@@ -44,6 +44,9 @@ export interface MeatGibLeaf {
   /** `from`: SECTOR levels (plan 3b), the body centre the spawn is clamped inside the level from. */
   throw(pos: Vec3, vel: Vec3, angVel: Vec3, r: number, from?: Vec3 | null): boolean;
   ready(): boolean;
+  /** Draw the chunk material once (degenerate, far below the floor) for one live body's room light list that has
+   *  not had it yet; take out the last step's warm mesh. Called every step. */
+  prewarm(): void;
 }
 
 export interface MeatGibDeps {
@@ -104,8 +107,33 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
     return m;
   }
 
+  // PRE-WARM (teratoma first-hit freeze, 2026-10-28): the first torn chunk in a room built its material's pipeline in
+  // the frame of the hit. Each live body's room list is drawn once, one a step, as a point far below the floor.
+  const warmedLists = new Set<THREE.LightsNode | null>();
+  let warmMesh: THREE.Mesh | null = null;
+
   return {
     ready: () => variants.length > 0 && base !== null,
+    prewarm() {
+      if (warmMesh) { ctx.boot.deferredApi?.router.unregister(warmMesh); warmMesh.removeFromParent(); warmMesh = null; }
+      if (variants.length === 0 || !base) return;
+      for (const a of ctx.world.actors) {
+        const pos = a.pose().pos;
+        const list = ctx.boot.deferredMode ? null : deps.lightsAt(pos);
+        if (warmedLists.has(list)) continue;
+        warmedLists.add(list);
+        const m = new THREE.Mesh(variants[0]!, materialFor(pos));
+        m.name = 'meat-warm';
+        m.position.set(0, -1000, 0);
+        m.scale.setScalar(1e-6);
+        m.frustumCulled = false;
+        m.castShadow = false; m.receiveShadow = false;
+        ctx.boot.handle.scene.add(m);
+        ctx.boot.deferredApi?.router.register(m, 'mesh', 'level-only');
+        warmMesh = m;
+        return;
+      }
+    },
     throw(pos, vel, angVel, r, from) {
       if (variants.length === 0 || !base || !ctx.boot.spawnMeshGib) return false;
       // Round-robin through the variants, so a burst of chunks never repeats one shape side by side.

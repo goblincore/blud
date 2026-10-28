@@ -38,6 +38,8 @@ export interface KitEyeLeaf {
   step(dt: number): void;
   /** Drop everything (a cast rebuild). */
   clear(): void;
+  /** Light lists of live kit-eye bodies whose pop materials have not been drawn yet (0 = all warm). */
+  readonly prewarmPending: number;
 }
 
 export interface KitEyeDeps {
@@ -101,7 +103,8 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
   const mats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   const listIds = new Map<THREE.LightsNode, number>();
 
-  // The generated maps, made once per iris colour (a few ms; at the first pop, not at boot).
+  // The generated maps, made once per iris colour (~170 ms of main-thread generation for the eye: at creation for the
+  // cast already standing, else at the first warm-up below, never at the first pop).
   const texCache = new Map<string, { eye: THREE.DataTexture; eyeN: THREE.DataTexture; eyeG: THREE.DataTexture; cord: THREE.DataTexture; cordN: THREE.DataTexture }>();
   function textures(iris: Vec3) {
     const key = iris.join(',');
@@ -119,10 +122,16 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
     return t;
   }
 
-  function material(kind: 'eye' | 'cord', pos: Vec3, iris: Vec3): THREE.Material {
+  /** The light-list part of a material key: 0 without a list. */
+  function listKey(pos: Vec3): number {
     const list = ctx.boot.deferredMode ? null : deps.lightsAt(pos);
     if (list && !listIds.has(list)) listIds.set(list, listIds.size + 1);
-    const key = `${kind}:${iris.join(',')}:${list ? listIds.get(list) : 0}`;
+    return list ? listIds.get(list)! : 0;
+  }
+
+  function material(kind: 'eye' | 'cord', pos: Vec3, iris: Vec3): THREE.Material {
+    const list = ctx.boot.deferredMode ? null : deps.lightsAt(pos);
+    const key = `${kind}:${iris.join(',')}:${listKey(pos)}`;
     let m = mats.get(key);
     if (!m) {
       const t = textures(iris);
@@ -224,7 +233,47 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
       { restitution: EYE_FLY.restitution, tag: 'eye', from: actorSpawnCentre(ctx, a) });
   }
 
+  // PRE-WARM (teratoma first-hit freeze, 2026-10-28). The first eye pop generated the maps (~170 ms) and built two new
+  // node materials' pipelines in the frame of the hit: a 0.7 s freeze, then a ~1.7 s GPU compile. Now each live kit-eye
+  // body's (iris, light list) pair is drawn once, ONE pair a step, as a degenerate eye and stalk far below the floor,
+  // then taken out the next step. A floater that drifts into another room warms that room's list the same way.
+  const warmed = new Set<string>();
+  let warmMeshes: THREE.Mesh[] = [];
+  let warmStalk: THREE.BufferGeometry | null = null;
+  let pending = 0;
+  function prewarm(): void {
+    for (const m of warmMeshes) removeFromScene(m);
+    warmMeshes = [];
+    pending = 0;
+    let done = false;
+    for (const a of ctx.world.actors) {
+      const spec = specOf(a);
+      if (!spec) continue;
+      const pos = a.pose().pos;
+      const key = `${spec.iris.join(',')}:${listKey(pos)}`;
+      if (warmed.has(key)) continue;
+      if (done) { pending++; continue; }
+      warmed.add(key);
+      done = true;
+      warmStalk ??= stalkGeometry();
+      const eye = new THREE.Mesh(eyeGeom(spec), material('eye', pos, spec.iris));
+      const cord = new THREE.Mesh(warmStalk, material('cord', pos, spec.iris));
+      for (const m of [eye, cord]) {
+        m.name = 'kit-eye-warm';
+        m.position.set(0, -1000, 0);
+        m.scale.setScalar(1e-6);   // a point, not 0: the normal matrix inverts the world matrix
+        m.frustumCulled = false;
+        m.castShadow = false; m.receiveShadow = false;
+        addToScene(m);
+        warmMeshes.push(m);
+      }
+    }
+  }
+  // The cast standing at creation (boot, behind the loader): its maps now, not in the first frames of play.
+  for (const a of ctx.world.actors) { const spec = specOf(a); if (spec) textures(spec.iris); }
+
   return {
+    get prewarmPending() { return pending; },
     hit(a, point, dir) {
       const spec = specOf(a);
       if (!spec) return;
@@ -247,6 +296,7 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
         st.stalk = stepStalk(st.stalk, kitEyeSocket(centre, fwd, spec), dt);
         poseDangling(st, spec, fwd);
       }
+      prewarm();
     },
     clear() {
       for (const [a, st] of eyes) {
@@ -255,6 +305,9 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
         if (spec) setKitMaterialVisible(a, spec.material, true);
       }
       eyes.clear();
+      for (const m of warmMeshes) removeFromScene(m);
+      warmMeshes = [];
+      warmed.clear();
     },
   };
 }

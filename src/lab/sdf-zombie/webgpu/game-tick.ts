@@ -1278,6 +1278,7 @@ export function tick(ctx: GameContext, dt: number) {
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
     ctx.boot.kitEye?.step(cdt);
+    ctx.boot.meatGib?.prewarm();
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite
