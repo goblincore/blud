@@ -47,6 +47,10 @@ import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
 import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
+import { levelBatchOn } from './level-batch';
+
+/** `?batch=0` keeps every casing pool an InstancedMesh drawn even while empty (level-batch.ts). */
+const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.search);
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
@@ -633,7 +637,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
   // The warbull's launcher throws no brass: its rockets leave nothing behind.
   const casings = armed && isSoldierFamily(entry.profile) && entry.profile.gunner?.weapon !== 'rocket'
-    ? (chaingun ? createShotgunCasings(256, 0xc8963c) : createShotgunCasings()) : null;
+    ? (chaingun ? createShotgunCasings(256, 0xc8963c, casingsBatched) : createShotgunCasings(128, 0xc53424, casingsBatched)) : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
   if (casings) opts.scene.add(casings.object);

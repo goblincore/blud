@@ -23,6 +23,8 @@ import { newHazard, stepHazard, type HazardState } from './hazard-floor';
 import type { SectorGround } from './sector-ground';
 import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
 import { simTimeMs } from './sim-clock';
+import { levelBatchOn } from './level-batch';
+import { createPickupBatches, type PickupBatches } from './game-level-batch';
 
 export interface LoopRuntime {
   god: boolean;
@@ -43,6 +45,9 @@ export interface LoopRuntime {
    *  bites and rounds). */
   hurts: { amount: number; kind: DamageKind; health: number; t: number }[];
   meshes: Map<string, THREE.Mesh>;
+  /** One instanced draw per item type (game-level-batch.ts); null with `?batch=0`, where every pickup mesh is in the
+   *  scene. With batches the meshes in `meshes` are logical only (never in the scene). */
+  batches: PickupBatches | null;
   el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
 }
 
@@ -98,9 +103,11 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     hazard: newHazard(),
     hurts: [],
     meshes: new Map(),
+    batches: null,
     el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
   };
   if (authored) {
+    const batched = levelBatchOn(location.search);
     for (const p of def.pickups) {
       const l = LOOK[p.item];
       if (!l) continue;
@@ -113,9 +120,10 @@ export function createLoop(ctx: GameContext): LoopRuntime {
       if (p.item === 'cd') mesh.rotation.x = Math.PI / 2;
       if (STILL.has(p.item)) mesh.userData.still = true;
       mesh.name = `pickup:${p.id}`;
-      ctx.boot.handle.scene.add(mesh);
+      if (!batched) ctx.boot.handle.scene.add(mesh);
       rt.meshes.set(p.id, mesh);
     }
+    if (batched) rt.batches = createPickupBatches(ctx, def.pickups, rt.meshes, item => LOOK[item]);
   }
   ctx.world.loop = rt;
   updateStatus(ctx);
@@ -308,6 +316,12 @@ export function createLoopSeams(ctx: GameContext) {
       return rt && def ? def.pickups.filter(p => !rt.taken.has(p.id)).map(p => p.id) : [];
     },
     emitLevelEvent: (event: string) => { emitLevelEvent(ctx, event); },
+    /** Captures: set every spinning pickup's spin angle (radians) so two boots draw them alike. Returns how many. */
+    setPickupSpin: (yaw: number) => {
+      let n = 0;
+      for (const m of ctx.world.loop?.meshes.values() ?? []) if (!m.userData.still) { m.rotation.y = yaw; n++; }
+      return n;
+    },
     levelComplete: () => !!ctx.world.loop?.done,
   };
 }

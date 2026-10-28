@@ -15,7 +15,8 @@ import type { BarrelDef } from './level-def';
 import type { SectorGround } from './sector-ground';
 import { barrelYaw, scorchFit } from './barrel-look';
 import { createBarrelCore, type BarrelRuntime } from './barrel-runtime';
-import { createBarrelMaterials, createBarrelView, createScorchPool, type BarrelView } from './game-barrel-view';
+import { createBarrelBatches, createBarrelMaterials, createBarrelView, createScorchPool, type BarrelView } from './game-barrel-view';
+import { groupByZone, levelBatchOn } from './level-batch';
 import { detonateAt } from './game-dynamite-step';
 import { blastShielded } from './game-hit-trace';
 import { damagePlayer } from './game-loop';
@@ -28,6 +29,10 @@ export interface GameBarrels extends BarrelRuntime {
   materialCount(): number;
   /** The floor scorches laid so far (their centres, gate readback). */
   scorches(): [number, number, number][];
+  /** The per-zone merges (level-batch.ts): intact drums each; null with `?batch=0`. */
+  batches(): { zoneRoom: number; drums: number }[] | null;
+  /** In-boot A/B of the per-zone merges (game-level-batch.ts setLevelBatchLive). */
+  setBatchLive(on: boolean): void;
 }
 
 export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]): GameBarrels {
@@ -35,11 +40,17 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
   const ground = ctx.world.level.ground as SectorGround;
   const mats = createBarrelMaterials(ctx);
   const views = new Map<string, BarrelView>();
+  const batched = levelBatchOn(location.search);
+  const zoneOf = new Map<string, number>();
   for (const b of defs) {
     const sector = ground.sectorAt(b.pos[0], b.pos[2]);
     const zoneRoom = map.sectors[sector]!.zone + 1;          // the zone's synthesized room (game-sector-mesh)
-    views.set(b.id, createBarrelView(ctx, b, sector, zoneRoom, mats));
+    views.set(b.id, createBarrelView(ctx, b, sector, zoneRoom, mats, batched));
+    zoneOf.set(b.id, zoneRoom);
   }
+  // One merged drum and lid per zone (level-batch.ts; `?batch=0`: a drum and a lid per barrel).
+  const batches = batched ? createBarrelBatches(ctx, new Map(groupByZone(defs.map(b => ({ id: b.id, zone: zoneOf.get(b.id)! })))
+    .map(([zoneRoom, ids]) => [zoneRoom, ids.map(id => { const view = views.get(id)!; return { view, intact: () => view.drum.visible }; })])), mats) : null;
   const scorches = createScorchPool(ctx);
   const shielded = (from: Vec3, to: Vec3, inside?: Vec3) => blastShielded(ctx, from, to, inside);
 
@@ -47,6 +58,7 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     shielded,
     explode(id, at, feet) {
       views.get(id)?.explode();
+      batches?.rebuild(zoneOf.get(id)!);
       // As wide as the floor round the feet takes (BARREL_LOOK.scorchM, shrunk so it never hangs off a ledge).
       const size = scorchFit((x, z) => ground.floorAt(x, z), feet[0], feet[2], feet[1]);
       scorches.add(feet[0], feet[1], feet[2], size, barrelYaw(`${id}:scorch`));
@@ -59,5 +71,6 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     },
   });
   console.info(`[barrels] ${defs.length} barrels, ${mats.count()} materials (2 per zone with barrels)`);
-  return Object.assign(core, { materialCount: () => mats.count(), scorches: () => scorches.positions() });
+  return Object.assign(core, { materialCount: () => mats.count(), scorches: () => scorches.positions(), batches: () => batches?.report() ?? null,
+    setBatchLive: (on: boolean) => batches?.setLive(on) });
 }

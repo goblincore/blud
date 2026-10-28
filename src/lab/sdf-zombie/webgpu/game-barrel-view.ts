@@ -311,7 +311,11 @@ export function createBarrelMaterials(ctx: GameContext): BarrelMaterials {
   };
 }
 
-export function createBarrelView(ctx: GameContext, b: BarrelDef, sector: number, zoneRoom: number, mats: BarrelMaterials): BarrelView {
+/** `batched` (level-batch.ts, the default; `?batch=0` off): the drum and lid are LOGICAL meshes (not in the level
+ *  group); the zone's BarrelBatches draws every intact drum and lid of the zone as one merged mesh each. The stub is
+ *  always its own level-group mesh (hidden until the blast). */
+export function createBarrelView(ctx: GameContext, b: BarrelDef, sector: number, zoneRoom: number, mats: BarrelMaterials,
+  batched = false): BarrelView {
   const { drum: drumMat, lid: lidMat } = mats.forZone(zoneRoom);
   const yaw = barrelYaw(b.id);
 
@@ -332,10 +336,12 @@ export function createBarrelView(ctx: GameContext, b: BarrelDef, sector: number,
     mesh.rotation.y = yaw;
     mesh.userData.room = zoneRoom;               // the zone's light list applies, like a sector wall
     mesh.userData.barrel = b.id;
-    ctx.world.levelGroup.add(mesh);
+    if (!batched || mesh === stub) ctx.world.levelGroup.add(mesh);
   }
   // 1 mm over the lathe's own lid disc, so the two never fight.
   lid.position.y += BARREL.heightM - BARREL_LOOK.lidRecessM + 0.001;
+  drum.updateMatrix();
+  lid.updateMatrix();
 
   return {
     drum, lid, stub,
@@ -430,6 +436,82 @@ export function createScorchPool(ctx: GameContext, n = 12): ScorchPool {
       geo.dispose();
       mat.dispose();
       mesh.dispose();
+    },
+  };
+}
+
+/** BARREL BATCHES (level-batch.ts, 2026-10-28): per zone with barrels, ONE mesh of every intact drum and one of every
+ *  intact lid (the barrels' own geometry, dents and all, baked to level-group space), on the zone's shared materials
+ *  (the zone's light list), so a zone's drums are one draw however many there are. A drum that goes up leaves its
+ *  zone's merge (rebuilt without it, once, on the blast frame: same attribute layout, so no new build) and its stub
+ *  shows as before. Named `barrels-<part>-zone-<zone>` so the zone cull takes them off by zone like a sector batch;
+ *  direct level-group children with `userData.room` so the light-list loop stamps them and the level pre-warm builds
+ *  them. */
+export interface BarrelBatches {
+  /** Rebuild the merges of zone room `zoneRoom` from its intact barrels (after a blast). */
+  rebuild(zoneRoom: number): void;
+  /** Debug seam: per zone room, intact barrels merged. */
+  report(): { zoneRoom: number; drums: number }[];
+  /** In-boot A/B: false takes the merges off and puts each intact barrel's drum and lid in the level group (their
+   *  materials are the zone's, already lit by its list); true merges again. */
+  setLive(on: boolean): void;
+  dispose(): void;
+}
+
+export function createBarrelBatches(ctx: GameContext, zones: ReadonlyMap<number, readonly { view: BarrelView; intact(): boolean }[]>,
+  mats: BarrelMaterials): BarrelBatches {
+  const merged = new Map<number, { drum: THREE.Mesh; lid: THREE.Mesh; count: number }>();
+  const bake = (meshes: THREE.Mesh[]) => {
+    const parts = meshes.map(m => m.geometry.clone().applyMatrix4(m.matrix));
+    const g = parts.length ? mergeGeometries(parts, false) : null;
+    for (const p of parts) p.dispose();
+    return g;
+  };
+  const build = (zoneRoom: number) => {
+    const members = (zones.get(zoneRoom) ?? []).filter(m => m.intact());
+    const { drum: drumMat, lid: lidMat } = mats.forZone(zoneRoom);
+    let z = merged.get(zoneRoom);
+    if (!z) {
+      z = { drum: new THREE.Mesh(new THREE.BufferGeometry(), drumMat), lid: new THREE.Mesh(new THREE.BufferGeometry(), lidMat), count: 0 };
+      z.drum.name = `barrels-drum-zone-${zoneRoom - 1}`;
+      z.lid.name = `barrels-lid-zone-${zoneRoom - 1}`;
+      for (const m of [z.drum, z.lid]) {
+        m.userData.room = zoneRoom;
+        m.matrixAutoUpdate = false;
+        ctx.world.levelGroup.add(m);
+      }
+      merged.set(zoneRoom, z);
+    }
+    for (const [mesh, part] of [[z.drum, 'drum'], [z.lid, 'lid']] as const) {
+      const g = bake(members.map(m => m.view[part]));
+      mesh.geometry.dispose();
+      mesh.geometry = g ?? new THREE.BufferGeometry();
+      mesh.visible = !!g;
+    }
+    z.count = members.length;
+  };
+  for (const zoneRoom of zones.keys()) build(zoneRoom);
+  let live = true;
+  return {
+    rebuild: (zoneRoom) => {
+      if (live) { build(zoneRoom); return; }
+      for (const m of zones.get(zoneRoom) ?? []) if (!m.intact()) { m.view.drum.removeFromParent(); m.view.lid.removeFromParent(); }
+    },
+    setLive(on) {
+      live = on;
+      for (const [zoneRoom, members] of zones) {
+        for (const m of members) {
+          if (on || !m.intact()) { m.view.drum.removeFromParent(); m.view.lid.removeFromParent(); }
+          else ctx.world.levelGroup.add(m.view.drum, m.view.lid);
+        }
+        if (on) build(zoneRoom);
+        else { const z = merged.get(zoneRoom); if (z) z.drum.visible = z.lid.visible = false; }
+      }
+    },
+    report: () => [...merged].map(([zoneRoom, z]) => ({ zoneRoom, drums: z.count })),
+    dispose() {
+      for (const z of merged.values()) for (const m of [z.drum, z.lid]) { m.removeFromParent(); m.geometry.dispose(); }
+      merged.clear();
     },
   };
 }

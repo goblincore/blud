@@ -53,7 +53,8 @@ export interface ZoneCullRuntime {
   readonly tiers: Map<number, LodTier>;
 }
 
-const ZONE_MESH = /^sector-.*-zone-(\d+)$/;
+/** Zone batches: sector-<role>-<kind>-zone-<n>, and the barrels' per-zone merges barrels-<part>-zone-<n>. */
+const ZONE_MESH = /^(?:sector|barrels)-.*-zone-(\d+)$/;
 
 export function createZoneCull(ctx: GameContext): ZoneCullRuntime | null {
   const map = ctx.world.level.def?.sectors;
@@ -87,6 +88,31 @@ function flood(z: ZoneCullRuntime, x: number, y: number, zz: number, dx: number,
   return eye;
 }
 
+/** The sectors under a bounding circle (its centre, and 8 points on the rim and at half radius): how the cull
+ *  places a small thing. Empty when it is over no sector. */
+export function sectorsUnder(ground: SectorGround, x: number, zz: number, r: number): number[] {
+  const set = new Set<number>();
+  const probe = (px: number, pz: number) => { const s = ground.sectorAt(px, pz); if (s >= 0) set.add(s); };
+  probe(x, zz);
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4;
+    probe(x + Math.cos(a) * r, zz + Math.sin(a) * r);
+    probe(x + Math.cos(a) * r * 0.5, zz + Math.sin(a) * r * 0.5);
+  }
+  return [...set];
+}
+
+/** Re-gather the placed meshes on the next draw (a mesh left or joined the scene without changing the counts). */
+export function resyncZoneCull(ctx: GameContext): void {
+  if (ctx.world.zoneCull) ctx.world.zoneCull.seenCount = -1;
+}
+
+/** The draw flood's sectors this frame (1 = may be seen), or null with the cull off or on a room level. */
+export function drawSectorsSeen(ctx: GameContext): Uint8Array | null {
+  const z = ctx.world.zoneCull;
+  return z && z.on ? z.sectors : null;
+}
+
 const camDir = new THREE.Vector3();
 const sphere = new THREE.Sphere();
 
@@ -100,7 +126,8 @@ function syncCullables(ctx: GameContext, z: ZoneCullRuntime): void {
   const out: Cullable[] = [];
   const add = (o: THREE.Object3D) => {
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.geometry) return;
+    // A parentless mesh is not drawn (a batched pickup's logical mesh, a taken one): nothing to place.
+    if (!mesh.isMesh || !mesh.geometry || !mesh.parent) return;
     const m = ZONE_MESH.exec(mesh.name);
     if (m) { out.push({ mesh, zone: +m[1]!, sectors: [], mask: 0, hidden: false }); return; }
     const g = mesh.geometry;
@@ -109,18 +136,10 @@ function syncCullables(ctx: GameContext, z: ZoneCullRuntime): void {
     mesh.updateWorldMatrix(true, false);
     sphere.copy(g.boundingSphere).applyMatrix4(mesh.matrixWorld);
     if (!(sphere.radius < SMALL_M)) return;
-    const set = new Set<number>();
-    const c = sphere.center, r = sphere.radius;
-    const probe = (x: number, zz: number) => { const s = z.ground.sectorAt(x, zz); if (s >= 0) set.add(s); };
-    probe(c.x, c.z);
-    for (let k = 0; k < 8; k++) {
-      const a = (k * Math.PI) / 4;
-      probe(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r);
-      probe(c.x + Math.cos(a) * r * 0.5, c.z + Math.sin(a) * r * 0.5);
-    }
+    const sectors = sectorsUnder(z.ground, sphere.center.x, sphere.center.z, sphere.radius);
     // Over no sector at all (a mesh parked at the origin, a pool not placed yet): never culled.
-    if (set.size === 0) return;
-    out.push({ mesh, zone: -1, sectors: [...set], mask: 0, hidden: false });
+    if (sectors.length === 0) return;
+    out.push({ mesh, zone: -1, sectors, mask: 0, hidden: false });
   };
   ctx.world.levelGroup.traverse(add);
   for (const m of loopMeshes?.values() ?? []) add(m);

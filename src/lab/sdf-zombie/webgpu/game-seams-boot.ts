@@ -13,6 +13,8 @@ import { type DeferredDebugView } from './deferred-layer';
 import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
 import { sectorOcclusion } from './actor-sight';
+import { levelBatchOn } from './level-batch';
+import { levelBatchLive, setLevelBatchLive } from './game-level-batch';
 import { applyBulletTimeTuning } from '../bullet-time';
 import {
   adrenalineBorderAt, adrenalineDrive, adrenalineEdgeAt, adrenalinePhase, adrenalineScalesAt, applyAdrenalineTuning,
@@ -200,6 +202,54 @@ export function createBootSeams(ctx: GameContext) {
       for (const [k, v] of Object.entries(by)) if (v > 0) out[k] = Math.round(v / n);
       return out;
     },
+    /** DRAWS BY OBJECT (level batching pass, 2026-10-28): every object three actually renders over `n` drawn
+     *  frames, per frame, keyed by its nearest named ancestor's name (digits and ids stripped) and the camera
+     *  (`main` = the game camera, else the camera's type: shadow and layer passes). Borrows the render-object
+     *  function for its duration. `objects` counts distinct objects drawn by the main camera. */
+    drawsByObject: async (n = 4, detail = false) => {
+      const det: Record<string, Set<THREE.Object3D>> = {}, detN: Record<string, number> = {};
+      const r = ctx.boot.handle.renderer, main = ctx.boot.handle.camera;
+      const prev = r.getRenderObjectFunction();
+      const by: Record<string, number> = {};
+      const seen = new Set<THREE.Object3D>();
+      const keyOf = (o: THREE.Object3D) => {
+        let q: THREE.Object3D | null = o, k = '';
+        while (q && !k) { k = q.name; q = q.parent; }
+        return (k || `(${o.type})`).replace(/[:#].*$/, '').replace(/-?\d+/g, '#');
+      };
+      r.setRenderObjectFunction((object, scene, camera, geometry, material, group, lightsNode, clip, passId) => {
+        const k = `${camera === main ? 'main' : camera.type}|${keyOf(object)}`;
+        by[k] = (by[k] ?? 0) + 1;
+        if (camera === main) seen.add(object);
+        if (detail) { const rt = r.getRenderTarget(); const t = `${camera === main ? 'main' : camera.type}@${rt ? (rt.texture?.name || `rt${rt.width}x${rt.height}`) : 'screen'}|${keyOf(object)}`; (det[t] ??= new Set()).add(object); detN[t] = (detN[t] ?? 0) + 1; }
+        r.renderObject(object, scene, camera, geometry, material, group, lightsNode, clip, passId);
+      });
+      ctx.boot.handle.setLoopRunning(false);   // no rAF frame inside the awaits
+      try {
+        for (let i = 0; i < n; i++) { ctx.boot.handle.drawOnce(); await ctx.boot.handle.resolveGpu(); }
+      } finally {
+        r.setRenderObjectFunction(prev);
+        ctx.boot.handle.setLoopRunning(true);
+      }
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(by).sort((a, b) => b[1] - a[1])) out[k] = +(v / n).toFixed(1);
+      const targets = detail ? Object.fromEntries(Object.entries(det).map(([k, v]) => [k, { objects: v.size, draws: +(detN[k]! / n).toFixed(1) }])) : undefined;
+      return { objects: seen.size, draws: out, targets };
+    },
+    /** LEVEL BATCHING (level-batch.ts, 2026-10-28): whether it is on (`?batch=0` off), the pickup batches (members,
+     *  instances drawn this frame) and the casing pools (all, and those in the render). Pair with drawsByObject. */
+    levelBatch: () => {
+      let pools = 0, shown = 0;
+      ctx.boot.handle.scene.traverse(o => {
+        if (o.name !== 'spent-shotgun-shells') return;
+        pools++;
+        if (o.children.some(c => c.visible)) shown++;
+      });
+      return { on: levelBatchLive(), booted: levelBatchOn(location.search), pickups: ctx.world.loop?.batches?.report() ?? null, barrels: ctx.world.barrels?.batches() ?? null, casingPools: pools, casingPoolsDrawn: shown };
+    },
+    /** In-boot A/B of the level batching (game-level-batch.ts setLevelBatchLive): false = the per-object path.
+     *  Returns whether batching is on. A level booted with `?batch=0` cannot switch. */
+    setLevelBatch: (on: boolean) => setLevelBatchLive(ctx, on),
     /** What the main camera's polygonal pass can draw: visible meshes on its layers, grouped by
      *  the nearest named ancestor (optimisation pass census). */
     /** Diagnostics: visible objects whose name matches `re`, with world position, scale and bounds. */

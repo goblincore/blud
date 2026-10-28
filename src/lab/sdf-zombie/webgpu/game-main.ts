@@ -107,6 +107,7 @@ import { parseLevel } from './sector-json';
 import { addSectorMeshes } from './game-sector-mesh';
 import { createGameDoors } from './game-doors';
 import { createZoneCull, updateZoneCull } from './game-zone-cull';
+import { freezeLevelMatrices } from './game-level-batch';
 import { doorTravel } from './sector-doors';
 import { SECTOR_BODY_RADIUS_M } from './sector-def';
 import { createDoorSeams } from './game-seams-doors';
@@ -2316,6 +2317,9 @@ async function main() {
     // The camera's portal flood (game-zone-cull.ts): level meshes in sectors it cannot see leave the render, and
     // the march cull below skips the sight rays of bodies in none of its sectors.
     updateZoneCull(ctx);
+    // Pickup batches (game-level-batch.ts) read this frame's flood: the shown pickups' rows packed for one draw an item.
+    ctx.world.loop?.batches?.update();
+    freezeLevelMatrices(ctx);   // sector levels: static level transforms composed once (`?batch=0` off)
     updateVisibleActors(ctx);
     syncKitVisibility(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
