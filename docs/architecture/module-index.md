@@ -46,18 +46,18 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 26 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 88 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 89 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 47 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 48 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 55 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 57 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -405,6 +405,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-wound-tuning.ts` — applyWoundTuning: writes wound panel values into the game (ramp, viscera, gut ropes), rebuilding the cast when boneRatio changes.
 - `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
 - `webgpu/game-zombie-face.ts` — The zombie's flat face sheet (url, atlas rect, mean) and headShape, the head prim that normalises the face projection.
+- `webgpu/game-zone-cull.ts` — ZONE / PORTAL CULL AND ENEMY UPDATE LOD IN PLAY (occlusion pass, 2026-10-28).
 
 ## Weapons and viewmodel (render)
 
@@ -562,6 +563,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/sector-light.ts` — SECTOR LIGHT (spec 2026-10-24-doom-sector-levels-design.md §7).
 - `webgpu/sector-materials.ts` — SECTOR MATERIALS: the converter's family names (scripts/levels/doom_tables.py — tech, rust, metal, door, light-panel, concrete, metal-plate, tile) to…
 - `webgpu/sector-navigation.ts` — NAVIGATION OVER SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.3): the grid core of grid-navigation.ts, with standing and travel read…
+- `webgpu/sector-portals.ts` — SECTOR PORTAL VISIBILITY (occlusion pass, 2026-10-28): which sectors the camera can possibly see, from the sector graph alone.
 - `webgpu/sector-ray.ts` — SEGMENT VS SECTOR GEOMETRY (plan 2026-10-24-sector-levels-3a Task 3): where a 3D segment a→b first meets a sector level's walls, floors or ceilings —…
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).
 - `webgpu/sky.wgsl.ts` — The sky dome's colour, hand-written WGSL (Outdoor v1 §6).
@@ -642,6 +644,7 @@ Benchmarks, demo record/replay, frame hashes, GPU timing.
 
 The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation.
 
+- `webgpu/actor-lod.ts` — ENEMY UPDATE LOD (occlusion pass, 2026-10-28; owner: "not rendering or updating enemies that aren't visible").
 - `webgpu/aim-style.ts` — PER-WEAPON AIM STYLE (owner 2026-10-27): "the dead-zone free look (inspired by Realms of the Haunting) will be a per-weapon setting.
 - `webgpu/arena-cycle.ts` — The TEST ARENA's character cycling (game-arena.ts), pure: which registry characters it steps through, and the next one from the current.
 - `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
@@ -684,6 +687,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
 - `webgpu/soft-fade.ts` — SHARED SOFT-PARTICLE DEPTH FADE (flame-polish task 1, extracted for the explosion-curl task).
 - `webgpu/split-ablate.ts` — THE OPEN HEAD'S COST, TAKEN APART (docs/dev-notes/2026-10-06-open-head-cost/NOTES.md; scripts/open-head-cost.mjs is the driver).
+- `webgpu/stress-spawns.ts` — STRESS CAST (occlusion pass, 2026-10-28): `?stress=N` on a sector level adds N enemies to the level's own spawns, for measuring culling at Doom 2…
 - `webgpu/surface-blood-view.ts` — Persistent surface blood (opt-in, `?surfaceblood=1`): sweeps the blood sim's droplets against the level's meshes, keeps the stains as per-receiver…
 - `webgpu/surface-blood.wgsl.ts` — Original procedural splatter masks, shared by the shader entrypoints.
 - `webgpu/surface-nets-compute.ts` — GPU side of the hull extraction: buffers sized ONCE at the worst case, compute nodes built once, a per-frame extract() that moves only uniforms (the…

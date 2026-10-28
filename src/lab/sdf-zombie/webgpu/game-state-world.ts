@@ -28,6 +28,7 @@ import type { EggRuntime } from './game-egg';
 import type { EmergenceRuntime } from './game-emergence';
 import type { SequenceRuntime } from './game-sequence';
 import type { SectorFxRuntime } from './game-sector-light';
+import type { ZoneCullRuntime } from './game-zone-cull';
 import type { GameBarrels } from './game-barrels';
 import type { GameDoors } from './game-doors';
 import type * as THREE from 'three/webgpu';
@@ -115,6 +116,8 @@ export interface WorldState {
   /** The level geometry the box colliders do not hold, for the render culls' sight test
    *  (actor-sight.ts sectorOcclusion): set on sector levels, null on room levels. */
   sightOccluder: SightOccluder | null;
+  /** Sector levels: the portal flood cull and the enemy update LOD (game-zone-cull.ts); null on room levels. */
+  zoneCull: ZoneCullRuntime | null;
   /** Navigation graph the encounter director paths over. */
   encounterNav: EncounterNavigation;
   /** The encounter director itself (per-agent memory, routes, sight). */
@@ -173,6 +176,7 @@ export function makeWorldState(): WorldState {
     coverage: { screenFrac: 0, nearestM: 0, biggestFrac: 0 },
     sightA: [0, 0, 0],
     sightOccluder: null,
+    zoneCull: null,
     encounterNav: unbuilt<EncounterNavigation>(),
     encounter: unbuilt<EncounterDirector>(),
     encounterHomes: new Map<number, Vec3>(),

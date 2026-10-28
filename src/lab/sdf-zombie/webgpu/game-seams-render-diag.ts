@@ -466,6 +466,23 @@ export function createRenderDiagSeams(ctx: GameContext, d: RenderDiagDeps) {
     // fire-frame draw volume (drawStats) to actual scene objects. Passes
     // multiply draws (objects x passes = drawCalls), so pair this with
     // drawStats when quoting.
+    /** What three's per-render matrix walk (scene.updateMatrixWorld) visits, by scene child: objects walked, and
+     *  those under a hidden ancestor (walked for nothing unless something reads their matrices). */
+    sceneWalk() {
+      const rows: { name: string; walked: number; hidden: number }[] = [];
+      for (const c of scene.children) {
+        let walked = 0, hidden = 0;
+        const visit = (o: THREE.Object3D, hid: boolean) => { walked++; if (hid) hidden++; for (const k of o.children) visit(k, hid || !k.visible); };
+        visit(c, !c.visible);
+        rows.push({ name: c.name || c.type, walked, hidden });
+      }
+      const by = new Map<string, { n: number; walked: number; hidden: number }>();
+      for (const r of rows) { const e = by.get(r.name) ?? { n: 0, walked: 0, hidden: 0 }; e.n++; e.walked += r.walked; e.hidden += r.hidden; by.set(r.name, e); }
+      const t0 = performance.now();
+      for (let i = 0; i < 20; i++) scene.updateMatrixWorld();
+      const walkMs = +((performance.now() - t0) / 20).toFixed(3);
+      return { total: rows.reduce((a, r) => a + r.walked, 0), walkMs, top: [...by].sort((a, b) => b[1].walked - a[1].walked).slice(0, 16) };
+    },
     sceneCensus() {
       let meshes = 0, visible = 0, instanced = 0;
       const byName = new Map<string, number>();

@@ -10,6 +10,7 @@
 import { FLOATER_BODIES, createFloaterSpace, type FloaterBody, type FloaterSpace } from './floater-move';
 import { sectorSightBlocker } from './sector-ray';
 import type { SectorGround } from './sector-ground';
+import { stressSpawns } from './stress-spawns';
 import type { SectorMap } from './sector-def';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
@@ -584,9 +585,26 @@ export function spawnAll(ctx: GameContext, errs: string[]): void {
   // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
   // cultist, juggernaut and warbull slots keep their kind (level-def
   // SpawnKind).
-  for (const s of ctx.world.level.spawnList()) {
+  const list = ctx.world.level.spawnList();
+  for (const s of list) {
     const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
     ctx.world.actors.push(spawnEnemy(ctx, name, s.room, s.pos, errs));
+  }
+  // ?stress=N (sector levels): N more of the level's own kinds near its spawns, for culling at scale (stress-spawns.ts).
+  const stress = Number(new URLSearchParams(location.search).get('stress') ?? 0);
+  const map = ctx.world.level.def?.sectors;
+  if (stress > 0 && map) {
+    const ground = ctx.world.level.ground as SectorGround;
+    const sources = list.map(s => ({ kind: s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind, pos: s.pos }));
+    const extra = stressSpawns(sources, stress, (x, z, y) => {
+      const f = ground.floorUnder(x, z, 0.45);
+      return Number.isFinite(f) && Math.abs(f - y) < 0.3 && ground.sectorAt(x, z) >= 0 ? f : null;
+    }, 1);
+    for (const e of extra) {
+      const room = list[e.from]!.room;
+      ctx.world.actors.push(spawnEnemy(ctx, e.kind, room, e.pos, errs));
+    }
+    console.info(`[stress] ${extra.length} extra enemies (asked ${stress}); cast ${ctx.world.actors.length}`);
   }
 }
 

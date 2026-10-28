@@ -106,6 +106,7 @@ import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sec
 import { parseLevel } from './sector-json';
 import { addSectorMeshes } from './game-sector-mesh';
 import { createGameDoors } from './game-doors';
+import { createZoneCull, updateZoneCull } from './game-zone-cull';
 import { doorTravel } from './sector-doors';
 import { SECTOR_BODY_RADIUS_M } from './sector-def';
 import { createDoorSeams } from './game-seams-doors';
@@ -2312,6 +2313,9 @@ async function main() {
     // frame's bodies and chunks. With the gate off the lists are not walked.
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
+    // The camera's portal flood (game-zone-cull.ts): level meshes in sectors it cannot see leave the render, and
+    // the march cull below skips the sight rays of bodies in none of its sectors.
+    updateZoneCull(ctx);
     updateVisibleActors(ctx);
     syncKitVisibility(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
@@ -6219,9 +6223,12 @@ function buildEncounter(ctx: GameContext): void {
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
     // The render culls (march + visual set) see through the same geometry (actor-sight.ts).
     ctx.world.sightOccluder = sectorOcclusion(sectorMap, sectorGround);
+    // The portal flood cull and the enemy update LOD (game-zone-cull.ts; ?cull=0 off).
+    ctx.world.zoneCull = createZoneCull(ctx);
   } else {
     ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
     ctx.world.sightOccluder = null;
+    ctx.world.zoneCull = null;
   }
 }

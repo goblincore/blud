@@ -447,6 +447,10 @@ export interface ZombieActor {
   /** True while the ring may not revoke this body's token (mid-swing). */
   committed(): boolean;
   step(dt: number): void;
+  /** UPDATE LOD (actor-lod.ts): true when nothing transient is under way — no damage pending or in the last
+   *  2 s of its own sim time, no knock, not dying, doomed, burning, tearing, popping or collapsed — so a body
+   *  out of sight may step less often. Optional: a fake without it is treated as restless (always stepped). */
+  settled?(): boolean;
   /** VIEW SYNC (sector perf, 2026-10-25). false: step() still moves, poses and thinks, but skips the GPU
    *  view's per-frame upload (the body pack, the head rotation, the wound rows) — for a body no view can
    *  see. true: back on, and a view left stale is uploaded at once from the current pose, so it is right
@@ -1332,8 +1336,11 @@ export function createZombieActor(opts: {
 
   let bakePaused = false;
   let damageRevision = 0;
+  /** UPDATE LOD: the damage revision step() last saw, and its own sim seconds since it changed. */
+  let lodRevision = 0, sinceDamage = Infinity;
   function step(dt: number) {
     if (bakePaused) return;
+    if (damageRevision !== lodRevision) { lodRevision = damageRevision; sinceDamage = 0; } else sinceDamage += Math.max(0, dt);
     // A MELEE prop falls with its sword arm (the bride): motion.ts stops the
     // carry (canHold), so drop the sword rather than leave it hanging in air.
     if (opts.profile?.melee && opts.profile.prop && !propReleaseRequested && missingLimbs().armR) {
@@ -2464,6 +2471,10 @@ export function createZombieActor(opts: {
     engagedForCrowd: () => !doomed && lastEngaged,
     committed: () => !doomed && lastCommitted,
     step,
+    settled: () => !bakePaused && damageRevision === lodRevision && sinceDamage > 2
+      && pendingShot === null && pendingWounds.length === 0 && pendingSevered.length === 0 && pendingPelletHits === 0
+      && knockV <= 1e-4 && !doomed && !softKilled && dyingT <= 0 && burnPanic === null && !headPop && pop === null
+      && tear === null && !forceCollapseNext && forcedSwing === null && !(lastFrame?.collapsed ?? false),
     setViewSync(on: boolean, catchUp = true) {
       viewSync = on;
       // A body paused for its corpse bake: the baker owns the view (the head-only partition); never

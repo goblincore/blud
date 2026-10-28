@@ -8,6 +8,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 
+import { bodyMaySee, guardHiddenMatrices } from './game-zone-cull';
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { visibleFovDeg } from './fisheye';
@@ -315,7 +316,9 @@ export function updateVisibleActors(ctx: GameContext): void {
       // a bare skull and arm bones in the doorway (2026-09-20).
       // Sector levels add their walls, floors and ceilings (ctx.world.sightOccluder; null on
       // room levels, where this is the boxes-only test exactly).
-      seen = bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
+      // The zone cull's camera flood first (game-zone-cull.ts): flesh in no flooded sector is out of sight, no rays.
+      seen = bodyMaySee(ctx, c, 'draw')
+        && bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
     }
     if (seen) ctx.world.lastSeenMs.set(a.id, now);
     const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
@@ -382,7 +385,8 @@ export function syncKitVisibility(ctx: GameContext): void {
     // The kit pre-warm's root of this step draws whatever the cull says (game-kit-prewarm.ts forcedRoot): out of
     // sight, behind a wall, it builds now rather than the frame it comes into view.
     const warm = ctx.boot.kitPrewarm?.forcedRoot ?? null;
-    if (ch.kit) ch.kit.object.visible = on || ch.kit.object === warm;
+    if (ch.kit) { ch.kit.object.visible = on || ch.kit.object === warm; guardHiddenMatrices(ctx, ch.kit.object); }
+    if (ch.prop) guardHiddenMatrices(ctx, ch.prop.object);
     if (ch.prop && !ch.prop.released) ch.prop.object.visible = on || ch.prop.object === warm;
     else if (ch.prop) ch.prop.object.visible = true;
   }

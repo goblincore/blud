@@ -64,6 +64,7 @@ import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracer
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
 import { headShape } from './game-zombie-face';
+import { bodyMaySee, kitPoseSkippable, lodStepDts, zoneCullTick } from './game-zone-cull';
 import { stepSpritePieces } from './gib-sprite-pieces';
 import { billboardGib } from './gib-sprites';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -294,6 +295,8 @@ export function tick(ctx: GameContext, dt: number) {
   // exactly.
   {
     const visualSetTiming = ctx.telemetry.telemetry.begin();
+    // The zone cull's omni flood from this tick's eye (game-zone-cull.ts): the sight pre-test below and the LOD.
+    zoneCullTick(ctx, eyeOf(ctx.player.player));
     if (ctx.render.visualCullEnabled) {
       const cam = ctx.boot.handle.camera;
       const alsoKeep = new Set<number>();
@@ -313,7 +316,14 @@ export function tick(ctx: GameContext, dt: number) {
         bodies, alsoKeep, undefined,
         // Walls count: the same per-cluster sight test the march cull uses,
         // from this tick's eye. Only bodies the cone kept are ever asked.
-        (id) => { const a = byId.get(id); return !a || bodyInSight(eye, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined); },
+        (id) => {
+          const a = byId.get(id);
+          if (!a) return true;
+          // No sector the body's flesh reaches is in the flood: out of sight without casting a ray.
+          const torso = a.posed().clusters.find(c => c.limb === 'torso');
+          if (torso && !bodyMaySee(ctx, torso.center, 'tick')) return false;
+          return bodyInSight(eye, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
+        },
       );
       const visual = new Set<ZombieActor>();
       for (const a of unmeasurable) visual.add(a);
@@ -402,9 +412,15 @@ export function tick(ctx: GameContext, dt: number) {
     // not drive, so it always uploads. Room levels: every view uploads every frame, as before.
     // catchUp false: a body coming back in is uploaded by its own step() just below, once.
     const viewCull = !!ctx.world.sightOccluder;
+    // UPDATE LOD (sector levels, game-zone-cull.ts / actor-lod.ts): a body the player cannot see and that is not
+    // engaged steps at a quarter rate with its time accumulated (alert, far) or not at all (idle); everything else,
+    // and every body with ?cull=0 or on a room level, steps with `dt` as before.
+    const lodDt = lodStepDts(ctx, dt, orders);
     for (const a of ctx.world.actors) {
+      const adt = lodDt.get(a) ?? dt;
+      if (adt <= 0) continue;
       if (viewCull) a.setViewSync(!a.crowd || ctx.render.visualActors.has(a), false);
-      a.step(dt);
+      a.step(adt);
     }
     // 'body-step' CLOSES HERE, before the kit pose below, because that is
     // the boundary main's telemetry numbers were taken with. Widening a
@@ -429,6 +445,7 @@ export function tick(ctx: GameContext, dt: number) {
     // do (see meshHold in the draw). Motion and the rig still advance —
     // only the VISUAL pose is held, so gameplay is untouched.
     if (!(ctx.render.sdfLayer.halfRate && ctx.render.sdfLayer.willHold)) {
+      const march = new Set(ctx.render.visibleActors);
       for (const a of ctx.world.actors) {
         if (!a.character) continue;
         const p = a.pose();
@@ -440,6 +457,8 @@ export function tick(ctx: GameContext, dt: number) {
           a.character.releaseProp(rotateYaw([-1.4, 1.6, 0.5], p.yaw), a.id);
           ctx.telemetry.telemetry.event('disarm', { actor: a.id });
         }
+        // Its kit and prop are hidden this frame (out of the visual and march sets): nothing reads their pose.
+        if (kitPoseSkippable(ctx, a, march)) continue;
         a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
       }
     }
