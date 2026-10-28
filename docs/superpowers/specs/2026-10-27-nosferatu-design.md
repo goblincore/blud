@@ -57,7 +57,7 @@ ranged attack in a distance band.
   right arm rises, palm forward and claws spread, and the head tips back. On the fire frame (a `castFires(prev,
   phase)` edge, like `squirtFires`), `fire` goes up for one frame.
 - **Where the swarm leaves from.** `game-actor` places the swarm at the right hand through `MotionProfile.spit`
-  (`from: 'foreArm.r'`, an offset to the palm). `game-spawn` creates the swarm there, heading for the player.
+  (`from: 'handR'`, the wrist joint, plus an offset to the palm). `game-spawn` creates the swarm there, heading for the player.
 - **Inside `castBand.min`** he walks in and claws. A stagger cancels a cast, as it cancels a squirt.
 - **The cast's dark-red glow.** A point light at the palm ramps up over the tell, so the cast reads in a dark room.
   It uses an existing dynamic-light path (the plan picks which: muzzle flash or tracer lights), with no new light
@@ -81,7 +81,7 @@ steps it with the world's segment tests.
 - **Contact.** A bat within 0.35 m of the player's head **nips**: **4 damage** (player-vitals scale: a zombie bite is
   10). Then it **retreats** for 0.6 s (it flies off and up) before seeking again. A swarm that all lands at once is
   about 32 damage, which is the threat.
-- **Lifetime.** After **6 s** a bat disperses: it flies up and away and fades, doing no damage.
+- **Lifetime.** After **6 s** a bat disperses: it flies up and away and shrinks out (an opaque bat, so no transparent pass), doing no damage.
 - **Shooting bats.** Pellets, slugs and SMG rounds already step as segments (`traceProjectile`). Each segment is
   also tested against the live bats as spheres (radius **0.12 m**, generous for a small target, with the
   `segmentNearAnySphere` shape).
