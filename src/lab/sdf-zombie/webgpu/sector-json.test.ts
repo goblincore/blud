@@ -56,6 +56,11 @@ describe('parseSectorLevel: refusals (collects every problem)', () => {
     expect(broken(j => { j.sectors[0].special = 'spin'; })).toThrow(/sectors\[0\]\.special/);
     expect(broken(j => { j.sectors[0].special = 'hurt'; })).toThrow(/sectors\[0\]\.hurtPerSec/);
   });
+  it('takes a converter world scale (unitsPerM, provenance only) but not a bad one', () => {
+    expect(broken(j => { j.unitsPerM = 35; })).not.toThrow();
+    expect(broken(j => { j.unitsPerM = 0; })).toThrow(/unitsPerM: expected a positive number/);
+    expect(broken(j => { j.unitsPerM = '35'; })).toThrow(/unitsPerM: expected a positive number/);
+  });
   it('lets a door sector close (ceil == floor) but not invert', () => {
     expect(broken(j => { j.sectors[1].ceil = 0.5; j.lines[2].door = { sector: 1 }; })).not.toThrow();
     expect(broken(j => { j.sectors[1].ceil = 0.2; j.lines[2].door = { sector: 1 }; })).toThrow(/ceil must not be below floor/);

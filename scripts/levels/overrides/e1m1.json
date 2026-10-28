@@ -1,6 +1,7 @@
 {
  "map": "E1M1",
- "note": "Owner edits 2026-10-27 (ours, not WAD data). Format: scripts/levels/doom_overrides.py. Coordinates are the converted level's metres (start = origin, Doom +y = -z).",
+ "unitsPerM": 32,
+ "note": "Owner edits 2026-10-27 (ours, not WAD data). Format: scripts/levels/doom_overrides.py. Lengths (positions, floor/ceil heights) are metres AT unitsPerM 32 (start = origin, Doom +y = -z): the converter rescales them to its world scale, so they stay on the same Doom spots. The notes below quote metres at 32.",
  "sectors": [
   {
    "note": "The start room's sunken centre (the floor-0.5 pit inside the -0.25 step ring, and its run east to the window sills) filled with toxic goo like the courtyard pool. Lowered 0.125 m so it reads as liquid below the dry step; the sills (0.25) become a 0.875 m climb, which matches Doom's impassable window lines.",

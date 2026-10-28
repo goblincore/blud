@@ -226,6 +226,7 @@ export default defineConfig({
       'scripts/lib/png-write.test.mjs',
       'scripts/lib/hybrid-estimate.test.mjs',
       'scripts/lib/march-depth-guard.test.mjs',
+      'scripts/lib/doom-scale.test.mjs',
       'scripts/sdf-melee-stage.test.mjs',
     ],
     exclude: [

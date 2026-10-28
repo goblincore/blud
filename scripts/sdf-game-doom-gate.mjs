@@ -25,6 +25,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
+import { at32, doomScale } from './lib/doom-scale.mjs';
 const OUT = '.lab-tmp/doom';
 
 const VITE = Number(process.argv[2] ?? 5483);
@@ -466,6 +467,10 @@ if (!existsSync('public/assets/levels/doom-e1m1.level.json')) {
   console.log('skip E1M1: run scripts/levels/doom_map.py <doomu.wad> E1M1 first');
   process.exit(0);
 }
+// The E1M1 poses below are metres at 32 units/m (Doom position / 32, scripts/lib/doom-scale.mjs); K takes
+// them to the generated level's world scale (its unitsPerM). DOOM_* env overrides are this level's metres.
+const K = doomScale();
+console.log(`E1M1 world scale: ${(32 / K).toFixed(2)} Doom units/m (poses x ${K.toFixed(4)})`);
 /** The page-side helper for the enemy checks: the level's own pure modules (sector-ray's sight test, the
  *  director's eye height 1.4 m over each floor and its 10 m / ±0.39π sight rule), a pose finder, and a sampler on
  *  requestAnimationFrame that counts shots (an actor's sinceFire resetting) and follows every enemy round by
@@ -657,12 +662,12 @@ const start = await evaluate('__sdfGame.ground(0, 0)');
 if (start.floor !== 0) fail(`E1M1 start floor ${start.floor}, expected 0`);
 // ROUTE: [x, z] waypoints along the main path (DOOM_ROUTE overrides). Each leg must end within 0.6 m of
 // its target, standing on the floor the ground reports there. The default is derived numbers, not WAD data:
-// a grid search over the generated level (step 0.75 m, headroom 1.9 m, 0.45 m clear of every blocking line,
-// no nukage) for straight legs. Start room (floor -0.5..0) north, out its north-east door, the bent corridor
+// a grid search over the generated level at 32 units/m (step 0.75 m, headroom 1.9 m, 0.45 m clear of every
+// blocking line, no nukage) for straight legs; scaled by K. Start room (floor -0.5..0) north, out its north-east door, the bent corridor
 // (zone 7), across the window room (zone 2), the corridor east down a 0.25 m step, onto the zigzag
 // walkway over the nukage (zone 9, floor -0.75).
 const DEFAULT_ROUTE = [[0, 0], [0, -17], [5.75, -22.75], [8.5, -34], [30.25, -33.75], [32.75, -31.25], [49.75, -31.25], [57.75, -23.25]];
-const ROUTE = process.env.DOOM_ROUTE ? JSON.parse(process.env.DOOM_ROUTE) : DEFAULT_ROUTE;
+const ROUTE = process.env.DOOM_ROUTE ? JSON.parse(process.env.DOOM_ROUTE) : DEFAULT_ROUTE.map(([x, z]) => at32(K, x, z));
 if (ROUTE.length < 4) fail('E1M1: ROUTE needs at least 4 waypoints (DOOM_ROUTE env, see the plan Task 7 Step 3)');
 for (let i = 1; i < ROUTE.length; i++) {
   // Walk speed 3.4 m/s: allow the leg's length at ~2.4 m/s plus 2 s, so legs up to ~22 m fit.
@@ -823,7 +828,7 @@ if (wantFloat) {
   const idleBad = f0.filter((f) => f.down || f.mode !== 'idle' || !(f.low - f.floor >= 1.0) || !(f.pos[1] + 2.1 <= f.ceil + 0.05));
   if (idleBad.length) fail(`floaters idle: not cruising clear of floor and ceiling: ${JSON.stringify(idleBad.map((f) => ({ id: f.id, mode: f.mode, gap: +(f.low - f.floor).toFixed(2), alt: +f.altitude.toFixed(2), floor: f.floor, ceil: f.ceil })))}`);
   pass(`floaters idle: ${f0.length} cruising (body lowest − floor ${f0.map((f) => (f.low - f.floor).toFixed(2)).join(', ')} m; floors ${f0.map((f) => f.floor).join(', ')})`);
-  const [px, pz] = process.env.DOOM_FLOAT_POSE ? JSON.parse(process.env.DOOM_FLOAT_POSE) : [24, -21.5];
+  const [px, pz] = process.env.DOOM_FLOAT_POSE ? JSON.parse(process.env.DOOM_FLOAT_POSE) : at32(K, 24, -21.5);
   const pf = (await evaluate(`__sdfGame.ground(${px}, ${pz})`)).floor;
   await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${Math.PI}, 0, ${pf})`);
   const t = await simWait(10);
@@ -875,10 +880,11 @@ if (views.length) {
 // The pit corridor pose of the 3a notes' run 1 (40.9, 13.1), looking down the corridor (yaw 1.1): ten bodies
 // stood in that frustum behind sector walls, all drawn before the render culls learned the walls (report only).
 {
-  const f = (await evaluate('__sdfGame.ground(40.9, 13.1)')).floor;
-  await evaluate(`__sdfGame.setPose(40.9, 13.1, 1.1, -0.05, ${f})`);
+  const [pcx, pcz] = at32(K, 40.9, 13.1);
+  const f = (await evaluate(`__sdfGame.ground(${pcx}, ${pcz})`)).floor;
+  await evaluate(`__sdfGame.setPose(${pcx}, ${pcz}, 1.1, -0.05, ${f})`);
   const c = await budgetHere();
-  console.log(`budget pit corridor (40.9, 13.1) yaw 1.1: ${c.calls} draw calls, ${c.ms.toFixed(2)} ms (readings ${c.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${c.cull.drawn} / in frame ${c.cull.framed} / in sight ${c.cull.inSight}; ${c.split.line}`);
+  console.log(`budget pit corridor (${pcx}, ${pcz}) yaw 1.1: ${c.calls} draw calls, ${c.ms.toFixed(2)} ms (readings ${c.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${c.cull.drawn} / in frame ${c.cull.framed} / in sight ${c.cull.inSight}; ${c.split.line}`);
 }
 // 5.7 SHOTS with enemies in view.
 if (process.env.SHOTS === '1') {
@@ -1326,7 +1332,7 @@ if (!(abPass.ratio > 1.05)) fail(`sector light A/B: ${fmt(abPass)} at ${abCurve}
 pass(`sector light A/B: ${fmt(abPass)} at ${abCurve}`);
 const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
 if (errs.length) fail(`console errors: ${JSON.stringify(errs.slice(0, 4))}`);
-// 7b. BARRELS ON E1M1, a fresh ?god=0 boot of its own (the 5.4 boot leaves the player under fire and hurt): every converter barrel on its floor; b48 -> b50 (4.3 m, the
+// 7b. BARRELS ON E1M1, a fresh ?god=0 boot of its own (the 5.4 boot leaves the player under fire and hurt): every converter barrel on its floor; b48 -> b50 (4.3 m at 32 units/m, 3.93 at 35, the
 // map's closest pair: the 4.5 m reach chains on the real map); the player 2 m off b48 in the open takes a share;
 // the others stay intact; the budget at that pose; SHOTS e1m1-barrels-0..2.png (before, the chain, after).
 await boot('doom-e1m1', '&god=0');

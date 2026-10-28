@@ -14,7 +14,7 @@ export const BARREL = {
   heightM: 0.95,
   hp: 20,
   damage: { pellet: 4, slug: 20, melee: 10, round: 3 },
-  /** Centre to centre, 3D. Doom-like reach (owner, 2026-10-25): E1M1's closest pair, b48–b50, is 4.3 m apart. */
+  /** Centre to centre, 3D. Doom-like reach (owner, 2026-10-25): E1M1's closest pair, b48–b50, is 4.3 m apart at 32 units/m (3.9 m at the converter's 35). */
   catchRadiusM: 4.5,
   chainDelaySec: [0.1, 0.3] as const,
 } as const;

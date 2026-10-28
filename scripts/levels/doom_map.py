@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert a Doom map from a WAD into a Blud sector level.
 
-    python3 scripts/levels/doom_map.py <wad> E1M1 [--units-per-m 32] [--out public/assets/levels] [--svg .lab-tmp/doom]
+    python3 scripts/levels/doom_map.py <wad> E1M1 [--units-per-m 35] [--out public/assets/levels] [--svg .lab-tmp/doom]
 
 Spec: docs/superpowers/specs/2026-10-24-doom-sector-levels-design.md §5. Reads the vanilla map
 lumps (VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, THINGS; no BSP). Writes <out>/doom-<map>.level.json.
@@ -16,6 +16,17 @@ ones are still left out). Other things (decorations, keys, ...) are skipped and 
 Hand-written edits (ours, committed): scripts/levels/overrides/<map>.json is applied when it exists
 (`--overrides PATH` picks another, `--no-overrides` skips it); format in doom_overrides.py. Sector
 patches land before lights and things are placed; override spawns are added after Doom's.
+
+World scale (`--units-per-m`, default UNITS_PER_M): every Doom length becomes metres by it (vertices,
+heights, things, the exit box's span, lights). What stays in metres whatever the scale is what is
+sized for a BODY (the player and the characters are not scaled): the exit box's depth and height, a
+light's height over the floor or under the ceiling (CEIL_DROP_M, EMITTER_LIGHT_MAX_Y_M, the pool
+light's 0.6 m). What follows the WORLD is every decision about the map's structure: the zone split /
+merge areas, the area that earns a fill, pool or emitter light, how far an emitter light stands out
+from its wall and the emitter lights' spacing are written in metres at REFERENCE_UNITS_PER_M (the old
+32) and read against the map at that scale, so a rescale gives the same zones and the same lights at
+the same Doom spots. Light powers stay per real m^2 (a smaller room has
+nearer walls: less power for the same look). The overrides file carries its own `unitsPerM`.
 """
 from __future__ import annotations
 
@@ -37,8 +48,17 @@ from doom_tables import (  # noqa: E402
 MAP_LUMPS = ("THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SECTORS")
 STANDARD_MAP_LUMPS = ("THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS", "NODES", "SECTORS", "REJECT", "BLOCKMAP")
 PLAYER1_START = 1
+# 35 Doom units per metre (owner 2026-10-27: at 32 the characters read a little small in E1M1's
+# rooms; the world shrinks, the bodies do not). The ceiling on it is E1M1's lowest needed opening: its
+# doors open to 68 units (72 - DOOR_OPEN_GAP_UNITS), which must stay over SECTOR_HEADROOM_M 1.9
+# (sector-def.ts): 1.94 m at 35, 1.89 m at 36 (shut). Doom's 56-unit player is 1.6 m at 35, our eye.
+# Steps get easier (the 24-unit stairs 0.69 m against SECTOR_STEP_M 0.75) but none newly climbable:
+# the next step up, 28 units (the start room's goo pit to its window sills), is 0.8 m.
+UNITS_PER_M = 35.0
+REFERENCE_UNITS_PER_M = 32.0      # the scale the *_M2 / spacing constants below were tuned at
 DOOR_OPEN_GAP_UNITS = 4          # Doom: a door opens to 4 units below the lowest neighbouring ceiling
-ZONE_SPLIT_M2 = 600.0            # a zone whose real floor area is over this splits (spec §6.5)
+# The *_M2 areas and the EMITTER_LIGHT_*_M spacings are map structure: metres at REFERENCE_UNITS_PER_M.
+ZONE_SPLIT_M2 = 600.0            # a zone whose floor area is over this splits (spec §6.5)
 ZONE_MIN_M2 = 50.0               # a smaller zone merges into a neighbour
 LIGHT_MIN_ZONE_M2 = 150.0        # a zone gets a fill light from this area up
 MAX_LIGHTS = 10
@@ -286,19 +306,24 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
             if not _inside(px, pz, segs):
                 continue
             d = min(_seg_dist(px, pz, a, b) for a, b in segs)
-            if d > best_d:
+            # Ties (a symmetric room: two arms equally far from the walls) go to the first grid point,
+            # not to the vertices' 0.1 mm rounding noise, so the pick is the same at every world scale.
+            if d > best_d + 1e-3:
                 best, best_d = (px, pz), d
     return best
 
 
-def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int = 4, zombieman: str = "mix",
+def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, skill: int = 4, zombieman: str = "mix",
             overrides: dict | None = None) -> tuple[dict, dict]:
     """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
     `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
     "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS. `overrides` is a
     loaded doom_overrides file (None: none); a bad one raises doom_overrides.OverrideError."""
+    if not (math.isfinite(units_per_m) and units_per_m > 0):
+        raise ValueError(f"units_per_m must be a positive number, not {units_per_m}")
     if overrides is not None:
         doom_overrides.check_top(overrides, map_name)
+        overrides = doom_overrides.rescaled(overrides, units_per_m)
     if skill not in SKILL_BITS:
         raise ValueError(f"skill must be one of {sorted(SKILL_BITS)}")
     if zombieman != "mix" and zombieman not in ZOMBIEMAN_VARIANTS:
@@ -383,7 +408,10 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
     for i in range(n):
         pts = [p for seg in sector_segs[i] for p in seg] or [(0.0, 0.0)]
         bbox[i] = (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
-    zone_of = _zones(n, pairs, doors, area, bbox)
+    # Structural decisions (zones, which zones / pools / emitters earn a light) read the area at
+    # REFERENCE_UNITS_PER_M, so the world scale does not change them; powers read the real area.
+    area_ref = [a * (m / REFERENCE_UNITS_PER_M) ** 2 for a in area]
+    zone_of = _zones(n, pairs, doors, area_ref, bbox)
 
     out_sectors = []
     for i, s in enumerate(sectors):
@@ -423,7 +451,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
     # confirmed inside the zone's biggest sector, as far from its walls as the grid finds.
     zone_area: dict[int, float] = {}
     for i in range(n):
-        zone_area[zone_of[i]] = zone_area.get(zone_of[i], 0.0) + area[i]
+        zone_area[zone_of[i]] = zone_area.get(zone_of[i], 0.0) + area_ref[i]
     big_zones = sorted((z for z, a in zone_area.items() if a >= LIGHT_MIN_ZONE_M2), key=lambda z: (-zone_area[z], z))[:MAX_LIGHTS]
     lights = []
     for zone in sorted(big_zones):
@@ -448,7 +476,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
     pools: dict[int, list[int]] = {}
     for i in glow:
         pools.setdefault(pu.find(i), []).append(i)
-    ranked = sorted(((sum(area[i] for i in g), min(g), g) for g in pools.values() if sum(area[i] for i in g) >= POOL_MIN_M2),
+    ranked = sorted(((sum(area[i] for i in g), min(g), g) for g in pools.values() if sum(area_ref[i] for i in g) >= POOL_MIN_M2),
                     key=lambda t: (-t[0], t[1]))[:MAX_POOL_LIGHTS]
     for total_area, _, g in ranked:
         for i in sorted(g, key=lambda i: (-area[i], i)):
@@ -461,7 +489,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
     verts_m = [[X(x), Z(y)] for x, y in verts]
-    emitter_lights = _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area)
+    emitter_lights = _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, m / REFERENCE_UNITS_PER_M)
     lights.extend(emitter_lights)
 
     # Things: monsters, pickups and barrels at their sector's floor; ids from the THINGS index, so stable.
@@ -526,7 +554,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
 
     level = {
         "version": 1, "id": f"doom-{map_name.lower()}", "name": f"Doom {map_name.upper()} (dev placeholder)",
-        "geometry": "sectors", "ammo": "infinite", "loadout": ["melee", "shotgun", "dynamite", "flare"],
+        "geometry": "sectors", "unitsPerM": m, "ammo": "infinite", "loadout": ["melee", "shotgun", "dynamite", "flare"],
         "vertices": [[X(x), Z(y)] for x, y in verts],
         "sectors": out_sectors, "lines": out_lines,
         "start": {"pos": [0.0, 0.0, 0.0], "yaw": round(math.radians(90 - start["angle"]), 6)},
@@ -583,11 +611,14 @@ def _emitter_walls(out_sectors, out_lines, verts_m):
     return out
 
 
-def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) -> list[dict]:
+def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, to_ref: float = 1.0) -> list[dict]:
     """Cheap coloured lights for the strongest emitter surfaces (EMITTER_LIGHTS): one candidate per
     (sector, family) of wall quads, standing out_m in front of their area-weighted middle at their mean
     height, and one per fluorescent ceiling, CEIL_DROP_M under it; ranked by area x weight, at most
-    MAX_EMITTER_LIGHTS, MAX_EMITTER_LIGHTS_PER_ZONE per zone, EMITTER_LIGHT_SPACING_M apart per family."""
+    MAX_EMITTER_LIGHTS, MAX_EMITTER_LIGHTS_PER_ZONE per zone, EMITTER_LIGHT_SPACING_M apart per family.
+    `to_ref` turns real metres into metres at REFERENCE_UNITS_PER_M: min_m2, out_m and the spacings are
+    read there (the same picks at the same Doom spots at any world scale); the heights over the floor
+    (bodies' scale) and the powers (real area) stay real."""
     groups: dict[tuple[int, str], list] = {}
     for fam, sec, a, b, y0, y1 in _emitter_walls(out_sectors, out_lines, verts_m):
         groups.setdefault((sec, fam), []).append((a, b, y0, y1))
@@ -605,7 +636,7 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) ->
             cy += w * (y0 + y1) / 2
             nx += w * -dz / ln
             nz += w * dx / ln
-        if tot < spec["min_m2"]:
+        if tot * to_ref ** 2 < spec["min_m2"]:
             continue
         cx, cz, cy = cx / tot, cz / tot, cy / tot
         nl = math.hypot(nx, nz)
@@ -613,8 +644,8 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) ->
         pt = None
         # Out from the walls along their mean normal (none for a room lined with them: the middle itself).
         for k in ((1.0, 0.6, 0.3, 0.0) if nl > 1e-6 else (0.0,)):
-            px = cx + (nx / nl * spec["out_m"] * k if nl > 1e-6 else 0.0)
-            pz = cz + (nz / nl * spec["out_m"] * k if nl > 1e-6 else 0.0)
+            px = cx + (nx / nl * spec["out_m"] / to_ref * k if nl > 1e-6 else 0.0)
+            pz = cz + (nz / nl * spec["out_m"] / to_ref * k if nl > 1e-6 else 0.0)
             if _inside(px, pz, sector_segs[sec]):
                 pt = (px, pz)
                 break
@@ -624,14 +655,16 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) ->
             continue
         # At the surfaces' mean height, but no higher than EMITTER_LIGHT_MAX_Y_M over the floor: the light is for bodies.
         y = min(s["ceil"] - 0.3, s["floor"] + EMITTER_LIGHT_MAX_Y_M, max(s["floor"] + 0.5, cy))
-        cands.append((tot * spec["weight"], sec, fam, tot, (pt[0], y, pt[1])))
+        # Ranked by the area at the reference scale, rounded to 0.1: vertices rounded to 0.1 mm at a scale that is not
+        # a power of two make equal Doom areas differ in the last digits, which would break ties by noise.
+        cands.append((round(tot * to_ref ** 2 * spec["weight"], 1), sec, fam, tot, (pt[0], y, pt[1])))
     for sec, s in enumerate(out_sectors):
-        if s["materials"]["ceil"] != "fluorescent" or area[sec] < EMITTER_LIGHTS["fluorescent"]["min_m2"]:
+        if s["materials"]["ceil"] != "fluorescent" or area[sec] * to_ref ** 2 < EMITTER_LIGHTS["fluorescent"]["min_m2"]:
             continue
         pt = _fill_point(sector_segs[sec], bbox[sec])
         if pt is None:
             continue
-        cands.append((area[sec] * EMITTER_LIGHTS["fluorescent"]["weight"], sec, "fluorescent", area[sec], (pt[0], s["ceil"] - CEIL_DROP_M, pt[1])))
+        cands.append((round(area[sec] * to_ref ** 2 * EMITTER_LIGHTS["fluorescent"]["weight"], 1), sec, "fluorescent", area[sec], (pt[0], s["ceil"] - CEIL_DROP_M, pt[1])))
     cands.sort(key=lambda c: (-c[0], c[1], c[2]))
     picked: list[dict] = []
     per_zone: dict[int, int] = {}
@@ -642,7 +675,7 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) ->
         zone = out_sectors[sec]["zone"]
         if per_zone.get(zone, 0) >= MAX_EMITTER_LIGHTS_PER_ZONE:
             continue
-        if any(math.hypot(p[0] - pos[0], p[2] - pos[2]) < (EMITTER_LIGHT_SPACING_M if f == fam else EMITTER_LIGHT_MIN_GAP_M) for f, p in placed):
+        if any(math.hypot(p[0] - pos[0], p[2] - pos[2]) * to_ref < (EMITTER_LIGHT_SPACING_M if f == fam else EMITTER_LIGHT_MIN_GAP_M) for f, p in placed):
             continue
         spec = EMITTER_LIGHTS[fam]
         picked.append({"pos": [round(pos[0], 3), round(pos[1], 3), round(pos[2], 3)], "color": list(spec["color"]),
@@ -707,7 +740,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("wad", type=Path)
     ap.add_argument("map")
-    ap.add_argument("--units-per-m", type=float, default=32)
+    ap.add_argument("--units-per-m", type=float, default=UNITS_PER_M,
+                    help=f"world scale, Doom units per metre (default {UNITS_PER_M:g}; the bodies are not scaled)")
     ap.add_argument("--out", type=Path, default=Path("public/assets/levels"))
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
     ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")

@@ -178,15 +178,41 @@ def test_every_sector_is_left_of_its_lines_with_positive_area(tmp_path):
     assert all(a > 0 for a in area), area
 
 
-def test_a_big_zone_gets_a_light_inside_its_sector(tmp_path):
-    out = convert(tmp_path, units_per_m=16)               # 4x the area: 384 m2
+def test_a_big_zone_gets_a_light_inside_its_sector(tmp_path, monkeypatch):
+    monkeypatch.setattr(doom_map, "LIGHT_MIN_ZONE_M2", 90.0)   # A + B is 96 m2 (the threshold is map structure: no scale makes it bigger)
+    out = convert(tmp_path)
     fill = [li for li in out["lights"] if "mood" not in li]
     assert len(fill) == 1
     px, py, pz = fill[0]["pos"]
-    assert -4 < px < 12 and -8 < pz < 8                   # inside the 16 x 16 m box of A + B (x -4..20 overall)
+    assert -2 < px < 10 and -4 < pz < 4                   # inside the 8 x 8 m box of A + B
     a = out["sectors"][0]
     assert a["floor"] < py < a["ceil"]
-    assert px < 8                                         # A is x -4..12: the biggest sector holds the light
+    assert px < 6                                         # A is x -2..6: the biggest sector holds the light
+
+
+def test_the_world_scale_moves_things_but_keeps_the_structure(tmp_path, monkeypatch):
+    """--units-per-m shrinks every Doom length; zones and which lights exist do not change (their
+    thresholds are metres at REFERENCE_UNITS_PER_M); a body-sized length (the exit box depth) stays."""
+    monkeypatch.setattr(doom_map, "LIGHT_MIN_ZONE_M2", 90.0)
+    a = convert(tmp_path, units_per_m=32)
+    b = convert(tmp_path, units_per_m=40)
+    k = 32 / 40
+    assert b["unitsPerM"] == 40 and a["unitsPerM"] == 32
+    assert b["vertices"] == [[round(x * k, 4), round(z * k, 4)] for x, z in a["vertices"]]
+    assert [s["zone"] for s in b["sectors"]] == [s["zone"] for s in a["sectors"]]
+    assert [s["floor"] for s in b["sectors"]] == [round(s["floor"] * k, 4) for s in a["sectors"]]
+    assert len(b["lights"]) == len(a["lights"]) and [li.get("mood") for li in b["lights"]] == [li.get("mood") for li in a["lights"]]
+    assert [s["pos"] for s in b["spawns"]] == [[round(v * k, 4) for v in s["pos"]] for s in a["spawns"]]
+
+
+def test_the_default_world_scale_is_the_converters(tmp_path):
+    wad = tmp_path / "t.wad"
+    wad.write_bytes(build_wad())
+    out, _ = doom_map.convert(wad, "E1M1")
+    assert out["unitsPerM"] == doom_map.UNITS_PER_M == 35
+    import pytest
+    with pytest.raises(ValueError, match="units_per_m"):
+        doom_map.convert(wad, "E1M1", units_per_m=0)
 
 
 def test_remote_door_target_is_opened_and_joins_a_zone(tmp_path):
@@ -235,12 +261,12 @@ def test_pool_gets_a_green_fire_light_inside_it(tmp_path):
 
 
 def test_pool_lights_do_not_use_the_fill_light_cap(tmp_path):
-    # 11 separate 256 m2 rooms (16 units/m); the last is nukage.
+    # 11 separate 256 m2 rooms (512 units square at 32 units/m); the last is nukage.
     verts, sectors, sides, lines = [], [], [], []
     for k in range(11):
-        x = k * 600
+        x = k * 1200
         v = len(verts)
-        verts += [(x, 0), (x + 256, 0), (x + 256, 256), (x, 256)]
+        verts += [(x, 0), (x + 512, 0), (x + 512, 512), (x, 512)]
         floor_tex = "NUKAGE1" if k == 10 else "FLOOR4_8"
         sectors.append((0, 128, floor_tex, "CEIL3_5", 160, 0, 0))
         sides.append((0, 0, "-", "-", "STARTAN3", k))
@@ -248,7 +274,7 @@ def test_pool_lights_do_not_use_the_fill_light_cap(tmp_path):
             lines.append((v + a, v + b, 1, 0, 0, k, 0xFFFF))
     wad = tmp_path / "m.wad"
     wad.write_bytes(pack_wad(verts, sectors, sides, lines, [(64, 128, 0, 1, 7)]))
-    out, _ = doom_map.convert(wad, "E1M1", units_per_m=16)
+    out, _ = doom_map.convert(wad, "E1M1", units_per_m=32)
     fire = [li for li in out["lights"] if li.get("mood") == "fire"]
     assert len(fire) == 1
     assert len(out["lights"]) - len(fire) == doom_map.MAX_LIGHTS

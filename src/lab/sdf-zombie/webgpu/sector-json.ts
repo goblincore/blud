@@ -17,7 +17,10 @@ import {
 
 type Json = Record<string, unknown>;
 
-const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry',
+/** `unitsPerM`: provenance only, the world scale a converted Doom map was written at (Doom units per
+ *  metre, scripts/levels/doom_map.py). The game does not read it; tools that place things by Doom
+ *  position (the doom gate's route) do. */
+const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry', 'unitsPerM',
   'vertices', 'sectors', 'lines', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
@@ -72,6 +75,7 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
 
   unknownKeys(j, TOP, 'level');
   if (j.geometry !== 'sectors') errors.push('geometry: expected "sectors"');
+  if (j.unitsPerM !== undefined && !(isNum(j.unitsPerM) && j.unitsPerM > 0)) errors.push('unitsPerM: expected a positive number');
 
   // --- vertices ------------------------------------------------------------------
   const vertices: XZ[] = [];

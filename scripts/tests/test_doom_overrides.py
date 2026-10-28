@@ -104,6 +104,28 @@ def test_a_spawn_stands_on_its_floor_facing_its_point(tmp_path):
     assert math.isclose(east["spawns"][-1]["yaw"], math.pi / 2, abs_tol=1e-6)               # the start rule
 
 
+def test_a_file_written_at_one_scale_lands_on_the_same_spots_at_another(tmp_path):
+    """unitsPerM 32 file, converted at 40: positions and heights shrink by 32/40, so `expect` still
+    matches, the patched floor is the same Doom height and the spawn stands on the same Doom spot."""
+    wad = tmp_path / "t.wad"
+    wad.write_bytes(build_wad())
+    ov = {"map": "E1M1", "unitsPerM": 32,
+          "sectors": [{"at": [8, 0], "expect": {"floor": 0.5}, "set": {"floor": 0.75, "light": 0.5, "hurtPerSec": 7}}],
+          "spawns": [{"id": "o-t", "kind": "teratoma", "at": [8, 2], "face": [8, -3], "sector": 1}]}
+    out, _ = doom_map.convert(wad, "E1M1", units_per_m=40, overrides=ov)
+    b = out["sectors"][1]
+    assert b["floor"] == 0.6 and b["light"] == 0.5 and b["hurtPerSec"] == 7       # 0.75 * 32/40; light and hurt are not lengths
+    spawn = out["spawns"][-1]
+    assert spawn["pos"] == [6.4, 0.6, 1.6] and spawn["yaw"] == 0.0
+    assert ov["sectors"][0]["at"] == [8, 0]                                      # the loaded file is not changed
+    same, _ = doom_map.convert(wad, "E1M1", units_per_m=40, overrides={**ov, "unitsPerM": 40,
+                                                                        "sectors": [{"at": [6.4, 0], "expect": {"floor": 0.4}, "set": {"floor": 0.6}}],
+                                                                        "spawns": [{"id": "o-t", "kind": "teratoma", "at": [6.4, 1.6], "face": [6.4, -2.4]}]})
+    assert same["sectors"][1]["floor"] == b["floor"] and same["spawns"][-1]["pos"] == spawn["pos"]
+    with pytest.raises(OverrideError, match="unitsPerM: must be a positive number"):
+        doom_map.convert(wad, "E1M1", overrides={"map": "E1M1", "unitsPerM": -1})
+
+
 @pytest.mark.parametrize("entry, message", [
     ({"id": "o-v", "kind": "teratoma", "at": [40, 0], "yaw": 0}, "(40.0, 0.0) is in no sector (the void)"),
     ({"id": "o-w", "kind": "teratoma", "at": [-1.9, 0], "yaw": 0}, "0.10 m from a wall of sector 0"),
@@ -169,3 +191,4 @@ def test_the_committed_e1m1_overrides_are_well_formed():
     for entry in ov["spawns"]:
         assert set(entry) <= doom_overrides.SPAWN_KEYS and entry["kind"] in doom_overrides.SPAWN_KINDS
     assert len({s["id"] for s in ov["spawns"]}) == len(ov["spawns"])
+    assert ov["unitsPerM"] == 32                     # its metres are at 32: the converter rescales them

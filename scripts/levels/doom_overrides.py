@@ -2,10 +2,15 @@
 
 Our data, not the WAD's: committed in scripts/levels/overrides/<map>.json, so regenerating a level from
 the WAD keeps the edits. Coordinates are OURS (metres, the converted level's x/z: the player start is
-the origin, Doom +y is our -z), as read off the `--svg` plan or the level JSON.
+the origin, Doom +y is our -z), as read off the `--svg` plan or the level JSON, AT THE FILE'S
+`unitsPerM` (Doom units per metre it was written at; 32 when absent). Converting at another world
+scale rescales every length in the file by unitsPerM / the converter's (`rescaled`): positions
+(`at`, `face`) and heights (`floor`, `ceil` in `expect` and `set`), so a change of world scale does
+not move an edit off its spot. Other values (light, hurtPerSec, yaw) are not lengths.
 
     {
       "map": "E1M1",
+      "unitsPerM": 32,
       "note": "free text",
       "sectors": [
         {"at": [0, -12], "expect": {"floor": -0.5}, "set": {"glow": "nukage", "special": "hurt", "hurtPerSec": 5, "floor": -0.625}}
@@ -43,7 +48,9 @@ BODY_RADIUS_M = 0.34
 STEP_M = 0.75
 HEADROOM_M = 1.9
 
-TOP_KEYS = {"map", "note", "sectors", "spawns"}
+TOP_KEYS = {"map", "unitsPerM", "note", "sectors", "spawns"}
+DEFAULT_UNITS_PER_M = 32.0
+LENGTH_KEYS = ("floor", "ceil")
 SECTOR_KEYS = {"sector", "at", "expect", "set", "note"}
 SET_KEYS = {"floor", "ceil", "light", "special", "hurtPerSec", "glow", "materials"}
 MATERIAL_KEYS = {"floor", "ceil", "wall"}
@@ -91,6 +98,30 @@ def check_top(ov: dict, map_name: str) -> None:
     for key in ("sectors", "spawns"):
         if not isinstance(ov.get(key, []), list):
             raise OverrideError(f"overrides.{key}: must be a list")
+    if "unitsPerM" in ov and not (_num(ov["unitsPerM"]) and ov["unitsPerM"] > 0):
+        raise OverrideError(f"overrides.unitsPerM: must be a positive number (Doom units per metre), not {ov['unitsPerM']!r}")
+
+
+def rescaled(ov: dict, units_per_m: float) -> dict:
+    """A copy of `ov` (check_top first) with its lengths in metres at `units_per_m`. Malformed entries
+    are passed through unscaled for apply_* to name."""
+    k = float(ov.get("unitsPerM", DEFAULT_UNITS_PER_M)) / float(units_per_m)
+    if k == 1.0:
+        return ov
+
+    def xz(v):
+        return [round(c * k, 4) for c in v] if isinstance(v, list) and all(_num(c) for c in v) else v
+
+    def lengths(o):
+        return {key: round(v * k, 4) if key in LENGTH_KEYS and _num(v) else v for key, v in o.items()} if isinstance(o, dict) else o
+
+    out = {**ov, "unitsPerM": float(units_per_m)}
+    out["sectors"] = [{**e, **{key: xz(e[key]) for key in ("at",) if key in e},
+                       **{key: lengths(e[key]) for key in ("expect", "set") if key in e}} if isinstance(e, dict) else e
+                      for e in ov.get("sectors", [])]
+    out["spawns"] = [{**e, **{key: xz(e[key]) for key in ("at", "face") if key in e}} if isinstance(e, dict) else e
+                     for e in ov.get("spawns", [])]
+    return out
 
 
 def _inside(px: float, pz: float, segs) -> bool:

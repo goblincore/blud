@@ -9,6 +9,7 @@
 // Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-emitlight.sh   (POSES=computer,... VARIANTS=off,default)
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { at32, doomScale } from './lib/doom-scale.mjs';
 
 const VITE = Number(process.argv[2] ?? 5547);
 const CDP = Number(process.argv[3] ?? 9547);
@@ -16,7 +17,8 @@ const OUT = '.lab-tmp/doom/emitlight';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 
-/** [name, x, z, yaw, pitch, flashlight]: yaw 0 faces -z, π/2 faces +x. */
+/** [name, x, z, yaw, pitch, flashlight]: yaw 0 faces -z, π/2 faces +x; x, z are metres at 32 units/m
+ *  (scripts/lib/doom-scale.mjs), scaled to the level's world scale below. */
 export const POSES = [
   ['computer', 21, -28, 0.45, 0.2, true],          // the computer room (zone 2) from its north-west: screen banks, viewscreen boxes
   ['computer-off', 21, -28, 0.45, 0.2, false],
@@ -73,8 +75,10 @@ const VARIANTS = { off: [0, 0], half: [D / 2, 0.5], default: [D, 1], double: [2 
 const vlist = (process.env.VARIANTS ?? 'off,half,default,double').split(',');
 const only = process.env.POSES ? new Set(process.env.POSES.split(',')) : null;
 for (const v of vlist) mkdirSync(`${OUT}/${v}`, { recursive: true });
-for (const [name, x, z, yaw, pitch, torch] of POSES) {
+const K = doomScale();
+for (const [name, x32, z32, yaw, pitch, torch] of POSES) {
   if (only && !only.has(name)) continue;
+  const [x, z] = at32(K, x32, z32);
   await evaluate(`__sdfGame.setFlashlight(${torch})`);
   const f = (await evaluate(`__sdfGame.ground(${x}, ${z})`)).floor;
   await evaluate(`__sdfGame.setPose(${x}, ${z}, ${yaw}, ${pitch}, ${f})`);

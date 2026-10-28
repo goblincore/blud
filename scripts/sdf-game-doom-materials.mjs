@@ -9,6 +9,7 @@
 // (emit-before is ?emitters=0, the old look); compose with SHEET=emitters python3 scripts/sdf-game-doom-materials-sheet.py.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { at32, doomScale } from './lib/doom-scale.mjs';
 
 const VITE = Number(process.argv[2] ?? 5483);
 const CDP = Number(process.argv[3] ?? 9483);
@@ -17,7 +18,8 @@ const OUT = POSE_SET === 'emitters' ? '.lab-tmp/doom/emit' : '.lab-tmp/doom/mat'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 
-/** [name, x, z, yaw, pitch, flashlight]: yaw 0 faces -z, π/2 faces +x. Picked from the generated plan. */
+/** [name, x, z, yaw, pitch, flashlight]: yaw 0 faces -z, π/2 faces +x. Picked from the generated plan; x, z are
+ *  metres at 32 units/m (scripts/lib/doom-scale.mjs), scaled to the level's world scale where they are used. */
 export const POSES = [
   ['start', 0, -1, Math.PI * 0.6, 0.05, true],            // the start room, facing its east wall
   ['tech', 30, -40, 0.25, 0.12, true],                    // the window room (zone 2): tech walls, light-panel bays
@@ -69,6 +71,7 @@ const only = process.env.POSES ? new Set(process.env.POSES.split(',')) : null;
 const QUERY = { before: '&sectormat=0', after: '', head: '', 'emit-before': '&emitters=0', 'emit-after': '' };
 const POSE_LIST = POSE_SET === 'emitters' ? EMITTER_POSES : POSES;
 const EXTRA = process.env.QUERY_EXTRA ?? '';
+const K = doomScale();
 for (const variant of VARIANTS) {
   consoleEvents = [];
   const t0 = Date.now();
@@ -87,13 +90,14 @@ for (const variant of VARIANTS) {
   const meshes = await evaluate(`(() => { const out = {}; __sdfGame.sectorMeshes?.()?.forEach((n) => { out[n] = (out[n] ?? 0) + 1; }); return out; })()`).catch(() => null);
   if (meshes) console.log(`${variant}: sector meshes ${JSON.stringify(meshes)}`);
   mkdirSync(`${OUT}/${variant}`, { recursive: true });
-  for (const [name, x, z, yaw, pitch, torch] of POSE_LIST) {
+  for (const [name, x32, z32, yaw, pitch, torch] of POSE_LIST) {
     if (only && !only.has(name)) continue;
     const hasSeam = await evaluate('typeof __sdfGame.setFlashlight === "function"');
     if (hasSeam) await evaluate(`__sdfGame.setFlashlight(${torch})`);
     else if (!torch) { console.log(`${variant}: ${name} skipped (no setFlashlight seam)`); continue; }
-    const f = (await evaluate(`__sdfGame.ground(${x}, ${z})`)).floor;
-    await evaluate(`__sdfGame.setPose(${x}, ${z}, ${yaw}, ${pitch}, ${f})`);
+    const [px, pz] = at32(K, x32, z32);
+    const f = (await evaluate(`__sdfGame.ground(${px}, ${pz})`)).floor;
+    await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${yaw}, ${pitch}, ${f})`);
     await sleep(1500);
     if (name === 'start' || name === 'computer') {
       await evaluate('__sdfGame.timeDraws(15)');
