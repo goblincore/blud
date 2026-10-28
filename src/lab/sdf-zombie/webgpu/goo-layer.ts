@@ -1319,8 +1319,13 @@ export interface GooLayer {
    * PIPELINE WARM-UP for the reference layer materials
    * (renderLayer's makeLayerMat graphs). Compiles them off the capture path so
    * the first shutter frame does not hitch on a mid-firefight compile.
+   * With `target` (the target renderLayer draws into) each material is DRAWN into it once instead: compileAsync
+   * builds against a fresh render context with default attachments (the output colour space), not the layer
+   * target's, so its pipelines never matched renderLayer's and the first blood frame built its own. The layer target
+   * is cleared by every capture before renderLayer, so the warm draw leaves nothing. Not from inside post-aa's
+   * render callback (shutter-blur warmResolveDraw).
    */
-  precompileLayer(): Promise<void>;
+  precompileLayer(target?: THREE.RenderTarget): Promise<void>;
   /** How many extra blobs the last setExtraBlobs accepted (capped). */
   readonly extraBlobCount: number;
   /** Density-target resolution, independent of the canvas/output size. */
@@ -2681,7 +2686,7 @@ export function createGooLayer(
     setStreamDebug(on) { streamDebugOn = !!on; uStreamDebug.value = on ? 1 : 0; },
     get streamDebug() { return streamDebugOn; },
     setUploadOptimization(on) { uploadOptimization = !!on; },
-    async precompileLayer() {
+    async precompileLayer(target) {
       // Compile the reference layer graphs in the SAME scene/target shape
       // renderLayer draws, so the first shutter frame does not pay a
       // mid-firefight pipeline compile. The material is restored afterwards:
@@ -2691,7 +2696,18 @@ export function createGooLayer(
         for (const m of [layerMats.smooth.raw, layerMats.smooth.blur,
           layerMats.original.raw, layerMats.original.blur]) {
           quad.material = m;
-          await renderer.compileAsync(quadScene, quadCam);
+          if (target) {
+            const prevTarget = renderer.getRenderTarget();
+            const prevAutoClear = renderer.autoClear;
+            renderer.setRenderTarget(target);
+            renderer.autoClear = false;
+            try { void renderer.render(quadScene, quadCam); } finally {
+              renderer.autoClear = prevAutoClear;
+              renderer.setRenderTarget(prevTarget);
+            }
+          } else {
+            await renderer.compileAsync(quadScene, quadCam);
+          }
         }
         quad.material = prev;
       } catch (err) {

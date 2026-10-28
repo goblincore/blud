@@ -1460,6 +1460,9 @@ export function tick(ctx: GameContext, dt: number) {
   // posed and shaded later by the capture stage, exactly once. When off this
   // clears the selection, so the frame is the shipped fused goo.
   ctx.panels.shutterGame?.poseSharp();
+  // The blood shutter's targets need the goo density size, which boot's prewarm can run before: until it lands,
+  // this (outside post-aa's callback) allocates, primes and warms them (shutter-game-layer prewarm; a no-op after).
+  if (ctx.render.postAa) ctx.panels.shutterGame?.prewarm(ctx.render.postAa.captureTarget);
   ctx.goo.layer?.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
   // GIB SHUTTER PARTITION: lift this frame's moving pieces onto the blur
   // layer BEFORE the base scene renders (the draw callback follows this tick),

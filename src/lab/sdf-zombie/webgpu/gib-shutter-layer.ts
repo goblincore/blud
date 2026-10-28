@@ -37,7 +37,7 @@ import * as THREE from 'three/webgpu';
 import type { Chunk } from '../gib-chunks';
 import { setPassLabel } from './gpu-pass-timing';
 import {
-  createShutterResolve, rasterizeSweepSeed, seedDimsForOutput, EMPTY_SEED_STATS,
+  createShutterResolve, warmResolveDraw, rasterizeSweepSeed, seedDimsForOutput, EMPTY_SEED_STATS,
   type ShutterProjection, type ShutterResolveHandle, type SweepSeedStats, type SweepStamp,
 } from './shutter-blur';
 import {
@@ -279,7 +279,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     capsW = capsH = seedW = seedH = layerW = layerH = 0;
   }
 
-  function ensureTargets(capture: THREE.RenderTarget): void {
+  function ensureTargets(capture: THREE.RenderTarget, warm = true): void {
     const cw = Math.max(1, capture.width);
     const ch = Math.max(1, capture.height);
     // Gib seed grid: capture/2 at scale 1 — the same texel density the blood
@@ -319,12 +319,18 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       },
       { depthBias: depthBiasM },
     );
-    warmOnce();
+    if (warm) warmOnce();
   }
 
-  function warmOnce(): void {
+  /** `draw`: warm by drawing into the real targets (outside post-aa's callback only — shutter-blur warmResolveDraw);
+   *  otherwise a compileAsync, which builds a look-alike pipeline the real draw may not reuse. */
+  function warmOnce(draw = false): void {
     if (warmed || !resolve) return;
     warmed = true;
+    if (draw && stageTarget && layerTarget) {
+      warmResolveDraw(renderer, resolve, stageTarget);
+      return;
+    }
     void renderer.compileAsync(resolve.scene, warmCam).catch(() => {});
   }
 
@@ -556,7 +562,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     prewarm(capture) {
       if (!supported) return false;
       try {
-        ensureTargets(capture);
+        ensureTargets(capture, false);
+        // Boot, outside post-aa's callback: warm by drawing into the real targets.
+        warmOnce(true);
         return resolve !== null;
       } catch (err) {
         fail('prewarm failed', err);
