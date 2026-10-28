@@ -85,6 +85,54 @@ auto-open for the player and for enemies, close `wait` (4 s) after the doorway c
   (242 -> 245), first sight of door-69 still +0. Seams `doorCues()`, `setDoorLamp(gain, spill)`. Sheet:
   `.lab-tmp/doors-readable/doors-readable-sheet.png`. The lamp is the cue that carries at 10 m; frame and tone help up close.
 
+**Zone cull and update LOD (2026-10-28, e0c2ed7c, c75557ca, 1d19c68b).** Owner: "occlusion logic and game logic to
+optimize, like not rendering or updating enemies that aren't visible", designed for MAP28 scale. `?cull=0` turns it all off.
+- Measured first (CDP 250 µs profiles + `frameSplit`, 4 spots, `?god=1`). E1M1 before: tick 4–7 ms (actor step 2–3.5,
+  kit pose 0.5–0.9, 31 bodies of which 0–5 in the visual set), draw CPU 7–11 ms (three's per-object render ~4.3,
+  matrix walk ~1.2, shadow pass ~0.6), GPU fence 4–16 ms (the SDF march dominates; level meshes barely move it).
+  What it skipped already: the body march cull and kit/gun hiding were draw-only; every body still stepped, posed its kit
+  and was ray-tested every frame, and every level mesh in the frustum drew (zone boxes are huge), behind walls or not.
+- `sector-portals.ts` (pure): a frustum-wedge portal flood over the SECTOR graph (two-sided lines; no vertical opening =
+  wall; closed door = shut face; sky ceilings show taller sectors in the wedge over their walls; margin 0.35 m, a portal
+  within 0.5 m passes the wedge unchanged; void eye = fail open). `discVisible`: a body's 1.4 m flesh disc vs the flood.
+- `actor-lod.ts` (pure): full / quarter (alert, ≥ 18 m, unseen: 1 frame in 4 with time accumulated, so routes and speed
+  are the same) / sleep (director order idle, unseen, ≥ 8 m, settled). Anything in view, in a flooded sector, seen by the
+  director, in combat, or restless (`ZombieActor.settled()`: damage in the last 2 s, knock, dying, burning, tear,
+  collapsed...) is full.
+- `game-zone-cull.ts`: draw flood from the camera → level meshes (zone batches by zone; barrels, pickups, door leaves and
+  frames by the sectors under them) go to `layers.mask = 0` (not `.visible`, which game logic and the pre-warm own; a mesh
+  the level pre-warm is forcing is never hidden). The march cull skips the sight rays of bodies in no flooded sector.
+  Tick: an omni flood from the eye pre-tests the visual set and feeds the LOD; a hidden settled body skips its kit pose;
+  hidden kit/prop roots skip three's matrix walk (0.21 → 0.085 ms a walk at 101 bodies, several walks a frame).
+  Flood cost 40–250 µs on the loaded machine (2 a frame). Seams `zoneCull()` (zones, sectors, culled meshes, flood
+  steps, tiers), `setZoneCull(on)`, `sceneWalk()`. `?stress=N` adds N enemies of the level's own kinds near its spawns.
+- A/B, 2 paired rounds, split medians (ranges), cull=0 → cull=1:
+
+  | E1M1 | tick ms | draw CPU ms | actor step ms | kit pose ms | GPU fence ms |
+  |---|---|---|---|---|---|
+  | start | 4.2–6.8 → 2.3–3.1 | 7.1–11.5 → 5.0–7.6 | 2.2–3.3 → 0.9–1.1 | 0.5–0.9 → 0.1 | 6.0–6.3 → 4.2–6.6 |
+  | pool (open) | 4.7–7.1 → 4.4–9.9 | 6.9–10.3 → 6.6–16.5 | 2.2–3.5 → 2.2–5.0 | 0.5–0.8 → 0.2–0.4 | 9.6–12.8 → 11.8–16.8 |
+  | court | 5.1–6.5 → 3.6–6.5 | 7.6–11.2 → 7.0–12.6 | 2.4–3.1 → 1.6–2.8 | 0.6–0.8 → 0.2 | 13.7–15.3 → 14.7–17.2 |
+  | west | 3.8–5.6 → 2.3–3.6 | 7.3–11.2 → 6.4–9.5 | 2.1–3.0 → 1.0–1.6 | 0.5–0.8 → 0 | 4.3–6.4 → 4.6–7.6 |
+  | **stress (101)** start | 15.8–24.0 → 7.9–8.2 | 15.9–27.0 → 12.3–12.4 | 8.7–13.8 → 3.5–3.6 | 2.5–3.5 → 0.4 | 5.0–6.3 → 5.3–6.7 |
+  | stress pool | 23.7–31.9 → 20.5–23.6 | 22.0–32.0 → 19.7–19.9 | 12.2–16.5 → 12.1–13.9 | 3.1–3.9 → 0.8 | ≈ |
+  | stress court | 21.3–34.3 → 13.9–19.4 | 19.9–32.8 → 15.0–21.3 | 11.2–19.0 → 7.5–10.5 | 2.9–4.2 → 0.6–0.8 | ≈ |
+  | stress west | 13.3–21.2 → 7.8–8.5 | 15.6–26.6 → 12.0–13.3 | 7.7–12.4 → 4.2–4.6 | 2.4–3.4 → 0.3 | noisy |
+
+  The big open pool room sees most of the map, so it gains little (honest: in range of noise). GPU is unchanged.
+- Correctness: frozen same-frame shots cull on vs off at 8 views differ only by animation noise (`.lab-tmp/zone-cull/shots2`);
+  door-85 shut → only sectors 52, 82 seen; the first frame its open fraction leaves 0 the sectors beyond are flooded
+  (0 of 90 frames open-but-hidden), shots at 4 % / 30 % open match (`.lab-tmp/zone-cull/door`); pursuers alerted by a
+  shot walk to it in the quarter tier with the player 31 m away behind a shut door and arrive like cull=0 (min distance
+  0.06–0.9 m vs 0.07–1.2 m); 12-zone tour with `pipelinelog`: the same 11 new pipelines (explosion fx) on and off, 0
+  level/kit builds on first sight.
+- Not done, on purpose: zone batching is per zone (12 big zones in E1M1; three doors are inside one zone), so mesh culling
+  is coarse — MAP28 wants the converter to split zones at doors / by size; glow floors (one mesh per kind) and
+  `sector-light` per-zone updates are not culled (measured ~0.1 ms, not worth it); the vertical opening is ignored except
+  for none; lifts/moving floors will need the graph's "no opening" rule refreshed; per-actor view objects and the encounter
+  director still run for every body (director 0.2–0.75 ms at 101); three's per-object render (~4–6 ms) is now the
+  biggest CPU item for what IS visible (batch level meshes further, or instance pickups).
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
@@ -103,7 +151,7 @@ Queued next (owner-approved):
    **auto-open on approach** (player or enemy; close after a few seconds; no use key). E1M1 has 8 door lines; the
    converter writes door sectors open today. Needs: door state per door sector, panel meshes, collision/nav/sight
    blocked while closed (sector-ray, navigation edges, bounce/light occlusion), enemies opening them, sound later.
-4. **Occlusion and update culling** (owner 2026-10-27: "make sure we don't render or update enemies that aren't
+4. **Occlusion and update culling — DONE 2026-10-28 (see "Zone cull and update LOD" below).** (owner 2026-10-27: "make sure we don't render or update enemies that aren't
    visible"). Render side exists: sector-aware body cull + kit/gun cull + view-sync skip (7cb532eb..51f0a636).
    Missing: simulation LOD for unseen/far enemies (rig/motion/brain at reduced rate when not visible and not
    engaged; idle wanderers far away frozen or ticked slowly), level-geometry culling per zone (portal/zone
