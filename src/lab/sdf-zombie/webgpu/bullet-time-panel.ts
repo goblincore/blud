@@ -56,10 +56,10 @@ const ADR_HINTS: Record<AdrenalineKnob | typeof ADRENALINE_SWITCHES[number], str
   worldScale: 'The world fully in the rush (explicit bullet time is 0.2).',
   playerScale: 'The player\'s move, aim, fire and reload fully in.',
   shotScale: 'The player\'s own pellets in flight.',
-  easeInSec: 'Real seconds to ease in.',
-  holdSec: 'Real seconds fully in; a new hit restarts it (never deepens).',
-  easeOutSec: 'Real seconds to ease back to normal time.',
-  feedback: 'Peak opacity of the warm edge vignette (0 = none).',
+  rampInSec: 'Real seconds to glide into the rush (accelerating).',
+  sustainSec: 'Real seconds after the LAST enemy hit before it fades; every hit restarts it.',
+  rampOutSec: 'Real seconds to glide back to normal time (decelerating).',
+  edgeFx: 'Strength of the screen-edge distortion at full rush (0 = none).',
 };
 
 function stepFor(span: number): number {
@@ -121,7 +121,7 @@ export function createBulletTimePanel(opts: { left?: number; top?: number } = {}
   }
 
   const adrHead = document.createElement('div');
-  adrHead.textContent = 'ADRENALINE — auto rush on a hit';
+  adrHead.textContent = 'ADRENALINE — auto rush while hitting';
   adrHead.setAttribute('style', 'color:#d8a07f; margin:10px 0 5px; border-top:1px solid #3a2f2d; padding-top:6px;');
   body.appendChild(adrHead);
   const adrChecks: { key: typeof ADRENALINE_SWITCHES[number]; input: HTMLInputElement }[] = [];
@@ -152,7 +152,7 @@ export function createBulletTimePanel(opts: { left?: number; top?: number } = {}
     input.type = 'range';
     input.min = String(lo);
     input.max = String(hi);
-    input.step = String(hi - lo <= 1 ? 0.01 : 0.005);
+    input.step = String(hi - lo <= 1 ? 0.01 : hi - lo <= 10 ? 0.05 : 0.5);
     input.value = String(ADRENALINE[key]);
     input.setAttribute('style', 'flex:1; min-width:0; accent-color:#c0704f;');
     const out = document.createElement('span');

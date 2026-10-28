@@ -14,7 +14,7 @@ import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
 import { sectorOcclusion } from './actor-sight';
 import { applyBulletTimeTuning } from '../bullet-time';
-import { adrenalineScalesAt, applyAdrenalineTuning } from '../adrenaline';
+import { adrenalineEdgeAt, adrenalinePhase, adrenalineScalesAt, applyAdrenalineTuning } from '../adrenaline';
 import type { SectorGround } from './sector-ground';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
@@ -338,17 +338,19 @@ export function createBootSeams(ctx: GameContext) {
       };
     },
     setBulletTime: (on: boolean) => { ctx.player.bulletTime.on = on; return { ...ctx.player.bulletTime }; },
-    /** ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off. Returns the envelope
-     *  (phase, level, holdLeft, triggers), this tick's scales, and the live tuning. Pass a partial to retune it,
-     *  validated as bulletTime's (`reset: true` restores the defaults):
-     *    __sdfGame.adrenaline({ worldScale: 0.45, holdSec: 0.6 })   __sdfGame.adrenaline({ on: false })
-     *  Knobs: on flail (true/false) worldScale playerScale shotScale easeInSec holdSec easeOutSec feedback.
-     *  URL: ?adrenaline=0 ?adr_flail=0 ?adr_world= ?adr_player= ?adr_shot= ?adr_in= ?adr_hold= ?adr_out= ?adr_fx=. */
+    /** ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off — a sustained state that
+     *  glides in, holds while hits land, and glides out `sustainSec` after the last one. Returns the envelope
+     *  (phase, level, sinceHit, triggers), this tick's scales and edge FX amount, and the live tuning. Pass a partial
+     *  to retune it, validated as bulletTime's (`reset: true` restores the defaults):
+     *    __sdfGame.adrenaline({ worldScale: 0.45, sustainSec: 10 })   __sdfGame.adrenaline({ on: false })
+     *  Knobs: on flail (true/false) worldScale playerScale shotScale rampInSec sustainSec rampOutSec edgeFx.
+     *  URL: ?adrenaline=0 ?adr_flail=0 ?adr_world= ?adr_player= ?adr_shot= ?adr_in= ?adr_sustain= ?adr_out= ?adr_fx=. */
     adrenaline: (partial?: Record<string, unknown>) => {
       const { tuning, rejected } = applyAdrenalineTuning(partial);
       if (partial) ctx.panels.bulletTimePanel?.refresh();
       return {
-        ...ctx.player.adrenaline, scales: adrenalineScalesAt(ctx.player.adrenaline.level),
+        ...ctx.player.adrenaline, phase: adrenalinePhase(ctx.player.adrenaline, ctx.player.bulletTime.on),
+        scales: adrenalineScalesAt(ctx.player.adrenaline.level), edge: adrenalineEdgeAt(ctx.player.adrenaline.level),
         tuning, ...(rejected.length ? { rejected } : {}),
       };
     },

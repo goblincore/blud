@@ -55,7 +55,7 @@ Each line is the first sentence of the module's header comment.
 | [Levels and world](#levels-and-world) | 45 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
-| [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
+| [Post-processing](#post-processing) | 13 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
 | [SDF march renderer](#sdf-march-renderer) | 52 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 16 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 17 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -605,6 +605,7 @@ AA, glow, VHS, shutter blur, fisheye.
 
 - `webgpu/fisheye.ts` — THE LENS. A radial magnifying warp applied at the canvas blit: the middle of the screen samples a small patch of the rendered frame (magnified,…
 - `webgpu/post-aa.ts` — X1.25: PSX-friendly anti-aliasing for the SDF lab.
+- `webgpu/post-adrenaline-edge.wgsl.ts` — THE ADRENALINE EDGE (owner 2026-10-27: "there needs to be a visual indicator of this state — maybe distortion around the border/edges of the…
 - `webgpu/post-contrast.wgsl.ts` — THE FINAL S-CURVE (owner 2026-09-27: "the overall scene lacks a little contrast - everything a bit medium grey"; softened after a replay: "still…
 - `webgpu/post-flash-grade.wgsl.ts` — THE LIGHTNING GRADE (owner, 2026-09-26), hand-written WGSL, applied at the final blit.
 - `webgpu/post-glow.ts` — THE GLOW PASS, as pure numbers plus the two WGSL sources post-aa.ts wires into quad scenes.
@@ -859,6 +860,7 @@ Blood simulation, probe grids, ambient.
 What fits no area above: the original WebGL lab shader, resolution scaling, samplers.
 
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
+- `adrenaline.ts` — ADRENALINE (owner 2026-10-27: "a subtle bullet time that automatically kicks in when you hit an enemy with your shot ...
 - `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
 - `cloth-sway.ts` — CLOTH SWAY (2026-10-26; eased 2026-10-27).
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…

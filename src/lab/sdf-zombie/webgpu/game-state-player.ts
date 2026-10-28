@@ -100,9 +100,8 @@ export interface PlayerState {
   bulletTime: BulletTimeState;
   /** Its vignette overlay, created lazily by the tick (game-bullet-time.ts). */
   bulletTimeEl: HTMLDivElement | null;
-  /** ADRENALINE (adrenaline.ts): the automatic rush a hit on an enemy sets off; and its vignette (game-bullet-time.ts). */
+  /** ADRENALINE (adrenaline.ts): the automatic rush a hit on an enemy sets off (its look: game-bullet-time.ts). */
   adrenaline: AdrenalineState;
-  adrenalineEl: HTMLDivElement | null;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -139,7 +138,6 @@ export function makePlayerState(): PlayerState {
     bulletTime: makeBulletTime(),
     bulletTimeEl: null,
     adrenaline: makeAdrenaline(),
-    adrenalineEl: null,
   };
 }
 

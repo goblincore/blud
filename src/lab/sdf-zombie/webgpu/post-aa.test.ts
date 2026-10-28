@@ -678,7 +678,8 @@ describe('post-aa fisheye in the blit', () => {
     // this string containing "fisheyeWarp(" once for the call — this guards
     // against exactly that, which destroys the Jacobian-spread argument the
     // comment above makes.
-    const warpCalls = POST_AA_BLIT_WGSL.match(/fisheyeWarp\(/g) ?? [];
+    // (The adrenaline edge's two chromatic taps, fisheyeWarp(sr / sb, are their own single-point fetches.)
+    const warpCalls = POST_AA_BLIT_WGSL.match(/fisheyeWarp\((?!s[rb],)/g) ?? [];
     expect(warpCalls.length).toBe(2);
 
     // The per-tap offset must be added to st BEFORE the warp call, not
