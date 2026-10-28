@@ -236,3 +236,13 @@ Subagent per task; one reviewer per task doing spec compliance then code quality
 same implementer; final branch review. Reviews caught real bugs each time (step-height check below the
 floor, line-order-dependent loop tracing on E1M1 sector 28, island-in-hole capture, 36 zones / lights
 outside sectors, reversed WGSL smoothstep edges).
+
+## Next spike (owner idea, 2026-10-28): Doom 2 MAP28 "The Spirit World"
+
+After the E1M1 exploration wraps (perf, doors, culling), and after a spec that makes sector levels the standard format, convert Doom 2 MAP28. It's the owner's pick: a long late-game level with mixed areas, to test perf and feel at scale. It needs:
+- `doom2.wad` support in `doom_map.py` (MAP## names);
+- linedef specials as a small trigger/action system: switches, lifts, doors, keys, teleporters, triggered sectors;
+- damaging floors;
+- zone culling at scale.
+
+Enemies aren't built yet; map the roster onto the current cast and note the gaps. The WAD-derived JSON is still never committed.
