@@ -125,7 +125,7 @@ export function createRenderSeams(ctx: GameContext) {
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
     get boneMesh() { return ctx.render.boneMesh; },
-    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
+    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, prewarmPending: ctx.render.segMeshRenderer.prewarmPending, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Perf round 2, task 5: the front-to-back per-body passes and their
      *  accumulated-depth gate. OFF restores the single-pass march. Refused under
      *  ?earlyz=1 (stage 1): its per-body pass list holds only each type's back batch. */

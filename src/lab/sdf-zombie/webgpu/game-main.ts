@@ -3998,6 +3998,9 @@ async function main() {
       // switch it on (a dummy capsule, out of view) for this one real frame so
       // its pipelines compile here, not on the first ignite.
       const unwarmFire = ctx.vfx.burning.warmVolume();
+      // Every skeleton segment batch of the cast, built and drawn once (degenerate) in this real frame: otherwise
+      // the first hit that exposes bone builds ~20 of them in one frame (mesh-renderer.ts PREWARM_PER_UPDATE).
+      ctx.render.segMeshRenderer?.prewarmNext();
       try {
         ctx.boot.handle.drawOnce();
       } finally {

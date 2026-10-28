@@ -21,7 +21,7 @@ import { bindRig, applyRig } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
-import { SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import { BATCH_IDLE_UPDATES, PREWARM_PER_UPDATE, SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
 import { headQuatOf } from '../../rig-bind';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
@@ -146,6 +146,81 @@ describe('SegmentMeshRenderer update(…, shown) — instanced draws', () => {
     const owners = Array.from({ length: 40 }, (_, i) => ({ id: i }));
     renderer.update(owners.map(() => [headSrc]), owners);
     expect(renderer.drawn.filter(d => !d.eye)).toHaveLength(40);
+    renderer.dispose();
+    cache.dispose();
+  });
+});
+
+describe('PRE-WARM (fire-hitch fix): a referenced segment has its batch before a wound exposes it', () => {
+  // Bone-carrying, eye-less segments: with nothing exposed they are referenced but not drawn.
+  const bones = sources.filter(s => s.kind !== 'organ' && s.segment !== 'head');
+  const batchMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) =>
+    r.object.children.filter((c): c is THREE.InstancedMesh => (c as THREE.InstancedMesh).isInstancedMesh && c.name === 'skeleton-segments');
+
+  it('one new batch an update, drawn once as a degenerate instance, then idle; nothing counts as drawn', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    const none = new Set<unknown>();
+    expect(bones.length).toBeGreaterThan(3);
+    renderer.update([bones], [owner], undefined, none);
+    expect(batchMeshes(renderer)).toHaveLength(PREWARM_PER_UPDATE);
+    const first = batchMeshes(renderer)[0]!;
+    expect(first.count).toBe(1);
+    expect(first.visible).toBe(true);
+    const m = new THREE.Matrix4(); first.getMatrixAt(0, m);
+    expect(new THREE.Vector3().setFromMatrixPosition(m).y).toBeLessThan(-100);
+    expect(m.getMaxScaleOnAxis()).toBeLessThan(1e-3);
+    expect(renderer.drawn.filter(d => !d.eye)).toHaveLength(0);
+    expect(renderer.draws).toBe(0);
+    expect(renderer.prewarmPending).toBe(bones.length - PREWARM_PER_UPDATE);
+    renderer.update([bones], [owner], undefined, none);
+    expect(first.count).toBe(0);
+    expect(first.visible).toBe(false);
+    for (let i = 0; i < bones.length; i++) renderer.update([bones], [owner], undefined, none);
+    expect(batchMeshes(renderer)).toHaveLength(bones.length);
+    expect(renderer.prewarmPending).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('prewarmNext() builds every pending batch in the next update, and only that one', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    renderer.prewarmNext();
+    renderer.update([bones], [owner], undefined, new Set());
+    expect(batchMeshes(renderer)).toHaveLength(bones.length);
+    expect(batchMeshes(renderer).every(b => b.count === 1)).toBe(true);
+    expect(renderer.prewarmPending).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('a hit on a pre-warmed segment draws into the SAME batch mesh (no new mesh, so no new build)', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    renderer.prewarmNext();
+    renderer.update([bones], [owner], undefined, new Set());
+    const before = new Set(batchMeshes(renderer));
+    renderer.update([bones], [owner], undefined, new Set([owner]));
+    expect(renderer.drawn.filter(d => !d.eye)).toHaveLength(bones.length);
+    expect(batchMeshes(renderer).every(b => before.has(b))).toBe(true);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('an undrawn batch a source still references is never dropped; an unreferenced one is, after the idle period', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    renderer.update([[headSrc]], [owner]);   // drawn: the head (and its eyes)
+    const head = batchMeshes(renderer)[0]!;
+    for (let i = 0; i < BATCH_IDLE_UPDATES + 10; i++) renderer.update([[headSrc]], [owner], new Set());
+    expect(batchMeshes(renderer)).toContain(head);
+    for (let i = 0; i < BATCH_IDLE_UPDATES + 2; i++) renderer.update([], []);
+    expect(batchMeshes(renderer)).not.toContain(head);
     renderer.dispose();
     cache.dispose();
   });

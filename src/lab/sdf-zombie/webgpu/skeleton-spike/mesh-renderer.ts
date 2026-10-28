@@ -120,7 +120,22 @@ export const SEGMENT_MATERIALS = {
   boneSplit: 'skeleton-bone-split', plateSplit: 'skeleton-plate-split', eyeSplit: 'skeleton-eye-split',
 } as const;
 /** Updates a segment batch may sit unused before it is dropped (a stale revision's geometry). */
-const BATCH_IDLE_UPDATES = 120;
+export const BATCH_IDLE_UPDATES = 120;
+/** PRE-WARM (fire-hitch fix, 2026-10-27). A batch is an InstancedMesh, and three keys an instanced mesh's render object
+ *  by its uuid (RenderObject.getCacheKey) and names its instance-matrix buffer by node id in the WGSL: EVERY batch is
+ *  its own node build (~20-25 ms of TSL codegen on the main thread), its own shader module and its own pipeline. The
+ *  bone exposure cull draws an owner's segments only once a wound exposes bone, so the first hit on a character built
+ *  ~20 bone + 2 organ batches in ONE frame: a 0.6-1.0 s freeze on the first shotgun hit on each character type, again
+ *  on every fresh cast (the arena respawn), and again whenever a batch had been dropped as idle (an exposed body out of
+ *  the visual set for 120 updates) and was drawn again. So a batch is made, and drawn once as a degenerate instance,
+ *  as soon as a live source REFERENCES its geometry, not when it is first exposed: `PREWARM_PER_UPDATE` new batches
+ *  an update (the build spread over frames), or every one in an update the game asks for with prewarmNext (the boot
+ *  warm-up, where the cost hides in the loader). And a batch whose geometry a source still references is never dropped
+ *  as idle: only a stale revision's is. */
+export const PREWARM_PER_UPDATE = 1;
+/** The warm draw's instance: shrunk to a point far below the floor, so it rasterises nothing (a tiny scale, not 0:
+ *  the instance normal transform inverts the matrix). */
+const WARM_MATRIX = new THREE.Matrix4().makeScale(1e-6, 1e-6, 1e-6).setPosition(0, -1000, 0);
 
 /** The per-segment draw decision of the visual-actor cull (pure, exported
  *  for vitest — see mesh-renderer.test.ts). A segment is drawn when its
@@ -275,6 +290,11 @@ export interface SegmentMeshRenderer {
   readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; organ: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }>;
   /** How many instanced draws this update issued (one per segment geometry in use, plus eyes). */
   readonly draws: number;
+  /** PRE-WARM (PREWARM_PER_UPDATE): the next update makes, and draws once degenerate, up to `n` (default all) batches
+   *  for referenced geometries that have none yet, instead of PREWARM_PER_UPDATE. The boot warm-up's real frame. */
+  prewarmNext(n?: number): void;
+  /** Referenced geometries still waiting for their pre-warm batch (0 = every one is built). */
+  readonly prewarmPending: number;
   /** Remove every actor slot while keeping material/uniforms reusable. */
   clear(): void;
   dispose(): void;
@@ -602,7 +622,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // segment per actor (~250 draws on Night Train). The shaders read `positionGeometry`, not
   // `positionLocal`: an InstancedMesh folds the instance matrix into positionLocal, and the
   // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
-  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; organ: boolean; split: boolean; idle: number; owners: unknown[] }
+  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; organ: boolean; split: boolean; idle: number; owners: unknown[]; warm?: boolean }
   /** Take a batch out of the scene. A split batch's geometry is its twin (splitGeometryOf), which this renderer owns:
    *  disposed here, or three keeps it (its instance buffers, and through it the vertex data) for good. Disposing it
    *  also frees the GPU buffers of the vertex attributes it SHARES with the segment's geometry; three makes those
@@ -614,6 +634,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     batches.delete(geo);
   };
   const batches = new Map<THREE.BufferGeometry, Batch>();
+  const referenced = new Map<THREE.BufferGeometry, boolean>();
+  let warmBudget = PREWARM_PER_UPDATE, pending = 0;
   // The split copies' geometry for a segment (or the eye) geometry: the SAME vertex attributes and index (shared
   // objects, so one set of GPU buffers), and instance attributes of its own. The batch map is keyed by the geometry a
   // batch draws, so a closed batch and its split twin never share instance data.
@@ -741,6 +763,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   };
   const clear = () => {
     for (const [geo, b] of [...batches]) dropBatch(geo, b);
+    referenced.clear();
+    pending = 0;
     drawn.length = 0;
     slots.length = 0;
     absent = new WeakMap();
@@ -1158,6 +1182,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       stats.overflow = stats.clamped = stats.droppedQuads = 0;
       drawn.length = 0;
       for (const b of batches.values()) b.count = 0;
+      // Every closed segment geometry a live source references this update (organ flag as the value): the pre-warm's
+      // list, and what keeps an undrawn batch from being dropped as idle.
+      referenced.clear();
       const liveOwners = new Set(owners ?? entries);
       for (let i = debris.length - 1; i >= 0; i--) if (owners && !liveOwners.has(debris[i]!.owner)) { group.remove(debris[i]!.mesh); debris.splice(i, 1); }
       batchFor(eyeGeometry, true);
@@ -1171,6 +1198,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         srcs.forEach((s, si) => {
           const baked = cache.get(s);
           prepareGeometry(baked.geometry, s);
+          referenced.set(baked.geometry, s.kind === 'organ');
           if (slot!.keys[si] !== baked.key) {
             // Revision swap (anatomy/sever re-derive): the eye seats come from the new source.
             slot!.keys[si] = baked.key;
@@ -1241,6 +1269,17 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         });
       });
       slots.length = entries.length;
+      // PRE-WARM: a batch for each referenced geometry that has none (within this update's budget), drawn below as
+      // one degenerate instance so three builds its nodes and pipeline now and not on the first hit that exposes it.
+      let budget = warmBudget;
+      warmBudget = PREWARM_PER_UPDATE;
+      pending = 0;
+      for (const [geo, organ] of referenced) {
+        if (batches.has(geo)) continue;
+        if (budget <= 0) { pending++; continue; }
+        batchFor(geo, false, false, organ).warm = true;
+        budget--;
+      }
       for (const [geo, b] of batches) {
         b.mesh.count = b.count;
         b.owners.length = b.count;
@@ -1248,10 +1287,21 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (b.count > 0) {
           b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0;
           if (b.split) markLive(splitRows(geo), b.count, SPLIT_INSTANCE_FLOATS);
+        } else if (b.warm) {
+          // The pre-warm draw: one instance that rasterises nothing, this update only (the next sets count 0 again).
+          b.mesh.setMatrixAt(0, WARM_MATRIX);
+          b.mesh.instanceMatrix.needsUpdate = true;
+          b.mesh.count = 1;
+          b.mesh.visible = true;
         }
-        // A segment geometry nobody has drawn for a while (a revision replaced it: a sever, an
-        // anatomy change) drops its batch; the cache owns the geometry itself.
-        else if (!b.eye && ++b.idle > BATCH_IDLE_UPDATES) dropBatch(geo, b);
+        // A segment geometry no source references any more (a revision replaced it: a sever, an anatomy change)
+        // drops its batch after a while; the cache owns the geometry itself. One a source still references stays,
+        // drawn or not: dropping it would rebuild its nodes and pipeline on its next draw (PREWARM_PER_UPDATE).
+        else if (!b.eye) {
+          b.idle = referenced.has(geo) ? 0 : b.idle + 1;
+          if (b.idle > BATCH_IDLE_UPDATES) dropBatch(geo, b);
+        }
+        b.warm = false;
       }
       group.visible = stats.segments > 0;
     },
@@ -1324,6 +1374,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     show,
     get drawn() { return drawn; },
     get draws() { let n = 0; for (const b of batches.values()) if (b.count > 0) n++; return n; },
+    prewarmNext(n = Infinity) { warmBudget = Math.max(0, n); },
+    get prewarmPending() { return pending; },
     clear,
     dispose() {
       clear();
