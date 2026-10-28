@@ -221,7 +221,7 @@ const TUBE = {
  *  A/B them. The maps still render once at boot. */
 let tubeShadowUpdates = true;
 /** `?flashes=reduced`: the Boiler Room's strobe slows and its flash bursts become slow pulses (lamp-moods.ts LAMP_SCRIPT). */
-const REDUCED_FLASHES = reducedFlashes(new URLSearchParams(location.search));
+const REDUCED_FLASHES = reducedFlashes(new URLSearchParams(typeof location === 'undefined' ? '' : location.search));
 let beamFn: ReturnType<typeof wgslFn> | null = null;
 
 function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group, shadow: boolean): Tube {

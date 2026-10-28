@@ -3,7 +3,7 @@
 // Bodies stand on the floor under them (sector levels 3a, Task 4): MotionState.floorY eases toward
 // cfg.floorAt(x, z) at FLOOR_EASE_MPS and lifts the root shift and every world-plane use of
 // joints.groundY. With NO floorAt, a frame is exactly what it was before floorY existed: the
-// recorded digests below were taken from motion.ts before the change, -0 included.
+// recorded digests below match motion.ts before the change (pinned at 1e-7 since 2026-10-27, -0 included).
 import { describe, it, expect } from 'vitest';
 import {
   applyFloorContact, FALL_DROP_M, FALL_GRAVITY, FLOOR_EASE_MPS, makeMotionJoints, makeMotionState, MOTION_TUNING, stepMotion,
@@ -82,9 +82,11 @@ function run(
   return { state, frames, states };
 }
 
-/** FNV-1a over a -0-preserving serialization of every number a frame hands the wiring. */
+/** FNV-1a over a -0-preserving serialization of every number a frame hands the wiring, each rounded to
+ *  1e-7 m: macOS and CI's Linux differ in the last bits of a few libm results, so a full-precision digest
+ *  pinned on one machine failed on the other. 1e-7 is far finer than any floor/lift bug this guards. */
 function digest(frames: readonly MotionFrame[], states: readonly MotionState[]): string {
-  const num = (v: number) => (Object.is(v, -0) ? '-0' : String(v));
+  const num = (v: number) => (Object.is(v, -0) ? '-0' : v.toFixed(7));
   const parts: string[] = [];
   frames.forEach((f, i) => {
     parts.push(num(f.floorY), ...f.rootShift.map(num), num(f.bodyYaw), num(f.restPull), f.phase);
@@ -125,8 +127,8 @@ describe('no floorAt: frames are exactly the frames before floorY existed', () =
 });
 
 const RECORDED = {
-  zombie: '51a8714b:309210',
-  soldier: '5fdd82eb:419697',
+  zombie: '5f646a5a:182431',
+  soldier: 'bde1cc7d:237075',
 };
 
 describe('floorAt: the body stands on the floor under it', () => {
