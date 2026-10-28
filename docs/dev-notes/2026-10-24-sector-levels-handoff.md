@@ -52,6 +52,8 @@ two unattributed 1.2/1.9 s E1M1 frames, the arena respawn frame itself (~760 ms)
 
 **Gore tear-off pass (2026-10-28, 3079ce7d).** The old `stepBlood`/`emitTrails` blame was a profiler artifact (process stalls charged to whatever ran); blood sim is ~2–7 ms/s and GPU-bound. Real fix: blood/gib blur pre-warm used `compileAsync` (wrong target keys) so first gore built 3 pipelines; now warms by drawing into the real no-depth half-float targets outside the post callback. Tear-off now 0 new pipelines (arena) / 2 (E1M1). Remaining ~50–65 ms frame is the **shot** (pellet `hit`/`woundFromPellet`/`traceProjectile` + 2 first-use MeshBasicMaterial on E1M1). Open: teratoma kit pipelines compile on first sight (~300 ms) — pre-warm like kit-eye. Probes `tear.mjs`, `ab-tear.sh` in the session scratchpad.
 
+**Teratoma kit pre-warm (2026-10-28, db14ad19).** Kits (skinned glTF, `kit-overlay.ts`) were culled off-screen so first sight built 9–14 materials (0.3–1.0 s); also each kit made its own env texture whose id is in the build key, so copies never shared. Now one shared never-disposed env per renderer + `game-kit-prewarm.ts` un-culls one real kit mesh per step off-camera (then each further copy once, for cacoeye). E1M1 first sight: 0 kit builds; frame still 475–770 ms from **sector zone materials (23–27 builds, ~15–20 ms each) + pickup** — next first-sight target. Boot-in-play warm in drawOnce tried and dropped (keys mismatch). Seam `kitPrewarmPending()`.
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
