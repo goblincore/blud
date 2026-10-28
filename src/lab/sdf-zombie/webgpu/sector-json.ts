@@ -11,9 +11,10 @@ import { parseLevelJson, type ParseOptions } from './level-json';
 import { buildSectorGround } from './sector-ground';
 import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
 import {
-  GLOW_KINDS, SECTOR_SPECIALS, zoneName,
-  type GlowKind, type SectorDef, type SectorLine, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
+  DOOR_STYLES, GLOW_KINDS, SECTOR_SPECIALS, zoneName,
+  type DoorStyle, type GlowKind, type SectorDef, type SectorDoorDef, type SectorLine, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
 } from './sector-def';
+import { DOOR_SPEED_M_S, DOOR_WAIT_S } from './sector-doors';
 
 type Json = Record<string, unknown>;
 
@@ -21,7 +22,7 @@ type Json = Record<string, unknown>;
  *  metre, scripts/levels/doom_map.py). The game does not read it; tools that place things by Doom
  *  position (the doom gate's route) do. */
 const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry', 'unitsPerM',
-  'vertices', 'sectors', 'lines', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
+  'vertices', 'sectors', 'lines', 'doors', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
@@ -30,6 +31,9 @@ const LINE_KEYS = ['v', 'front', 'back', 'door', 'exit', 'walls'];
 const WALL_SIDES = ['front', 'back'];
 const WALL_PARTS = ['upper', 'mid', 'lower'];
 const DOOR_KEYS = ['sector', 'speed', 'wait'];
+const DOOR_ENTITY_KEYS = ['id', 'sector', 'faces', 'a', 'b', 'width', 'depth', 'height', 'zones', 'style', 'speed', 'wait', 'key'];
+/** How far a door's stated width may differ from |b - a|, and its faces from parallel to a -> b (metres). */
+const DOOR_TOLERANCE_M = 0.01;
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
 const BARREL_KEYS = ['id', 'pos'];
 /** How far a barrel's y may sit off the floor under it (float noise from the converter's unit scale). */
@@ -198,8 +202,60 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     });
   }
 
+  // --- doors (sector-def.ts SectorDoorDef; sector-doors.ts runs them) ------------------
+  const doors: SectorDoorDef[] = [];
+  if (j.doors !== undefined) {
+    const seen = new Set<string>();
+    const xz = (v: unknown): XZ | null => (Array.isArray(v) && v.length === 2 && v.every(isNum) ? [v[0] as number, v[1] as number] : null);
+    objects(j.doors, 'doors').forEach((o, i) => {
+      const where = `doors[${i}]`;
+      const before = errors.length;
+      unknownKeys(o, DOOR_ENTITY_KEYS, where);
+      const id = typeof o.id === 'string' && o.id !== '' ? o.id : (errors.push(`${where}.id: expected a name`), '');
+      if (id && seen.has(id)) errors.push(`door ${id}: duplicate id`);
+      seen.add(id);
+      const sector = sectorIndex(o.sector) ? o.sector as number : (errors.push(`${where}.sector: a sector index`), -1);
+      const faces = Array.isArray(o.faces) && o.faces.length === 2 && o.faces.every(f => isInt(f) && f >= 0 && f < lines.length)
+        && o.faces[0] !== o.faces[1] ? o.faces as [number, number] : (errors.push(`${where}.faces: two different line indices`), null);
+      const a = xz(o.a) ?? (errors.push(`${where}.a: expected [x, z]`), null);
+      const b = xz(o.b) ?? (errors.push(`${where}.b: expected [x, z]`), null);
+      const pos = (k: string) => (isNum(o[k]) && (o[k] as number) > 0 ? o[k] as number : (errors.push(`${where}.${k}: a number > 0`), 1));
+      const width = pos('width'), depth = pos('depth'), height = pos('height');
+      const zones = Array.isArray(o.zones) && o.zones.length === 2 && o.zones.every(z => isInt(z) && z >= 0)
+        ? o.zones as [number, number] : (errors.push(`${where}.zones: two zone numbers`), [0, 0] as [number, number]);
+      let style: DoorStyle = 'split';
+      if (o.style !== undefined) {
+        if (DOOR_STYLES.includes(o.style as DoorStyle)) style = o.style as DoorStyle;
+        else errors.push(`${where}.style: one of ${DOOR_STYLES.join(', ')}`);
+      }
+      const speed = o.speed === undefined ? DOOR_SPEED_M_S : isNum(o.speed) && o.speed > 0 ? o.speed : (errors.push(`${where}.speed: > 0`), DOOR_SPEED_M_S);
+      const wait = o.wait === undefined ? DOOR_WAIT_S : isNum(o.wait) && o.wait >= 0 ? o.wait : (errors.push(`${where}.wait: >= 0`), DOOR_WAIT_S);
+      const key = o.key === undefined || o.key === null ? null
+        : typeof o.key === 'string' && o.key !== '' ? o.key : (errors.push(`${where}.key: a name or null`), null);
+      if (errors.length > before || !faces || !a || !b) return;
+      // The geometry must agree with itself and with the lines it names.
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (Math.abs(len - width) > DOOR_TOLERANCE_M) errors.push(`door ${id}: width ${width} is not |b - a| (${len.toFixed(4)})`);
+      const sec = sectors[sector]!;
+      if (height > sec.ceil - sec.floor + DOOR_TOLERANCE_M) errors.push(`door ${id}: height ${height} is over its sector's opening`);
+      faces.forEach((f, k) => {
+        const l = lines[f]!;
+        const other = l.front === sector ? l.back : l.back === sector ? l.front : -2;
+        if (other === -2 || other < 0 || other === sector) { errors.push(`door ${id}: faces[${k}] (line ${f}) must be a two-sided line of sector ${sector}`); return; }
+        if (sectors[other]!.zone !== zones[k]) errors.push(`door ${id}: zones[${k}] must be the zone beyond faces[${k}] (${sectors[other]!.zone})`);
+        // A face is parallel to a -> b, depth / 2 off it.
+        for (const vi of l.v) {
+          const [px, pz] = vertices[vi]!;
+          const off = Math.abs(((px - a[0]) * -(b[1] - a[1]) + (pz - a[1]) * (b[0] - a[0])) / (len || 1));
+          if (Math.abs(off - depth / 2) > DOOR_TOLERANCE_M) errors.push(`door ${id}: faces[${k}] (line ${f}) is not depth / 2 from a -> b`);
+        }
+      });
+      doors.push({ id, sector, faces, a, b, width, depth, height, zones, style, speed, wait, key });
+    });
+  }
+
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
-  const map: SectorMap = { vertices, sectors, lines };
+  const map: SectorMap = { vertices, sectors, lines, ...(doors.length ? { doors } : {}) };
   if (errors.length === 0) sectors.forEach((_, s) => {
     const idx = sectorEdgeIndices(map, s);
     const bal = new Map<number, number>();

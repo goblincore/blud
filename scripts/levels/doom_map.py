@@ -8,7 +8,11 @@ lumps (VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, THINGS; no BSP). Writes <out>/doom
 The output is derived from id Software's data: a dev placeholder, never committed (.gitignore).
 
 Plan 1 writes geometry, zones, fill lights and the player start. Door sectors (manual or remotely
-tagged) are written OPEN and remote floor-lowers LOWERED (plan 2 makes them move). Plan 3a writes
+tagged) are written OPEN (the ceiling at Doom's open height) and remote floor-lowers LOWERED. A door
+sector shaped like a doorway (two parallel two-sided faces of one length, squared ends) also becomes a
+DOOR ENTITY in `doors` (sector-def.ts SectorDoorDef: its faces, centre line a -> b, width, depth,
+height, the zones it joins, speed, wait, key): the game closes it with sliding leaves that open on
+approach. Any other door sector stays an open hole and is listed in the summary. Plan 3a writes
 monsters (spawns), pickups and an exit trigger in front of each exit switch. Plan 3b writes Doom's
 exploding barrels as our toxic drums (`barrels`, on every skill: they are scenery; multiplayer-only
 ones are still left out). Other things (decorations, keys, ...) are skipped and counted.
@@ -40,7 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
-    DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
@@ -57,6 +61,10 @@ PLAYER1_START = 1
 UNITS_PER_M = 35.0
 REFERENCE_UNITS_PER_M = 32.0      # the scale the *_M2 / spacing constants below were tuned at
 DOOR_OPEN_GAP_UNITS = 4          # Doom: a door opens to 4 units below the lowest neighbouring ceiling
+DOOR_SPEED_M_S = 3.0             # leaf travel (game time, not world scale: the leaves are body-sized timing)
+DOOR_BLAZE_SPEED_M_S = 6.0       # Doom's fast doors
+DOOR_WAIT_S = 4.0                # Doom waits 150 tics (4.3 s)
+DOOR_SHAPE_TOL_M = 0.01          # how far a door sector may be off a rectangle and still be a doorway
 # The *_M2 areas and the EMITTER_LIGHT_*_M spacings are map structure: metres at REFERENCE_UNITS_PER_M.
 ZONE_SPLIT_M2 = 600.0            # a zone whose floor area is over this splits (spec §6.5)
 ZONE_MIN_M2 = 50.0               # a smaller zone merges into a neighbour
@@ -350,7 +358,12 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                 neighbours[b].add(a)
 
     # Which sectors move: manual doors (the back side of the line), and sectors a tagged line targets.
-    doors = {sides[ln["left"]]["sector"] for ln in lines if ln["special"] in DOOR_SPECIALS and ln["left"] is not None}
+    # door_by: the specials that open each door sector (its speed and key come from them).
+    door_by: dict[int, set[int]] = {}
+    for ln in lines:
+        if ln["special"] in DOOR_SPECIALS and ln["left"] is not None:
+            door_by.setdefault(sides[ln["left"]]["sector"], set()).add(ln["special"])
+    doors = set(door_by)
     lowered: set[int] = set()
     for ln in lines:
         if ln["tag"] == 0:
@@ -358,6 +371,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         targets = [i for i, s in enumerate(sectors) if s["tag"] == ln["tag"]]
         if ln["special"] in REMOTE_DOOR_SPECIALS:
             doors.update(targets)
+            for t in targets:
+                door_by.setdefault(t, set()).add(ln["special"])
         elif ln["special"] in FLOOR_LOWER_SPECIALS:
             lowered.update(targets)
     floor = {i: s["floor"] for i, s in enumerate(sectors)}
@@ -438,14 +453,15 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         rec = {"v": [ln["v1"], ln["v2"]], "front": sides[ln["right"]]["sector"]}
         if ln["left"] is not None:
             rec["back"] = sides[ln["left"]]["sector"]
-            if ln["special"] in DOOR_SPECIALS:
-                rec["door"] = {"sector": rec["back"]}
         if ln["special"] in EXIT_SPECIALS:
             rec["exit"] = True
         walls = _line_walls(ln, sides, out_sectors)
         if walls:
             rec["walls"] = walls
         out_lines.append(rec)
+
+    verts_m = [[X(x), Z(y)] for x, y in verts]
+    door_entities, doors_left_open = _door_entities(doors, door_by, out_lines, verts_m, out_sectors)
 
     # Fill lights: one per zone of real area >= LIGHT_MIN_ZONE_M2 (the biggest MAX_LIGHTS), at a point
     # confirmed inside the zone's biggest sector, as far from its walls as the grid finds.
@@ -488,7 +504,6 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                            "mood": "fire", "fixture": "none"})
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
-    verts_m = [[X(x), Z(y)] for x, y in verts]
     emitter_lights = _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, m / REFERENCE_UNITS_PER_M)
     lights.extend(emitter_lights)
 
@@ -563,6 +578,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     }
     if triggers:
         level["completeOn"] = "level.end"
+    if door_entities:
+        level["doors"] = door_entities
     if barrels:
         level["barrels"] = barrels
 
@@ -572,12 +589,55 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             out[it[key]] = out.get(it[key], 0) + 1
         return out
 
-    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
+    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "doors_left_open": doors_left_open,
+             "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
              "emitter_lights": len(emitter_lights),
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
              "override_sectors": sector_patches, "override_spawns": override_spawns}
     return level, stats
+
+
+def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, verts_m, out_sectors) -> tuple[list[dict], list[int]]:
+    """The door sectors shaped like a doorway as door entities (sector-def.ts SectorDoorDef), and the
+    others (left open holes). A doorway: exactly two two-sided lines between the sector and another
+    (its faces), the same length, parallel, their ends joined square (a rectangle, the jambs being
+    one-sided track walls). `a` -> `b` runs between the faces' matching ends; the leaves stand on the
+    sector floor up to its (open) ceiling."""
+    out, left_open = [], []
+    for d in sorted(doors):
+        faces = [k for k, ln in enumerate(out_lines)
+                 if "back" in ln and ln["front"] != ln["back"] and d in (ln["front"], ln["back"])]
+        if len(faces) != 2:
+            left_open.append(d)
+            continue
+        (p0, p1), (q0, q1) = [(verts_m[out_lines[k]["v"][0]], verts_m[out_lines[k]["v"][1]]) for k in faces]
+        dist = lambda u, v: math.hypot(u[0] - v[0], u[1] - v[1])  # noqa: E731
+        if dist(p0, q0) + dist(p1, q1) > dist(p0, q1) + dist(p1, q0):
+            q0, q1 = q1, q0
+        a = [round((p0[0] + q0[0]) / 2, 4), round((p0[1] + q0[1]) / 2, 4)]
+        b = [round((p1[0] + q1[0]) / 2, 4), round((p1[1] + q1[1]) / 2, 4)]
+        width = math.hypot(b[0] - a[0], b[1] - a[1])
+        tx, tz = ((b[0] - a[0]) / width, (b[1] - a[1]) / width) if width > 0 else (0.0, 0.0)
+        # Square: both faces as long as the doorway, and each jamb (p0 -> q0, p1 -> q1) across it.
+        square = width > 0 and abs(dist(p0, p1) - width) < DOOR_SHAPE_TOL_M and abs(dist(q0, q1) - width) < DOOR_SHAPE_TOL_M \
+            and all(abs((q[0] - p[0]) * tx + (q[1] - p[1]) * tz) < DOOR_SHAPE_TOL_M for p, q in ((p0, q0), (p1, q1)))
+        if not square:
+            left_open.append(d)
+            continue
+        depth = dist(p0, q0)
+        beyond = [out_lines[k]["back"] if out_lines[k]["front"] == d else out_lines[k]["front"] for k in faces]
+        by = door_by.get(d, set())
+        rec = {"id": f"door-{d}", "sector": d, "faces": faces, "a": a, "b": b,
+               "width": round(width, 4), "depth": round(depth, 4),
+               "height": round(out_sectors[d]["ceil"] - out_sectors[d]["floor"], 4),
+               "zones": [out_sectors[s]["zone"] for s in beyond], "style": "split",
+               "speed": DOOR_BLAZE_SPEED_M_S if by & BLAZE_DOOR_SPECIALS else DOOR_SPEED_M_S, "wait": DOOR_WAIT_S}
+        keys = sorted({DOOR_KEY_SPECIALS[sp] for sp in by if sp in DOOR_KEY_SPECIALS})
+        if keys:
+            rec["key"] = keys[0]
+        out.append(rec)
+    return out, left_open
 
 
 def _emitter_walls(out_sectors, out_lines, verts_m):
@@ -714,9 +774,10 @@ def write_svg(level: dict, path: Path) -> None:
     x0 = min(v[0] for v in vs); x1 = max(v[0] for v in vs); z0 = min(v[1] for v in vs); z1 = max(v[1] for v in vs)
     s = 12
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0 * s - 20} {z0 * s - 20} {(x1 - x0) * s + 40} {(z1 - z0) * s + 40}" style="background:#111">']
-    for ln in level["lines"]:
+    faces = {f for d in level.get("doors", []) for f in d["faces"]}
+    for i, ln in enumerate(level["lines"]):
         (ax, az), (bx, bz) = vs[ln["v"][0]], vs[ln["v"][1]]
-        colour = "#c33" if "door" in ln else "#666" if "back" in ln else "#eee"
+        colour = "#c33" if i in faces else "#666" if "back" in ln else "#eee"
         parts.append(f'<line x1="{ax * s}" y1="{az * s}" x2="{bx * s}" y2="{bz * s}" stroke="{colour}" stroke-width="1.5"/>')
     spots: dict[int, list[list[float]]] = {}
     for ln in level["lines"]:
@@ -762,8 +823,9 @@ def main() -> None:
     dropped = stats["dropped_zero_length_lines"]
     path.write_text(json.dumps(level, indent=1))
     zones = len({s["zone"] for s in level["sectors"]})
-    doors = sum(1 for ln in level["lines"] if "door" in ln)
-    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter)"
+    doors = level.get("doors", [])
+    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {len(doors)} doors"
+          f" (sectors {[d['sector'] for d in doors]}; left open: {stats['doors_left_open']}), {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter)"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
     print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {stats['barrels']} barrels, {len(level['triggers'])} exit triggers"
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")

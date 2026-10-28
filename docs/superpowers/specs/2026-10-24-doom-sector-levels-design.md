@@ -61,6 +61,16 @@ never both; every existing level is unchanged.
     "door": { "sector": 4, "speed": 2.0, "wait": 4.0 },  // optional
     "exit": true                                      // optional: the exit switch
   }],
+  "doors": [{                                        // optional: door entities (§8, added 2026-10-28)
+    "id": "door-26", "sector": 26,                    // the doorway sector (its ceiling stays at the open height)
+    "faces": [148, 149],                              // line indices: the doorway's two two-sided faces
+    "a": [13.94, -33.83], "b": [13.94, -30.17],       // the centre line, jamb to jamb (metres)
+    "width": 3.657, "depth": 0.457, "height": 1.943,  // |b - a|; between the faces; leaves from the sector floor up
+    "zones": [7, 6],                                  // the zone beyond faces[0], beyond faces[1]
+    "style": "split",                                 // optional, default and only value: two leaves part sideways
+    "speed": 3.0, "wait": 4.0,                        // optional: leaf travel m/s (each leaf travels width / 2); s open once clear
+    "key": "blue"                                     // optional: parsed, no keys exist yet (opens like any other)
+  }],
   "start": { "pos": [x, y, z], "yaw": 0 },
   "spawns": [...], "pickups": [...], "barrels": [{ "id": "b1", "pos": [x, y, z] }],
   "solids": [...], "lights": [...]
@@ -71,6 +81,10 @@ A two-sided line between sectors of different heights generates the step riser (
 higher floor) and the ceiling lip (higher ceiling → lower ceiling). Validation: every sector is
 closed by its lines (each vertex used an even number of times per sector), no line references a
 missing sector, heights satisfy `ceil > floor` except for door sectors (closed: `ceil == floor`).
+A door entity must agree with its lines: each face a two-sided line of `sector`, parallel to `a -> b` and
+`depth / 2` off it, `width` = |b - a|, `height` no more than the sector's opening, `zones[k]` the zone of
+the sector beyond `faces[k]` (1 cm tolerance). The per-line `door` marker is legacy (older files and
+fixtures): the converter writes `doors` instead and nothing at run time reads the marker.
 Capability: a sector level `requires` a new `sectors` capability (not `multi-floor`, which
 stays the refusal for room levels with raised floors: the Wake gate checks it), which joins
 `ENGINE_CAPABILITIES` in plan 1.
@@ -166,7 +180,17 @@ neighbour). Lights are placed only for zones of 150 m² or more, at most 10. Zon
 
 ## 8. Doors, hazards, barrels
 
-**Doors.** Look at a door line within 1.5 m and press **E** (add a use key if the game has none).
+**Doors — as built (2026-10-28, owner design).** Sci-fi scratched-steel doors whose two leaves split
+sideways into the jambs. Door sectors shaped like a doorway become `doors` entities (§4; others stay
+open holes); the sector ceiling stays at the open height and the leaves do the closing. They open on
+their own for the player and for enemies (a body within 1.5 m moving toward the doorway, or a body
+whose travel a leaf refuses within 1.5 m), stay open `wait` s once the doorway is clear, and never
+close on a body in the doorway. While not fully open the leaves block bodies (the leaf pieces on the
+face lines), rays (sight, the sight cull, shots, pellets, projectiles, debris) where a leaf stands, and
+enemy travel; navigation routes through doorways regardless. The baked bounce treats door faces as
+walls. Pure logic: `sector-doors.ts`; renderer: `game-doors.ts`. No sound yet (a phase-change hook).
+
+*The original plan, superseded:* Look at a door line within 1.5 m and press **E** (add a use key if the game has none).
 The ceiling rises at `speed` (default 2 m/s) to its open height, waits `wait` (4 s), closes, and
 reopens if anything is under it. A pure `door-state.ts` (closed → opening → open → closing) drives
 `ceilAt`, the door mesh offset and nav headroom. Monsters don't open doors in v1. No sound yet.

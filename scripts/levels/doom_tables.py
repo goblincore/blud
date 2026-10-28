@@ -26,6 +26,10 @@ GLOW_MATERIALS = {"nukage", "lava", "acid"}
 # Linedef specials: manual doors (locked ones treated as plain in step 1-2: E1M1 has none) and exits.
 DOOR_SPECIALS = {1, 26, 27, 28, 31, 32, 33, 34, 117, 118}
 EXIT_SPECIALS = {11, 51, 52, 124}
+# Door entities (doors in the level file, 2026-10-28): which specials are Doom's fast ("blazing") doors,
+# and which need a key (written as the door's `key`; the game has no keys yet).
+BLAZE_DOOR_SPECIALS = {105, 106, 108, 109, 111, 112, 114, 115, 117, 118}
+DOOR_KEY_SPECIALS = {26: "blue", 32: "blue", 27: "yellow", 34: "yellow", 28: "red", 33: "red"}
 
 # Remotely triggered line specials (the line's tag names the target sectors). Step 1 is static, so each
 # class is applied once when converting; moving them is plan 2.

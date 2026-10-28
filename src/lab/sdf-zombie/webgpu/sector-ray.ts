@@ -20,6 +20,8 @@
 //   floor (ceil) hit at t 0. A zero-length segment is just that start test.
 // - Touching is not crossing: ending exactly on a floor is open; a two-sided line passes at exactly
 //   the higher floor.
+// - A DOOR's face line (sector-doors.ts) is a wall where a leaf stands at the crossing (ground.doors,
+//   live): shut it is a wall across the doorway, part open only its leaves are, fully open nothing.
 // - Through a vertex the next sector is read with sectorAt just past the vertex (1e-4 m on), so a
 //   diagonal through a corner reaches the sector it really enters; grazing a column's corner from
 //   outside is open, aiming into it is a wall, a corner into the void is a wall.
@@ -150,6 +152,7 @@ export function sectorSegmentHit(map: SectorMap, ground: SectorGround, a: V3, b:
     // Through the exit line.
     const l = L[lc]!;
     const y = ay + tc * dy;
+    if (ground.doors.lineDoor[lc]! >= 0 && ground.doors.coversLine(lc, uc)) return put(out, tc, ax + tc * dx, y, az + tc * dz, 'wall', lc, s);
     let n = l.front === s ? l.back : l.front;
     if (uc < VERTEX_U || uc > 1 - VERTEX_U) {
       const tp = tc + tProbe;

@@ -12,7 +12,8 @@
 // the pool. seen: the share of two rays (to the pool's nearest point and to its interior point) that
 // cross no blocking line — a one-sided wall, or a two-sided line the ray passes below the higher
 // floor or above the lower ceiling of (a lip, a closed door); the pool's own rim does not block up
-// to RIM_MAX_M (the pit glows up to it), its soffit and taller risers do. So the green never bleeds through a solid wall into an unrelated room. The renderer multiplies the sum by the albedo and its gains.
+// to RIM_MAX_M (the pit glows up to it), its soffit and taller risers do. A door's faces (sector-doors.ts)
+// are solid: the bake is static and doors stand shut. So the green never bleeds through a solid wall into an unrelated room. The renderer multiplies the sum by the albedo and its gains.
 //
 // refineNearGlow splits the lines near pools so walls, floors and ceilings get vertices along them
 // (both sides of a line split at the same points: no T-junctions); wallRows splits walls in height
@@ -83,6 +84,7 @@ export const boxNear = (min: XZ, max: XZ, a: XZ, b: XZ, r: number): boolean =>
 /** Every glow sector as a bounce source. */
 export function glowSources(map: SectorMap): GlowSource[] {
   const out: GlowSource[] = [];
+  const doorFaces = new Set((map.doors ?? []).flatMap(d => d.faces));
   map.sectors.forEach((s, sector) => {
     if (s.glow === null) return;
     const edges = sectorEdges(map, sector);
@@ -99,16 +101,16 @@ export function glowSources(map: SectorMap): GlowSource[] {
       const other = l.front === sector ? l.back : l.back === sector ? l.front : -1;
       if (other >= 0 && other !== sector) rim = Math.max(rim, Math.min(map.sectors[other]!.floor, s.floor + RIM_MAX_M));
     }
-    for (const l of map.lines) {
-      if (l.front === l.back) continue;
+    map.lines.forEach((l, i) => {
+      if (l.front === l.back) return;
       const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
-      if (!boxNear(min, max, a, b, BOUNCE_CUTOFF_M)) continue;
-      const f = map.sectors[l.front]!, k = l.back >= 0 ? map.sectors[l.back]! : null;
+      if (!boxNear(min, max, a, b, BOUNCE_CUTOFF_M)) return;
+      const f = map.sectors[l.front]!, k = l.back >= 0 && !doorFaces.has(i) ? map.sectors[l.back]! : null;   // a door face: solid
       const own = l.front === sector || l.back === sector;
       const hiFloor = k ? Math.max(f.floor, k.floor) : 0;
       const lo = !k ? 0 : own && hiFloor <= s.floor + RIM_MAX_M ? -Infinity : hiFloor - 1e-3;
       occ.push(a[0], a[1], b[0] - a[0], b[1] - a[1], lo, k ? Math.min(f.ceil, k.ceil) + 1e-3 : 0, k ? 0 : 1);
-    }
+    });
     out.push({ sector, kind: s.glow, floor: s.floor, targetY: rim + TARGET_LIFT_M, area: Math.abs(edgesArea(edges)), edges, interior, min, max,
       occluders: Float64Array.from(occ) });
   });
@@ -263,13 +265,16 @@ export function nearAny(boxes: readonly Reach[], x: number, z: number): boolean 
  *  two-sided line open between its higher floor and its lower ceiling. */
 export function occludersNear(map: SectorMap, min: XZ, max: XZ, reach: number): Float64Array {
   const occ: number[] = [];
-  for (const l of map.lines) {
-    if (l.front === l.back) continue;
+  // A door's faces are solid: the bake is static and doors stand shut until something opens them, so
+  // no pool or emitter bleeds its colour through a doorway into the next room.
+  const doorFaces = new Set((map.doors ?? []).flatMap(d => d.faces));
+  map.lines.forEach((l, i) => {
+    if (l.front === l.back) return;
     const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
-    if (!boxNear(min, max, a, b, reach)) continue;
-    const f = map.sectors[l.front]!, k = l.back >= 0 ? map.sectors[l.back]! : null;
+    if (!boxNear(min, max, a, b, reach)) return;
+    const f = map.sectors[l.front]!, k = l.back >= 0 && !doorFaces.has(i) ? map.sectors[l.back]! : null;
     occ.push(a[0], a[1], b[0] - a[0], b[1] - a[1], k ? Math.max(f.floor, k.floor) - 1e-3 : 0, k ? Math.min(f.ceil, k.ceil) + 1e-3 : 0, k ? 0 : 1);
-  }
+  });
   return Float64Array.from(occ);
 }
 

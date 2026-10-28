@@ -6,10 +6,15 @@
 // two sectors is under SECTOR_HEADROOM_M or the higher floor is over SECTOR_STEP_M above the feet;
 // the same rule both ways, so drops are open and climbs are not.
 //
+// DOORS (sector-doors.ts): the ground owns the level's DoorField. A face line of a door that is not
+// fully open blocks a body with its leaf pieces only (blockingNear), whatever the height rule says;
+// `lineBlocks` (navigation's static rule) ignores doors, so routes run through doorways.
+//
 // Pure: no three.js, no DOM. The Rust port implements the same rule.
 
 import type { LevelGround, WallSeg } from './level-ground';
 import { SECTOR_HEADROOM_M, SECTOR_STEP_M, type SectorMap } from './sector-def';
+import { createDoorField, type DoorField } from './sector-doors';
 
 const CELL_M = 4;
 
@@ -50,6 +55,8 @@ export interface SectorGround extends LevelGround {
   lineBlocks(i: number, feetY: number): boolean;
   /** The highest floor a disc of `radius` at (x, z) touches (discFloor); NaN off the map. */
   floorUnder(x: number, z: number, radius: number): number;
+  /** The level's doors, live (every door shut until the game opens it; empty with no `doors`). */
+  readonly doors: DoorField;
 }
 
 export function buildSectorGround(map: SectorMap): SectorGround {
@@ -123,7 +130,9 @@ export function buildSectorGround(map: SectorMap): SectorGround {
     return out;
   };
 
+  const doors = createDoorField(map);
   return {
+    doors,
     sectorAt,
     linesNear,
     lineBlocks: blocks,
@@ -142,6 +151,7 @@ export function buildSectorGround(map: SectorMap): SectorGround {
         for (const i of lineCells[cell]!) {
           if (seen.has(i)) continue;
           seen.add(i);
+          if (doors.lineDoor[i]! >= 0 && doors.open[doors.lineDoor[i]!]! < 1) { doors.leafSegs(i, out); continue; }
           if (!blocks(i, feetY)) continue;
           const [ax, az] = V[L[i]!.v[0]]!, [bx, bz] = V[L[i]!.v[1]]!;
           out.push({ ax, az, bx, bz });

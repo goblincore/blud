@@ -223,6 +223,42 @@ def test_remote_door_target_is_opened_and_joins_a_zone(tmp_path):
     assert stats["doors_opened"] == [1]
 
 
+def test_a_doorway_shaped_door_sector_becomes_a_door_entity(tmp_path):
+    out, stats = convert_row(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 63)
+    assert stats["doors_left_open"] == []
+    [door] = out["doors"]
+    assert door["id"] == "door-1" and door["sector"] == 1 and door["style"] == "split"
+    # M is x 128..256 (the start at x 64): its faces are its shared edges with A and B.
+    faces = [out["lines"][f] for f in door["faces"]]
+    assert all({ln["front"], ln["back"]} in ({0, 1}, {1, 2}) for ln in faces)
+    assert door["width"] == 8.0 and door["depth"] == 4.0
+    assert door["height"] == round(out["sectors"][1]["ceil"] - out["sectors"][1]["floor"], 4)
+    assert door["a"][0] == door["b"][0] == 4.0              # the centre line: x = (192 - 64) / 32
+    assert abs(door["a"][1] - door["b"][1]) == 8.0
+    zones = [out["sectors"][ln["back"] if ln["front"] == 1 else ln["front"]]["zone"] for ln in faces]
+    assert door["zones"] == zones
+    assert door["speed"] == doom_map.DOOR_SPEED_M_S and door["wait"] == doom_map.DOOR_WAIT_S and "key" not in door
+    assert all("door" not in ln for ln in out["lines"])   # the entity replaces the old per-line marker
+
+
+def test_a_fast_door_is_faster(tmp_path):
+    out, _ = convert_row(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 109)   # W1 door open stay (blazing)
+    assert out["doors"][0]["speed"] == doom_map.DOOR_BLAZE_SPEED_M_S
+
+
+def test_a_keyed_door_writes_its_key_and_a_misshapen_one_stays_open():
+    # Unit square doorway between sectors 0 and 2 (faces lines 0 and 1), opened by a blue-key special.
+    verts = [[0.0, 0.0], [0.0, 2.0], [0.5, 2.0], [0.5, 0.0]]
+    lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
+             {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    assert left == [] and doors[0]["key"] == "blue" and doors[0]["zones"] == [0, 1] and doors[0]["width"] == 2.0
+    verts[2] = [0.5, 2.6]                                   # one face longer: not a doorway
+    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    assert doors == [] and left == [1]
+
+
 def test_floor_lower_target_is_lowered(tmp_path):
     out, stats = convert_row(tmp_path, (64, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 36)
     assert out["sectors"][1]["floor"] == 0.0              # from 64 units to the neighbours' 0

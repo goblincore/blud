@@ -49,7 +49,40 @@ export interface SectorLine {
   /** Per-side wall families (optional: older files and fixtures have none). */
   walls?: { front?: SideWalls; back?: SideWalls };
 }
-export interface SectorMap { vertices: XZ[]; sectors: SectorDef[]; lines: SectorLine[] }
+/** How a door's leaves move. 'split': two leaves part sideways from the middle into the jambs. */
+export type DoorStyle = 'split';
+export const DOOR_STYLES: readonly DoorStyle[] = ['split'];
+/** A DOOR ENTITY (the level file's top-level `doors`, sector-doors.ts runs it): a doorway through
+ *  one sector, closed by leaves that stand between its two face lines. Geometry is in the file so a
+ *  reader needs no Doom rules: `a` -> `b` is the doorway's centre line, jamb to jamb (its length is
+ *  `width`); the faces are the two two-sided lines that bound the doorway on either side, `depth`
+ *  apart, each parallel to a -> b; the leaves stand on the sector's floor and are `height` tall. */
+export interface SectorDoorDef {
+  id: string;
+  /** The doorway sector (its ceiling stays at the open height: the leaves do the closing). */
+  sector: number;
+  /** Line indices of the doorway's two faces (two-sided lines between `sector` and a room). */
+  faces: readonly [number, number];
+  a: XZ;
+  b: XZ;
+  width: number;
+  depth: number;
+  height: number;
+  /** The zones on either side: zones[0] beyond faces[0], zones[1] beyond faces[1]. */
+  zones: readonly [number, number];
+  style: DoorStyle;
+  /** Leaf travel, metres per second (each leaf travels width / 2). */
+  speed: number;
+  /** Seconds a door stays open once its doorway is clear. */
+  wait: number;
+  /** A key that opens it (e.g. 'blue'); null for none. Parsed only: no keys exist yet, so a keyed door opens like any other. */
+  key: string | null;
+}
+export interface SectorMap {
+  vertices: XZ[]; sectors: SectorDef[]; lines: SectorLine[];
+  /** Door entities (optional: older files have none). */
+  doors?: readonly SectorDoorDef[];
+}
 
 /** Spec §6.2: the highest step a body walks up (Doom's 24 units at 32 units/m). */
 export const SECTOR_STEP_M = 0.75;
