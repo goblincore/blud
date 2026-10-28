@@ -9,6 +9,7 @@ import type { GameContext } from './game-context';
 import type { DoorPhase } from './sector-doors';
 import type { SectorGround } from './sector-ground';
 import { sectorSegmentHit } from './sector-ray';
+import { doorLampGain, doorSpillGain } from './game-doors';
 
 export function createDoorSeams(ctx: GameContext) {
   return {
@@ -17,6 +18,15 @@ export function createDoorSeams(ctx: GameContext) {
     /** The leaf meshes: name, zone room, culling, whether the level pre-warm can see them (in the level group). */
     doorMeshes: () => ctx.world.doors?.meshes.map(m => ({ name: m.name, room: m.userData.room as number, frustumCulled: m.frustumCulled,
       inLevelGroup: m.parent === ctx.world.levelGroup, material: (m.material as THREE.Material).type, lit: !!(m.material as { lightsNode?: unknown }).lightsNode })) ?? [],
+    /** The readability cues in force (`?doorcues=`) and each door's status lamp colour now. */
+    doorCues: () => ctx.world.doors ? { cues: ctx.world.doors.cues, lamps: ctx.world.doors.lampColours(),
+      lampGain: doorLampGain.value as number, spillGain: doorSpillGain.value as number } : null,
+    /** Retune the status lamp's brightness and its spill (shared by every door). */
+    setDoorLamp: (gain?: number, spill?: number) => {
+      if (gain !== undefined) doorLampGain.value = gain;
+      if (spill !== undefined) doorSpillGain.value = spill;
+      return { lampGain: doorLampGain.value as number, spillGain: doorSpillGain.value as number };
+    },
     doorEvents: () => ctx.world.doors?.events.map(e => ({ ...e, id: ctx.world.doors!.field.defs[e.door]!.id })) ?? [],
     doorRay: (a: Vec3, b: Vec3) => {
       const map = ctx.world.level.def?.sectors;

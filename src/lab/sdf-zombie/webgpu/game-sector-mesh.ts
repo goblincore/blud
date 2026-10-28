@@ -236,7 +236,7 @@ function emitterFn(kind: EmitterKind): WgslFnNode {
  *  never share one): the surface's textures and the palette colour, plus the sector term — the
  *  albedo times the sector's current level — for ceilings plan 1's whisper, and a light panel's glow. */
 function sectorMaterial(src: SurfaceSource, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean,
-  wallFloors: ReturnType<typeof uniformArray<'float'>> | null): MeshStandardNodeMaterial {
+  wallFloors: ReturnType<typeof uniformArray<'float'>> | null, grime = 1): MeshStandardNodeMaterial {
   const role = src.base;
   const nm = new MeshStandardNodeMaterial();
   nm.map = role.map; nm.normalMap = role.normalMap; nm.roughnessMap = role.roughnessMap;
@@ -263,7 +263,9 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     // darken toward their sector's floor (the per-sector floor height, read like the level).
     mottle ??= mottleTexture(977);
     const m = texture(mottle, attribute('mottleUv', 'vec2').mul(GRIME.mottleScale)).r;
-    let k = m.mul(GRIME.hi - GRIME.lo).add(GRIME.lo);
+    // `grime` < 1 narrows the mottle toward 1 (a cleaner surface: the door leaves' tone cue).
+    const lo = 1 - (1 - GRIME.lo) * grime, hi = 1 + (GRIME.hi - 1) * grime;
+    let k = m.mul(hi - lo).add(lo);
     if (wallFloors) {
       const floorY = wallFloors.element(attribute('sectorIndex', 'float').add(0.5).toInt());
       k = k.mul(float(1).sub(exp(positionWorld.y.sub(floorY).max(0).div(-GRIME.falloffM)).mul(GRIME.base)));
@@ -296,13 +298,14 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
  *  level[sectorIndex]`, the bakes) for a mesh outside the batches — the door leaves (game-doors.ts). The mesh must
  *  carry the batch attributes: sectorIndex, mottleUv, glowBounce, emitScreen, emitFS. Its textures are the page's
  *  shared set for the kind; the material is the mesh's own (the light-list loop reuses a node material as is). */
-export function panelSurfaceMaterial(kind: PanelKind, color: readonly [number, number, number], fx: SectorFxRuntime): MeshStandardNodeMaterial {
-  const look = SURFACE_LOOKS[kind];
+export function panelSurfaceMaterial(kind: PanelKind, color: readonly [number, number, number], fx: SectorFxRuntime,
+  over: Partial<Pick<SurfaceLook, 'metalness' | 'gain'>> & { grime?: number } = {}): MeshStandardNodeMaterial {
+  const look = { ...SURFACE_LOOKS[kind], ...over };
   const t = panelSet(kind);
   flushPanelJobs();
   const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
     roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
-  return sectorMaterial({ base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: null }, color, fx, false, null);
+  return sectorMaterial({ base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: null }, color, fx, false, null, over.grime ?? 1);
 }
 
 /** Add the sector level's meshes: stone to the level group, glow floors to the scene. Creates the
