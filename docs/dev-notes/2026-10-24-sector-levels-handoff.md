@@ -76,6 +76,14 @@ auto-open for the player and for enemies, close `wait` (4 s) after the doorway c
 - Probes `doors-probe.mjs` (session scratchpad); shots `.lab-tmp/doors/`. `?doors=0` = every doorway open, no leaves.
 - Not built: door sound (`onPhase` hook; the game loads no audio), keys (a keyed door opens like any other),
   floaters (teratomas) ignore doors (own fly space), a corpse in a doorway neither holds nor blocks the door.
+- **Readability cues (2026-10-28, owner: shut doors "sometimes just look like wall panels").** `?doorcues=` switches
+  each (all on by default; `none` = all off, a list = only those, `all,-light` = remove one): `frame` (dark heavy-metal
+  posts + header beam proud of the wall, reveal lining, threshold plate), `light` (status lamp bar on each header —
+  red shut, green opening/open, amber closing — plus a faint spill on the header; beside the door where there is no
+  header room), `recess` (leaves 12 cm back from the face planes), `tone` (leaves in cleaner, colder, lighter steel).
+  Pure geometry `door-frame-geometry.ts`; one frame mesh per door side (game-doors.ts). Cost: +3 pipelines total
+  (242 -> 245), first sight of door-69 still +0. Seams `doorCues()`, `setDoorLamp(gain, spill)`. Sheet:
+  `.lab-tmp/doors-readable/doors-readable-sheet.png`. The lamp is the cue that carries at 10 m; frame and tone help up close.
 
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
