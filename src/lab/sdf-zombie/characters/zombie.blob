@@ -36,18 +36,28 @@ body
   blob torso on spine  at=0.80 r=0.150 wide=1.28 deep=0.78 blend=0.014
   blob torso on spine  at=0.50 r=0.150 wide=1.15 deep=0.80 blend=0.02
   blob torso on spine  at=0.15 r=0.142 wide=1.02 deep=0.95 blend=0.02
-  blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
+  # THE TROUSERS ARE PAINT (owner 2026-10-26: the polygon trousers clipped through the pelvis and "look bad"). The pelvis
+  # mass and both thighs wear the labourer's dark work denim, so the cloth bends, takes wounds and severs with the flesh
+  # and nothing can poke through it. The waist is where the pelvis mass hands over to the spine masses (y 1.03-1.06 all
+  # round, probed), under the kit belt; the hem is the knee, where the thigh bar ends. The folds, seams, fly and pockets
+  # are in the body normal map (zombie.detail), which only paint marked `fabric` keeps; `fabric` also makes it matte
+  # (2b3445 with the latex flesh's wet sheen read as black vinyl). sRGB 4a5568: worn grey-blue work denim.
+  blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02 color=4a5568 fabric
 
-  # Arms — shoulder blob, then upper and forearm capsules, then a fist.
+  # Arms — shoulder blob, then upper and forearm capsules, then a WRIST knob. The fist orb (r 0.062 at 1.00) is now the
+  # grabber HANDS, polygon kit on the forearm (assets-source/zombie-kit/make_kit.py, owner 2026-10-26), drawn in this
+  # body's own flesh with the flesh shader's lighting (kit-flesh.ts); the knob is what the hand's palm sits into.
   blob arm on clavicle at=0.90 r=0.072 blend=0.010 mirror
   bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.007 mirror
-  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
-  blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
+  # The forearm TAPERS into the wrist (owner 2026-10-26): r 0.048 at the elbow to 0.040, so it narrows into the iron
+  # wrist shackle (kit) instead of meeting the hand as a thick drum; the knob shrinks with it and sits inside the cuff.
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 r2=0.040 blend=0.007 mirror
+  blob arm on foreArm  at=0.97 r=0.041 blend=0.0125 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # from=0.04348: 0.02 m down the (now 0.46) thigh, where 0.05 of 0.40 put it — the hip's flesh must not
   # move: the iliac crest bone below sits 4 mm inside it (validateBody's breach check).
-  bar  leg on thigh from=0.04348 to=0.95 r=0.082 blend=0.0175 mirror
+  bar  leg on thigh from=0.04348 to=0.95 r=0.082 blend=0.0175 mirror color=4a5568 fabric
   bar  leg on shin  from=0.05 to=0.92 r=0.062 blend=0.015 mirror
   # The ankle knob. It used to BE the foot (r 0.070, flattened 0.6, stretched 1.5 forward), which
   # is why the legs read as stumps; now a round joint the foot hangs off.

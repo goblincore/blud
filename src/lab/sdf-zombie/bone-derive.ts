@@ -39,6 +39,7 @@ type BoneSource = {
   gloss?: number;
   glow?: number;
   metal?: boolean;
+  fabric?: boolean;
 };
 
 /**
@@ -94,6 +95,8 @@ export function deriveBones<T extends BoneSource>(prims: T[], ratio: number): T[
       gloss: undefined,
       glow: undefined,
       metal: undefined,
+      // nor `fabric`: a bone plug is bone, not the trousers it surfaced through
+      fabric: undefined,
       // Never the cluster's structural core — that is the flesh's job, and a
       // bone winning the fuse probe would change severing behaviour.
       core: false,

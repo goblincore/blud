@@ -427,14 +427,17 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     expect(packedProf('schoolgirl.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
     // 27: + ankle-reshaped, heel and sole per side since the zombie's feet (2026-09-29), all flesh.
+    // Re-pinned 2026-10-26: the labourer's painted trousers (the pelvis mass and both thighs) carry `fabric`, bit 6 (64).
     expect(packedProf('zombie.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,64,64,64]);
   });
 });
 
 describe('primColor row', () => {
   it('packs flesh as all zeros, so pre-colour bodies are bit-identical', () => {
-    const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    // The zombie's trousers are painted (2026-10-26), so strip the paint: this pins what an UNPAINTED body packs.
+    const bare = { ...ZOMBIE, prims: ZOMBIE.prims.map(({ color: _c, gloss: _g, fabric: _f, ...p }) => p) };
+    const built = buildBody(bare, DEFAULT_BUILD_OPTS);
     const packed = packBody(built);
     let sum = 0;
     for (const v of packed.primColor) sum += Math.abs(v);

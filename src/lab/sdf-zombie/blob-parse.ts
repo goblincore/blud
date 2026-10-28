@@ -214,6 +214,14 @@ function parseMetalArg(l: BlobLine, painted: boolean): boolean {
   return true;
 }
 
+/** The bare word `fabric`, and only beside a `color=`: it makes PAINT matte and lets it keep the body normal map,
+ *  so on flesh it would change nothing, and silently doing nothing is how an author loses an hour. */
+function parseFabricArg(l: BlobLine, painted: boolean): boolean {
+  if (!l.words.includes('fabric')) return false;
+  if (!painted) throw new BlobError('fabric only means something on a coloured primitive (it makes paint matte and keeps the body normal map on it); add color=rrggbb', l.line, l.indent + 1);
+  return true;
+}
+
 /** `glow=0..1`, and only beside a `color=` — the glow COLOUR is the prim's
  *  own albedo (hard-surface design C: no new colour field, the authored
  *  intent stays on one line), so on flesh it would have nothing to emit.
@@ -532,6 +540,8 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // with no `gloss=` (say so on the grammar line — an author writing
     // `metal` alone reasonably expects the polished look, not pores).
     metal: parseMetalArg(l, strArg(l, 'color') !== null),
+    // `fabric` — painted CLOTH: matte, and it keeps the baked relief (the body normal map is masked off other paint).
+    fabric: parseFabricArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
     // `rigid`: both ends ride the declared bone as one piece. See BlobPart.rigid.

@@ -22,6 +22,8 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
   var gloss = 0.0;
   var painted = 0.0;
   var metal = 0.0;
+  // FABRIC (prof bit 6, 64): painted cloth, matte, keeping the body normal map (the zombie's painted trousers).
+  var fabric = 0.0;
   // CLOTH (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): a painted SHELL prim (profile bit 2, value 4)
   // is fabric, not skin — matte, no scatter, no pores, a grazing sheen and a dye mottle (the uses below). Read off
   // the shape texel this branch already loads, so it costs nothing; 0 everywhere else, and every use is written so
@@ -38,6 +40,7 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
       painted = 1.0;
       let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
+      if ((i32(PS.y) & 64) != 0) { fabric = 1.0; }
       if ((i32(PS.y) & 4) != 0) { cloth = 1.0; }
       // GLOW (hard-surface task 3): primClip.w, the lane that was documented
       // spare until now. Loaded ONLY inside the painted branch — glow is

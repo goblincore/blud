@@ -272,6 +272,14 @@ export interface PrimDef {
    */
   metal?: boolean;
   /**
+   * Painted FABRIC (the zombie labourer's painted trousers, 2026-10-26): MATTE whatever the flesh preset's wetness
+   * (wet.wgsl.ts; gloss can only raise the sheen, and the zombie's latex flesh shone the denim like vinyl), and it
+   * keeps the character's BAKED RELIEF (the body normal map, body-normal.wgsl.ts), which is otherwise masked off every
+   * painted prim, so the cloth's folds, seams and pockets can live in the map. Parse-gated on `color=`. Packed as
+   * prof bit 6 (64), shading-only.
+   */
+  fabric?: boolean;
+  /**
    * Per-prim emissive strength, 0..1 (hard-surface design C). The glow
    * COLOUR is the prim's own `color` — a prim with `color=ff2200 glow=0.9`
    * glows red because it IS red; there is no separate glow colour field.
@@ -456,6 +464,8 @@ export interface Primitive {
   shroud?: number;
   /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
   metal?: boolean;
+  /** See PrimDef.fabric. Carried through mirror, resolve and the rig untouched. */
+  fabric?: boolean;
   /** Rigid-segment id for inside-flesh prims (bones/organs), assigned by
    *  applyRig; pack groups bone rows by it. CPU-only — never a GPU row. */
   boneSegment?: number;

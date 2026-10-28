@@ -37,6 +37,7 @@ import {
   GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
 } from './game-march-accept';
 import { clearMeshGibs } from './game-mesh-gibs';
+import { clearKitRiders } from './game-kit-riders';
 import { applyMoonKey } from './game-outdoor';
 import { bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor } from './game-skeleton-actors';
 import { spawnPellets, spawnRound } from './game-weapon';
@@ -49,6 +50,8 @@ import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
+import { dressKitFlesh } from './kit-flesh';
+import { kitFleshMaterial } from './game-chunk-bake';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
 // game-march-accept.ts beside the accept law, so a lab page can run the game's march without importing the game; re-exported here.
@@ -212,6 +215,11 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // bones block, later).
     ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
     gpu: (built) => ({ ...viewGpuOpts, ...crowdViewOptsFor(built) }),
+    // Kit FLESH (the goblin's bony hands) in the flesh shader's lighting, wearing the same flesh the body does (below).
+    dressKitFlesh: (root, palette) => {
+      const flesh = name !== 'zombie' ? palette ?? ctx.vfx.flesh : ctx.vfx.flesh;
+      ctx.world.kitFlesh.meshes.push(...dressKitFlesh(root, kitFleshMaterial(ctx).material, flesh));
+    },
   });
   const placed = character.body;
   const view = character.gpu;
@@ -535,6 +543,7 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headSplit?.reset();
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
+  clearKitRiders(ctx);
   ctx.boot.kitEye?.clear();
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();

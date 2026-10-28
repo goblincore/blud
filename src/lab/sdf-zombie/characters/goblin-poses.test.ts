@@ -21,6 +21,12 @@ import { KEYBOARD, KOTATSU } from '../webgpu/emergence-field';
 import type { PoseClip } from '../pose';
 import type { Primitive, Vec3 } from '../types';
 
+/** The at-home hand ORB: the BIGGEST prim on the hand bone. Since 2026-10-24 goblin.blob's own hand is a small wrist knob
+ *  (the bony hands are kit), and goblin-home's marked block carries the orb back after it, so the first hand prim is the
+ *  knob. */
+const handOrb = (ps: readonly Primitive[], s: string): Primitive =>
+  ps.filter(p => p.bone === `hand.${s}`).reduce((m, p) => (p.radius > m.radius ? p : m));
+
 // The goblin's body, and goblin-home's (the same skeleton plus cloth and bare feet: pose-library.ts gives it the goblin's clips, so the
 // clip checks below run on both).
 const rigFor = (src: string) => {
@@ -176,7 +182,7 @@ describe('goblin poses', () => {
     expect(lean).toBeGreaterThan(15);
     expect(lean).toBeLessThan(25);
     for (const s of ['l', 'r']) {
-      const hand = bb.find(p => p.bone === `hand.${s}`)!;
+      const hand = handOrb(bb, s);
       expect(Math.abs(lowest([hand], /./))).toBeLessThan(0.003);
       expect(hand.a[2] + hand.radius).toBeLessThan(FLOOR_SEAT.z[0]);
       expect(hand.a[2]).toBeGreaterThan(-0.5);   // 0.45 m behind the hips (the crab had them 0.57 back on straight arms)
@@ -203,7 +209,7 @@ describe('goblin poses', () => {
   // close to the wrist (`reach`): the forearm ends in a 2.35 cm cap, so past 6.0 + 2.35 = 8.4 cm the ball floats free of it, and past
   // about 7 cm the junction pinches to a neck narrower than the wrist. Before this fit: floor-type 32.6 degrees and 79.7 mm (an 11 mm
   // neck), brace-back 77.5 degrees and 95.1 mm (a 1.1 cm GAP between the forearm and the ball), lean-back up to 106 degrees.
-  const orbOf = (ps: Primitive[], s: 'l' | 'r') => { const h = ps.find(p => p.bone === `hand.${s}`)!; return { c: h.a.map((v, k) => (v + h.b[k]!) / 2) as unknown as Vec3, r: h.radius, ry: h.radius * h.scale[1] }; };
+  const orbOf = (ps: Primitive[], s: 'l' | 'r') => { const h = handOrb(ps, s); return { c: h.a.map((v, k) => (v + h.b[k]!) / 2) as unknown as Vec3, r: h.radius, ry: h.radius * h.scale[1] }; };
   const ang = (a: Vec3, b: Vec3) => Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (len(a) * len(b))))) * 180 / Math.PI;
   /** The visible wrist: the forearm's direction against the wrist-to-orb line (degrees), and the orb centre's distance from the wrist. */
   const wrist = (j: readonly Vec3[], ps: Primitive[], s: 'l' | 'r') => {

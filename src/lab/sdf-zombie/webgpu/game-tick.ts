@@ -43,6 +43,7 @@ import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
+import { handShot, kitPieceShot, stepKitRiders } from './game-kit-riders';
 import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
 import { stepOutdoor } from './game-outdoor';
@@ -52,7 +53,10 @@ import { gibBlurSubjects } from './game-render-controls';
 import { applySequenceCamera, stepSequence } from './game-sequence';
 import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
-import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
+import { setShellHold } from './game-arms';
+/** The rig's toward-the-viewer direction: the fore hand's turn rolls its thumb this way. */
+const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
+import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
@@ -682,6 +686,10 @@ export function tick(ctx: GameContext, dt: number) {
   /** Where the fore hand is this frame BEFORE the recoil carries it: the rest
    *  place, or the reload's path while one is running. */
   let foreHandBase: THREE.Vector3 = FORE_HAND_REST;
+  /** The fore hand shows its shell-hold pose while the reload carries the fresh cases (set below). Decided every
+   *  frame, so a reload cut short (a weapon switch resets reloadAge) can never leave the hold pose up. */
+  let shellHold = false;
+  ctx.weapon.foreRoll = null;   // only the reload rolls the fore arm (set below)
   if (reloading) {
     // THE BORE BASIS, this frame, in rig space. The cases leave along it,
     // the fresh ones are staged on it, and the hand's two breech keys are
@@ -715,13 +723,20 @@ export function tick(ctx: GameContext, dt: number) {
       hold = { stage: asDelta(h.stage), seat: asDelta(h.seat) };
     }
     const sh = supportHandPose(ctx.weapon.reloadAge, hold);
+    shellHold = ctx.weapon.reloadAge >= RELOAD.loadStartSec && ctx.weapon.reloadAge < HOLD_POSE_END_SEC;
+    // THE COVER-AND-SHOVE (coverRoll): palm down onto the open tubes, back of the hand along `out` (the way the
+    // cases came out). The stage key already puts the case heads against that palm: they sit 16 mm ahead of the
+    // hand's centre, the palm's face 17 mm.
+    if (haveBore) ctx.weapon.foreRoll = { dorsal: out.clone(), w: coverRoll(ctx.weapon.reloadAge), thumbVia: TOWARD_VIEWER };
     const handNow = new THREE.Vector3(
       FORE_HAND_REST.x + sh.dx,
       FORE_HAND_REST.y + sh.dy,
       FORE_HAND_REST.z + sh.dz,
     );
     foreHandBase = handNow;
-    if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(ctx); }
+    if (ctx.weapon.foreHandGroup) {
+      ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(ctx);
+    }
 
     // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
     // The seated cases are children of Barrels, so they are already carrying
@@ -822,6 +837,7 @@ export function tick(ctx: GameContext, dt: number) {
       updateHud(ctx);
     }
   }
+  if (ctx.weapon.arms) setShellHold(ctx.weapon.arms, shellHold && Number.isFinite(ctx.weapon.reloadAge));
   // THE HANDS RIDE THE KICK. They are placed at rest (or by the reload) and the
   // recoil moves only the gun, so the hands used to hang where the fore-end had
   // been. Carry both by the recoil part of the gun's motion; the window runs a
@@ -943,9 +959,13 @@ export function tick(ctx: GameContext, dt: number) {
           const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
+        // A round that meets a polygon HAND (kitHands) before any flesh takes the hand off at the wrist, and is spent.
+        // ...and one that meets a breakable kit piece (kitBreakables: the belt, a shackle) first knocks it off.
+        const handTook = kitPieceShot(ctx, p, from, bestDist) || handShot(ctx, p, from, bestDist);
+        if (handTook) dead = true;
         // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
-        skullPasses(ctx, p, from, hitActor, hitPoint);
-        if (hitActor && hitPoint) {
+        if (!handTook) skullPasses(ctx, p, from, hitActor, hitPoint);
+        if (!handTook && hitActor && hitPoint) {
           const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
           const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
           // hit/hitSlug RETURN the wound this impact stamped (pre-sever),
@@ -1171,6 +1191,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    stepKitRiders(ctx);
     ctx.boot.kitEye?.step(cdt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`

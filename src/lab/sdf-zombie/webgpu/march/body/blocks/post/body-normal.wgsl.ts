@@ -31,7 +31,8 @@
 // (restPoint maps world -> rest with q; rest -> world is conj(q)), then made orthonormal against the current
 // shading normal, so the bake's relief lands on whatever the march computed rather than replacing it.
 //
-// Masked like the grain: off the face sheet, gloss and metal, painted prims, wounds and cut faces.
+// Masked like the grain: off the face sheet, gloss and metal, painted prims (unless the prim says `fabric`: painted
+// cloth whose folds are in the map), wounds and cut faces.
 //
 // COST: once per lit pixel, never in the walk or the field: the region table (five taps a region, a handful of
 // regions), four textureLoad taps for a manual bilinear (the march has no sampler, see shade-helpers.wgsl.ts
@@ -52,7 +53,7 @@ export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.w
   // z,w the torso prim range (region 0's hits). Strength 0 skips the block.
   let nmapStr = bodyNormCfg.x;
   if (nmapStr > 0.0) {
-    let nmapMask = (1.0 - faceSheetCover) * (1.0 - max(gloss, metal)) * (1.0 - painted)
+    let nmapMask = (1.0 - faceSheetCover) * (1.0 - max(gloss, metal)) * (1.0 - painted * (1.0 - fabric))
       * clamp(1.0 - wm, 0.0, 1.0) * (1.0 - cutFace);
     let nmapRa = textureLoad(data, vec2<i32>(hitBest, ${ROW_REST_A} + gBand), 0);
     let nmapHdr = textureLoad(bodyNormTex, vec2<i32>(0, 0), 0) * 255.0;

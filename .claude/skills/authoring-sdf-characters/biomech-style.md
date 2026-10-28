@@ -613,3 +613,41 @@ first, surging ~0.9 m (`slamAdvance`). A first pass that lifted the chest 0.30 m
 renders that checkout without a word; give each worktree its own `LAB_VITE_PORT`/`LAB_CDP_PORT` and read the
 `lab-servers: starting vite` line. The lab's 0.4 m reference cube hides a body this low (hide it in a `BLOB_PROBE`), and
 `BLOB_TARGET_X`/`BLOB_TARGET_Z` move the orbit centre to a head 0.8 m from the origin.
+
+## Refining the base zombie (the labourer, 2026-10-26)
+
+The crowd enemy got the default pipeline as a refinement pass rather than a new character. What it taught:
+
+- **Look-dev through the real pipeline, cheaply.** Copy the `.blob` to `zombie-<variant>.blob`, give each copy a
+  temporary registry entry with its own kit glTF and body map, and shoot them with `blob:shot`. One `make_kit.py` with a
+  variant switch builds every outfit on shared parts (hands, shackles), so the owner compares outfits, not lighting.
+  Delete the copies once one is picked.
+- **Clothes on probed skin.** `scripts/zombie-surface.ts` dumps torso rings and per-bone radius tables;
+  `zombie_common.py`'s `torso_pt` / `limb_pt` lay straps, trouser legs and cuffs a set clearance off the skin. A rigid cuff
+  takes the WIDEST skin across its span at each angle. Trouser pieces ride separate bones (pelvis, thigh, shin) and
+  overlap generously at the joints.
+- **Crowd budgets.** Decimate each part to ~700-1,200 tris; the look-dev's 31k labourer kit shipped at 17.5k with no
+  visible loss. Old iron needs a dark albedo (~0.10): 0.30 rendered as pale gold bangles.
+- **Cloth on kit needs its relief in the GEOMETRY.** The body normal map cannot reach kit, and voxel-remeshed parts
+  have no UVs, so the trousers' folds are sculpted in (`zombie_common.py deform`: knee compression folds, the long
+  folds a leg hangs in, crotch drag folds, seams, pockets, a patch) and darkened into the vertex colours (`crease`, a
+  cavity map). At 2-5 mm they still read as smooth tubes; 3-7 mm and a strong crease darkening read across a room.
+  In `deform`, read every normal BEFORE writing any `v.co`: writing dirties the normals, and the next read recomputes
+  all of them (quadratic: 40 minutes on a 138k-vertex part, 3 s fixed).
+- **Tight clothes on a crowd enemy: PAINT them (`fabric`), don't mesh them.** Even fitted to the posed envelope, the
+  labourer's polygon trousers read badly where they met the pelvis, and a rigid kit piece never takes a shot. Painted
+  `fabric` prims cost nothing, deform, wound and sever with the body, and the folds go in the body normal map. Keep
+  kit for rigid things (boots, belt, iron).
+- **Cloth must clear the POSED flesh, not the rest skin.** Kit rides one bone rigidly; the flesh under a seat is folded
+  from the pelvis AND the swinging thighs. Probe the outermost flesh over the real walk in each piece's own bone frame
+  (`zombie-surface.ts`, capped ~25 mm past rest: past that the flesh belongs to a limb whose own cloth piece covers it),
+  then check with `scripts/kit-clearance.ts <character>` (flesh samples ray-cast out to the posed cloth).
+- **Kit normal maps** (`zombie_common.py bake_normal_atlas`): keep each part's full-detail sculpt, unwrap the decimated
+  parts of one material into ONE atlas (blender-kit.ts merges a material's parts into one primitive), delete the
+  shell's inner wall on both (`drop_inner_wall`: the closed shell baked ~10% flipped normals), bake tangent-space
+  selected-to-active, export with tangents. Cheaper than more triangles, and it is what made the folds read.
+- **Kit leaves with its flesh** (`webgpu/kit-sever.ts`): a severed piece takes the kit triangles on the bones it took
+  flesh off, riding the flying chunk. Declare polygon hands as `kitHands` in the registry and they can be shot off whole.
+- **Bake trap (fixed):** `bakeBodies` now builds flesh only (`fleshFromBlob`). With bones, a body that has a `bones` block
+  plus a big `.detail` spent minutes deriving and containment-checking a bone per detail prim before the GPU started. And
+  a worktree whose `node_modules` predates the `webgpu` package falls back to the CPU bake: run `npm install`.

@@ -39,9 +39,18 @@ export function withDetail(src: string, detail: string, name: string): string {
 
 export function buildFromBlob(src: string): Body { const doc = parseBlob(src); return buildBody(compileBlob(doc, compileFace(doc))); }
 
-/** The plain body and the detailed body, both at rest. */
+/** A body for BAKING: the flesh only. The bake reads the flesh field and nothing else, and building the bones is the
+ *  slow part with a .detail folded in: buildBody derives a bone for every flesh prim and checks each one for containment
+ *  against the whole flesh field, which is quadratic in prims. The zombie's 1,258 detail prims sat over five minutes
+ *  there before the GPU bake started (2026-10-26). So drop the authored bones and turn derivation off (ratio 0). */
+export function fleshFromBlob(src: string): Body {
+  const doc = parseBlob(src);
+  return buildBody({ ...compileBlob(doc, compileFace(doc)), bonePrims: [], boneRatio: 0 });
+}
+
+/** The plain body and the detailed body, both at rest, flesh only (fleshFromBlob). */
 export function bakeBodies(blobSrc: string, detailSrc: string, name: string): { base: Body; detail: Body } {
-  return { base: buildFromBlob(blobSrc), detail: buildFromBlob(withDetail(blobSrc, detailSrc, name)) };
+  return { base: fleshFromBlob(blobSrc), detail: fleshFromBlob(withDetail(blobSrc, detailSrc, name)) };
 }
 
 export interface Region { label: string; limb: string; head: V; tail: V; rMax: number; rows: number; kind: 0 | 1; r0: number; row0: number }

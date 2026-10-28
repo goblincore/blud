@@ -435,6 +435,27 @@ What it does at shading time (`march.wgsl.ts`, the composite):
   metal's diffuse is dark and its brightness is the highlight. A light albedo
   plus a hot spec still reads as white plastic.
 
+## Fabric: the bare word `fabric` on a painted prim (added 2026-10-26)
+
+Painted CLOTH. Two things change on a `fabric` prim:
+- **It is matte.** Paint otherwise keeps the flesh preset's wetness, and `gloss` can only raise it, so the zombie's
+  latex flesh made painted denim read as black vinyl.
+- **It keeps the body normal map,** which is otherwise masked off every painted prim. The cloth's folds, seams, fly
+  and pockets can then live in the character's `.detail` and bake like muscle (`scripts/zombie-detail-gen.ts`, the
+  trousers sections).
+
+A wound in it stays as wet as flesh.
+
+```
+bar  leg on thigh from=0.04348 to=0.95 r=0.082 blend=0.0175 mirror color=4a5568 fabric   # work denim
+```
+
+When to reach for it: clothing that hugs the body, worn by a crowd enemy. It costs nothing (no new prims, one bit),
+and it bends, takes wounds and severs with the flesh. The zombie labourer's polygon trousers clipped through the
+pelvis and were replaced by this. Baggy or hanging cloth still needs shells (the cultist) or kit. Gated on `color=`.
+Packed as prof bit 6 (64), shading-only. Mind the paint-boundary rule above: the trousers end where the thigh bar
+ends, at the knee.
+
 ## Glow: `glow=0..1` on a painted prim (added 2026-09-03)
 
 Nothing on a character could emit — `faceGlow` is the baked sheet's own

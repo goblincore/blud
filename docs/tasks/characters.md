@@ -450,3 +450,46 @@ only if an idea below earns it.
 - [ ] **A monster with dangling jelly-orange tubes** (owner, 2026-10-03): the slug-burst's scalp flaps (`head-flap.ts`,
   the leaf's rim-hinged flap piece) read as wiggling orange tubes on the zombie, "quite creepy", so they are off there and
   can be the signature of a new creature. See [build notes](../dev-notes/2026-10-02-head-burst/NOTES.md).
+
+## The zombie refinement (2026-10-26)
+
+Owner: seeing detailed grabber hands on the plain zombie, bring the whole zombie up to the newer creatures' standard.
+Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
+
+- [x] **Look-dev:** three variants rendered in the lab on a shared base (asylum escapee, morgue walker, rotting labourer;
+  [sheet](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-variants-sheet.png)). The owner picked the **labourer**. `make_kit.py -- asylum|morgue`
+  still builds the other two (morgue wants `zombie-detail-gen.ts --incision`).
+- [x] **Body normal map:** `scripts/zombie-detail-gen.ts` -> `characters/zombie.detail` (collarbones, the lower ribs through slack
+  skin, pec edges, gut folds, spine knuckles, shoulder blades, varicose veins, forearm tendons), baked on the GPU in ~3 s
+  (`bake-args.json` has the command). No thigh regions: the trousers cover them.
+- [x] **Kit** (`assets-source/zombie-kit/make_kit.py` on `kit_sculpt.py`, laid on probed skin from `scripts/zombie-surface.ts`):
+  hands 1.2x and fleshier, iron wrist shackles with a broken chain over the hand seam, torn work trousers to below the knee,
+  work boots, suspenders. The trousers carry sculpted folds, seams, a fly, back pockets and a knee patch, darkened into
+  their vertex colours (the kit has no normal maps). 20.1k triangles (the look-dev's labourer was 31k).
+- [x] **Proportions:** the forearm tapers r 0.048 -> 0.040 into the shackle, and the wrist knob shrinks 0.045 -> 0.041
+  (zombie.blob and its body.ts twin; golden and gib assets re-pinned).
+- [x] **Playtest fixes (owner's clips, 2026-10-26):** the trousers are laid on the flesh's POSED envelope over the walk
+  (`scripts/zombie-surface.ts`), checked by `scripts/kit-clearance.ts` (flesh showing through the seat while walking 6% -> 0.1%);
+  the cloth's relief is a baked normal map (kit normal maps: `zombie_common.py bake_normal_atlas` -> `blender-kit.ts`);
+  a severed piece takes the kit on its bones with it, and a shot to a hand takes the hand off at the wrist
+  (`webgpu/kit-sever.ts`, `webgpu/game-kit-riders.ts`, `CharacterEntry.kitHands`; seams `aimHand`, `severArm`, `kitRiders`).
+- [x] **Second playtest (owner, 2026-10-26):** the polygon trousers still clipped through the pelvis and looked bad,
+  and the suspenders did not react to shots. Now the trousers are PAINT: `color=4a5568 fabric` on the pelvis mass and
+  the thighs. `fabric` is a new `.blob` word: matte paint that keeps the body normal map, which carries the fly,
+  pockets, seams and folds. The trousers end at the knee, where the thigh bar does. The kit keeps the hands,
+  shackles and boots, and adds a leather belt over the waist seam. The suspenders are gone. Kit 12.8k tris.
+- [x] **Belt and shackles break off (owner, 2026-10-26):** `CharacterEntry.kitBreakables` (zombie: the belt and its buckle on
+  the pelvis, each wrist's iron cuff). A round meeting one before any flesh knocks it off whole as a mesh gib along the
+  shot (`kit-sever.ts kitPieceHit`: the segment in the bone's rest frame against its triangles; `game-kit-riders.ts
+  kitPieceShot`). Seams: `aimAt`, `meshGibCount`, `slugFrom` (an exact line).
+- [x] **SDF-cloth trousers (owner, 2026-10-27: try real cloth before machine legs):** five `shell`s, the cloth spike's
+  recipe (a seat, a tube per thigh, a tube per shin, 12 mm off the flesh; arena ~1.16x a bare zombie). The thigh tube runs
+  straight to the knee and the shin tube tapers from there, tucked into the boots (hem y 0.235, inside the shaft). Light
+  `warp=` folds. The flesh under them stays painted denim, and the shins are painted too. `zombie.blob` stays the plain
+  fixture body: `characters/zombie-labourer.ts` splices the block in for the registry's zombie
+  ([lab](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-trousers-lab.png),
+  [game](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-trousers-ingame.png)). If they don't hold up, machine legs next.
+- [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
+- [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
+  shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the
+  zombie's test-fixture role. Its own task.
