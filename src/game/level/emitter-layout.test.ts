@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DIM_LEVEL, emHash, emitterFactor, emRand, exitLetterAt, EX_GLYPHS, EX_TEXT_BOX, FLUORO_FLICKER, FLUORO_RATES, fluoroFlicker,
   panelState, SB_CELL_PX, SB_CELL_TYPES, SB_GLASS, SB_LEDS, SB_LED_R, SCREEN_FLICKER, SCREEN_RATES, screenFlicker, signBuzz,
+  FLUORO_RGB, FLUORO_WARM, fluoroCellMean, fluoroFlickerMean, fluoroTint, fluoroTubeA, GLOW_PERIOD_S, LED_AMBER, LED_GREEN, LED_RED,
+  ledColour, ledOn, SB_GLASS_COVER, SB_SCREEN_MEAN, SCREEN_AMBER, SCREEN_AMBER_RATE, screenCellMean, screenColour, screenIsAmber,
+  sectorRowSeed, SIGN_BUZZ, signMean, viewscreenMean, viewscreenPlanet, VS_PLANET_CHANCE, wrapGlowTime,
 } from './emitter-layout';
 
 describe('emHash / emRand (mirrored in WGSL as u32 ops)', () => {
@@ -121,5 +124,76 @@ describe('layout', () => {
   });
   it('a dim panel is dimmer than a steady one but not off', () => {
     expect(DIM_LEVEL).toBeGreaterThan(0.1); expect(DIM_LEVEL).toBeLessThan(0.6);
+  });
+});
+
+describe('colours and means (item 2g B1: the CPU twin of the shader\'s per-panel colour)', () => {
+  it('screens are amber at about SCREEN_AMBER_RATE, an LED panel (type 2) always', () => {
+    let amber = 0;
+    for (let s = 0; s < 4000; s++) if (screenIsAmber(0, s, 3)) amber++;
+    expect(amber / 4000).toBeGreaterThan(SCREEN_AMBER_RATE - 0.04);
+    expect(amber / 4000).toBeLessThan(SCREEN_AMBER_RATE + 0.04);
+    for (let s = 0; s < 50; s++) expect(screenColour(2, s, 9)).toBe(SCREEN_AMBER);
+  });
+  it('LED hues split red / green / amber at LED_HUE_CUTS', () => {
+    expect(ledColour(0.1)).toBe(LED_RED); expect(ledColour(0.6)).toBe(LED_GREEN); expect(ledColour(0.95)).toBe(LED_AMBER);
+  });
+  it('under reduced flashes an LED never changes state (no blink)', () => {
+    for (let lid = 16; lid < 40; lid++) {
+      const first = ledOn(7, lid, 3, 0, true);
+      for (let t = 0; t < 20; t += 0.13) expect(ledOn(7, lid, 3, t, true)).toBe(first);
+    }
+    let changes = 0;
+    for (let lid = 16; lid < 40; lid++) for (let t = 0; t < 20; t += 0.13) if (ledOn(7, lid, 3, t, false) !== ledOn(7, lid, 3, t + 0.13, false)) changes++;
+    expect(changes).toBeGreaterThan(10);
+  });
+  it('a troffer tint stays within ±FLUORO_WARM / 2 of FLUORO_RGB; tube A sags only when not calm', () => {
+    for (let a = 0; a < 200; a++) {
+      const c = fluoroTint(a, 5);
+      expect(Math.abs(c[0] - FLUORO_RGB[0])).toBeLessThanOrEqual(FLUORO_WARM / 2 + 1e-12);
+      expect(c[1]).toBe(FLUORO_RGB[1]);
+    }
+    expect(fluoroTubeA(0.12, true)).toBe(1);
+    expect(fluoroTubeA(0.12, false)).toBeCloseTo(0.92 + 0.08 * 0.12, 12);
+    expect(fluoroTubeA(1, false)).toBe(1);
+  });
+  it('the glow clock wraps at GLOW_PERIOD_S and every slot period divides it', () => {
+    expect(wrapGlowTime(GLOW_PERIOD_S + 1.5)).toBeCloseTo(1.5, 9);
+    expect(wrapGlowTime(10)).toBe(10);
+    for (const p of [FLUORO_FLICKER.window, 1 / SCREEN_FLICKER.slotHz, 1 / FLUORO_FLICKER.slotHz, 1 / SIGN_BUZZ.slotHz]) {
+      const k = GLOW_PERIOD_S / p;
+      expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-9);
+    }
+  });
+  it('mean glows: screens green-or-amber and dimmer than their glass, dead cells dim the mean, troffers cold, signs red', () => {
+    const cells = Array.from({ length: 64 }, (_, i) => screenCellMean(i, i % 7, 15));
+    for (const c of cells) { expect(Math.max(...c)).toBeLessThan(0.2); expect(c[1]).toBeGreaterThan(c[2]); }
+    const mean = cells.reduce((s, c) => s + c[1], 0) / cells.length;
+    expect(mean).toBeGreaterThan(0.01);
+    const fl = fluoroCellMean(3, 1, 25);
+    expect(fl[2]).toBeGreaterThan(fl[0]);
+    expect(fluoroFlickerMean(false)).toBeLessThan(fluoroFlickerMean(true));
+    const sg = signMean();
+    expect(sg[0]).toBeGreaterThan(sg[1] * 10);
+    const vs = viewscreenMean(1, 0, 16);
+    expect(vs[2]).toBeGreaterThan(0);
+    expect(Math.max(...vs)).toBeLessThan(0.1);
+    // A dead screen's cell is dimmer than the steady ones' mean.
+    let dead = -1;
+    for (let wx = 0; wx < 400 && dead < 0; wx++) {
+      if (SB_CELL_TYPES[(wx % 4)]! !== 1 && panelState(wx * 2, 0 + sectorRowSeed(15), SCREEN_RATES) === 'dead') dead = wx;
+    }
+    expect(dead).toBeGreaterThanOrEqual(0);
+    expect(screenCellMean(dead, 0, 15)[1]).toBeLessThan(0.3 * SB_SCREEN_MEAN * SB_GLASS_COVER[SB_CELL_TYPES[dead % 4]!]!);
+  });
+  it('viewscreenPlanet: about VS_PLANET_CHANCE of screens, radius 0.18..0.32', () => {
+    let n = 0;
+    for (let wx = 0; wx < 2000; wx++) {
+      const p = viewscreenPlanet(wx, 5);
+      if (!p) continue;
+      n++;
+      expect(p.r).toBeGreaterThanOrEqual(0.18); expect(p.r).toBeLessThanOrEqual(0.32);
+    }
+    expect(Math.abs(n / 2000 - VS_PLANET_CHANCE)).toBeLessThan(0.04);
   });
 });

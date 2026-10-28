@@ -120,6 +120,25 @@ export function wallFit(fit: WallFit, t: number, full: number, y: number, y0: nu
   return [u + uOffset, v];
 }
 
+/** A fitted FLAT (a fluorescent ceiling): whole troffers over its polygon's x/z box. The box is
+ *  stretched to whole cells (fit.u across x, fit.v along z; at least one), from its min corner, so
+ *  a rectangular light ceiling (Doom's TLITE flats are) shows whole troffers edge to edge. A
+ *  non-rectangular polygon still cuts cells at its slanted edges (known limit). */
+export interface FlatBox { min: XZ; max: XZ }
+export function flatFitCells(fit: WallFit, box: FlatBox): [number, number] {
+  return [Math.max(1, Math.round((box.max[0] - box.min[0]) / fit.u)), Math.max(1, Math.round((box.max[1] - box.min[1]) / fit.v))];
+}
+export function flatFit(fit: WallFit, x: number, z: number, box: FlatBox): [number, number] {
+  const [nx, nz] = flatFitCells(fit, box);
+  const w = box.max[0] - box.min[0], d = box.max[1] - box.min[1];
+  return [w > 0 ? ((x - box.min[0]) / w) * nx * fit.cu : 0, d > 0 ? ((z - box.min[1]) / d) * nz * fit.cv : 0];
+}
+export function polyBox(pts: readonly XZ[]): FlatBox {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  return { min: [x0, z0], max: [x1, z1] };
+}
+
 /** A line's whole-tile u offset from its start point: deterministic, small, non-negative. */
 export function lineSeedTiles(x: number, z: number): number {
   const k = Math.round(x * 8) * 73856093 ^ Math.round(z * 8) * 19349663;

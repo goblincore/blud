@@ -7,7 +7,7 @@ from __future__ import annotations
 
 # (prefix, ours): the LONGEST matching prefix wins (so COMPUTE beats COMP, EXITSIGN beats EXIT), whatever
 # the order. Emitters (2026-10-26, hand-off item 2g): screen-bank (computer banks), viewscreen (the big
-# display wall), fluorescent (strip and ceiling lights), exit-sign. COMPSPAN / COMPTILE stay tech trim.
+# display wall), fluorescent (strip and ceiling lights; LITEBLU* stays a light panel), exit-sign. COMPSPAN / COMPTILE stay tech trim.
 FLAT_FAMILIES = [
     ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("FWATER", "acid"),
     ("BLOOD", "tile"),  # no blood glow material yet: plain tile, not a glow kind
@@ -19,6 +19,7 @@ TEXTURE_FAMILIES = [
     ("PLANET", "viewscreen"), ("EXITSIGN", "exit-sign"), ("BROWN", "rust"), ("BRN", "rust"),
     ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "fluorescent"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
+    ("LITEBLU", "light-panel"),  # blue-lit strips: the plain light panel, not a cold-white troffer
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
 

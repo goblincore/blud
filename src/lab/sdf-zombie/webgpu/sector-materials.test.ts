@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/sector-materials.test.ts
 import { describe, expect, it } from 'vitest';
-import { emittersOn, FAMILY_KINDS, isStone, lineSeedTiles, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU } from './sector-materials';
+import { emittersOn, FAMILY_KINDS, flatFit, flatFitCells, isStone, lineSeedTiles, polyBox, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU } from './sector-materials';
 
 describe('surfaceKind', () => {
   it('maps the converter families to their panel kinds', () => {
@@ -100,5 +100,20 @@ describe('wallFit', () => {
     expect(Number.isInteger(k) && k >= 0 && k < 61).toBe(true);
     expect(lineSeedTiles(17.25, -43.5)).toBe(k);
     expect(new Set([[0, 0], [8, 0], [0, 8], [17, -43], [47, -41]].map(([x, z]) => lineSeedTiles(x!, z!))).size).toBeGreaterThan(3);
+  });
+});
+
+describe('flatFit (fluorescent ceilings fit whole troffers, item 2g)', () => {
+  const fit = SURFACE_LOOKS.fluorescent.fit!;
+  it('stretches the polygon box to whole 1 x 2 m troffers from its min corner', () => {
+    const box = polyBox([[3, 5], [7.4, 5], [7.4, 9.1], [3, 9.1]]);
+    expect(flatFitCells(fit, box)).toEqual([4, 2]);
+    expect(flatFit(fit, 3, 5, box)).toEqual([0, 0]);
+    const [u, v] = flatFit(fit, 7.4, 9.1, box);
+    expect(u).toBeCloseTo(4 * fit.cu, 9);                                     // 4 troffers across: one tile
+    expect(v).toBeCloseTo(2 * fit.cv, 9);                                     // 2 along: one tile
+  });
+  it('a sliver still gets one whole troffer', () => {
+    expect(flatFitCells(fit, polyBox([[0, 0], [0.3, 0], [0.3, 0.4]]))).toEqual([1, 1]);
   });
 });

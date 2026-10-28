@@ -1,7 +1,11 @@
 // src/lab/sdf-zombie/webgpu/emitter-glow.wgsl.test.ts
 import { describe, expect, it } from 'vitest';
-import { FLUORO_FLICKER, SB_CELL_TYPES, SCREEN_RATES, SIGN_BUZZ } from '../../../game/level/emitter-layout';
-import { EM_FLUORO_FLICKER, EM_HASH, EM_RAND, EM_SCREEN_STATE, EMITTER_FN, EMITTER_KINDS } from './emitter-glow.wgsl';
+import {
+  FLUORO_FLICKER, FLUORO_RGB, FLUORO_WARM, LED_AMBER, LED_BLINK_CUT, LED_GREEN, LED_RED, SB_CELL_TYPES, SB_TEXT_MEAN, SCREEN_AMBER,
+  SCREEN_AMBER_RATE, SCREEN_GREEN, SCREEN_RATES, SIGN_BUZZ, SIGN_RGB, VS_BASE, VS_BASE_UP, VS_PLANET_CHANCE, VS_PLANET_COOL,
+  VS_PLANET_WARM, VS_RIM, VS_STAR,
+} from '../../../game/level/emitter-layout';
+import { EM_FLUORO_FLICKER, EM_HASH, EM_RAND, EM_SCREEN_STATE, EMITTER_FN, EMITTER_KINDS, v3 } from './emitter-glow.wgsl';
 
 const all = [EM_HASH, EM_RAND, ...EMITTER_KINDS.flatMap(k => [EMITTER_FN[k].src, ...EMITTER_FN[k].deps])];
 const fnName = (src: string) => /^fn (\w+)\(/.exec(src.trim())![1]!;
@@ -53,5 +57,25 @@ describe('emitter-glow.wgsl', () => {
     expect(EM_SCREEN_STATE).toContain(`h < ${SCREEN_RATES.dead}`);
     expect(EM_FLUORO_FLICKER).toContain(`${FLUORO_FLICKER.slotHz}.0`);
     expect(EMITTER_FN.exitSign.src).toContain(`${SIGN_BUZZ.chance}`);
+  });
+});
+
+describe('emitter-glow.wgsl colours come from emitter-layout.ts (item 2g B1: one source for shader and bake)', () => {
+  it('screen, LED, troffer, sign and viewscreen colours and cuts are interpolated, not literals', () => {
+    const sb = EMITTER_FN.screenBank.src;
+    expect(sb).toContain(v3(SCREEN_GREEN)); expect(sb).toContain(v3(SCREEN_AMBER));
+    expect(sb).toContain(`< ${SCREEN_AMBER_RATE}`);
+    for (const c of [LED_RED, LED_GREEN, LED_AMBER]) expect(sb).toContain(v3(c));
+    expect(sb).toContain(`> ${LED_BLINK_CUT}`);
+    expect(sb).toContain(`mix(dot, ${SB_TEXT_MEAN}, aa)`);
+    // Reduced flashes freeze the LED blink (emitter-layout.ts ledOn).
+    expect(sb).toMatch(/blinkPhase = select\(floor\(.*\), 0\.0, calm > 0\.5\)/);
+    expect(EMITTER_FN.fluorescent.src).toContain(`${FLUORO_RGB[0]} + warm`);
+    expect(EMITTER_FN.fluorescent.src).toContain(`${FLUORO_WARM} * (emRand(a, b + 1) - 0.5)`);
+    expect(EMITTER_FN.fluorescent.src).toContain('mix(1.0, 0.92 + 0.08 * tb, 1.0 - calm)');
+    expect(EMITTER_FN.exitSign.src).toContain(v3(SIGN_RGB));
+    const vs = EMITTER_FN.viewscreen.src;
+    for (const c of [VS_BASE, VS_BASE_UP, VS_STAR, VS_RIM, ...VS_PLANET_WARM, ...VS_PLANET_COOL]) expect(vs).toContain(v3(c));
+    expect(vs).toContain(`< ${VS_PLANET_CHANCE}`);
   });
 });

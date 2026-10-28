@@ -12,12 +12,16 @@
 // Deterministic: no state, only (uv, t, sector).
 
 import {
-  DEAD_LEVEL, DIM_LEVEL, EMIT_TILE_PX, FLUORO_FLICKER, FLUORO_RATES, FL_CELL_H, FL_CELL_W,
-  SB_CELL_PX, SB_CELL_TYPES, SB_GLASS, SB_GLYPH_PX, SB_LEDS, SB_LED_R, SB_ROW_PX, SCREEN_FLICKER, SCREEN_RATES,
-  SIGN_BUZZ, VS_CELL_PX, VS_FRAME_PX,
+  DEAD_LEVEL, DIM_LEVEL, EMIT_TILE_PX, FLUORO_FLICKER, FLUORO_RATES, FLUORO_RGB, FLUORO_WARM, FL_CELL_H, FL_CELL_W, FL_DIM_TUBES,
+  LED_AMBER, LED_GAIN, LED_GREEN, LED_HUE_CUTS, LED_KIND, LED_BLINK_CUT, LED_RED,
+  SB_CELL_PX, SB_CELL_TYPES, SB_GLASS, SB_GLYPH_PX, SB_LEDS, SB_ROW_PX, SB_TEXT_MEAN, SCREEN_AMBER, SCREEN_AMBER_RATE,
+  SCREEN_FLICKER, SCREEN_GREEN, SCREEN_RATES, SIGN_BACKLIT, SIGN_BUZZ, SIGN_RGB, VS_BASE, VS_BASE_UP, VS_CELL_PX, VS_FRAME_PX,
+  VS_PLANET_CHANCE, VS_PLANET_COOL, VS_PLANET_WARM, VS_RIM, VS_STAR, type RGB3,
 } from '../../../game/level/emitter-layout';
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+/** A layout colour as a WGSL vec3 literal. */
+export const v3 = (c: RGB3) => `vec3<f32>(${c.map(f).join(', ')})`;
 
 export const EM_HASH = /* wgsl */ `fn emHash(a: u32, b: u32) -> u32 {
   var h = (a * 0x9E3779B1u) ^ ((b + 0x7F4A7C15u) * 0x85EBCA77u);
@@ -80,8 +84,8 @@ export const EM_SCREEN_BANK = /* wgsl */ `fn emScreenBank(uv: vec2<f32>, mask: v
   let state = emScreenState(sid, wy);
   var lvl = 1.0;
   if (state < 0.5) { lvl = ${f(DEAD_LEVEL)}; } else if (state < 1.5) { lvl = ${f(DIM_LEVEL)}; }
-  let amber = ty == 2 || emRand(sid, wy + 1) < 0.4;
-  let col = select(vec3<f32>(0.22, 1.0, 0.36), vec3<f32>(1.0, 0.58, 0.12), amber);
+  let amber = ty == 2 || emRand(sid, wy + 1) < ${f(SCREEN_AMBER_RATE)};
+  let col = select(${v3(SCREEN_GREEN)}, ${v3(SCREEN_AMBER)}, amber);
   let size = r.zw - r.xy;
   let s = clamp((l - r.xy) / size, vec2<f32>(0.0), vec2<f32>(1.0));
   let rows = floor(size.y / ${f(SB_ROW_PX)});
@@ -109,7 +113,7 @@ export const EM_SCREEN_BANK = /* wgsl */ `fn emScreenBank(uv: vec2<f32>, mask: v
   }
   // Far away the dots alias, so fade them toward their average density.
   let aa = smoothstep(0.7, 1.8, fw);
-  let text = mix(dot, 0.22, aa);
+  let text = mix(dot, ${f(SB_TEXT_MEAN)}, aa);
   let scan = mix(0.78 + 0.22 * sin(fy * 3.14159265), 0.89, aa);
   let roll = 1.0 - 0.10 * smoothstep(0.0, 0.08, fract(s.y - t * 0.13)) * (1.0 - smoothstep(0.08, 0.2, fract(s.y - t * 0.13)));
   let ex = min(s.x, 1.0 - s.x);
@@ -123,17 +127,18 @@ export const EM_SCREEN_BANK = /* wgsl */ `fn emScreenBank(uv: vec2<f32>, mask: v
   let lj = select(0, i32(floor((l.y - lr.y) / lr.w + 0.5)), lr.w > 0.0);
   let lid = li + lj * 8 + 16;
   let rate = 0.4 + 2.2 * emRand(sid * 16 + lid, wy + 7);
-  let blinkPhase = floor(t * rate + 7.0 * emRand(sid * 16 + lid, wy + 8));
+  // Under reduced flashes (calm) the blink holds its phase-0 state (emitter-layout.ts ledOn).
+  let blinkPhase = select(floor(t * rate + 7.0 * emRand(sid * 16 + lid, wy + 8)), 0.0, calm > 0.5);
   let kind = emRand(sid * 16 + lid, wy + 9);
-  var on = select(0.0, 1.0, emRand(sid * 16 + lid + i32(blinkPhase) * 23, wy + 10) > 0.42);
-  if (kind < 0.3) { on = 1.0; }
-  if (kind > 0.88) { on = 0.0; }
+  var on = select(0.0, 1.0, emRand(sid * 16 + lid + i32(blinkPhase) * 23, wy + 10) > ${f(LED_BLINK_CUT)});
+  if (kind < ${f(LED_KIND[0])}) { on = 1.0; }
+  if (kind > ${f(LED_KIND[1])}) { on = 0.0; }
   let hue = emRand(sid * 16 + lid, wy + 11);
-  var lc = vec3<f32>(1.0, 0.10, 0.05);
-  if (hue > 0.45) { lc = vec3<f32>(0.25, 1.0, 0.2); }
-  if (hue > 0.8) { lc = vec3<f32>(1.0, 0.55, 0.08); }
+  var lc = ${v3(LED_RED)};
+  if (hue > ${f(LED_HUE_CUTS[0])}) { lc = ${v3(LED_GREEN)}; }
+  if (hue > ${f(LED_HUE_CUTS[1])}) { lc = ${v3(LED_AMBER)}; }
   let led = lc * on * mask.g * select(1.0, 0.25, state < 0.5);
-  return screen + led * 1.4;
+  return screen + led * ${f(LED_GAIN)};
 }`;
 
 /** A screen's dips (emitter-layout.ts screenFlicker). */
@@ -153,7 +158,7 @@ export const EM_VIEWSCREEN = /* wgsl */ `fn emViewscreen(uv: vec2<f32>, mask: ve
   let s = clamp((l - ${f(VS_FRAME_PX)}) / ${f(VS_CELL_PX - 2 * VS_FRAME_PX)}, vec2<f32>(0.0), vec2<f32>(1.0));
   let wx = i32(tile.x) * 2 + i32(cell.x);
   let wy = i32(tile.y) * 2 + i32(cell.y) + i32(sec + 0.5) * 977;
-  var col = vec3<f32>(0.008, 0.012, 0.03) + vec3<f32>(0.0, 0.01, 0.03) * s.y;
+  var col = ${v3(VS_BASE)} + ${v3(VS_BASE_UP)} * s.y;
   // Two star layers drifting at different speeds (parallax), a few twinkling.
   for (var k = 0; k < 2; k++) {
     let dens = select(14.0, 26.0, k == 1);
@@ -170,10 +175,10 @@ export const EM_VIEWSCREEN = /* wgsl */ `fn emViewscreen(uv: vec2<f32>, mask: ve
     let rad = select(1.6, 1.1, k == 1) + 0.5 * fw;
     let tw = 0.75 + 0.25 * sin(t * (1.0 + 3.0 * h) + h * 40.0);
     let star = select(0.0, 1.0, h > 0.78) * (1.0 - smoothstep(0.0, rad, d)) * tw;
-    col += vec3<f32>(0.75, 0.82, 1.0) * star * select(0.9, 0.45, k == 1);
+    col += ${v3(VS_STAR)} * star * select(0.9, 0.45, k == 1);
   }
   // A planet on about half the screens.
-  if (emRand(wx, wy + 3) < 0.55) {
+  if (emRand(wx, wy + 3) < ${f(VS_PLANET_CHANCE)}) {
     let c = vec2<f32>(0.35 + 0.3 * emRand(wx, wy + 4), 0.32 + 0.3 * emRand(wx, wy + 5));
     let rad = 0.18 + 0.14 * emRand(wx, wy + 6);
     let d = (s - c) / rad;
@@ -184,13 +189,13 @@ export const EM_VIEWSCREEN = /* wgsl */ `fn emViewscreen(uv: vec2<f32>, mask: ve
       let lon = d.x / max(z, 0.05) + t * 0.03;
       let band = 0.5 + 0.5 * sin(lat * 13.0 + 1.7 * sin(lon * 2.0 + lat * 4.0));
       let hue = emRand(wx, wy + 7);
-      let c0 = select(vec3<f32>(0.55, 0.32, 0.16), vec3<f32>(0.12, 0.38, 0.42), hue > 0.5);
-      let c1 = select(vec3<f32>(0.85, 0.62, 0.36), vec3<f32>(0.42, 0.70, 0.66), hue > 0.5);
+      let c0 = select(${v3(VS_PLANET_WARM[0])}, ${v3(VS_PLANET_COOL[0])}, hue > 0.5);
+      let c1 = select(${v3(VS_PLANET_WARM[1])}, ${v3(VS_PLANET_COOL[1])}, hue > 0.5);
       let lit = clamp(dot(vec3<f32>(d.x, d.y, z), normalize(vec3<f32>(-0.6, 0.35, 0.7))), 0.0, 1.0);
       col = mix(c0, c1, band) * (0.03 + 0.9 * lit) * 0.42;
     }
     let rim = exp(-abs(sqrt(r2) - 1.0) * 18.0) * 0.12;
-    col += vec3<f32>(0.3, 0.55, 1.0) * rim;
+    col += ${v3(VS_RIM)} * rim;
   }
   let scan = mix(0.72 + 0.28 * sin(l.y * 1.5707963), 0.86, smoothstep(0.6, 1.6, fw));
   let ex = min(s.x, 1.0 - s.x);
@@ -212,10 +217,10 @@ export const EM_FLUORESCENT = /* wgsl */ `fn emFluorescent(uv: vec2<f32>, mask: 
   var ta = 1.0;
   var tb = 1.0;
   if (state < 0.5) { ta = ${f(DEAD_LEVEL)}; tb = ${f(DEAD_LEVEL)}; }
-  else if (state < 1.5) { ta = 0.8; tb = 0.06; }
+  else if (state < 1.5) { ta = ${f(FL_DIM_TUBES[0])}; tb = ${f(FL_DIM_TUBES[1])}; }
   else if (state < 2.5) { tb = fluoroFlicker(t, a, b, calm); ta = mix(1.0, 0.92 + 0.08 * tb, 1.0 - calm); }
-  let warm = 0.04 * (emRand(a, b + 1) - 0.5);
-  let col = vec3<f32>(0.78 + warm, 0.88, 1.0 - warm);
+  let warm = ${f(FLUORO_WARM)} * (emRand(a, b + 1) - 0.5);
+  let col = vec3<f32>(${f(FLUORO_RGB[0])} + warm, ${f(FLUORO_RGB[1])}, ${f(FLUORO_RGB[2])} - warm);
   return col * (mask.r * ta + mask.g * tb);
 }`;
 
@@ -234,7 +239,7 @@ export const EM_EXIT_SIGN = /* wgsl */ `fn emExitSign(uv: vec2<f32>, mask: vec4<
   let b = i32(tile.y) + i32(sec + 0.5) * 977;
   let F = ${f(SIGN_BUZZ.slotHz)};
   let dip = select(1.0, mix(${f(SIGN_BUZZ.dip)}, ${f(SIGN_BUZZ.calmDip)}, calm), emRand(a + i32(floor(t * F)) * 53, b + 9) < ${f(SIGN_BUZZ.chance)});
-  return vec3<f32>(1.0, 0.07, 0.04) * (mask.r + 0.16 * mask.g) * dip;
+  return ${v3(SIGN_RGB)} * (mask.r + ${f(SIGN_BACKLIT)} * mask.g) * dip;
 }`;
 
 /** The fn names per emitter kind, and every helper string (includes go in dependency order). */
