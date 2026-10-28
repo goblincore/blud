@@ -56,6 +56,27 @@ two unattributed 1.2/1.9 s E1M1 frames, the arena respawn frame itself (~760 ms)
 
 **Level + prop pre-warm (2026-10-28, d7daff92, 839984d1).** Zone materials cannot share builds: each (zone, role, kind) batch has its own node graph (r186 keys nodes by id) and each zone room's light list holds its own lights + probe/level-list nodes, whose bindings live in the build state. So `game-level-prewarm.ts` un-culls one real level mesh per step (sector batches, barrels, pickups, glow floors), nearest the player first (`prewarm-order.ts`), and skips its step when the kit pre-warm built. Soldier guns built per instance (per-prop PMREM in the key): held props now share the kit env and the kit pre-warm warms props, plus kits/props hidden by the sector sight cull (`forcedRoot`, kept shown by `syncKitVisibility` for the step). E1M1 11-zone tour, 3 paired rounds: first-sight max 262–278 ms → 37–43 ms, 61 builds → 0, frames >50 ms 10 → 0; level pre-warm done 5.2–5.5 s after warmDone; boot max 113–121 → 103–129 ms (load noise), >50 ms frames after 2.5 s 1–3 → 5 (50–59 ms, one 129). Still built late: meat-gib / kit-eye stand-ins per new actor room (~10 ms each, can land 3 in one frame). Seams `levelPrewarmPending()`, `levelPrewarmDoneMs()`.
 
+**Doors (2026-10-28).** Owner design built: sci-fi scratched-steel doors, two leaves split sideways into the jambs,
+auto-open for the player and for enemies, close `wait` (4 s) after the doorway clears, never on an occupant.
+- Format (spec §4): top-level `doors` entities `{ id, sector, faces: [line, line], a, b, width, depth, height, zones,
+  style: "split", speed, wait, key? }`; the parser checks them against their lines. The converter writes one per
+  doorway-shaped door sector (manual and remote-tagged; fast specials 6 m/s, others 3 m/s; key specials give `key`)
+  and no longer writes the per-line `door` marker. E1M1: 5 doors (sectors 4, 26, 69, 83, 85); sector 2 (the W1 ambush
+  wall, 14.6 m, not a doorway) stays an open hole (`doors_left_open`).
+- Logic `sector-doors.ts` (pure): state machine, trigger (within 1.5 m moving toward it, or a body whose travel a
+  leaf refuses within 1.5 m), occupant rule, leaf cover ((1 - open) / 2 each from the jambs). The ground owns a
+  `DoorField`: face lines block bodies with their leaf pieces (`blockingNear`), rays where a leaf stands
+  (`sector-ray.ts`: sight, the sight cull, shots, pellets, projectiles, debris). Navigation ignores doors (routes
+  through); `doorTravel` wraps `encounterNav.canTravel` so enemies are held at the leaves and ask the door to open.
+  Door faces are solid in the glow and emitter bakes (no colour through a doorway).
+- Leaves `game-doors.ts`: two meshes per door (one per side, each lit by its zone), panel kind `slideDoor` (vent, brace,
+  kick plate, hazard-striped leading edge), `positionNode` slides them by one uniform. The level pre-warm builds them:
+  first sight of door-69 built 0 nodes / 0 pipelines (pipelineCensus +0). Leaf geometry hit WebGPU's 8 vertex-buffer
+  limit (9 attributes): the bake attributes share one interleaved buffer.
+- Probes `doors-probe.mjs` (session scratchpad); shots `.lab-tmp/doors/`. `?doors=0` = every doorway open, no leaves.
+- Not built: door sound (`onPhase` hook; the game loads no audio), keys (a keyed door opens like any other),
+  floaters (teratomas) ignore doors (own fly space), a corpse in a doorway neither holds nor blocks the door.
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
@@ -69,7 +90,7 @@ Queued next (owner-approved):
    converter — run after the scale agent.
 2. **B2: light shafts + dust motes** under fluorescent ceilings / off screens (use `emitterSurfaces`, the `glow`
    light positions, `fluoroCellMean` so dead troffers cast none; calm under ?flashes=reduced).
-3. **Doors** (owner decided 2026-10-27): sci-fi scratched-steel doors that **split sideways** (two panels part
+3. **Doors — DONE 2026-10-28 (see "Doors (2026-10-28)" above).** (owner decided 2026-10-27): sci-fi scratched-steel doors that **split sideways** (two panels part
    left/right, Alien/Star Trek style — door geometry separate from the sector ceiling, our own procedural look),
    **auto-open on approach** (player or enemy; close after a few seconds; no use key). E1M1 has 8 door lines; the
    converter writes door sectors open today. Needs: door state per door sector, panel meshes, collision/nav/sight
