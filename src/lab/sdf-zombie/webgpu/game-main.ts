@@ -310,6 +310,7 @@ import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from '.
 import { createMeatGib } from './game-meat-gib';
 import { createKitEye } from './game-kit-eye';
 import { createKitPrewarm } from './game-kit-prewarm';
+import { createLevelPrewarm } from './game-level-prewarm';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -5601,6 +5602,8 @@ async function main() {
   ctx.boot.kitEye = createKitEye(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null });
   // Every cast kit mesh drawn once, one a step, before the player first sees it (game-kit-prewarm.ts).
   ctx.boot.kitPrewarm = createKitPrewarm(ctx);
+  // Every level mesh (sector batches, barrels, pickups) drawn once, nearest first, one build a step (game-level-prewarm.ts).
+  ctx.boot.levelPrewarm = createLevelPrewarm(ctx);
   ctx.boot.attachPiece = (a, prims, pos, opts) => {
     // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
     // consume rngStreams.misc (every other piece's sequence stays put).

@@ -28,8 +28,9 @@ import type * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 
 export interface KitPrewarm {
-  /** Restore the meshes forced last step; force the next unwarmed kit mesh (or instance) to draw this frame. */
-  step(): void;
+  /** Restore the meshes forced last step; force the next unwarmed kit mesh (or instance) to draw this frame. True when
+   *  it forced a NEW mesh (a build this frame), so the level pre-warm (game-level-prewarm.ts) holds its own. */
+  step(): boolean;
   /** Kit meshes not drawn yet, plus kits still loading (0 = all warm). */
   readonly pending: number;
   /** Forget everything (a cast rebuild). */
@@ -53,6 +54,7 @@ export function createKitPrewarm(ctx: GameContext): KitPrewarm {
       restore();
       pending = 0;
       let budget = true;   // one unit a step: ONE new mesh, or one whole instance of an already-warm character
+      let built = false;
       for (const a of ctx.world.actors) {
         const view = a.character;
         if (!view) continue;
@@ -78,12 +80,14 @@ export function createKitPrewarm(ctx: GameContext): KitPrewarm {
         if (fresh.length > 0) {
           warmed.add(fresh[0]!.key);
           forced = [fresh[0]!.mesh];
+          built = true;
         } else {
           done.add(kit);
           forced = meshes;
         }
         for (const m of forced) m.frustumCulled = false;
       }
+      return built;
     },
     clear() {
       restore();

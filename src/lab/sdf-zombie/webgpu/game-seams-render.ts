@@ -127,6 +127,10 @@ export function createRenderSeams(ctx: GameContext) {
     get boneMesh() { return ctx.render.boneMesh; },
     /** Cast kit meshes not drawn yet by the kit pre-warm (game-kit-prewarm.ts), -1 before it exists. 0 = all warm. */
     kitPrewarmPending: () => ctx.boot.kitPrewarm?.pending ?? -1,
+    /** Level meshes not drawn yet by the level pre-warm (game-level-prewarm.ts), -1 before it exists. 0 = all warm. */
+    levelPrewarmPending: () => ctx.boot.levelPrewarm?.pending ?? -1,
+    /** Milliseconds from the level pre-warm's first step to the step that left nothing pending, null until then. */
+    levelPrewarmDoneMs: () => ctx.boot.levelPrewarm?.doneMs ?? null,
     skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, prewarmPending: ctx.render.segMeshRenderer.prewarmPending, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Perf round 2, task 5: the front-to-back per-body passes and their
      *  accumulated-depth gate. OFF restores the single-pass march. Refused under

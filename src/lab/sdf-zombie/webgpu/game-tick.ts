@@ -1279,7 +1279,9 @@ export function tick(ctx: GameContext, dt: number) {
     stepMeshGibs(ctx, cdt);
     ctx.boot.kitEye?.step(cdt);
     ctx.boot.meatGib?.prewarm();
-    ctx.boot.kitPrewarm?.step();
+    // Kit meshes, then level meshes (game-level-prewarm.ts): never two first builds in one frame.
+    const kitBuilt = ctx.boot.kitPrewarm?.step() ?? false;
+    ctx.boot.levelPrewarm?.step(!kitBuilt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

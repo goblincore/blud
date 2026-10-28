@@ -168,6 +168,8 @@ export interface BootState {
   kitEye?: import('./game-kit-eye').KitEyeLeaf;
   /** Draws each cast kit mesh once before it is first seen (game-kit-prewarm.ts). */
   kitPrewarm?: import('./game-kit-prewarm').KitPrewarm;
+  /** Draws each level mesh once, nearest first, before it is first seen (game-level-prewarm.ts). */
+  levelPrewarm?: import('./game-level-prewarm').LevelPrewarm;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */
