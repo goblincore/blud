@@ -47,7 +47,18 @@ Queued next (owner-approved):
    converter — run after the scale agent.
 2. **B2: light shafts + dust motes** under fluorescent ceilings / off screens (use `emitterSurfaces`, the `glow`
    light positions, `fluoroCellMean` so dead troffers cast none; calm under ?flashes=reduced).
-3. Later: doors (sci-fi sliding steel — ask up or sideways), cross-zone lights, pickup balance, more zombies
+3. **Doors** (owner decided 2026-10-27): sci-fi scratched-steel doors that **split sideways** (two panels part
+   left/right, Alien/Star Trek style — door geometry separate from the sector ceiling, our own procedural look),
+   **auto-open on approach** (player or enemy; close after a few seconds; no use key). E1M1 has 8 door lines; the
+   converter writes door sectors open today. Needs: door state per door sector, panel meshes, collision/nav/sight
+   blocked while closed (sector-ray, navigation edges, bounce/light occlusion), enemies opening them, sound later.
+4. **Occlusion and update culling** (owner 2026-10-27: "make sure we don't render or update enemies that aren't
+   visible"). Render side exists: sector-aware body cull + kit/gun cull + view-sync skip (7cb532eb..51f0a636).
+   Missing: simulation LOD for unseen/far enemies (rig/motion/brain at reduced rate when not visible and not
+   engaged; idle wanderers far away frozen or ticked slowly), level-geometry culling per zone (portal/zone
+   visibility so whole zones behind walls aren't drawn), and lights/emitter work skipped for unseen zones. Measure
+   first (frameSplit seam), then cull; doors become natural portals.
+5. Later: cross-zone lights, pickup balance, more zombies
    (sparse), room-level barrels, doom gate run on a quiet machine.
 
 ## Why
