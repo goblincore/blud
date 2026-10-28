@@ -23,6 +23,7 @@ import { AnatomicalSkullKit, type SkullFitPlan } from './anatomical-skull';
 import { BALL_HEADS, HUMANOIDS, ballHeadFit } from './skull-cast';
 import { createSkeletonSeams } from '../game-seams-skeleton';
 import type { GameContext } from '../game-context';
+import { batchDraws } from './segment-instance';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
 const bound = bindRig(body);
@@ -36,7 +37,7 @@ const make = (variant: SculptVariant) => {
   const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(variant));
   return { cache, renderer: createSegmentMeshRenderer(cache) };
 };
-const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as THREE.InstancedMesh | undefined;
+const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as THREE.Mesh | undefined;
 const reach = (roots: readonly Node[], stop: ReadonlySet<Node> = new Set()): Graph[] => {
   const seen = new Set<Node>(), todo = [...roots];
   while (todo.length) {
@@ -76,7 +77,7 @@ describe('the sculpted skull\'s variants in the segment renderer', () => {
     const m = batch(renderer, 'skeleton-segments')!.material as MeshBasicNodeMaterial;
     expect([...calls(reach([m.colorNode!]))].sort()).toEqual([...expected]);
     // One material for every bone: a limb and the head are on the same one.
-    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.InstancedMesh).material)).size).toBe(1);
+    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.Mesh).material)).size).toBe(1);
     renderer.dispose(); cache.dispose();
   });
 
@@ -137,7 +138,7 @@ describe('the second paint is drawn on the characters it is fitted to, and the f
   const as = (character: string) => { const all = createSkeletonSources(body, bound, { character }); return { head: all.find(s => s.segment === 'head')!, limb: all.find(s => s.segment !== 'head')! }; };
   const cultist = as('cultist'), juggernaut = as('juggernaut');
   const rendererOf = (recipe: Parameters<typeof sculptPaintOf>[0]) => { const cache = new SegmentMeshCache(MESH_CELL, undefined, null, recipe); return { cache, renderer: createSegmentMeshRenderer(cache) }; };
-  const batchOf = (r: R, geometry: THREE.BufferGeometry) => r.object.children.find(c => (c as THREE.InstancedMesh).geometry === geometry) as THREE.InstancedMesh;
+  const batchOf = (r: R, geometry: THREE.BufferGeometry) => r.object.children.find(c => batchDraws(c, geometry)) as THREE.Mesh;
   const paintOn = (m: THREE.Material | THREE.Material[]) => [(m as THREE.Material).name, (m as THREE.Material).userData.sculptPaint, [...calls(reach([(m as MeshBasicNodeMaterial).colorNode!]))].sort()];
 
   it('full: the zombie\'s and the juggernaut\'s bones on the second paint\'s material, the cultist\'s on the first\'s, in one renderer', () => {
@@ -146,7 +147,7 @@ describe('the second paint is drawn on the characters it is fitted to, and the f
     for (const s of [headSrc, limbSrc, juggernaut.head, juggernaut.limb]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material), s.revision).toEqual(['skeleton-bone', 2, SECOND]);
     for (const s of [cultist.head, cultist.limb]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material), s.revision).toEqual(['skeleton-bone', 1, FIRST]);
     // Two bone materials in all, each character's bones on one.
-    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.InstancedMesh).material)).size).toBe(2);
+    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.Mesh).material)).size).toBe(2);
     expect(batchOf(renderer, cache.get(cultist.head).geometry).material).toBe(batchOf(renderer, cache.get(cultist.limb).geometry).material);
     expect(batchOf(renderer, cache.get(headSrc).geometry).material).toBe(batchOf(renderer, cache.get(juggernaut.limb).geometry).material);
     renderer.dispose(); cache.dispose();
@@ -164,7 +165,7 @@ describe('the second paint is drawn on the characters it is fitted to, and the f
     const { cache, renderer } = rendererOf(sculptRecipe('classic'));
     renderer.update([[headSrc, limbSrc], [cultist.head], [juggernaut.head]], [{ id: 1 }, { id: 2 }, { id: 3 }]);
     for (const s of [headSrc, limbSrc, cultist.head, juggernaut.head]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material)).toEqual(['skeleton-bone', 1, FIRST]);
-    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.InstancedMesh).material)).size).toBe(1);
+    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.Mesh).material)).size).toBe(1);
     renderer.dispose(); cache.dispose();
   });
 
@@ -178,7 +179,7 @@ describe('the second paint is drawn on the characters it is fitted to, and the f
   it('a split head\'s copies are on its own paint\'s split material', () => {
     const { cache, renderer } = rendererOf(sculptRecipe('full'));
     renderer.update([[headSrc], [cultist.head]], [{ id: 1 }, { id: 2 }], undefined, undefined, undefined, { warp: (_o, seg) => (seg === 'head' ? warp() : null) });
-    const splits = renderer.object.children.filter(c => c.name === 'skeleton-segments-split') as THREE.InstancedMesh[];
+    const splits = renderer.object.children.filter(c => c.name === 'skeleton-segments-split') as THREE.Mesh[];
     expect(splits).toHaveLength(2);
     const of = (src: typeof headSrc) => splits.find(b => b.geometry.getAttribute('position') === cache.get(src).geometry.getAttribute('position'))!.material as MeshBasicNodeMaterial;
     expect([of(headSrc).name, of(headSrc).userData.sculptPaint]).toEqual(['skeleton-bone-split', 2]);

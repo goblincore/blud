@@ -22,6 +22,9 @@ import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
 import { BATCH_IDLE_UPDATES, PREWARM_PER_UPDATE, SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import {
+  SEGMENT_MATRIX_ATTRS, batchDraws, batchInstances, batchMatrixAt, ensureSegmentMatrices, isSegmentBatch, type SegmentBatchMesh,
+} from './segment-instance';
 import { headQuatOf } from '../../rig-bind';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
@@ -45,6 +48,12 @@ let bodyYaw = 0;
 const sources = createSkeletonSources(body, bound, { character: 'zombie', bodyYaw: () => bodyYaw });
 const headSrc = sources.find(s => s.segment === 'head')!;
 
+
+/** A segment batch (mesh-renderer.ts SHARED BUILDS, 2026-10-28): a plain Mesh on an InstancedBufferGeometry of its own;
+ *  its instances this update are the geometry's `instanceCount`, its matrices the segment-instance rows. */
+type BatchMesh = SegmentBatchMesh;
+const isBatch = isSegmentBatch, instancesOf = batchInstances, matrixAt = batchMatrixAt;
+const capOf = (m: BatchMesh) => ensureSegmentMatrices(m.geometry, 0).count;
 describe('segmentDrawn — the pure owner/live decision', () => {
   it('draws a live segment when shown is omitted (pre-cull behaviour)', () => {
     expect(segmentDrawn(true, {})).toBe(true);
@@ -155,7 +164,7 @@ describe('PRE-WARM (fire-hitch fix): a referenced segment has its batch before a
   // Bone-carrying, eye-less segments: with nothing exposed they are referenced but not drawn.
   const bones = sources.filter(s => s.kind !== 'organ' && s.segment !== 'head');
   const batchMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) =>
-    r.object.children.filter((c): c is THREE.InstancedMesh => (c as THREE.InstancedMesh).isInstancedMesh && c.name === 'skeleton-segments');
+    r.object.children.filter((c): c is BatchMesh => isBatch(c) && c.name === 'skeleton-segments');
 
   it('one new batch an update, drawn once as a degenerate instance, then idle; nothing counts as drawn', () => {
     const cache = new SegmentMeshCache();
@@ -166,16 +175,16 @@ describe('PRE-WARM (fire-hitch fix): a referenced segment has its batch before a
     renderer.update([bones], [owner], undefined, none);
     expect(batchMeshes(renderer)).toHaveLength(PREWARM_PER_UPDATE);
     const first = batchMeshes(renderer)[0]!;
-    expect(first.count).toBe(1);
+    expect(instancesOf(first)).toBe(1);
     expect(first.visible).toBe(true);
-    const m = new THREE.Matrix4(); first.getMatrixAt(0, m);
+    const m = new THREE.Matrix4(); matrixAt(first, 0, m);
     expect(new THREE.Vector3().setFromMatrixPosition(m).y).toBeLessThan(-100);
     expect(m.getMaxScaleOnAxis()).toBeLessThan(1e-3);
     expect(renderer.drawn.filter(d => !d.eye)).toHaveLength(0);
     expect(renderer.draws).toBe(0);
     expect(renderer.prewarmPending).toBe(bones.length - PREWARM_PER_UPDATE);
     renderer.update([bones], [owner], undefined, none);
-    expect(first.count).toBe(0);
+    expect(instancesOf(first)).toBe(0);
     expect(first.visible).toBe(false);
     for (let i = 0; i < bones.length; i++) renderer.update([bones], [owner], undefined, none);
     expect(batchMeshes(renderer)).toHaveLength(bones.length);
@@ -191,7 +200,7 @@ describe('PRE-WARM (fire-hitch fix): a referenced segment has its batch before a
     renderer.prewarmNext();
     renderer.update([bones], [owner], undefined, new Set());
     expect(batchMeshes(renderer)).toHaveLength(bones.length);
-    expect(batchMeshes(renderer).every(b => b.count === 1)).toBe(true);
+    expect(batchMeshes(renderer).every(b => instancesOf(b) === 1)).toBe(true);
     expect(renderer.prewarmPending).toBe(0);
     renderer.dispose();
     cache.dispose();
@@ -243,7 +252,7 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     return bl ? new THREE.Vector4(...bl) : undefined;
   };
   const iLights = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
-    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    const m = r.object.children.find(c => isBatch(c) && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as BatchMesh;
     const a = m.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
     return { m, a };
   };
@@ -258,8 +267,8 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     expect(seg.a.itemSize).toBe(4);
     expect(Array.from(seg.a.array.slice(0, 4)).map(v => +v.toFixed(4))).toEqual([0.9, -1, -1, -1]);
     const eye = iLights(renderer, true);
-    expect(eye.m.count).toBeGreaterThan(0);
-    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i * 4]).toBeCloseTo(0.9, 6);
+    expect(instancesOf(eye.m)).toBeGreaterThan(0);
+    for (let i = 0; i < instancesOf(eye.m); i++) expect(eye.a.array[i * 4]).toBeCloseTo(0.9, 6);
     // no owner picks: the instance keeps the old key (-2)
     renderer.syncLights(() => undefined);
     expect(seg.a.array[0]).toBe(-2);
@@ -274,14 +283,14 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     renderer.update(owners.map(() => [headSrc]), owners);
     renderer.syncLights(lightsOf);
     const { m, a } = iLights(renderer, false);
-    expect(m.count).toBe(40);
-    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    expect(instancesOf(m)).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(capOf(m));
     for (let i = 0; i < 40; i++) expect(a.array[i * 4]).toBeCloseTo(i + 0.5, 5);
     renderer.dispose();
     cache.dispose();
   });
   const iFill = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
-    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    const m = r.object.children.find(c => isBatch(c) && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as BatchMesh;
     return { m, a: m.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute };
   };
   it('Task 11b: writes the owner\'s room fill into iFill, segment and eyes; no picks or no fillOf = 1', () => {
@@ -296,12 +305,12 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     expect(seg.a.itemSize).toBe(1);
     expect(seg.a.array[0]).toBeCloseTo(0.3, 6);
     const eye = iFill(renderer, true);
-    expect(eye.m.count).toBeGreaterThan(0);
-    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i]).toBeCloseTo(0.3, 6);
+    expect(instancesOf(eye.m)).toBeGreaterThan(0);
+    for (let i = 0; i < instancesOf(eye.m); i++) expect(eye.a.array[i]).toBeCloseTo(0.3, 6);
     expect(renderer.ownerFill(actor).every(f => Math.abs(f - 0.3) < 1e-6)).toBe(true);
     // M3: only the live instances upload
     expect(seg.a.updateRanges).toEqual([{ start: 0, count: 1 }]);
-    expect(eye.a.updateRanges).toEqual([{ start: 0, count: eye.m.count }]);
+    expect(eye.a.updateRanges).toEqual([{ start: 0, count: instancesOf(eye.m) }]);
     // the owner's room lights up again: the next sync follows
     actor.fill = 1;
     renderer.syncLights(lightsOf, fillOf);
@@ -322,8 +331,8 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     renderer.update(owners.map(() => [headSrc]), owners);
     renderer.syncLights(lightsOf, o => (o as { fill: number }).fill);
     const { m, a } = iFill(renderer, false);
-    expect(m.count).toBe(40);
-    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    expect(instancesOf(m)).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(capOf(m));
     for (let i = 0; i < 40; i++) expect(a.array[i]).toBeCloseTo(0.25 + i / 80, 5);
     renderer.dispose();
     cache.dispose();
@@ -334,9 +343,9 @@ describe('the head split: the skull is drawn once per piece that owns part of it
   type R = ReturnType<typeof createSegmentMeshRenderer>;
   const segs = (r: R, owner: unknown) => r.drawn.filter(d => d.owner === owner && !d.eye);
   const eyes = (r: R, owner: unknown) => r.drawn.filter(d => d.owner === owner && d.eye);
-  const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as THREE.InstancedMesh | undefined;
+  const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as BatchMesh | undefined;
   /** A split batch's records: the interleaved instance buffer behind its four iSplit* attributes. */
-  const rowsOf = (m: THREE.InstancedMesh) => (m.geometry.getAttribute('iSplitN') as unknown as THREE.InterleavedBufferAttribute).data as THREE.InstancedInterleavedBuffer;
+  const rowsOf = (m: BatchMesh) => (m.geometry.getAttribute('iSplitN') as unknown as THREE.InterleavedBufferAttribute).data as THREE.InstancedInterleavedBuffer;
   /** The posed zombie's split, as the leaf makes it (game-head-split.ts skullOf). */
   const warpOf = (preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, frac: number): SplitWarp => {
     bodyYaw = 0;
@@ -403,7 +412,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     expect(eyes(renderer, open).map(d => d.piece).sort()).toEqual([1, 2]);
     // The clip data of the split batch's rows is the rule's record.
     const sb = batch(renderer, 'skeleton-segments-split')!;
-    expect(sb.count).toBe(3);
+    expect(instancesOf(sb)).toBe(3);
     const rows = rowsOf(sb), want = new Float32Array(3 * SPLIT_INSTANCE_FLOATS);
     ([0, 1, 2] as const).forEach(piece => packSplitInstance(want, piece, s, piece));
     expect(Array.from(rows.array.slice(0, want.length))).toEqual(Array.from(want));
@@ -416,9 +425,9 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       expect([a.data === rows, a.itemSize, a.offset], name).toEqual([true, 4, k * 4]);
     });
     // The closed neighbour is in the closed batch, alone; the split head is not there.
-    expect(batch(renderer, 'skeleton-segments')!.count).toBe(1);
-    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(2);
-    expect(batch(renderer, 'skeleton-fleshy-eyes-split')!.count).toBe(2);
+    expect(instancesOf(batch(renderer, 'skeleton-segments')!)).toBe(1);
+    expect(instancesOf(batch(renderer, 'skeleton-fleshy-eyes')!)).toBe(2);
+    expect(instancesOf(batch(renderer, 'skeleton-fleshy-eyes-split')!)).toBe(2);
     renderer.dispose(); cache.dispose();
   });
 
@@ -435,13 +444,13 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     const side = seats.map(c => c[0] * w.n[0] + c[1] * w.n[1] + c[2] * w.n[2] - w.d0);
     expect(Math.min(...side.map(Math.abs))).toBeLessThan(0.0191);
     expect(eyes(renderer, owner).map(d => d.piece).sort()).toEqual([0, 1, null].sort());
-    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(1);
+    expect(instancesOf(batch(renderer, 'skeleton-fleshy-eyes')!)).toBe(1);
     // The face preset is one-sided too.
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('face', 1, 0, 1)));
     expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1]);
     // Both eyes sit in front of the face's plane, clear of it: one copy each, on the face piece.
     expect(eyes(renderer, owner).map(d => d.piece)).toEqual([1, 1]);
-    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(0);
+    expect(instancesOf(batch(renderer, 'skeleton-fleshy-eyes')!)).toBe(0);
     renderer.dispose(); cache.dispose();
   });
 
@@ -468,18 +477,20 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(null));
     expect(renderer.drawn.map(d => ({ eye: d.eye, m: d.matrix.elements.slice() }))).toEqual(before);
     expect(renderer.drawn.every(d => d.piece === null)).toBe(true);
-    expect(batch(renderer, 'skeleton-segments-split')!.count).toBe(0);
+    expect(instancesOf(batch(renderer, 'skeleton-segments-split')!)).toBe(0);
     expect(batch(renderer, 'skeleton-segments-split')!.visible).toBe(false);
     expect(batch(renderer, 'skeleton-fleshy-eyes-split')!.visible).toBe(false);
-    expect(batch(renderer, 'skeleton-segments')!.count).toBe(1);
+    expect(instancesOf(batch(renderer, 'skeleton-segments')!)).toBe(1);
     // The owner leaves while split: nothing is drawn for it.
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
     renderer.update([], []);
     expect(renderer.drawn).toHaveLength(0);
-    expect(batch(renderer, 'skeleton-segments-split')!.count).toBe(0);
+    expect(instancesOf(batch(renderer, 'skeleton-segments-split')!)).toBe(0);
     // A split segment batch nobody draws is dropped like any stale batch, and its twin geometry (the renderer's own:
-    // three holds a rendered geometry until it is disposed) with it. The skull's own geometry is the cache's.
+    // three holds a rendered geometry until it is disposed) with it. The skull's own geometry is the cache's: a closed
+    // batch draws a share of it (segment-instance.ts instancedShareOf), the renderer's own as well.
     const disposed: string[] = [];
+    cache.get(headSrc).geometry.addEventListener('dispose', () => { disposed.push('cache'); });
     const watch = (name: string) => batch(renderer, name)!.geometry.addEventListener('dispose', () => { disposed.push(name); });
     const base = batch(renderer, 'skeleton-segments')!.geometry, twin = batch(renderer, 'skeleton-segments-split')!.geometry;
     watch('skeleton-segments'); watch('skeleton-segments-split'); watch('skeleton-fleshy-eyes'); watch('skeleton-fleshy-eyes-split');
@@ -493,10 +504,11 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     expect(twin2.getAttribute('position')).toBe(base.getAttribute('position'));
     expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2]);
     twin2.addEventListener('dispose', () => { disposed.push('twin2'); });
-    // clear() (a cast rebuild) disposes every twin it holds, and no geometry that is not its own.
+    // clear() (a cast rebuild) disposes every draw geometry it holds (the twins, the closed shares), and no geometry
+    // that is not its own (the cache's).
     renderer.clear();
     expect(renderer.object.children).toHaveLength(0);
-    expect(disposed.sort()).toEqual(['skeleton-fleshy-eyes-split', 'skeleton-segments-split', 'twin2']);
+    expect(disposed.sort()).toEqual(['skeleton-fleshy-eyes', 'skeleton-fleshy-eyes-split', 'skeleton-segments', 'skeleton-segments-split', 'twin2']);
     // And the renderer draws again after it: closed, then split.
     renderer.update([[headSrc]], [owner]);
     expect(renderer.drawn.map(d => d.piece)).toEqual([null, null, null]);
@@ -512,9 +524,9 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.update(owners.map(() => [headSrc]), owners, undefined, undefined, undefined, headOnly(w));
     renderer.syncLights(o => new THREE.Vector4(...(o as { bodyLights: number[] }).bodyLights), o => (o as { fill: number }).fill);
     const sb = batch(renderer, 'skeleton-segments-split')!;
-    expect(sb.count).toBe(120);
-    for (const name of [...SPLIT_INSTANCE_ATTRS, 'iLights', 'iFill']) {
-      expect((sb.geometry.getAttribute(name) as THREE.InstancedBufferAttribute).count, name).toBeGreaterThanOrEqual(sb.instanceMatrix.count);
+    expect(instancesOf(sb)).toBe(120);
+    for (const name of [...SPLIT_INSTANCE_ATTRS, ...SEGMENT_MATRIX_ATTRS, 'iLights', 'iFill']) {
+      expect((sb.geometry.getAttribute(name) as THREE.InstancedBufferAttribute).count, name).toBeGreaterThanOrEqual(capOf(sb));
     }
     const K = 12;   // the K lane's offset in a row: (piece, + turns, - turns, seed)
     const l = (sb.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).array;
@@ -617,7 +629,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     // The same head under a name the kit does not fit: it keeps the extracted bone, in the same renderer.
     const otherHead = createSkeletonSources(body, bound, { character: 'ghoul' }).find(s => s.segment === 'head')!;
     type Drawn = R['drawn'][number];
-    const matOf = (r: R, d: Drawn) => (r.object.children.find(c => (c as THREE.InstancedMesh).geometry === d.geometry) as THREE.InstancedMesh).material as MeshBasicNodeMaterial;
+    const matOf = (r: R, d: Drawn) => (r.object.children.find(c => batchDraws(c, d.geometry)) as BatchMesh).material as MeshBasicNodeMaterial;
     type Graph = Node & { functionNode?: { code: string }; isTextureNode?: boolean; isVarNode?: boolean; intent?: boolean; value?: unknown; node?: Node; ifNode?: unknown };
     /** Every node `roots` reach, not looking behind a node of `stop`. */
     const reach = (roots: readonly Node[], stop: ReadonlySet<Node> = new Set()): Graph[] => {
@@ -1274,7 +1286,7 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
   const organsOf = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: unknown) => r.drawn.filter(d => d.owner === owner && d.organ);
   const belly = [{ pos: [0, 1.03, 0.12] as const, radius: 0.08 }];
   const headShot = [{ pos: [0, 1.62, 0.1] as const, radius: 0.1 }];
-  const organMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) => r.object.children.filter(c => c.name === 'skeleton-organs') as THREE.InstancedMesh[];
+  const organMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) => r.object.children.filter(c => c.name === 'skeleton-organs') as BatchMesh[];
 
   it('organNeeded: exposed owner AND a reaching sphere; no reach list = no reach test', async () => {
     const { organNeeded } = await import('./mesh-renderer');
@@ -1302,9 +1314,9 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
     // Their own batches: not the bone material, never a split copy, no eye.
     const meshes = organMeshes(renderer);
     expect(meshes).toHaveLength(organSrc.length);
-    const boneMesh = renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh;
+    const boneMesh = renderer.object.children.find(c => c.name === 'skeleton-segments') as BatchMesh;
     for (const m of meshes) {
-      expect(m.count).toBe(1);
+      expect(instancesOf(m)).toBe(1);
       expect(m.visible).toBe(true);
       expect(m.material).not.toBe(boneMesh.material);
       expect((m.material as THREE.Material).depthWrite).toBe(true);
@@ -1345,7 +1357,7 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
     renderer.show.organs = false;
     renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
     for (const m of organMeshes(renderer)) expect(m.visible).toBe(false);
-    expect((renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh).visible).toBe(true);
+    expect((renderer.object.children.find(c => c.name === 'skeleton-segments') as BatchMesh).visible).toBe(true);
     renderer.show.organs = true;
     renderer.update([all], [owner], new Set<unknown>(), new Set([owner]), undefined, undefined, () => belly);
     expect(organsOf(renderer, owner)).toHaveLength(0);
@@ -1408,9 +1420,9 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
         } else {
           for (let i = 0; i < n; i++) expect([arr[i * 4], arr[i * 4 + 1], arr[i * 4 + 2], arr[i * 4 + 3]]).toEqual([0, 0, 0, 1]);
         }
-        // The organ pipeline's vertex buffers: position, normal, organTube, iLights, iFill (5 of WebGPU's 8; the
-        // instance matrix is a uniform buffer at this instance count).
-        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'normal', 'organTube', 'position']);
+        // The organ pipeline's vertex buffers: position, normal, organTube, the instance matrix (segment-instance.ts:
+        // one interleaved buffer behind iM0..iM3), iLights, iFill (6 of WebGPU's 8).
+        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'iM0', 'iM1', 'iM2', 'iM3', 'normal', 'organTube', 'position']);
       }
       renderer.dispose();
       cache.dispose();
@@ -1431,7 +1443,7 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
     expect(vertsOf(nets)).toBe(4038);
     expect(nets.map(d => d.geometry)).not.toEqual(tubes.map(d => d.geometry));
     // The tube batches are still in the scene (they idle out later), drawing nothing.
-    const live = organMeshes(renderer).filter(m => m.count > 0), idle = organMeshes(renderer).filter(m => m.count === 0);
+    const live = organMeshes(renderer).filter(m => instancesOf(m) > 0), idle = organMeshes(renderer).filter(m => instancesOf(m) === 0);
     expect(live).toHaveLength(organSrc.length);
     expect(idle).toHaveLength(organSrc.length);
     for (const m of idle) expect(m.visible).toBe(false);
