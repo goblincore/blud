@@ -3,6 +3,53 @@
 Branch `claude/level-design-abstract-459f86` (worktree `.claude/worktrees/level-design-abstract-459f86`).
 Task wiki: [docs/tasks/levels.md](../tasks/levels.md) "Sector levels + the E1M1 experiment".
 
+## RESUME HERE (2026-10-27) — state at context compaction
+Branch `claude/level-design-abstract-459f86`, **draft PR goblincore/blud#89** (pushed; merged with main twice,
+latest 4b16f611 incl. the analytic-normals/hood fixes). Dev server: `npm run dev:doom` (port 5174 if 5173 is taken);
+regenerate E1M1 first: `python3 scripts/levels/doom_map.py "$HOME/MIYOO BACKUP/Roms/PORTS/Games/Doom (PrBoom)/doom/doomu.wad" E1M1 --svg .lab-tmp/doom`.
+
+Done since plan 3b (all owner-requested, see commit messages):
+- Fog on sector levels 8..40 m (`webgpu/fog-range.ts`, `?fognear/?fogfar/?fog=0`), 7a3a81e0.
+- Barrel grime pass a7e639f1 (finding: see-through dark decals can't darken the floor; very rough surfaces wash
+  out pale under the flashlight at 1–2 m — both in dualmem as warnings).
+- Shotgun: left click = both barrels, right = one; 10 pellets/barrel; player pellets 80 m/s, gravity −1.5
+  (`PLAYER_GRAPESHOT`); room-level segment-vs-box pellet test; tracer cap 2 m — 88d15a05.
+- **Pellets flew through bodies on long frame steps** (broad phase divided by segLen twice; < ~48 fps sector /
+  < ~37 fps room) — fixed 1e0a56b7 (`segmentPointDistance`). Still open (room levels only): steep down shots on slow
+  frames die at the floor kill before the actor test; a muzzle inside a box kills the volley at the muzzle.
+- Player feel 5f953b6f: walk 4.4 m/s, smooth gun bob (step 1.4 m, −sin² dip), bullet-time knobs split
+  (move/aim/fire/reload all 0.35 = original, owner reverted 0.66/0.6), `__sdfGame.bulletTime()`, `?bt_*`, BULLET TIME panel.
+- 715dd710: per-weapon aim style (`webgpu/aim-style.ts`; shotgun = mouselook, others free aim; G = session override);
+  **G killed mouselook** — the anti-drift pin undid every turn — fixed.
+- E1M1 overrides (`scripts/levels/overrides/e1m1.json`, `doom_overrides.py`) 35a86d7b: start-room sunken centre
+  (sector 27) is a nukage pit; two teratomas over the big pool. Doom-style floater movement 6dd20d42
+  (`webgpu/floater-move.ts`; idle cruise high, descend when chasing; `__sdfGame.floatTuning()`).
+- Teratoma toughness aec933a4 (per-character `MotionProfile.toughness`: 4 point-blank doubles; wound merge cap scaled).
+- Pellet damage falloff 18f0c901 (`pellet-falloff.ts`: full ≤5 m → 0.3 at 18 m; slugs/barrels full;
+  `__sdfGame.pelletFalloff()`, `?pelletMin=`). Owner question pending: teratoma at 25 m = ~61 doubles (raise floor to 0.5?).
+- Adrenaline rush 678713db (`adrenaline.ts`: enemy hit → world eases to 0.55 over 0.8 s, sustains 30 s after the
+  last hit, eases out 1.8 s; player/shots 0.85; edge distortion `post-adrenaline-edge.wgsl.ts`; `__sdfGame.adrenaline()`, `?adr_*`).
+- Emitters part A e807dfca (screen banks, viewscreen, fluorescents, exit signs — animated procedural looks) and
+  B1 48ee22d4 + 9127b3e1 (baked coloured emitter bounce, `emitterSurfaces`, cheap `glow` lights; E1M1 triangles 3.8×).
+- CI fixes f47fc024 (motion digests pinned at 1e-7 — mac vs linux libm; stale kind message; location guard).
+- World scale d09f8e03: Doom world at 35 units/m (was 32) — E1M1 ~9% smaller, bodies unchanged (agent report pending).
+
+In flight at compaction (background agents in this session; their results arrive after compaction):
+- World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
+  "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
+- Low-health adrenaline: below 35 HP the rush deepens to 0.2 by 20 HP (smoothstep), player 0.85→~0.6, a RED BORDER
+  fading inward at the screen edges (owner), only during a rush unless `lowHealthAlways`.
+
+Queued next (owner-approved):
+1. **Push screens and exit signs harder** (owner, after the B1 sheet): stronger green/amber spill near the banks,
+   a clear red pool at exit signs (dim nearby fluorescent strips a little), and make alcove enemies pick up screen
+   colour (today the body key is the nearest light regardless of power, so the troffer light wins). Touches the
+   converter — run after the scale agent.
+2. **B2: light shafts + dust motes** under fluorescent ceilings / off screens (use `emitterSurfaces`, the `glow`
+   light positions, `fluoroCellMean` so dead troffers cast none; calm under ?flashes=reduced).
+3. Later: doors (sci-fi sliding steel — ask up or sideways), cross-zone lights, pickup balance, more zombies
+   (sparse), room-level barrels, doom gate run on a quiet machine.
+
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
 abstract test spaces (ring, arena). Theory: non-architectural, Doom-like layouts feel more alien.
