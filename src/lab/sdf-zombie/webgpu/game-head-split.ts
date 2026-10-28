@@ -64,6 +64,7 @@ import {
 } from '../head-split';
 import { headAlive, headShape } from './flame-anchors';
 import { cross } from '../vec';
+import { isZombieKin } from '../character-registry';
 
 export interface HeadSplitDeps {
   /** The head damage leaf holds state for this head (game-head-damage.ts has): open() and force() refuse it. Absent:
@@ -138,7 +139,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
   /** The character, not the motion profile: every character without a profile of its own moves on the zombie's, and
    *  the presets are measured on the zombie's head alone. */
   const canSplit = (a: ZombieActor): boolean =>
-    a.characterName() === 'zombie' && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
+    isZombieKin(a.characterName()) && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
 
   /** The split hook: asked by the actor at every re-pose, with the un-split pose. */
   function hook(a: ZombieActor, h: ActorSplit, p: BuildResult): SplitWarp | null {

@@ -120,7 +120,8 @@ describe('goblin-cinematic-home wears the cinematic kit\'s teeth, scaled to 1.70
 
   it('the filtered kit is the teeth alone: one skinned `tooth` mesh, 16 teeth (8 on the skull, 8 on the jaw), nothing else', async () => {
     const whole = await kitScene();
-    expect(whole.meshes.length, 'the whole kit: 8 armour primitives + the teeth').toBe(9);
+    // ...+ the bony hands (`goblinskin` and `goblinclaw`, scripts/merge-kit-hands.ts), which the filter drops: at home the orbs stay.
+    expect(whole.meshes.length, 'the whole kit: 8 armour primitives + the teeth + the hands\' skin and claws').toBe(11);
     expect(meshes.length).toBe(1);
     expect(mesh.isSkinnedMesh).toBe(true);
     expect((mesh.material as THREE.Material).name).toBe('tooth');

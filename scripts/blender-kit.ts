@@ -31,6 +31,10 @@
 //     kit-overlay.ts turns it into emission for the materials that ask
 //     (GLOW_FROM_ATTRIBUTE). Parts without it get 0.
 //
+//   * a material MAY carry a normalTexture (embedded image): every part wearing it must then carry TEXCOORD_0 and
+//     TANGENT (Blender: export_tangents). They pass through with the image, so the material keeps its normal map
+//     (GLTFLoader -> material.normalMap). The atlas is shared by the material's parts: they are one primitive here.
+//
 // WHAT IT WRITES: joint nodes named after the bones, each at its bone's HEAD
 // (translation-only, parented as the .blob is), inverse binds that are pure
 // translations (kit-overlay.ts poseKitBones assumes exactly that), and one
@@ -120,7 +124,18 @@ function local(n: { matrix?: M4; translation?: V3; rotation?: number[]; scale?: 
 }
 const I: M4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
-interface Batch { pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean; glow: number[]; hasGlow: boolean }
+interface Batch {
+  pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean; glow: number[]; hasGlow: boolean;
+  /** A material with a normalTexture: UVs and tangents for every vertex, and the image (zombie_common.py bake_normal_atlas). */
+  uv: number[]; tan: number[]; normalImage: { bytes: Buffer; mimeType: string } | null; parts: number; partsWithUv: number;
+}
+/** The bytes of a .glb image (bufferView + mimeType, as Blender's exporter embeds it). */
+function imageBytes(ti: number): { bytes: Buffer; mimeType: string } {
+  const img = gj.images[gj.textures[ti].source];
+  if (img.bufferView === undefined) die(`image ${img.name ?? ti} is not embedded in the .glb`);
+  const v = gj.bufferViews[img.bufferView];
+  return { bytes: Buffer.from(bin.subarray(v.byteOffset ?? 0, (v.byteOffset ?? 0) + v.byteLength)), mimeType: img.mimeType ?? 'image/png' };
+}
 const batches = new Map<string, Batch>();
 let parts = 0;
 function walk(ni: number, parent: M4) {
@@ -139,8 +154,14 @@ function walk(ni: number, parent: M4) {
       const mi = p.material;
       const m = mi === undefined ? { name: 'iron' } : gj.materials[mi];
       const key: string = m.name;
-      const b = batches.get(key) ?? { pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false, glow: [], hasGlow: false };
+      const b = batches.get(key) ?? { pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false, glow: [], hasGlow: false,
+        uv: [], tan: [], normalImage: m.normalTexture !== undefined ? imageBytes(m.normalTexture.index) : null, parts: 0, partsWithUv: 0 };
       batches.set(key, b);
+      // A NORMAL-MAPPED material needs UVs and tangents on every part that wears it (one primitive, one texture).
+      const UV = b.normalImage && p.attributes.TEXCOORD_0 !== undefined ? read(p.attributes.TEXCOORD_0) : null;
+      const TAN = b.normalImage && p.attributes.TANGENT !== undefined ? read(p.attributes.TANGENT) : null;
+      b.parts++;
+      if (UV && TAN) b.partsWithUv++;
       const P = read(p.attributes.POSITION), N = read(p.attributes.NORMAL);
       const C = p.attributes.COLOR_0 !== undefined ? read(p.attributes.COLOR_0) : null;
       if (C) b.hasVcol = true;
@@ -166,6 +187,14 @@ function walk(ni: number, parent: M4) {
           b.vcol.push(C.data[i * C.comps]! * k, C.data[i * C.comps + 1]! * k, C.data[i * C.comps + 2]! * k);
         } else b.vcol.push(1, 1, 1);
         b.glow.push(Gd ? Gd.data[i]! : 0);
+        if (UV && TAN) {
+          b.uv.push(UV.data[i * 2]!, UV.data[i * 2 + 1]!);
+          const [tx, ty, tz, tw] = [TAN.data[i * 4]!, TAN.data[i * 4 + 1]!, TAN.data[i * 4 + 2]!, TAN.data[i * 4 + 3]!];
+          const ux = world[0]! * tx + world[4]! * ty + world[8]! * tz, uy = world[1]! * tx + world[5]! * ty + world[9]! * tz,
+            uz = world[2]! * tx + world[6]! * ty + world[10]! * tz;
+          const tl = Math.hypot(ux, uy, uz) || 1;
+          b.tan.push(ux / tl, uy / tl, uz / tl, tw);
+        }
       }
       for (const k of read(p.indices).data) b.idx.push(base + k);
     }
@@ -194,6 +223,7 @@ function acc(view: number, componentType: number, count: number, type: string, e
 const f32 = (a: number[]) => Buffer.from(new Float32Array(a).buffer);
 const materials: object[] = [];
 const primitives: object[] = [];
+const images: object[] = [], textures: object[] = [];
 for (const [mname, b] of [...batches].sort(([a], [c]) => a.localeCompare(c))) {
   const n = b.pos.length / 3;
   const min = [0, 1, 2].map(c => Math.min(...b.pos.filter((_, i) => i % 3 === c)));
@@ -207,8 +237,18 @@ for (const [mname, b] of [...batches].sort(([a], [c]) => a.localeCompare(c))) {
   const indices = acc(push(Buffer.from(new Uint32Array(b.idx).buffer), 34963), 5125, b.idx.length, 'SCALAR');
   const COLOR_0 = b.hasVcol ? acc(push(f32(b.vcol), 34962), 5126, n, 'VEC3') : undefined;
   const GLOW = b.hasGlow ? acc(push(f32(b.glow), 34962), 5126, n, 'SCALAR') : undefined;
-  materials.push({ name: mname, pbrMetallicRoughness: { baseColorFactor: b.color, metallicFactor: 0.7, roughnessFactor: 0.3 } });
-  primitives.push({ attributes: { POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}), ...(GLOW !== undefined ? { _glow: GLOW } : {}) }, indices, material: materials.length - 1 });
+  let normalTexture: object | undefined, TEXCOORD_0: number | undefined, TANGENT: number | undefined;
+  if (b.normalImage) {
+    if (b.partsWithUv !== b.parts) die(`material "${mname}" has a normalTexture but ${b.parts - b.partsWithUv} of its ${b.parts} parts lack TEXCOORD_0/TANGENT (export with export_tangents)`);
+    TEXCOORD_0 = acc(push(f32(b.uv), 34962), 5126, n, 'VEC2');
+    TANGENT = acc(push(f32(b.tan), 34962), 5126, n, 'VEC4');
+    images.push({ bufferView: push(b.normalImage.bytes), mimeType: b.normalImage.mimeType, name: `${mname}-normal` });
+    textures.push({ source: images.length - 1 });
+    normalTexture = { index: textures.length - 1 };
+  }
+  materials.push({ name: mname, pbrMetallicRoughness: { baseColorFactor: b.color, metallicFactor: 0.7, roughnessFactor: 0.3 }, ...(normalTexture ? { normalTexture } : {}) });
+  primitives.push({ attributes: { POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}), ...(GLOW !== undefined ? { _glow: GLOW } : {}),
+    ...(TEXCOORD_0 !== undefined ? { TEXCOORD_0, TANGENT } : {}) }, indices, material: materials.length - 1 });
 }
 const ibm: number[] = [];
 for (const k of order) { const h = heads.get(k)!; ibm.push(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -h[0], -h[1], -h[2], 1); }
@@ -228,6 +268,7 @@ const gltf = {
   meshes: [{ primitives }],
   skins: [{ joints: order.map(k => 1 + jointIndex.get(k)!), inverseBindMatrices, skeleton: roots[0] }],
   materials,
+  ...(images.length ? { images, textures } : {}),
   buffers: [{ byteLength: offset, uri: `data:application/octet-stream;base64,${Buffer.concat(chunks).toString('base64')}` }],
   bufferViews, accessors,
 };

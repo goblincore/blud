@@ -45,7 +45,10 @@ import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatched
 import { isLevelCheap } from './level-tier';
 import { LevelListLightingNode } from './level-list-node';
 import { GOBLIN_SKIN } from './goblin-skin';
-import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
+import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, seatOnBar, type GoblinArms } from './game-arms';
+/** From the gun's Fore_Hand locator to the fore-end's axis, where the fore hand's Grip_L goes (rig metres; measured
+ *  against the fore-end mesh in the hand's frame, 2026-10-25). */
+const FORE_BAR_OFFSET = new THREE.Vector3(0.010, 0.012, 0);
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   TRACER, emberPixels, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength,
@@ -302,6 +305,7 @@ import { createMeatGib } from './game-meat-gib';
 import { createKitEye } from './game-kit-eye';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
+import { spawnKitRiders } from './game-kit-riders';
 import { createHeadSeams } from './game-seams-head';
 import { createLauncherView } from './game-launcher-view';
 import { createMiscSeams } from './game-seams-misc';
@@ -360,7 +364,7 @@ import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render
 import { applyUpscaleAbMode } from './game-render-controls';
 import { enableTrainedUpscale } from './game-render-controls';
 import { AIM_CONVERGE_M, convergedDir } from './game-weapon-rig';
-import { BEND_L_VIEW, BEND_R_VIEW, SHOULDER_L_VIEW, SHOULDER_R_VIEW, _bendL, _bendR, _sh, aimArms } from './game-weapon-rig';
+import { BEND_L_VIEW, BEND_R_VIEW, FORE_HAND_DORSAL, SHOULDER_L_VIEW, SHOULDER_R_VIEW, _bendL, _bendR, _sh, aimArms } from './game-weapon-rig';
 import { applyInputEdges } from './game-player-input';
 import { spawnCarvedPiece } from './game-gib-spawn';
 import { throwBundle } from './game-dynamite-throw';
@@ -3601,13 +3605,9 @@ async function main() {
       if (!locatorInView(ctx, gltf.scene, 'Fore_Hand', FORE_HAND_REST)) {
         FORE_HAND_REST.set(GUN_REST.pos.x, GUN_REST.pos.y - 0.05, GUN_REST.pos.z - 0.15);
       }
-      // Sit each hand just off its locator so the orb WRAPS the wood rather
-      // than intersecting the middle of it. The support hand also shifts to the
-      // gun's left flank: directly underneath, it hid behind the fore-end and
-      // read as a sliver, which is not "holding the handrail".
+      // Sit the grip hand just off its locator so the fist wraps the wood rather than intersecting the middle of it.
+      // (The fore hand is SEATED on the fore-end once the arms load, below.)
       GRIP_HAND_REST.y -= 0.014;
-      FORE_HAND_REST.x -= 0.042;
-      FORE_HAND_REST.y -= 0.014;
     }
     // THE ARMS. goblin-arm.glb, dressed by game-arms.ts: mottled skin with no
     // glow, a bracer whose steel and brass match the gun, a smartwatch on the
@@ -3624,6 +3624,23 @@ async function main() {
     ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST);
     ctx.weapon.gunRig.add(ctx.weapon.gripHandGroup, ctx.weapon.foreHandGroup);
     aimArms(ctx);
+    // SEAT THE FORE HAND ON THE FORE-END (seatOnBar): palm up under the wood, the fingers' curl along the barrels with
+    // the thumb forward up the left flank, the curl centre on the fore-end's axis at the Fore_Hand locator. Its rest
+    // position and base roll are then that seat, so the reload, the recoil carry and aimArms all start from it.
+    {
+      const bar = new THREE.Vector3(), bL = new THREE.Vector3(), bR = new THREE.Vector3();
+      if (locatorInView(ctx, gltf.scene, 'Fore_Hand', bar) && locatorInView(ctx, gltf.scene, 'Breech_L', bL)
+        && locatorInView(ctx, gltf.scene, 'Breech_R', bR)) {
+        bar.add(FORE_BAR_OFFSET);
+        const toMuzzle = MUZZLE_VIEW.clone().sub(bL.add(bR).multiplyScalar(0.5)).normalize();
+        const down = FORE_HAND_DORSAL.clone();
+        const settled = seatOnBar(ctx.weapon.foreHandGroup, bar, toMuzzle, -1, (dorsal) => {
+          FORE_HAND_DORSAL.copy(dorsal ?? down); aimArms(ctx);
+        });
+        FORE_HAND_DORSAL.copy(settled);
+        FORE_HAND_REST.copy(ctx.weapon.foreHandGroup.position);
+      }
+    }
     // DEFERRED G-BUFFER ROUTE: the goblin arms are opaque Standard-material
     // surfaces (skin, bracer, watch screen — game-arms.ts) — same route as
     // the gun, same receiver, same castShadow reasoning.
@@ -5526,7 +5543,9 @@ async function main() {
   // the wound is the actor's own reference, so the anchor rides the body).
   ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
-    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    const chunkId = spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    // The kit on the bones the piece took flesh off goes WITH it (the zombie's hand and shackle with its forearm).
+    spawnKitRiders(ctx, a, piece, chunkId);
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
   };
   ctx.boot.onGoreDispatch = (a, pieces) => {

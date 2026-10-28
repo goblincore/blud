@@ -11,7 +11,8 @@ import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { burstVolume, spawnImpactGout } from '../blood-sim';
 import { type BuildResult } from '../build-body';
-import { characterEntry } from '../character-registry';
+import { characterEntry, isZombieKin } from '../character-registry';
+import { zombieVariantFor } from '../zombie-variants';
 import { woundWorldPos, type Wound } from '../damage';
 import { headPopDebris } from '../head-pop';
 import { decapitationRule } from '../head-burst';
@@ -37,6 +38,7 @@ import {
   GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
 } from './game-march-accept';
 import { clearMeshGibs } from './game-mesh-gibs';
+import { clearKitRiders } from './game-kit-riders';
 import { applyMoonKey } from './game-outdoor';
 import { bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor } from './game-skeleton-actors';
 import { spawnPellets, spawnRound } from './game-weapon';
@@ -49,6 +51,8 @@ import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
+import { dressKitFlesh } from './kit-flesh';
+import { kitFleshMaterial } from './game-chunk-bake';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
 // game-march-accept.ts beside the accept law, so a lab page can run the game's march without importing the game; re-exported here.
@@ -212,6 +216,11 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // bones block, later).
     ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
     gpu: (built) => ({ ...viewGpuOpts, ...crowdViewOptsFor(built) }),
+    // Kit FLESH (the goblin's bony hands) in the flesh shader's lighting, wearing the same flesh the body does (below).
+    dressKitFlesh: (root, palette) => {
+      const flesh = !isZombieKin(name) ? palette ?? ctx.vfx.flesh : ctx.vfx.flesh;
+      ctx.world.kitFlesh.meshes.push(...dressKitFlesh(root, kitFleshMaterial(ctx).material, flesh));
+    },
   });
   const placed = character.body;
   const view = character.gpu;
@@ -221,7 +230,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   // A character's OWN palette (its .blob block) wherever it declares one —
   // was soldier-only, so the cultist's matte tan robe played in the game as
   // the zombie's wet black latex. The zombie keeps the panel-tunable flesh.
-  view.applyMaterial(name !== 'zombie' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
+  view.applyMaterial(!isZombieKin(name) ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
     LIGHT_PRESETS['practical-hard-key']);
   // Outdoor v1 §7: a body in an open room takes the moon as its key light.
   if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
@@ -247,7 +256,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   (view.uniforms.aaCfg.value as unknown as { z: number; w: number }).w = GAME_AA_FADE_M;
   view.uniforms.aaCfg.value.x = ctx.render.sdfLayer.pixelConeK;
   view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
-  const face = name === 'zombie'
+  const face = isZombieKin(name)
     ? { tex: ctx.vfx.faceTex, atlas: ctx.vfx.faceAtlas, mean: ZOMBIE_FLAT.mean }
     : faceFor(ctx, name);
   view.setFaceTexture(face.tex, face.atlas, face.mean);
@@ -264,7 +273,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   // The character's OWN projection when its .blob declares a sheet block;
   // the zombie's hand-tuned default otherwise. Passing the zombie's numbers
   // to a body with its own bake is what strips a character's face.
-  const sheet = name === 'zombie' ? null : compileCharacterSheet(characterEntry(name)).sheet;
+  const sheet = isZombieKin(name) ? null : compileCharacterSheet(characterEntry(name)).sheet;
   if (sheet) {
     view.uniforms.faceProj.value.set(
       sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY,
@@ -468,10 +477,10 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
     // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
     // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
-    ...(name === 'zombie' ? {
+    ...(isZombieKin(name) ? {
       onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
     } : {}),
-    ...(characterEntry(name).profile.soft || name === 'zombie' ? {
+    ...(characterEntry(name).profile.soft || isZombieKin(name) ? {
       onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
         const at = head.origin;
         ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
@@ -482,7 +491,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
         if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
         ctx.render.segMeshRenderer?.explodeSkull(actor,ctx.render.skeletonSources.get(actor)?.sources ?? [],dir);
-        ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc, name === 'zombie' ? HEAD_LEAF.iris : undefined));
+        ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc, isZombieKin(name) ? HEAD_LEAF.iris : undefined));
       },
     } : {}),
   });
@@ -513,9 +522,10 @@ export function spawnAll(ctx: GameContext, errs: string[]): void {
   // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
   // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
   // cultist, juggernaut and warbull slots keep their kind (level-def
-  // SpawnKind).
+  // SpawnKind). Without the override a zombie slot may be a VARIANT body (zombie-variants.ts: the fat zombie), picked
+  // by the slot's id so the same seats get the same bodies every load.
   for (const s of ctx.world.level.spawnList()) {
-    const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
+    const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? zombieVariantFor(s.id) : s.kind;
     ctx.world.actors.push(spawnEnemy(ctx, name, s.room, s.pos, errs));
   }
 }
@@ -535,6 +545,7 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headSplit?.reset();
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
+  clearKitRiders(ctx);
   ctx.boot.kitEye?.clear();
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();

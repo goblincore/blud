@@ -153,7 +153,11 @@ export function measureSeat(prims: readonly Primitive[]): SeatMeasure {
   // capsule, whose round end hangs centimetres past the cloth's hem (the pelvis shell's base reaches 5.5 cm under the flesh), so the
   // seat would land under thin air.
   const of = (re: RegExp) => prims.filter(p => p.bone !== undefined && !p.shell && re.test(p.bone));
-  const hands = of(/^hand\.[lr]$/), thighs = of(/^thigh\.[lr]$/), pelvis = of(/^pelvis$/);
+  // The hand BALLS: the biggest prim on each hand bone. goblin.blob's hand also carries a small wrist knob since the bony kit
+  // hands (2026-10-24; goblin-home carries the orb back after it), and averaging the knob in moved the set's board a centimetre.
+  const ball = (s: 'l' | 'r') => of(new RegExp(`^hand\\.${s}$`)).reduce<Primitive | undefined>((m, p) => (!m || p.radius > m.radius ? p : m), undefined);
+  const hands = [ball('l'), ball('r')].filter((p): p is Primitive => p !== undefined);
+  const thighs = of(/^thigh\.[lr]$/), pelvis = of(/^pelvis$/);
   if (!hands.length || !thighs.length || !pelvis.length) throw new Error('measureSeat: the posed body has no hand, thigh or pelvis prims');
   const hb = hands.map(primBounds), tb = thighs.map(primBounds), pb = pelvis.map(primBounds);
   const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;

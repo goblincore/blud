@@ -16,6 +16,7 @@
 // fixes is a character that EXISTS as a .blob and was never registered.
 import type { BodyNormalSpec } from './webgpu/body-normal-load';
 import zombieBlobSrc from './characters/zombie.blob?raw';
+import zombieFatBlobSrc from './characters/zombie-fat.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
@@ -61,7 +62,7 @@ import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, ZOMBIE_FAT_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -90,6 +91,14 @@ export interface CharacterEntry {
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
+  /** Polygon HANDS on the kit that can be shot off whole (webgpu/kit-sever.ts, game-hand-shots.ts): the kit materials
+   *  that are the hand (a wrist cut takes only these; the rest of the bone's kit, e.g. a shackle, stays on the stump),
+   *  and the palm the shot tests, a sphere `drop` metres past each hand bone's end knob along the bone, `radius` round.
+   *  The hand bones are the ones whose flesh chain ends in a knob (`blob ... at=0.97` on the zombie's foreArm). */
+  kitHands?: { bones: readonly string[]; materials: readonly string[]; drop: number; radius: number };
+  /** Kit pieces a round knocks off whole (kit-sever.ts kitPieceHit, game-kit-riders.ts kitPieceShot): the kit on
+   *  `bone` wearing `materials`. A belt, an iron cuff: rigid things that should not shrug off a shotgun. */
+  kitBreakables?: readonly { bone: string; materials: readonly string[] }[];
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -101,6 +110,9 @@ export interface CharacterEntry {
   /** A baked BODY NORMAL MAP (scripts/bake-body-normal.ts; webgpu/body-normal-load.ts): the torso relief the
    *  march does not carry as prims. Absent = none, and the body shades exactly as it did before maps existed. */
   bodyNormal?: BodyNormalSpec;
+  /** A VARIANT BODY of another character that plays as it in every gameplay path keyed by name (isZombieKin): the
+   *  fat zombie is `kin: 'zombie'` and gets the zombie's panel flesh, face sheet and head pop. Absent: itself only. */
+  kin?: 'zombie';
   /** The motion profile this character moves with. Profiles live in
    *  motion-profile.ts; this records WHICH one. Characters without a bespoke
    *  profile get motionProfileFor(name) — the zombie default. */
@@ -155,9 +167,36 @@ function bakedFace(file: string): FaceSheet {
  * the whole reason the turntable exists.
  */
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
+  // The rotting labourer (owner's pick, 2026-10-26 look-dev: docs/dev-notes/2026-10-26-zombie-refine-lookdev/). Its kit
+  // (assets-source/zombie-kit/make_kit.py): the grabber HANDS, polygon flesh on each forearm drawn in the game with the
+  // flesh shader's lighting (kit-flesh.ts), iron wrist shackles over the hand seam, a belt and work boots. The trousers
+  // are PAINT on the flesh (zombie.blob `fabric`), their folds in the body map. The .blob keeps a wrist knob.
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
+    kit: '/assets/lab/zombie-kit.gltf',
+    // The grabber hands come off whole: palm ~7.5 cm past the wrist knob (make_kit.py HANG 0.072 x 1.2 scale less the
+    // knob's offset), and a sphere that takes the splayed fingers.
+    kitHands: { bones: ['foreArm.l', 'foreArm.r'], materials: ['zombieskin', 'zombienail'], drop: 0.075, radius: 0.08 },
+    // The belt (leather, its iron buckle) and each wrist shackle fly off when shot (owner, 2026-10-26).
+    kitBreakables: [{ bone: 'pelvis', materials: ['leather', 'rustplate'] },
+      { bone: 'foreArm.l', materials: ['rustplate'] }, { bone: 'foreArm.r', materials: ['rustplate'] }],
+    // Collarbones, ribs through slack skin, gut folds, spine and veins (characters/zombie.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
+  },
+  // The FAT zombie (zombie-fat.blob's header): the plain zombie's skeleton, gait and face sheet under a bloated body. It
+  // plays as a zombie (isZombieKin) and crowds mix it in (zombie-variants.ts).
+  'zombie-fat': {
+    name: 'zombie-fat', src: zombieFatBlobSrc, face: ZOMBIE_FLAT, kin: 'zombie',
+    // The zombie's kit REFIT to this skin (make_kit.py --body zombie-fat): the same hands, shackles, belt and boots,
+    // laid on the fat body's probed surface (surface-zombie-fat.json), so they come off the same way.
+    kit: '/assets/lab/zombie-fat-kit.gltf',
+    kitHands: { bones: ['foreArm.l', 'foreArm.r'], materials: ['zombieskin', 'zombienail'], drop: 0.075, radius: 0.08 },
+    kitBreakables: [{ bone: 'pelvis', materials: ['leather', 'rustplate'] },
+      { bone: 'foreArm.l', materials: ['rustplate'] }, { bone: 'foreArm.r', materials: ['rustplate'] }],
+    // No ribs or knuckles: gut creases, a navel, love handles, back rolls and stretch marks (zombie-detail-gen.ts --fat).
+    bodyNormal: { url: '/assets/lab/zombie-fat-body-n.png', meta: '/assets/lab/zombie-fat-body-n.json', strength: 1 },
+    profile: ZOMBIE_FAT_PROFILE,
   },
   goblin: {
     name: 'goblin', src: goblinBlobSrc,
@@ -166,8 +205,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     profile: motionProfileFor('goblin'),
   },
   // The goblin at home (the screen emergence lab): goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, in one
-  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home. The goblin's own motion
-  // profile; the lab drives him with the pose layer, which overwrites every target.
+  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home, and so do the bony
+  // kit hands: the at-home poses rest ORB hands on the keys and the floor, so the block carries the orb back (owner,
+  // 2026-10-24). The goblin's own motion profile; the lab drives him with the pose layer, which overwrites every target.
   'goblin-home': {
     name: 'goblin-home', src: goblinHomeBlobSrc,
     face: ZOMBIE_FLAT,
@@ -185,7 +225,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // The cinematic goblin AT HOME (emergence in the Flat, plan Task 4): goblin-cinematic.blob (the face rig) plus goblin-home's cloth
   // block and bare feet, at the goblin's 1.70 m (characters/goblin-cinematic-home.test.ts guards the copy). The armour stays off at
   // home, but the cinematic's mesh TEETH live in its 1.30 m kit (one skinned glTF, the `tooth` primitive beside the armour's), so he
-  // borrows that kit's teeth alone, scaled by the .blob's own `scale` about each bone (plan Task 4b; characters/
+  // borrows that kit's teeth alone (not its bony `goblinskin` hands: at home the orbs stay), scaled by the .blob's own `scale` about each bone (plan Task 4b; characters/
   // goblin-cinematic-home-teeth.test.ts pins them in his mouth). The cinematic's gait, poses and expressions (motion-profile.ts,
   // pose-library.ts, expression-library.ts list it under its own name).
   'goblin-cinematic-home': {
@@ -579,4 +619,10 @@ export function characterEntry(name: string): CharacterEntry {
     );
   }
   return e;
+}
+
+/** True for the zombie and every body that plays as it (CharacterEntry.kin): the zombie-only paths in the game
+ *  (panel flesh, the generated face sheet, the head burst and pop) are keyed on this, not on the name. */
+export function isZombieKin(name: string): boolean {
+  return name === 'zombie' || CHARACTERS[name]?.kin === 'zombie';
 }

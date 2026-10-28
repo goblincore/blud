@@ -60,6 +60,7 @@ import { BURST, aimOffsetOf, aimRangeOf, burstTuning, classifyBurst, headShotRul
 import { splitMaxAngle } from '../head-split';
 import type { HeadSplitLeaf } from './game-head-split';
 import { headAlive } from './flame-anchors';
+import { isZombieKin } from '../character-registry';
 
 export interface HeadShotDeps {
   /** game-main's headShape: the head frame's centre and half-axes on a posed body. */
@@ -122,7 +123,7 @@ export function createHeadShot(ctx: GameContext, deps: HeadShotDeps): HeadShotLe
 
   return {
     hit(a, point, dir, shot, kind = 'slug') {
-      if (!burstTuning.on || a.characterName() !== 'zombie') return false;
+      if (!burstTuning.on || !isZombieKin(a.characterName())) return false;
       const posed = a.posed();
       if (!headAlive(posed) || a.headPopping()) return false;
       // A split head's prims are the closed head's: the hit is judged where it lands on them.
