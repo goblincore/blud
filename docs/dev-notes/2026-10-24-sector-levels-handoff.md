@@ -34,6 +34,14 @@ Done since plan 3b (all owner-requested, see commit messages):
 - CI fixes f47fc024 (motion digests pinned at 1e-7 — mac vs linux libm; stale kind message; location guard).
 - World scale d09f8e03: Doom world at 35 units/m (was 32) — E1M1 ~9% smaller, bodies unchanged (agent report pending).
 
+Landed right before compaction: world scale **35 u/m** (36 would make E1M1's 68-unit doors 1.89 m < the 1.9 m
+headroom; ceiling 35.8) d09f8e03 + gate fixes c45856db (the old "round through geometry" failure was a gate
+classifier edge — a round already in flight when the sampler started; sight-pose finder rings now scale with the
+world; NOT yet verified end to end — rerun the doom gate on a quiet tree); low-health adrenaline + red border
+32ef4319 (`__sdfGame.setHealth(hp)`; danger k = smoothstep(35, 20, hp) → world 0.55→0.2, player 0.85→0.6).
+In flight: diagnosis of an owner-reported **freeze/pause when shotgun pellets hit enemies** (not only the first
+shot; suspects: post-pass pipeline compile when the adrenaline edge/border toggles, hit-stop, per-hit wound work).
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
