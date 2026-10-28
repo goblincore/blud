@@ -39,8 +39,16 @@ headroom; ceiling 35.8) d09f8e03 + gate fixes c45856db (the old "round through g
 classifier edge — a round already in flight when the sampler started; sight-pose finder rings now scale with the
 world; NOT yet verified end to end — rerun the doom gate on a quiet tree); low-health adrenaline + red border
 32ef4319 (`__sdfGame.setHealth(hp)`; danger k = smoothstep(35, 20, hp) → world 0.55→0.2, player 0.85→0.6).
-In flight: diagnosis of an owner-reported **freeze/pause when shotgun pellets hit enemies** (not only the first
-shot; suspects: post-pass pipeline compile when the adrenaline edge/border toggles, hit-stop, per-hit wound work).
+**Freeze on hit: FIXED (2026-10-28).** Not slow-mo / hit-stop / the adrenaline pass (uniform-driven). Cause: three
+r186 keys every InstancedMesh's render object by uuid and names its instance buffer per node, so ~22 identical bone
+batches per character type each built a node + pipeline on the first hit that exposed bone (0.6-1.0 s). ec5095e7
+pre-warms batches; 79afe0ce makes them share ONE build/pipeline per material (segment-instance.ts: plain Mesh on an
+InstancedBufferGeometry, matrices as named iM0..iM3 attributes; skeleton pipelines arena 21→2, E1M1 121→3; warm
+drawOnce arena ~1.5→1.15 s, E1M1 ~8.3→7.2 s; shot 300 ms after respawn 232-274→36 ms). Teratoma first hit (kit-eye
+maps + kit-eye-pop/cord/meat-wet pipelines, 0.7 s + 1.7 s) pre-warmed per step in 9649bde5 (now ~63 ms). Still open:
+gore tear-off frames 50-140 ms for ~1.5 s (blood sim), first sight of an E1M1 room compiles its props (0.3-1.3 s),
+two unattributed 1.2/1.9 s E1M1 frames, the arena respawn frame itself (~760 ms). Doom gate PAUSED by the owner
+(manual playtests for now).
 
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
