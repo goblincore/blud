@@ -379,8 +379,11 @@ export function syncKitVisibility(ctx: GameContext): void {
     const ch = a.character;
     if (!ch) continue;
     const on = visual || kitDrawn.has(a);
-    if (ch.kit) ch.kit.object.visible = on;
-    if (ch.prop && !ch.prop.released) ch.prop.object.visible = on;
+    // The kit pre-warm's root of this step draws whatever the cull says (game-kit-prewarm.ts forcedRoot): out of
+    // sight, behind a wall, it builds now rather than the frame it comes into view.
+    const warm = ctx.boot.kitPrewarm?.forcedRoot ?? null;
+    if (ch.kit) ch.kit.object.visible = on || ch.kit.object === warm;
+    if (ch.prop && !ch.prop.released) ch.prop.object.visible = on || ch.prop.object === warm;
     else if (ch.prop) ch.prop.object.visible = true;
   }
 }

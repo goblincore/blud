@@ -10,8 +10,8 @@
 // with flesh with nothing added here.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
+import { kitEnvironment } from './kit-overlay';
 import type { Vec3 } from '../types';
 import { GUN_GRIP, gunPoint, muzzleRise, type GunPose } from '../carry';
 import { DROP, releaseProp, stepDrop, type DropState } from '../prop-drop';
@@ -45,19 +45,18 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
   object.add(gltf.scene);
   // Like the armour, PBR gun metal needs something to reflect. This is a
   // prop-only reflection source; it does not change the level's lighting.
-  let environment: THREE.RenderTarget | null = null;
+  // It is the renderer's ONE kit environment (kit-overlay.ts kitEnvironment), never disposed: a PMREM of
+  // its own per prop put that texture's identity in every prop material's builder key
+  // (setMaterialEnvironment), so every soldier's gun built its materials again at first sight (E1M1, 20-30
+  // ms each, 2026-10-28). Shared, every instance of a prop shares the first one's builds.
   if (renderer) {
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const room = new RoomEnvironment();
-    environment = pmrem.fromScene(room, 0.04);
-    room.dispose();
-    pmrem.dispose();
+    const environment = kitEnvironment(renderer);
     object.traverse(o => {
       const material = (o as THREE.Mesh).material;
       for (const m of Array.isArray(material) ? material : material ? [material] : []) {
         const std = m as THREE.MeshStandardMaterial;
         if (std.isMeshStandardMaterial) {
-          setMaterialEnvironment(std, environment!.texture);
+          setMaterialEnvironment(std, environment);
           std.envMapIntensity = 0.65;
         }
       }
@@ -127,7 +126,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
     },
     dispose() {
       object.removeFromParent();
-      environment?.dispose();
+      // NOT the environment: it is the renderer's one kit environment, shared by every kit and prop.
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();

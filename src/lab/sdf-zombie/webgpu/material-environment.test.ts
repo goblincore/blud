@@ -25,21 +25,24 @@ function stubLoads(): { targets: THREE.RenderTarget[]; materials: THREE.MeshStan
   return { targets, materials };
 }
 
-it('prop retirement leaves the survivor with independent environment bindings', async () => {
+// Held props share the kits' ONE environment per renderer (E1M1 soldier guns built per instance, 2026-10-28): never
+// disposed, so retiring a prop cannot pull it from under a survivor, and instances share their node builds.
+it('props share the never-disposed kit environment per renderer', async () => {
   const { targets, materials } = stubLoads();
   const renderer = {} as THREE.WebGPURenderer;
   const first = await loadHeldProp('/stub.gltf', renderer), survivor = await loadHeldProp('/stub.gltf', renderer);
-  const disposeFirst = vi.spyOn(targets[0]!, 'dispose');
-  const disposeSurvivor = vi.spyOn(targets[1]!, 'dispose');
+  const kit = await loadKit('/stub.gltf', renderer);
+  expect(targets).toHaveLength(1);
+  const dispose = vi.spyOn(targets[0]!, 'dispose');
   expect(materials[0]!.envMap).toBe(targets[0]!.texture);
-  expect(materials[1]!.envMap).toBe(targets[1]!.texture);
-  expect(materials[0]!.customProgramCacheKey()).not.toBe(materials[1]!.customProgramCacheKey());
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[2]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[0]!.customProgramCacheKey()).toBe(materials[1]!.customProgramCacheKey());
   first.dispose();
-  expect(disposeFirst).toHaveBeenCalledOnce();
-  expect(disposeSurvivor).not.toHaveBeenCalled();
-  expect(materials[1]!.envMap).toBe(targets[1]!.texture);
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
   survivor.dispose();
-  expect(disposeSurvivor).toHaveBeenCalledOnce();
+  kit.dispose();
+  expect(dispose).not.toHaveBeenCalled();
 });
 
 // Kits share ONE environment per renderer so instances of a character share node builds (teratoma first-sight hitch,

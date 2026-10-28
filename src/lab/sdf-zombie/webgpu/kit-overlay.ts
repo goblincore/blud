@@ -421,7 +421,8 @@ export function poseKitBones(bones: KitBones, frames: ReadonlyMap<string, { pos:
  * material-environment.ts guards against.
  */
 const kitEnvironments = new WeakMap<THREE.WebGPURenderer, THREE.Texture>();
-function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.Texture {
+/** The renderer's one kit environment; held props (held-prop.ts) wear it too, for the same reason. */
+export function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.Texture {
   let env = kitEnvironments.get(renderer);
   if (!env) {
     const pmrem = new THREE.PMREMGenerator(renderer);
