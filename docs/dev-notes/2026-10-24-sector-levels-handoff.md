@@ -50,6 +50,8 @@ gore tear-off frames 50-140 ms for ~1.5 s (blood sim), first sight of an E1M1 ro
 two unattributed 1.2/1.9 s E1M1 frames, the arena respawn frame itself (~760 ms). Doom gate PAUSED by the owner
 (manual playtests for now).
 
+**Gore tear-off pass (2026-10-28, 3079ce7d).** The old `stepBlood`/`emitTrails` blame was a profiler artifact (process stalls charged to whatever ran); blood sim is ~2–7 ms/s and GPU-bound. Real fix: blood/gib blur pre-warm used `compileAsync` (wrong target keys) so first gore built 3 pipelines; now warms by drawing into the real no-depth half-float targets outside the post callback. Tear-off now 0 new pipelines (arena) / 2 (E1M1). Remaining ~50–65 ms frame is the **shot** (pellet `hit`/`woundFromPellet`/`traceProjectile` + 2 first-use MeshBasicMaterial on E1M1). Open: teratoma kit pipelines compile on first sight (~300 ms) — pre-warm like kit-eye. Probes `tear.mjs`, `ab-tear.sh` in the session scratchpad.
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
