@@ -501,25 +501,39 @@ const installEnemyHelper = () => evaluate(`(async () => {
     return Math.abs(Math.atan2(Math.sin(bearing - a.yaw), Math.cos(bearing - a.yaw))) < Math.PI * 0.39;
   };
   const yawTo = (from, to) => Math.atan2(to[0] - from[0], -(to[2] - from[2]));
-  /** Ring candidates round an actor, r 2.5..5 m. */
+  /** Ring candidates round an actor, r 2.5..5 m at 32 units/m (x K: the same Doom spots at any world scale; at 35
+   *  the absolute radii missed the thin cover beside soldier 18 the 32 runs hid behind, 3.27 m off it). */
   const ring = (a) => {
     const out = [];
-    for (const r of [2.5, 3.25, 4, 4.75]) for (let k = 0; k < 32; k++) {
+    for (const r0 of [2.5, 3.25, 4, 4.75]) for (let k = 0; k < 32; k++) {
+      const r = r0 * ${K};
       const t = (k / 32) * Math.PI * 2, q = stand(a.pos[0] + Math.sin(t) * r, a.pos[2] + Math.cos(t) * r);
       if (q) out.push(q);
     }
     return out;
   };
   /** HIDDEN: a soldier within 2.5..5 m (fire range 6 m) that cannot see it, and nobody within 12 m can; OPEN:
-   *  within 4 m of it, in that soldier's sight and field of view, nobody else within 10 m. */
+   *  within 4 m of it, in that soldier's sight and field of view, nobody else within 10 m. The 12 / 10 m keep the
+   *  other spawns out of it: they are Doom spacing, so they shrink with the world (x K, metres at 32), as do the ring
+   *  radii; the duck (d >= 0.8 m: the capsule out of the volley) is the player's (absolute). */
   const sightPoses = () => {
     const actors = __sdfGame.actorList();
     let best = null;
+    const diag = [];
     for (const s of actors) {
       if (s.kind !== 'soldier') continue;
       const cands = ring(s);
-      const hidden = cands.filter((h) => actors.every((a) => flat(a.pos, h) > 12 || !sees(a.pos, h)) && actors.every((a) => a.id === s.id || flat(a.pos, h) > flat(s.pos, h)));
-      const open = cands.filter((o) => sees(s.pos, o) && inFov(s, o) && actors.every((a) => a.id === s.id || flat(a.pos, o) > 10));
+      const isHidden = (h) => actors.every((a) => flat(a.pos, h) > 12 * ${K} || !sees(a.pos, h)) && actors.every((a) => a.id === s.id || flat(a.pos, h) > flat(s.pos, h));
+      const open = cands.filter((o) => sees(s.pos, o) && inFov(s, o) && actors.every((a) => a.id === s.id || flat(a.pos, o) > 10 * ${K}));
+      // Hiding places: the soldier's ring, and (2026-10-27, the 35 units/m world: the ring alone found no cover after
+      // the enemies had wandered) a ring 0.8..4 m round each of the six open poses furthest off the soldier.
+      const near = [];
+      for (const o of [...open].sort((p, q) => flat(s.pos, q) - flat(s.pos, p)).slice(0, 6)) for (const r of [0.9, 1.5, 2.25, 3]) for (let k = 0; k < 16; k++) {
+        const t = (k / 16) * Math.PI * 2, q = stand(o[0] + Math.sin(t) * r, o[2] + Math.cos(t) * r);
+        if (q && Math.abs(q[1] - o[1]) < 0.3) near.push(q);
+      }
+      const hidden = [...cands, ...near].filter(isHidden);
+      diag.push({ soldier: s.id, ring: cands.length, open: open.length, hidden: hidden.length });
       for (const h of hidden) for (const o of open) {
         // Prefer the open pose 4 m or more off the soldier (its rounds spread: some miss and fly on to the walls).
         const d = flat(h, o), score = d - 3 * Math.min(flat(s.pos, o), 4.5);
@@ -528,7 +542,7 @@ const installEnemyHelper = () => evaluate(`(async () => {
         if (d >= 0.8 && d <= 4 && (!best || score < best.score)) best = { score, d, soldier: s.id, soldierAt: s.pos, hidden: { x: h[0], y: h[1], z: h[2], yaw: yawTo(h, s.pos) }, open: { x: o[0], y: o[1], z: o[2], yaw: yawTo(o, s.pos) } };
       }
     }
-    return best;
+    return best ?? { none: diag };
   };
   /** In-view poses for shots and the busy budget: one per spawn cluster (actors within 8 m of each other), 4..6.5 m
    *  from its first actor, in sight of it, facing it; the clusters' floors differ where they can. */
@@ -599,7 +613,7 @@ const installEnemyHelper = () => evaluate(`(async () => {
         let sh = null;
         for (const a of list) if (!sh || flat(a.pos, r.pos) < flat(sh.pos, r.pos)) sh = a;
         const hit = sh ? sr.sectorSegmentHit(map, ground, eye(sh.pos), r.pos) : null;
-        if (hit) st.passed.push({ leg: 'eye->first', shooter: sh.id, kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)) });
+        if (hit) st.passed.push({ leg: 'eye->first', shooter: sh.id, kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)), age: +r.ageSec.toFixed(2) });
         st.rounds.set(r, { last: [...r.pos], vel: [...r.vel], age: r.ageSec });
         continue;
       }
@@ -624,8 +638,16 @@ const installEnemyHelper = () => evaluate(`(async () => {
     requestAnimationFrame(frame);
   };
   const sampler = {
-    start(opts = {}) { st = { dodge: opts.dodge ?? null, dodging: false, dodges: 0, lastT: null, maxDt: 0, other: 0, since: new Map(), shots: [], rounds: new WeakMap(), tracked: new Map(), seen: 0, atPlayer: 0, atWorld: 0, expired: 0, passed: [], frames: 0 }; requestAnimationFrame(frame); },
-    read() { return st ? { shots: st.shots, seen: st.seen, atPlayer: st.atPlayer, atWorld: st.atWorld, expired: st.expired, inFlight: st.tracked.size, passed: st.passed.slice(0, 6), passedCount: st.passed.length, frames: st.frames, dodges: st.dodges, other: st.other, maxFrameMs: +(st.maxDt * 1000).toFixed(1) } : null; },
+    start(opts = {}) {
+      st = { dodge: opts.dodge ?? null, dodging: false, dodges: 0, lastT: null, maxDt: 0, other: 0, since: new Map(), shots: [], rounds: new WeakMap(), tracked: new Map(), seen: 0, atPlayer: 0, atWorld: 0, expired: 0, passed: [], frames: 0, inherited: 0 };
+      // Rounds already in the air (fired before the sampler, by whoever saw the player at an earlier pose) are not
+      // fresh shots: their first sample is mid-flight, so 'eye->first' from the nearest actor's eye would cross
+      // walls it never flew through (2026-10-27: a round at the pit corridor, 58 m from soldier 18, the only one
+      // that fired in the window, blamed on actor 27). Follow their steps from here; skip the eye leg.
+      for (const r of __sdfGame.enemyRounds()) { st.rounds.set(r, { last: [...r.pos], vel: [...r.vel], age: r.ageSec }); st.inherited++; }
+      requestAnimationFrame(frame);
+    },
+    read() { return st ? { shots: st.shots, seen: st.seen, atPlayer: st.atPlayer, atWorld: st.atWorld, expired: st.expired, inFlight: st.tracked.size, passed: st.passed.slice(0, 6), passedCount: st.passed.length, inherited: st.inherited, frames: st.frames, dodges: st.dodges, other: st.other, maxFrameMs: +(st.maxDt * 1000).toFixed(1) } : null; },
     stop() { const r = sampler.read(); st = null; return r; },
   };
   window.__eg = { sees, stand, sightPoses, viewPoses, cullReport, sampler, yawTo, ground };
@@ -848,7 +870,7 @@ if (wantFloat) {
 // The player ducks behind the wall as each volley leaves (the sampler's dodge), so the rounds miss and fly on
 // into the walls behind the open pose: they must stop there, not step through.
 const sp = await evaluate('__eg.sightPoses()');
-if (!sp) fail("rounds: no pose in a soldier's sight with a hiding place near it");
+if (!sp || sp.none) fail(`rounds: no pose in a soldier's sight with a hiding place near it (per soldier: ${JSON.stringify(sp?.none ?? [])})`);
 console.log(`sight poses: ${JSON.stringify(sp)}`);
 await evaluate(`__eg.sampler.start({ dodge: { hide: ${JSON.stringify(sp.hidden)}, back: ${JSON.stringify(sp.open)} } })`);
 await evaluate(`__sdfGame.setPose(${sp.open.x}, ${sp.open.z}, ${sp.open.yaw}, 0, ${sp.open.y})`);
@@ -1092,7 +1114,7 @@ if (hazardErrs.length) fail(`console errors (?god=0 boot): ${JSON.stringify(haza
 // (nobody within 12 m can see the pose) — no shot, health holds; then step into its sight — fire within 6 s.
 await installEnemyHelper();
 const sight = await evaluate('__eg.sightPoses()');
-if (!sight) fail('sight: no hidden pose near a soldier with an open pose beside it');
+if (!sight || sight.none) fail(`sight: no hidden pose near a soldier with an open pose beside it (per soldier: ${JSON.stringify(sight?.none ?? [])})`);
 console.log(`sight poses: ${JSON.stringify(sight)}`);
 await evaluate('__eg.sampler.start()');
 await evaluate(`__sdfGame.setPose(${sight.hidden.x}, ${sight.hidden.z}, ${sight.hidden.yaw}, 0, ${sight.hidden.y})`);
