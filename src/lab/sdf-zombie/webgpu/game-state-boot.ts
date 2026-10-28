@@ -166,6 +166,8 @@ export interface BootState {
   meatGib?: import('./game-meat-gib').MeatGibLeaf;
   /** The popping kit eye (game-kit-eye.ts): characters whose profile declares `eye`. */
   kitEye?: import('./game-kit-eye').KitEyeLeaf;
+  /** Draws each cast kit mesh once before it is first seen (game-kit-prewarm.ts). */
+  kitPrewarm?: import('./game-kit-prewarm').KitPrewarm;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */

@@ -1279,6 +1279,7 @@ export function tick(ctx: GameContext, dt: number) {
     stepMeshGibs(ctx, cdt);
     ctx.boot.kitEye?.step(cdt);
     ctx.boot.meatGib?.prewarm();
+    ctx.boot.kitPrewarm?.step();
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

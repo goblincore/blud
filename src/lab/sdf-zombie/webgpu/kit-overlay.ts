@@ -413,6 +413,28 @@ export function poseKitBones(bones: KitBones, frames: ReadonlyMap<string, { pos:
 }
 
 /**
+ * ONE specular environment per renderer for EVERY kit (teratoma first-sight hitch, 2026-10-28). Each kit used to make its
+ * own PMREM of the same RoomEnvironment, and setMaterialEnvironment puts the texture's identity in the builder key, so
+ * every kit INSTANCE built its own node materials: two teratomas in view = every kit material built twice (~40 ms of CPU
+ * each). One shared texture, identical content, lets every instance of a kit share one build. It is never disposed (a
+ * kit's dispose leaves it): a retired kit can no longer pull the map out from under a survivor, which is the hazard
+ * material-environment.ts guards against.
+ */
+const kitEnvironments = new WeakMap<THREE.WebGPURenderer, THREE.Texture>();
+function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.Texture {
+  let env = kitEnvironments.get(renderer);
+  if (!env) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    env = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    kitEnvironments.set(renderer, env);
+  }
+  return env;
+}
+
+/**
  * Loads a WAM-compiled glTF and returns it ready to place.
  *
  * The .gltf is self-contained — WAM base64s both the buffer and the texture
@@ -445,12 +467,7 @@ export async function loadKit(
   // reference cube, which are MeshStandardMaterial too, keep the look every
   // previous capture was judged against.
   // (A kit loaded with `only` has already lost its other meshes here: keepKitMaterials above.)
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const environment = pmrem.fromScene(room, 0.04);
-  const env = environment.texture;
-  room.dispose();
-  pmrem.dispose();
+  const env = kitEnvironment(renderer);
   const object = new THREE.Group();
   object.add(gltf.scene);
   object.position.set(root[0], root[1], root[2]);
@@ -547,7 +564,7 @@ export async function loadKit(
       damageView?.dispose();
       occluders.dispose(); // before the traverse below: the twins share one material across kits
       debris.removeFromParent();
-      environment.dispose();
+      // NOT the environment: it is the renderer's one kit environment (kitEnvironment), shared by every kit.
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();

@@ -606,6 +606,7 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
   ctx.boot.kitEye?.clear();
+  ctx.boot.kitPrewarm?.clear();
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
   // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and

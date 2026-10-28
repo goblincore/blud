@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 25 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 85 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 86 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -360,6 +360,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
 - `webgpu/game-kit-eye.ts` — THE POPPING KIT EYE, in the game (kit-eye.ts has the rules and the shape).
+- `webgpu/game-kit-prewarm.ts` — KIT PRE-WARM: every cast kit mesh is drawn once, one build a step, before the player first sees it (teratoma first-sight hitch, 2026-10-28).
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
 - `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
 - `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.

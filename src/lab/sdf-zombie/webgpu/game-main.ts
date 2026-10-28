@@ -309,6 +309,7 @@ import { createHeadShot } from './game-head-shot';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createMeatGib } from './game-meat-gib';
 import { createKitEye } from './game-kit-eye';
+import { createKitPrewarm } from './game-kit-prewarm';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -5598,6 +5599,8 @@ async function main() {
   ctx.boot.meatGib = createMeatGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null });
   // The popping kit eye (game-kit-eye.ts): the teratoma's eyeball hangs out on a stalk, then snaps off.
   ctx.boot.kitEye = createKitEye(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null });
+  // Every cast kit mesh drawn once, one a step, before the player first sees it (game-kit-prewarm.ts).
+  ctx.boot.kitPrewarm = createKitPrewarm(ctx);
   ctx.boot.attachPiece = (a, prims, pos, opts) => {
     // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
     // consume rngStreams.misc (every other piece's sequence stays put).
