@@ -4559,7 +4559,7 @@ async function main() {
   // body is swapped for debris in the very frame the bundle goes off — and is
   // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
   // the agreed start.
-  // THE LIVE -> GIB SWITCH steps (gib-switch.ts, `?gibswitch=beat,blood,launch,shade,timing`; `none` = the old
+  // THE LIVE -> GIB SWITCH steps (gib-switch.ts, `?gibswitch=beat,blood,launch,timing`; `none` = the old
   // switch). `timing` shortens the window to GIB_SWITCH_TEAR_SEC; an explicit `?gibtear=` still wins.
   ctx.gibs.switchSteps = parseGibSwitch(DYN_PARAMS.get('gibswitch'));
   ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 })

@@ -3,25 +3,28 @@
 // THE LIVE-BODY -> GIB SWITCH (owner 2026-10-29: "explosion -> enemy damaged -> gibbed does not read as one
 // sequence", mostly with dynamite that lands OFF the target). The frame-strip diagnosis (.lab-tmp/blast-gib/,
 // docs/tasks/combat-and-gore.md "Blast-to-gib switch pass") found five breaks on the switch side; each fix is its
-// own step so it can be judged alone: `?gibswitch=beat,blood,launch,shade,timing` (no param: DEFAULT_GIB_SWITCH;
+// own step so it can be judged alone: `?gibswitch=beat,blood,launch,timing` (no param: DEFAULT_GIB_SWITCH;
 // `none`: the old behaviour; `all`; or any comma list).
-//  - beat:   the doomed body takes a visible hit reaction away from the blast during the pre-tear window
-//            (gib-tear.ts `beatM`), and the pieces spawn where that shoved body is (it rides the rupture offsets).
+//  - beat:   the doomed body takes the survivor's blast() reaction (root knock + stagger lurch, no wounds) in the
+//            pre-tear window; the rupture follows the moving pose (gib-tear.ts followPose) and the pieces spawn
+//            where that shoved body is drawn.
 //  - blood:  the spray comes from the body, on its blast side, aimed away from the blast, and a first spray
 //            starts on the hit frame (blastBloodPlacement), not only at the swap.
 //  - launch: pieces blow AWAY from the blast, violent close and a shove far, with a lower up floor
 //            (gib-launch.ts gibBlastLaunchVelocity).
-//  - shade:  the transition frame's pieces match the live body's look.
+//  - shade:  NOT A STEP. Tried and dropped (2026-10-29): the asset pieces read darker on the swap frame (L 117 ->
+//            78) but not by a gain — seams, cut faces, the bared skeleton and the micro-detail layer; a per-object
+//            colour lift of 2.2x only reached 92 and blew the highlights. See the combat-and-gore.md entry.
 //  - timing: the swap lands nearer the explosion light's peak (GIB_SWITCH_TEAR_SEC).
 // Gameplay is untouched by every step: who gibs, damage, AOE radius and piece counts are the resolver's.
 // Pure: no three.js, no DOM.
 import type { Vec3 } from './types';
 
-export type GibSwitchStep = 'beat' | 'blood' | 'launch' | 'shade' | 'timing';
-export const GIB_SWITCH_STEPS: readonly GibSwitchStep[] = ['beat', 'blood', 'launch', 'shade', 'timing'];
+export type GibSwitchStep = 'beat' | 'blood' | 'launch' | 'timing';
+export const GIB_SWITCH_STEPS: readonly GibSwitchStep[] = ['beat', 'blood', 'launch', 'timing'];
 
 /** What a page with no `?gibswitch=` gets: the steps that were judged to read right. */
-export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat', 'blood', 'launch'];
+export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat', 'blood', 'launch', 'timing'];
 
 /** The steps a `?gibswitch=` value turns on: absent or '' = DEFAULT_GIB_SWITCH, 'none', 'all', or a comma list
  *  (unknown names ignored). */
