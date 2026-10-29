@@ -346,6 +346,7 @@ import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createDebrisSeams } from './game-seams-debris';
+import { createBlastTraceSeams } from './game-seams-blast-trace';
 import { createBarrelSeams } from './game-seams-barrels';
 import { createBarrelRuntime } from './game-barrels';
 import { barrelBox } from './barrel-runtime';
@@ -6032,6 +6033,7 @@ async function main() {
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createDebrisSeams(ctx),
+    createBlastTraceSeams(ctx),
     createBarrelSeams(ctx),
     createDoorSeams(ctx),
     createMarchDebugSeams(ctx),
