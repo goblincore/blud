@@ -45,7 +45,7 @@ Each line is the first sentence of the module's header comment.
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
-| [Game: debug seams](#game-debug-seams) | 26 | `window.__sdfGame` members, read by the gate and capture scripts. |
+| [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
 | [Game: feature modules](#game-feature-modules) | 91 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
@@ -61,7 +61,7 @@ Each line is the first sentence of the module's header comment.
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
-| [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
+| [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
@@ -288,6 +288,7 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 
 - `webgpu/game-seams-barrels.ts` — Barrel seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 13): the level's barrels as plain data, a hit by…
 - `webgpu/game-seams-bench.ts` — Seam module: the `bench` and `demoScenario` members lifted verbatim out of the `__sdfGame` object literal in game-main.ts.
+- `webgpu/game-seams-blast-trace.ts` — READ-ONLY diagnostic seam for the blast -> damage -> gib frame-strip probe (2026-10-29, "the explosion and the gib do not feel connected").
 - `webgpu/game-seams-boot.ts` — The window.__sdfGame boot and frame diagnostics: backend, tiles, frame hash, pass timings, draw counts, frame cap and shadow toggles.
 - `webgpu/game-seams-debris.ts` — Debris seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 9): where every loose piece a fight leaves behind…
 - `webgpu/game-seams-debug-probe.ts` — Debug probe and world inspection seams, lifted verbatim out of the window.__sdfGame object literal in game-main.ts.
@@ -825,6 +826,7 @@ Gib parts, launch, tearing, entrails, strands.
 - `gib-launch.ts` — WHERE A GIB PIECE COMES FROM, PHYSICALLY — the active lab's replacement for the correlated radial concussion shove the owner reported as "pieces…
 - `gib-look-tuning.ts` — ONE constant, shared by the GPU march shader and the CPU bake so the two cannot drift: the fraction of a piece's gore a HEAD's non-face exterior…
 - `gib-parts.ts` — THE PIECE SET — what a body actually becomes when a blast takes it apart.
+- `gib-switch.ts` — THE LIVE-BODY -> GIB SWITCH (owner 2026-10-29: "explosion -> enemy damaged -> gibbed does not read as one sequence", mostly with dynamite that lands…
 - `gib-tear.ts` — THE RUPTURE WINDOW — the body coming apart BEFORE it becomes chunks.
 - `gobs.ts` — Amorphous gib shapes (spec: gobs-and-goo §1).
 - `gore-parts.ts` — PROCEDURAL GORE PARTS: chunky meat and classic bones.

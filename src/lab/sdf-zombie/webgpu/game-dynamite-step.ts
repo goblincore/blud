@@ -10,6 +10,7 @@
 import type { GameContext } from './game-context';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { FLIGHT_TUNING, detonated as flightDetonated, stepFlight } from '../dynamite-flight';
+import { GIB_SWITCH_BEAT_GAIN } from '../gib-switch';
 import { EXPLOSION_PROFILE, resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { chargeFraction, stepCook, type CookSignal } from '../fpv';
 import { type Vec3 } from '../types';
@@ -136,6 +137,12 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: 
         // are RESERVED out of `gibBudget()` until release, so the preview is
         // the shape that will spawn and a later blast cannot spend its slots.
         const chosen = scheduleGib(ctx, a, at, pb.falloff, gibAllowance(ctx, remaining, condemnedLeft));
+        // THE HIT BEAT (`?gibswitch=beat`): the doomed body takes the survivor's blast REACTION — root knock and
+        // stagger lurch, no wounds, no meter — so the body that dies reacts at least as hard as one that lives.
+        // The rupture follows the moved pose (TearTuning.followPose) and the pieces spawn where it is drawn.
+        if (chosen && ctx.gibs.switchSteps.has('beat')) {
+          a.blast({ wounds: [], meterCredit: 0, impulse: pb.rigImpulse, gain: GIB_SWITCH_BEAT_GAIN, forceKnock: true });
+        }
         if (chosen) {
           remaining = gibDebit(ctx, remaining, chosen.reserve);
           condemnedLeft = Math.max(0, condemnedLeft - 1);

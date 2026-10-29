@@ -80,6 +80,12 @@ export function createBlastTraceSeams(ctx: GameContext) {
         pendingGibImpulses: ctx.gibs.pendingGibImpulses.length,
         pendingGibs: ctx.gibs.pendingGibs.length,
         recoilPitch: ctx.weapon.recoilPitch,
+        // The main camera's projection x view (column-major), so a probe can project the boxes above to pixels.
+        projView: (() => {
+          const cam = ctx.boot.handle.camera;
+          cam.updateMatrixWorld();
+          return new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse).toArray();
+        })(),
       };
     },
   };

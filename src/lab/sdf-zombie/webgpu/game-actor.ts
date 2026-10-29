@@ -610,6 +610,9 @@ export interface ActorBlastEffect {
    *  impulse's size cannot carry it — the reaction takes only its direction (unitOrZero). The flail's
    *  bigger shove (flail-impact.ts FLAIL_IMPACT_FEEL.zombie.reactionGain). */
   gain?: number;
+  /** The root knock even on a body that normally only staggers (a soldier): the doomed body's hit beat
+   *  (gib-switch.ts `beat`), which must read as a shove on every kind. Default false. */
+  forceKnock?: boolean;
 }
 
 export function createZombieActor(opts: {
@@ -2083,7 +2086,8 @@ export function createZombieActor(opts: {
       });
       if (soldierDamage) {
         mind.stagger(soldierStaggerDuration('medium'));
-      } else {
+      }
+      if (!soldierDamage || effect.forceKnock) {
         const l = Math.hypot(dirWorld[0], dirWorld[2]);
         if (l > 1e-6) {
           knockV = Math.max(knockV, BLAST_KNOCK_MPS * (effect.gain ?? 1));
@@ -2355,7 +2359,7 @@ export function createZombieActor(opts: {
     posed: () => posed,
     drawnBody: () => drawnPose(),
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
-      tear = { at: [...at] as Vec3, falloff, age: 0 };
+      tear = { at: [...at] as Vec3, falloff, age: 0, refPrims: posed.prims };
       tearPlan = plan;
       // The head split describes the CLEAN pose in world space, and rupturePosed spreads `posed`: it must not ride onto
       // the regions as they pull apart. The split closes here (the plan's pieces are the closed head's prims anyway),

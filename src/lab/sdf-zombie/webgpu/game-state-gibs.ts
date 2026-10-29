@@ -23,6 +23,7 @@ import type { Object3D } from 'three/webgpu';
 import type { Chunk } from '../gib-chunks';
 import type { GibBoneRelease, GibPlan } from '../gib-parts';
 import type { Vec3 } from '../types';
+import type { GibSwitchStep } from '../gib-switch';
 import type { BakedChunkMaterial } from './baked-chunks';
 import type { ZombieActor } from './game-actor';
 import type { GibAssetHeadFactory } from './gib-asset-head';
@@ -81,6 +82,8 @@ export interface GibsState {
   wounds: boolean;
   /** Rupture window in seconds (`?gibtear`, shipped 0.2). */
   tearSec: number;
+  /** The live-body -> gib switch steps on this boot (`?gibswitch=`, gib-switch.ts). */
+  switchSteps: ReadonlySet<GibSwitchStep>;
   /** The loaded sprite atlas, or null before `ensureGibAtlas` resolves. */
   atlas: GibSpriteAtlas | null;
   /** Which atlas the bench shows: `placeholder` (default) or the shipped `sheet`. */
@@ -148,6 +151,7 @@ export function makeGibsState(): GibsState {
     launchMode: 'notblood',
     wounds: false,
     tearSec: 0,
+    switchSteps: new Set<GibSwitchStep>(),
     atlas: null,
     atlasSource: 'placeholder',
     spriteAtlasWarned: false,

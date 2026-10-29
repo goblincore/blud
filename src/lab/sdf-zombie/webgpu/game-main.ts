@@ -193,6 +193,7 @@ import {
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { TEAR_TUNING } from '../gib-tear';
+import { GIB_SWITCH_TEAR_SEC, parseGibSwitch } from '../gib-switch';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
@@ -4558,7 +4559,11 @@ async function main() {
   // body is swapped for debris in the very frame the bundle goes off — and is
   // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
   // the agreed start.
-  ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
+  // THE LIVE -> GIB SWITCH steps (gib-switch.ts, `?gibswitch=beat,blood,launch,shade,timing`; `none` = the old
+  // switch). `timing` shortens the window to GIB_SWITCH_TEAR_SEC; an explicit `?gibtear=` still wins.
+  ctx.gibs.switchSteps = parseGibSwitch(DYN_PARAMS.get('gibswitch'));
+  ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 })
+    ?? (ctx.gibs.switchSteps.has('timing') ? GIB_SWITCH_TEAR_SEC : 0.2);
   /**
    * NON-RIGID SLOUGH multiplier (`?tearslough=`, 0..3, default 1). The rupture
    * deforms flesh endpoints rather than sliding rigid regions; this scales the
@@ -4586,6 +4591,8 @@ async function main() {
     headFollow: parseFloatParam(DYN_PARAMS.get('tearhead'), { min: 0, max: 1 }) ?? TEAR_TUNING.headFollow,
     neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
     recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
+    // THE HIT BEAT (`?gibswitch=beat`): the doomed body is struck back like a survivor (gib-switch.ts).
+    ...(ctx.gibs.switchSteps.has('beat') ? { followPose: true } : {}),
   };
   // Owner-approved optical wave defaults; URL flags retain off/on A/B control.
   ctx.vfx.blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;

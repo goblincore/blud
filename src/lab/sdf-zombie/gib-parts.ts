@@ -995,6 +995,20 @@ export function displaceGibPieces(
 }
 
 /**
+ * CARRY each piece's pivot (`origin`, `tornAt`) by the pose's per-region travel since the plan was cut
+ * (gib-tear.ts `regionDrift`; the `beat` step's shoved body). The prims are not touched: on the rupture path
+ * they are already the drawn geometry (`retargetGibPieces`). No drift: the pieces unchanged.
+ */
+export function carryGibPieces(pieces: readonly GibPiece[], drift?: readonly Vec3[]): GibPiece[] {
+  if (!drift) return pieces as GibPiece[];
+  return pieces.map((g, i) => {
+    const d = drift[i];
+    if (!d || (d[0] === 0 && d[1] === 0 && d[2] === 0)) return g;
+    return { ...g, origin: add(g.origin, d), tornAt: g.tornAt.map(p => add(p, d)) };
+  });
+}
+
+/**
  * RE-TARGET a plan's pieces onto the geometry the body was LAST DRAWN with.
  *
  * WHY THIS EXISTS (2026-09-16, the non-rigid slough). The rupture no longer

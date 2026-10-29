@@ -13,7 +13,7 @@ import { spawnImpactGout } from '../blood-sim';
 import { type BuildResult } from '../build-body';
 import { concussionVelocity } from '../explosion-aoe';
 import { gibLaunchVelocity } from '../gib-launch';
-import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
+import { carryGibPieces, displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
 import { gibAll, gibAllPieces } from '../sever';
 import { type Vec3 } from '../types';
 import { type ZombieActor } from './game-actor';
@@ -65,7 +65,7 @@ export function spawnScheduledGibs(ctx: GameContext, dt: number): number {
     const planned = {
       pieces: frame
         ? displaceGibPieces(
-            retargetGibPieces(q.plan.pieces, frame.deformedPrims, frame.deformedBones),
+            carryGibPieces(retargetGibPieces(q.plan.pieces, frame.deformedPrims, frame.deformedBones), frame.drift),
             frame.offsets, frame.quats, frame.angVels)
         : q.plan.pieces,
       body: frame?.body ?? q.actor.posed(),
