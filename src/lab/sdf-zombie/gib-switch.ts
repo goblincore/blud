@@ -21,7 +21,7 @@ export type GibSwitchStep = 'beat' | 'blood' | 'launch' | 'shade' | 'timing';
 export const GIB_SWITCH_STEPS: readonly GibSwitchStep[] = ['beat', 'blood', 'launch', 'shade', 'timing'];
 
 /** What a page with no `?gibswitch=` gets: the steps that were judged to read right. */
-export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat', 'blood'];
+export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat', 'blood', 'launch'];
 
 /** The steps a `?gibswitch=` value turns on: absent or '' = DEFAULT_GIB_SWITCH, 'none', 'all', or a comma list
  *  (unknown names ignored). */

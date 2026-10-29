@@ -10,6 +10,7 @@ import { applyRig, bindRig } from './rig-bind';
 import { carryGibPieces, displaceGibPieces, gibPlan, retargetGibPieces } from './gib-parts';
 import { TEAR_TUNING, regionDrift, rupturePosed, type TearState } from './gib-tear';
 import { DEFAULT_GIB_SWITCH, GIB_SWITCH_STEPS, blastBloodPlacement, parseGibSwitch } from './gib-switch';
+import { GIB_BLAST_LAUNCH, gibBlastLaunchVelocity } from './gib-launch';
 import type { Primitive, Vec3 } from './types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)));
@@ -105,5 +106,32 @@ describe('blastBloodPlacement (blood)', () => {
     const { anchor, spray } = blastBloodPlacement([0, 1, 0], [0, 0.1, 0]);
     expect(anchor).toEqual([0, 1, 0]);
     expect(spray).toEqual([0, 1, 0]);
+  });
+});
+
+describe('gibBlastLaunchVelocity (launch)', () => {
+  const t: Vec3 = [0, 1.1, 0];
+  const keys = plan.pieces.map((p, i) => `${p.part ?? p.limb}#${i}`);
+  const origins = plan.pieces.map(p => [p.origin[0] - torso[0], p.origin[1] - torso[1] + 1.1, p.origin[2] - torso[2]] as Vec3);
+  const launch = (at: Vec3, falloff: number) => origins.map((o, i) =>
+    gibBlastLaunchVelocity({ key: keys[i]!, seed: 7, at, torso: t, origin: o, falloff }));
+  it('an offset blast blows the pieces away along the blast line, mostly sideways, still arcing', () => {
+    const vs = launch([-2, 0.15, 0], 0.54);
+    for (const v of vs) {
+      expect(v[0]).toBeGreaterThan(0);                       // away from the blast
+      expect(v[1]).toBeGreaterThanOrEqual(GIB_BLAST_LAUNCH.minUpMps);
+    }
+    const mean = (k: number) => vs.reduce((s, v) => s + v[k]!, 0) / vs.length;
+    expect(mean(0)).toBeGreaterThan(mean(1));                  // more sideways than up (the old launch: 3 vs 6)
+  });
+  it('is faster the nearer the blast, and a direct hit bursts in all directions', () => {
+    const spd = (vs: Vec3[]) => vs.reduce((s, v) => s + Math.hypot(...v), 0) / vs.length;
+    expect(spd(launch([-1.5, 0.15, 0], 0.67))).toBeGreaterThan(spd(launch([-2.3, 0.15, 0], 0.47)));
+    const direct = launch([0, 0.15, 0], 0.97);
+    const ang = direct.map(v => Math.atan2(v[2], v[0]));
+    expect(Math.max(...ang) - Math.min(...ang)).toBeGreaterThan(Math.PI);  // spread round the body, not a column
+  });
+  it('is deterministic', () => {
+    expect(launch([-2, 0.15, 0], 0.5)).toEqual(launch([-2, 0.15, 0], 0.5));
   });
 });

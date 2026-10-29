@@ -12,7 +12,7 @@ import { EXPLOSION_LAUNCH, EXPLOSION_STANDARD } from '../../../game/gibs/tuning'
 import { spawnImpactGout } from '../blood-sim';
 import { type BuildResult } from '../build-body';
 import { concussionVelocity } from '../explosion-aoe';
-import { gibLaunchVelocity } from '../gib-launch';
+import { gibBlastLaunchVelocity, gibLaunchVelocity } from '../gib-launch';
 import { GIB_SWITCH_BLOOD, blastBloodPlacement } from '../gib-switch';
 import { carryGibPieces, displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
 import { gibAll, gibAllPieces } from '../sever';
@@ -200,9 +200,14 @@ export function gibActor(ctx: GameContext,
     at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale);
   // `?giblaunch=radial` is the labelled CONTROL: the old per-piece radial
   // shove, kept only so a normal-speed A/B can be captured side by side.
+  // `?gibswitch=launch`: the shared shove is shaped by the blast instead (gib-launch.ts gibBlastLaunchVelocity) —
+  // away along the blast line far out, a burst out of the body point-blank, low up floor.
+  const blastShaped = ctx.gibs.switchSteps.has('launch') && ctx.gibs.launchMode !== 'radial';
   const launchFor = (key: string, origin: Vec3): Vec3 => ctx.gibs.launchMode === 'radial'
     ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale)
-    : gibLaunchVelocity({ key, seed: ctx.demo.seed, bodyVel: coherentVel });
+    : blastShaped
+      ? gibBlastLaunchVelocity({ key, seed: ctx.demo.seed, at, torso: torsoC, origin, falloff })
+      : gibLaunchVelocity({ key, seed: ctx.demo.seed, bodyVel: coherentVel });
   // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
   // explosion starts moving first, so the blast reads as ripping outward
   // through the body. It no longer decides what survives — the budget was
