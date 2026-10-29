@@ -59,8 +59,9 @@ import { stepVoid } from './game-void';
 import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
 import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
-import { carryFreshShots, expired, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
-import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
+import { carryFreshShots, expired, GRAPESHOT, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
+import { shotFixEnabled, traceField } from '../body-field';
+import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
 import { headShape } from './game-zombie-face';
@@ -924,7 +925,9 @@ export function tick(ctx: GameContext, dt: number) {
       // levels keep their order: chunks, then the y 0.02 floor kill (see the ORDER comments).
       let wallHit = false;
       if (!dead && sectorLevel) {
+        const st = ctx.telemetry.telemetry.begin();
         const h = sectorWorldHit(ctx, from, p.pos);
+        ctx.telemetry.telemetry.end('hit:sector', st);
         if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
       }
       // BARRELS (plan 3b Task 14): the cut segment's first standing drum cuts it as the wall does, at the contact
@@ -1009,6 +1012,7 @@ export function tick(ctx: GameContext, dt: number) {
         // player's 80 m/s pellets step 1.3 m a frame (2.7 m at 30 Hz), clean through a 0.3 m outer wall.
         // The cut segment is what the actor test below reads, so a body behind the wall is not hit.
         let boxHit: Vec3 | null = null, boxD2 = Infinity;
+        const bt = ctx.telemetry.telemetry.begin();
         for (const b of ctx.world.colliders) {
           if (pelletDrumBoxes?.has(b)) continue;        // a drum's box: the drum test above is its collision
           const h = segmentBoxHit(from, p.pos, b.min, b.max);
@@ -1016,6 +1020,7 @@ export function tick(ctx: GameContext, dt: number) {
           const d2 = (h[0] - from[0]) ** 2 + (h[1] - from[1]) ** 2 + (h[2] - from[2]) ** 2;
           if (d2 < boxD2) { boxD2 = d2; boxHit = h; }
         }
+        ctx.telemetry.telemetry.end('hit:boxes', bt);
         if (boxHit) { p.pos = boxHit; wallHit = true; }
       }
       if (!dead) {
@@ -1024,19 +1029,25 @@ export function tick(ctx: GameContext, dt: number) {
         let bestDist = Infinity;
         let hitActor: ZombieActor | null = null;
         let hitPoint: Vec3 | null = null;
+        const tt = ctx.telemetry.telemetry.begin();
         for (const a of ctx.world.actors) {
           const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
           if (!c) continue;
           // Segment-to-centre distance (clamped closest approach).
           if (segmentPointDistance(from, p.pos, c) > 1.35) continue;
           const posedA = a.posed();
-          const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));
+          // body-field.ts traceField: the same landing as sdBody, folding only near the body (?shotfix=0: sdBody).
+          const field = traceField(posedA, GRAPESHOT.hitEps);
+          const hp = traceProjectile(from, p.pos, field);
           if (!hp) continue;
           const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
+        ctx.telemetry.telemetry.end('hit:trace', tt);
         // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
+        const sk = ctx.telemetry.telemetry.begin();
         skullPasses(ctx, p, from, hitActor, hitPoint);
+        ctx.telemetry.telemetry.end('hit:skull', sk);
         if (hitActor && hitPoint) {
           const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
           const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
@@ -1051,15 +1062,21 @@ export function tick(ctx: GameContext, dt: number) {
           // path (impact: the eyes near the hit are ejected, the plate under it is damaged) is for the rounds the
           // leaf declines (every pellet, an imprecise slug, a slug from too far, not the head, not the zombie), which
           // then take the ordinary wound below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
+          const hs = ctx.telemetry.telemetry.begin();
           const burstHandled = !!ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind);
+          ctx.telemetry.telemetry.end('hit:headshot', hs);
           if (!burstHandled && ctx.render.segMeshRenderer) {
+            const sm = ctx.telemetry.telemetry.begin();
             const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
             if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
+            ctx.telemetry.telemetry.end('hit:segmesh', sm);
           }
+          const ah = ctx.telemetry.telemetry.begin();
           const stamped = burstHandled ? null
             : p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN, p.shot)
               : hitActor.hit(hitPoint, dirN, p.shot);
+          ctx.telemetry.telemetry.end('hit:actor', ah);
           ctx.telemetry.telemetry.end('wound-hit', hitTiming);
           if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
             actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
@@ -1068,11 +1085,17 @@ export function tick(ctx: GameContext, dt: number) {
             woundCount: hitActor.wounds().length,
           });
           if (stamped) {
+            const bl = ctx.telemetry.telemetry.begin();
             registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            ctx.telemetry.telemetry.end('hit:bleed', bl);
+            const fl = ctx.telemetry.telemetry.begin();
             throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
+            ctx.telemetry.telemetry.end('hit:flesh', fl);
           }
           // A kit eye in the line of fire pops; a dangling one snaps (game-kit-eye.ts; profile.eye only).
+          const ke = ctx.telemetry.telemetry.begin();
           if (!burstHandled) ctx.boot.kitEye?.hit(hitActor, hitPoint, dirN);
+          ctx.telemetry.telemetry.end('hit:kiteye', ke);
           dead = true;
         }
       }
@@ -1085,14 +1108,18 @@ export function tick(ctx: GameContext, dt: number) {
       if (dead) ctx.weapon.pellets.splice(i, 1);
     }
     // ADRENALINE: a round on an actor this frame (not a drum, a gib or a wall) starts or refreshes the rush.
+    const ad = ctx.telemetry.telemetry.begin();
     if (hitThisFrame.size > 0) triggerAdrenalineRush(ctx, 'shot');
+    ctx.telemetry.telemetry.end('hit:adrenaline', ad);
     const flushTiming = ctx.telemetry.telemetry.begin();
     for (const a of hitThisFrame) a.endHits();
     if (ctx.telemetry.telemetry.active) for (const a of hitThisFrame) ctx.telemetry.telemetry.event('actor-wounds', {
       actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(ctx, a, w)),
       aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
     });
+    const sc = ctx.telemetry.telemetry.begin();
     ctx.world.soldierCorpses?.update(ctx.world.actors,0); // restore damaged snapshots before this draw
+    ctx.telemetry.telemetry.end('hit:corpses', sc);
     ctx.telemetry.telemetry.end('wound-flush', flushTiming);
     ctx.telemetry.telemetry.end('projectiles-and-hits', projectileTiming);
     ctx.telemetry.telemetry.lap('region', 'tick:post-hits');
@@ -1303,7 +1330,9 @@ export function tick(ctx: GameContext, dt: number) {
     ctx.boot.meatGib?.prewarm();
     // Kit meshes, then level meshes (game-level-prewarm.ts): never two first builds in one frame.
     const kitBuilt = ctx.boot.kitPrewarm?.step() ?? false;
-    ctx.boot.levelPrewarm?.step(!kitBuilt);
+    // The pellet tracers' pipelines (game-weapon-rig.ts prewarmTracer), on a step the kit warm built nothing.
+    const tracerBuilt = !kitBuilt && shotFixEnabled() && prewarmTracer(ctx);
+    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

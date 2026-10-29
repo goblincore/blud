@@ -428,6 +428,33 @@ export function placeTracer(ctx: GameContext, v: TracerView, p: Projectile, eye:
   setQuadMatrix(ctx, v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
 }
 
+/**
+ * TRACER PRE-WARM (shot frame pass, 2026-10-29). The tracers' one pipeline pair (additive, double-sided: three draws a
+ * transparent double-sided mesh twice, back faces then front, one pipeline each) was built the first frame a
+ * pellet was still in flight when the effects overlay drew: on E1M1, whose first pellet step starts at the eye and
+ * reaches nothing, that was the frame the volley hit (2 sync builds, 3-4 ms). Drawn once instead, with a real pooled
+ * view, while nothing is in flight: the streak and the ember shown at opacity 0 and a near-zero scale far under the
+ * floor, for one step (the pellet sync hides them again the next). Called after the pellet sync; `?shotfix=0` skips it.
+ * Returns true on the step it drew.
+ */
+const tracerWarm = new WeakMap<GameContext, 'shown' | 'done'>();
+export function prewarmTracer(ctx: GameContext): boolean {
+  const state = tracerWarm.get(ctx);
+  if (state === 'done') return false;
+  if (state === 'shown') { tracerWarm.set(ctx, 'done'); return false; }
+  if (ctx.weapon.pellets.length > 0) return false;   // a live round draws (and builds) them itself
+  if (ctx.weapon.pelletViews.length === 0) ctx.weapon.pelletViews.push(newTracerView(ctx));
+  const v = ctx.weapon.pelletViews[0]!;
+  for (const m of [v.streak, v.ember]) {
+    (m.material as THREE.MeshBasicMaterial).opacity = 0;
+    m.matrix.makeScale(1e-6, 1e-6, 1e-6).setPosition(0, -1000, 0);
+    m.matrixWorldNeedsUpdate = true;
+    m.visible = true;
+  }
+  tracerWarm.set(ctx, 'shown');
+  return true;
+}
+
 export function hideTracer(ctx: GameContext, v: TracerView): void {
   v.streak.visible = false;
   v.ember.visible = false;
