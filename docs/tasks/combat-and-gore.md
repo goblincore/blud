@@ -2,6 +2,17 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Gore at scale and the blast-to-gib link — owner notes 2026-10-29
+
+- [ ] **Gore at scale.** Not urgent now, but rockets and groups of enemies will mean far more blood and gibs at once.
+  Starting points from the 2026-10-29 shot/gore passes (hand-off note `docs/dev-notes/2026-10-24-sector-levels-handoff.md`):
+  the shutter seed raster on the CPU (0.8–2.7 ms a frame on E1M1 while blood flies; a GPU raster would also drop the
+  upload but is not bit-identical, needs a look A/B); GPU compute particles for droplets; pool misses on later volleys.
+- [ ] **The blast → damage → gib sequence doesn't read as connected**, mostly with dynamite, where the explosion is often
+  off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
+  partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
+  (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
