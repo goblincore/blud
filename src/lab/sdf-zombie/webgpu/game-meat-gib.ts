@@ -15,6 +15,9 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
+import type { GoreTuning } from '../gore-tuning';
+import { FLESH_BITS } from '../flesh-bits';
+import { shotFixEnabled } from '../body-field';
 
 export const MEAT_GLB = '/assets/lab/meat-chunks.glb';
 
@@ -37,6 +40,20 @@ export const MEAT_LOOK = {
 
 /** Size buckets (m) for the baked-scale geometry copies. */
 const SIZE_STEP = 0.02;
+/** The drawn size bucket of a chunk thrown at SDF-bit radius `r`. */
+export function meatSize(r: number): number {
+  return Math.max(SIZE_STEP, Math.round(r * MEAT_LOOK.sizePerRadius / SIZE_STEP) * SIZE_STEP);
+}
+/** Every size bucket a body's gun craters can throw (flesh-bits.ts: radius FLESH_BITS.size x the kind's scale). */
+export function meatSizesFor(gore: GoreTuning | null | undefined): number[] {
+  const out = new Set<number>();
+  for (const c of Object.values(gore?.chunks ?? {})) {
+    if (!c) continue;
+    const lo = meatSize(FLESH_BITS.size[0] * c.scale), hi = meatSize(FLESH_BITS.size[1] * c.scale);
+    for (let s = lo; s <= hi + 1e-9; s += SIZE_STEP) out.add(meatSize(s / MEAT_LOOK.sizePerRadius));
+  }
+  return [...out];
+}
 
 export interface MeatGibLeaf {
   /** Throw one torn chunk from `pos` with `vel` and `angVel`, `r` the size an SDF bit would have had. False: the GLB
@@ -117,6 +134,9 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
     prewarm() {
       if (warmMesh) { ctx.boot.deferredApi?.router.unregister(warmMesh); warmMesh.removeFromParent(); warmMesh = null; }
       if (variants.length === 0 || !base) return;
+      // THE SCALED COPIES TOO (shot frame pass, 2026-10-29): each new size bucket cloned and scaled its variant's
+      // geometry and uploaded the buffers in the frame of the hit (~1.7 ms for one E1M1 soldier volley). Once every
+      // room list is warm, one missing copy a step is built and drawn here (below). `?shotfix=0` leaves them to the hit.
       for (const a of ctx.world.actors) {
         const pos = a.pose().pos;
         const list = ctx.boot.deferredMode ? null : deps.lightsAt(pos);
@@ -133,6 +153,25 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
         warmMesh = m;
         return;
       }
+      if (!shotFixEnabled()) return;
+      for (const a of ctx.world.actors) {
+        for (const size of meatSizesFor(a.gore)) {
+          for (let v = 0; v < variants.length; v++) {
+            if (scaledCache.has(`${v}:${size.toFixed(3)}`)) continue;
+            const pos = a.pose().pos;
+            const m = new THREE.Mesh(scaled(v, size), materialFor(pos));
+            m.name = 'meat-warm';
+            m.position.set(0, -1000, 0);
+            m.scale.setScalar(1e-6);
+            m.frustumCulled = false;
+            m.castShadow = false; m.receiveShadow = false;
+            ctx.boot.handle.scene.add(m);
+            ctx.boot.deferredApi?.router.register(m, 'mesh', 'level-only');
+            warmMesh = m;
+            return;
+          }
+        }
+      }
     },
     throw(pos, vel, angVel, r, from) {
       if (variants.length === 0 || !base || !ctx.boot.spawnMeshGib) return false;
@@ -141,7 +180,7 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
       // The SIZE is baked into the geometry: spawnMeshGib writes the object's whole matrix (position, squash,
       // rotation; no scale) and the deferred router registers the object itself as a mesh, so neither a scaled mesh
       // nor a scaling parent survives. Sizes snap to SIZE_STEP buckets so the scaled copies stay few and shared.
-      const size = Math.max(SIZE_STEP, Math.round(r * MEAT_LOOK.sizePerRadius / SIZE_STEP) * SIZE_STEP);
+      const size = meatSize(r);
       const mesh = new THREE.Mesh(scaled(v, size), materialFor(pos));
       mesh.name = 'meat-gib';
       mesh.castShadow = false;
