@@ -93,6 +93,31 @@ EMITTER_LIGHT_SPACING_M = 6.0    # two lights of one family stand at least this 
 EMITTER_LIGHT_MIN_GAP_M = 2.5    # and any two emitter lights this far (the alcove's screens and strips: one light)
 CEIL_DROP_M = 0.35
 EMITTER_LIGHT_MAX_Y_M = 2.4
+# Emitter PUSH (owner 2026-10-29, after the B1 sheet: "push the screens and exit signs harder"). Two of the
+# runtime's ?emitpush= steps are placement, so the converter writes the lights for every on/off combination of
+# them and tags a light that is not in all four with `push`: the combos it is in (PUSH_COMBOS names). The game
+# keeps a tagged light only when its combo is listed (level-json.ts, emit-push.ts), so ?emitpush=none boots
+# exactly the B1 lights. The third step (key) is runtime only.
+#  - spill: screen banks get one light per (sector, facing) wall group, not one per sector at the area-weighted
+#    middle of a whole room's walls (E1M1's computer room: one light 6 m from every bank), for each group of at
+#    least SPILL_GROUP_MIN_M2 (a sector with none keeps its one light), at a higher power (SPILL_SCREEN_LIGHT);
+#    spacing is judged within a zone only (lights never cross zones, so two lights either side of a zone line
+#    do not double up). The per-zone cap stays MAX_EMITTER_LIGHTS_PER_ZONE; the total cap is
+#    MAX_EMITTER_LIGHTS_PUSH with either step on.
+#  - exit: each exit sign's light hangs low in front of it (a wall sign: EXIT_OUT_M out; a hanging box: its
+#    sector's fill point), EXIT_DROP_M below its bottom edge and at least EXIT_MIN_Y_M over the floor, at
+#    EXIT_POWER; signs skip the min gap (a sign next to a troffer keeps both) and any fluorescent light within
+#    EXIT_DIM_M of a sign in its zone runs at EXIT_FLUORO_DIM.
+PUSH_COMBOS = ("none", "spill", "exit", "spill+exit")
+SPILL_SCREEN_LIGHT = {"base": 8.0, "per_m2": 0.2, "cap": 30.0}
+SPILL_GROUP_MIN_M2 = 20.0        # a facing group this big (reference scale) earns its own light
+MAX_EMITTER_LIGHTS_PUSH = 15     # spill + exit on E1M1: 15 (the shared list holds 32, light-list.ts LIST_CAP: 13 fill / pool + 15)
+EXIT_POWER = 50.0
+EXIT_OUT_M = 0.6
+EXIT_DROP_M = 0.5
+EXIT_MIN_Y_M = 1.2
+EXIT_DIM_M = 6.0
+EXIT_FLUORO_DIM = 0.7
 EXIT_DEPTH_M = 0.8               # the exit trigger reaches this far in front of the switch line
 EXIT_HEIGHT_M = 2.0
 
@@ -504,8 +529,10 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                            "mood": "fire", "fixture": "none"})
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
-    emitter_lights = _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, m / REFERENCE_UNITS_PER_M)
-    lights.extend(emitter_lights)
+    push_sets = {c: _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, m / REFERENCE_UNITS_PER_M,
+                                    spill="spill" in c.split("+"), exit_push="exit" in c.split("+")) for c in PUSH_COMBOS}
+    emitter_lights = push_sets["none"]
+    lights.extend(_merge_push(push_sets))
 
     # Things: monsters, pickups and barrels at their sector's floor; ids from the THINGS index, so stable.
     skill_bit = SKILL_BITS[skill]
@@ -592,6 +619,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "doors_left_open": doors_left_open,
              "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
              "emitter_lights": len(emitter_lights),
+             "emitter_lights_by_push": {c: len(v) for c, v in push_sets.items()},
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
              "override_sectors": sector_patches, "override_spawns": override_spawns}
@@ -671,21 +699,66 @@ def _emitter_walls(out_sectors, out_lines, verts_m):
     return out
 
 
-def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, to_ref: float = 1.0) -> list[dict]:
+def _facing_group(fam: str, a, b, spill: bool) -> int:
+    """The wall group key's facing part: one group per sector and family (-1), or with the spill push a screen
+    bank's walls grouped by which of 8 compass directions they face (a U of banks: three lights, not one in the
+    room's middle)."""
+    if not (spill and fam == "screen-bank"):
+        return -1
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    return int(round(math.atan2(dx, -dz) / (math.pi / 4))) % 8
+
+
+def _spill_groups(groups: dict, to_ref: float) -> dict:
+    """The spill push's screen-bank groups: a sector's facing groups of at least SPILL_GROUP_MIN_M2 (at the
+    reference scale) each earn a candidate; the smaller ones earn none (the baked bounce still lights from
+    them). A sector with no group that big keeps its one per-sector group, as without the push."""
+    def area(quads):
+        return sum(math.hypot(b[0] - a[0], b[1] - a[1]) * (y1 - y0) for a, b, y0, y1 in quads) * to_ref ** 2
+    out: dict = {}
+    by_sector: dict[int, list] = {}
+    for key, quads in groups.items():
+        if key[2] < 0:
+            out[key] = quads
+        else:
+            by_sector.setdefault(key[0], []).append((key, quads))
+    for sec, items in by_sector.items():
+        big = [(k, q) for k, q in items if area(q) >= SPILL_GROUP_MIN_M2]
+        if big:
+            out.update(big)
+        else:
+            out[(sec, items[0][0][1], -1)] = [q for _, qs in items for q in qs]
+    return out
+
+
+def _sector_of_point(px: float, pz: float, sector_segs, bbox) -> int:
+    for i, segs in enumerate(sector_segs):
+        x0, z0, x1, z1 = bbox[i]
+        if x0 <= px <= x1 and z0 <= pz <= z1 and _inside(px, pz, segs):
+            return i
+    return -1
+
+
+def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, to_ref: float = 1.0,
+                    spill: bool = False, exit_push: bool = False) -> list[dict]:
     """Cheap coloured lights for the strongest emitter surfaces (EMITTER_LIGHTS): one candidate per
     (sector, family) of wall quads, standing out_m in front of their area-weighted middle at their mean
     height, and one per fluorescent ceiling, CEIL_DROP_M under it; ranked by area x weight, at most
     MAX_EMITTER_LIGHTS, MAX_EMITTER_LIGHTS_PER_ZONE per zone, EMITTER_LIGHT_SPACING_M apart per family.
     `to_ref` turns real metres into metres at REFERENCE_UNITS_PER_M: min_m2, out_m and the spacings are
     read there (the same picks at the same Doom spots at any world scale); the heights over the floor
-    (bodies' scale) and the powers (real area) stay real."""
-    groups: dict[tuple[int, str], list] = {}
+    (bodies' scale) and the powers (real area) stay real. `spill` and `exit_push` are the PUSH steps
+    (PUSH_COMBOS, above)."""
+    groups: dict[tuple[int, str, int], list] = {}
     for fam, sec, a, b, y0, y1 in _emitter_walls(out_sectors, out_lines, verts_m):
-        groups.setdefault((sec, fam), []).append((a, b, y0, y1))
+        groups.setdefault((sec, fam, _facing_group(fam, a, b, spill)), []).append((a, b, y0, y1))
+    if spill:
+        groups = _spill_groups(groups, to_ref)
     cands = []
-    for (sec, fam), quads in groups.items():
+    for (sec, fam, _), quads in groups.items():
         spec = EMITTER_LIGHTS[fam]
         tot = cx = cz = cy = nx = nz = 0.0
+        ylo = math.inf
         for a, b, y0, y1 in quads:
             dx, dz = b[0] - a[0], b[1] - a[1]
             ln = math.hypot(dx, dz)
@@ -696,11 +769,29 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, to
             cy += w * (y0 + y1) / 2
             nx += w * -dz / ln
             nz += w * dx / ln
+            ylo = min(ylo, y0)
         if tot * to_ref ** 2 < spec["min_m2"]:
             continue
         cx, cz, cy = cx / tot, cz / tot, cy / tot
         nl = math.hypot(nx, nz)
         s = out_sectors[sec]
+        if exit_push and fam == "exit-sign":
+            # Low and in front of the sign: a wall sign, EXIT_OUT_M out from its middle; a hanging box (its faces
+            # face every way, the normals cancel) at its sector's fill point (the box is often a door's lintel:
+            # under its middle the light would sit against the door). Whatever sector that point is in.
+            if nl > 0.5 * tot:
+                k = EXIT_OUT_M / to_ref
+                pt2 = (cx + nx / nl * k, cz + nz / nl * k)
+            else:
+                pt2 = _fill_point(sector_segs[sec], bbox[sec]) if area[sec] > 0 else None
+            under = _sector_of_point(pt2[0], pt2[1], sector_segs, bbox) if pt2 else -1
+            if under >= 0:
+                px, pz = pt2
+                u = out_sectors[under]
+                y = max(u["floor"] + EXIT_MIN_Y_M, min(ylo - EXIT_DROP_M, u["ceil"] - 0.2))
+                # Ranked as before (signs first: weight 30); the placement sector is the one it hangs in.
+                cands.append((round(tot * to_ref ** 2 * spec["weight"], 1), under, fam, tot, (px, y, pz)))
+                continue
         pt = None
         # Out from the walls along their mean normal (none for a room lined with them: the middle itself).
         for k in ((1.0, 0.6, 0.3, 0.0) if nl > 1e-6 else (0.0,)):
@@ -728,21 +819,58 @@ def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area, to
     cands.sort(key=lambda c: (-c[0], c[1], c[2]))
     picked: list[dict] = []
     per_zone: dict[int, int] = {}
-    placed: list[tuple[str, tuple]] = []
+    placed: list[tuple[str, tuple, int]] = []
+    cap = MAX_EMITTER_LIGHTS_PUSH if (spill or exit_push) else MAX_EMITTER_LIGHTS
     for _, sec, fam, tot, pos in cands:
-        if len(picked) >= MAX_EMITTER_LIGHTS:
+        if len(picked) >= cap:
             break
         zone = out_sectors[sec]["zone"]
         if per_zone.get(zone, 0) >= MAX_EMITTER_LIGHTS_PER_ZONE:
             continue
-        if any(math.hypot(p[0] - pos[0], p[2] - pos[2]) * to_ref < (EMITTER_LIGHT_SPACING_M if f == fam else EMITTER_LIGHT_MIN_GAP_M) for f, p in placed):
+
+        def clash(f, p, z):
+            if spill and z != zone:
+                return False
+            if exit_push and f != fam and "exit-sign" in (f, fam):
+                return False
+            gap = EMITTER_LIGHT_SPACING_M if f == fam else EMITTER_LIGHT_MIN_GAP_M
+            return math.hypot(p[0] - pos[0], p[2] - pos[2]) * to_ref < gap
+        if any(clash(f, p, z) for f, p, z in placed):
             continue
         spec = EMITTER_LIGHTS[fam]
+        if spill and fam == "screen-bank":
+            spec = {**spec, **SPILL_SCREEN_LIGHT}
+        if exit_push and fam == "exit-sign":
+            spec = {**spec, "base": EXIT_POWER, "per_m2": 0.0, "cap": EXIT_POWER}
         picked.append({"pos": [round(pos[0], 3), round(pos[1], 3), round(pos[2], 3)], "color": list(spec["color"]),
                        "power": round(min(spec["cap"], spec["base"] + spec["per_m2"] * tot), 2), "mood": "glow", "fixture": "none"})
         per_zone[zone] = per_zone.get(zone, 0) + 1
-        placed.append((fam, pos))
+        placed.append((fam, pos, zone))
+    if exit_push:
+        signs = [(p, z) for f, p, z in placed if f == "exit-sign"]
+        for li, (f, p, z) in zip(picked, placed):
+            if f == "fluorescent" and any(sz == z and math.hypot(sp[0] - p[0], sp[2] - p[2]) * to_ref < EXIT_DIM_M for sp, sz in signs):
+                li["power"] = round(li["power"] * EXIT_FLUORO_DIM, 2)
     return picked
+
+
+def _merge_push(sets: dict[str, list[dict]]) -> list[dict]:
+    """One light list from the per-combo ones (PUSH_COMBOS order, each light where it first appears): a light in
+    every combo as it was, any other tagged `push` with the combos it is in."""
+    order: list[str] = []
+    seen: dict[str, tuple[dict, list[str]]] = {}
+    for combo in PUSH_COMBOS:
+        for li in sets[combo]:
+            key = json.dumps(li, sort_keys=True)
+            if key not in seen:
+                seen[key] = (li, [])
+                order.append(key)
+            seen[key][1].append(combo)
+    out = []
+    for key in order:
+        li, combos = seen[key]
+        out.append(dict(li) if len(combos) == len(PUSH_COMBOS) else {**li, "push": combos})
+    return out
 
 
 def _line_walls(ln, sides, out_sectors) -> dict:
@@ -825,7 +953,7 @@ def main() -> None:
     zones = len({s["zone"] for s in level["sectors"]})
     doors = level.get("doors", [])
     print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {len(doors)} doors"
-          f" (sectors {[d['sector'] for d in doors]}; left open: {stats['doors_left_open']}), {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter)"
+          f" (sectors {[d['sector'] for d in doors]}; left open: {stats['doors_left_open']}), {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter; by push combo {stats['emitter_lights_by_push']})"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
     print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {stats['barrels']} barrels, {len(level['triggers'])} exit triggers"
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")

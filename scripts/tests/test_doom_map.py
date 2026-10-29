@@ -416,9 +416,14 @@ def test_no_emitters_no_emitter_lights(tmp_path):
     assert not [li for li in convert(tmp_path)["lights"] if li.get("mood") == "glow"]
 
 
+def _combo(out: dict, combo: str) -> list[dict]:
+    """The glow (emitter) lights the game boots for one emitter-push combo (emit-push.ts keepPushedLight)."""
+    return [li for li in out["lights"] if li.get("mood") == "glow" and combo in li.get("push", doom_map.PUSH_COMBOS)]
+
+
 def test_screen_bank_walls_get_a_cheap_teal_light_in_front_of_them(tmp_path):
     out = _convert_bytes(tmp_path, build_wad().replace(name8("STARTAN3"), name8("COMPUTE2")))
-    glow = [li for li in out["lights"] if li.get("mood") == "glow"]
+    glow = _combo(out, "none")
     assert len(glow) == 1
     li = glow[0]
     assert li["color"] == doom_map.EMITTER_LIGHTS["screen-bank"]["color"] and li["fixture"] == "none"
@@ -430,9 +435,57 @@ def test_screen_bank_walls_get_a_cheap_teal_light_in_front_of_them(tmp_path):
 
 def test_a_fluorescent_ceiling_gets_a_cold_light_under_it(tmp_path):
     out = _convert_bytes(tmp_path, build_wad().replace(name8("CEIL3_5"), name8("TLITE6_5")))
-    glow = [li for li in out["lights"] if li.get("mood") == "glow"]
+    glow = _combo(out, "none")
     assert len(glow) == 1
     li = glow[0]
     assert li["color"] == doom_map.EMITTER_LIGHTS["fluorescent"]["color"]
     assert li["pos"][1] == round(out["sectors"][0]["ceil"] - doom_map.CEIL_DROP_M, 3)
     assert _inside(out, li["pos"][0], li["pos"][2], 0)
+
+
+def test_spill_push_lights_each_screen_wall_facing_and_stronger(tmp_path):
+    # A's south, west and north walls (8 x 4 m each, 32 m^2 at 32 units/m: over SPILL_GROUP_MIN_M2) are screen banks.
+    out = _convert_bytes(tmp_path, build_wad().replace(name8("STARTAN3"), name8("COMPUTE2")))
+    none, spill = _combo(out, "none"), _combo(out, "spill")
+    # The south and north walls' lights stand 6 m apart; the west wall's would be nearer than
+    # EMITTER_LIGHT_SPACING_M to both and is dropped.
+    assert len(none) == 1 and len(spill) == 2
+    assert all(li["push"] == ["none", "exit"] for li in none)       # B1's one light: only with spill off
+    assert all(li["push"] == ["spill", "spill+exit"] for li in spill)
+    assert sum(li["power"] for li in spill) > none[0]["power"]          # more light, nearer each bank
+    assert all(li["power"] <= doom_map.SPILL_SCREEN_LIGHT["cap"] for li in spill)
+    # One per wall, out_m in front of its own wall's middle (A: x -2..6, z -4..4; the start is the origin).
+    xs = sorted((round(li["pos"][0], 2), round(li["pos"][2], 2)) for li in spill)
+    out_m = doom_map.EMITTER_LIGHTS["screen-bank"]["out_m"]
+    assert xs == sorted([(2.0, 4 - out_m), (2.0, -4 + out_m)])
+    assert all(_inside(out, li["pos"][0], li["pos"][2], 0) for li in spill)
+
+
+def build_sign_wad(ceil_flat: str = "CEIL3_5") -> bytes:
+    """build_wad with A's south wall (line 0) on its own sidedef textured EXITSIGN; A's ceiling `ceil_flat`."""
+    verts = [(0, 0), (256, 0), (256, 256), (0, 256), (384, 0), (384, 256)]
+    sectors = [(0, 128, "FLOOR4_8", ceil_flat, 160, 0, 0), (16, 128, "NUKAGE1", "F_SKY1", 255, 7, 0)]
+    sides = [(0, 0, "-", "-", "STARTAN3", 0), (0, 0, "-", "STEP6", "-", 0), (0, 0, "-", "-", "-", 1),
+             (0, 0, "-", "-", "BROWN1", 1), (0, 0, "-", "-", "EXITSIGN", 0)]
+    lines = [(1, 0, 1, 0, 0, 4, 0xFFFF), (2, 1, 4, 0, 0, 1, 2), (3, 2, 1, 0, 0, 0, 0xFFFF), (0, 3, 1, 0, 0, 0, 0xFFFF),
+             (4, 1, 1, 0, 0, 3, 0xFFFF), (5, 4, 1, 0, 0, 3, 0xFFFF), (2, 5, 1, 0, 0, 3, 0xFFFF)]
+    return pack_wad(verts, sectors, sides, lines, [(64, 128, 0, 1, 7)])
+
+
+def test_exit_push_hangs_a_stronger_sign_light_under_and_in_front_of_the_sign(tmp_path):
+    out = _convert_bytes(tmp_path, build_sign_wad())
+    [old], [new] = _combo(out, "none"), _combo(out, "exit")
+    assert old["color"] == new["color"] == doom_map.EMITTER_LIGHTS["exit-sign"]["color"]
+    assert old["power"] == 1.5 and new["power"] == doom_map.EXIT_POWER
+    assert new["push"] == ["exit", "spill+exit"]
+    # The wall sign at z 4 faces into A (-z): the light stands EXIT_OUT_M in front of its middle, low.
+    assert new["pos"][0] == 2.0 and new["pos"][2] == round(4 - doom_map.EXIT_OUT_M, 3)
+    assert new["pos"][1] == round(out["sectors"][0]["floor"] + doom_map.EXIT_MIN_Y_M, 3)
+
+
+def test_exit_push_dims_a_fluorescent_light_near_a_sign(tmp_path):
+    out = _convert_bytes(tmp_path, build_sign_wad("TLITE6_5"))
+    fl = lambda combo: [li for li in _combo(out, combo) if li["color"] == doom_map.EMITTER_LIGHTS["fluorescent"]["color"]]
+    [plain], [dim] = fl("none"), fl("exit")
+    assert dim["power"] == round(plain["power"] * doom_map.EXIT_FLUORO_DIM, 2)
+    assert dim["pos"] == plain["pos"]
