@@ -201,6 +201,37 @@ for MAP28. `?batch=0` restores the old per-object path; `__sdfGame.setLevelBatch
   texture-array the kinds); per-door frames if MAP28 packs doors into one zone; three's per-object node/binding refresh
   is the floor (~15–20 µs an object here).
 
+**Emitter push: screens and exit signs harder (2026-10-29).** Owner brief after the B1 sheet; three steps, each
+alone behind `?emitpush=spill,exit,key` (no param = all three, `none` = the B1 look; pure `webgpu/emit-push.ts`).
+The converter writes the lights of every on/off combo of the two placement steps and tags a light not in all four
+with `push: [combos]` (level-json keeps the booted combo's), so the level JSON serves every variant.
+- **spill**: screen banks get one light per (sector, 8-way facing) wall group of >= 20 m² (ref scale; a sector with
+  none keeps its one light) instead of one at the area-weighted middle of a whole room (E1M1's computer room: one
+  light 6 m from every bank); power 8 + 0.2/m², cap 30 (`SPILL_SCREEN_LIGHT`); spacing judged within a zone only;
+  screen-bank bake x3 (`?spillbake=`). Zone 2 now holds 4 bank lights (the alcove troffer and the 2 dim viewscreen
+  lights drop: per-zone cap stays 4); emitter lights total 12 -> 14 (cap `MAX_EMITTER_LIGHTS_PUSH` 15), list 25 -> 27 of 32.
+- **exit**: the sign's light hangs low in front of it (wall sign 0.6 m out; hanging box: its sector's fill point,
+  not under the lintel against the door), 0.5 m under its bottom edge, >= 1.2 m over the floor, power 50 (was 1.5;
+  20 barely read: the cheap tier is diffuse-only and the passage floor is dark metal plate); fluorescent lights
+  within 6 m of a sign x0.7, fluorescent bake within 5 m x0.6 (`?exitdim=`), sign bake x6 (`?exitbake=`; adds
+  little on metal, the light does the work). Signs skip the min gap to troffers.
+- **key**: a body's lights are also ranked by power over the level's median lamp power (clamp 0.1..4,
+  `ListLight.rankScale`, rank only: the packed weight / brightness is unchanged), sector levels only. bodyNorm
+  divides every lamp by its own power, so a 2.6 viewscreen out-keyed a 10 screen bank by being nearer.
+- Measured (`.lab-tmp/emit-push/emit-push-sheet.png`, `measurements.txt`; 960x600 shots, torch off, frozen):
+  computer-room floor before the south banks lum 19.2 -> 26.3, G/R 1.15 -> 1.22; wall under the banks 14.4 -> 17.6,
+  G/R 1.28 -> 1.40; floor under the exit sign R/G 1.00 -> 1.60 (RGB 14/15/15 -> 24/15/15), door below it R/G 1.02 ->
+  1.74; passage wall at 9 m R/G 1.22 -> 1.46. Keys (slot 0): soldier at the south banks blue viewscreen 2.6 ->
+  green bank 26.5; soldier at the west alcove viewscreen -> green bank; soldier at the east banks troffer -> green
+  bank; alcove flayers troffer -> green bank (all on; spill alone: the zone fill; key alone: the troffer, which
+  is the strongest light at them while it exists). Body pixel colour moves little in a rect (the list weight
+  carries no power), the sheet shows the flayers turn from cold white to olive-green.
+- Cost: draw calls at the room pose identical per variant (107/268 alternate with timeDraws, same in all);
+  pipelinelog 12-zone tour all / none: the same 11 explosion-FX builds, 0 level builds, max frame 37 / 39 ms.
+- Open: the bank lights stand 0.9 m out at y <= 2.4 under screens at 2.5-6.4 m, so the 6.4 m ceiling gets bake
+  only; the second E1M1 sign (sector 70) earns no light (6 m same-family spacing); fluorescent strips beside the
+  sign turn pink at 0.9 m.
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).
@@ -208,7 +239,7 @@ In flight at compaction (background agents in this session; their results arrive
   fading inward at the screen edges (owner), only during a rush unless `lowHealthAlways`.
 
 Queued next (owner-approved):
-1. **Push screens and exit signs harder** (owner, after the B1 sheet): stronger green/amber spill near the banks,
+1. **DONE 2026-10-29 (see "Emitter push" above).** **Push screens and exit signs harder** (owner, after the B1 sheet): stronger green/amber spill near the banks,
    a clear red pool at exit signs (dim nearby fluorescent strips a little), and make alcove enemies pick up screen
    colour (today the body key is the nearest light regardless of power, so the troffer light wins). Touches the
    converter — run after the scale agent.
