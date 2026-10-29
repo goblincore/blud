@@ -21,6 +21,7 @@ export function createCharacterEffects(renderer: THREE.WebGPURenderer) {
       setPassLabel('effects');
       try { void renderer.render(scene, camera); }
       finally { renderer.autoClear = autoClear; }
+      setPassLabel('effects:tail');
     },
   };
 }

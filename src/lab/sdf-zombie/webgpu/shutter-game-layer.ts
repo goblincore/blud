@@ -457,6 +457,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
       ensureTargets(cap, diag.densityWidth, diag.densityHeight, false);
       if (!layerTarget || !stageTarget || !seedTex || !seedData || !resolve) return null;
 
+      setPassLabel('shutter:plan');
       if (planSelectedStamps(sim, camera) === 0) {
         // EMPTY WORK FAST PATH: the sharp-remainder pass already drew the whole
         // fused frame (nothing was selected), so the captured frame is exactly
@@ -467,6 +468,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
 
       // 1. SELECTED airborne blood, shaded ONCE as premultiplied colour+coverage.
       gooLayer.setSelection(SHUTTER_SELECTED_SELECTION);
+      setPassLabel('shutter:goo-sync');
       gooLayer.sync(sim, camera);
       const prevClear = renderer.getClearColor(clearColor).getHex();
       const prevAlpha = renderer.getClearAlpha();
@@ -483,6 +485,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
       //    empty stamp list CLEARS the seed rather than re-uploading a stale
       //    sweep, so a selected droplet with unusable motion still composites
       //    its sharp current shape through the layer's base and is never lost.
+      setPassLabel('shutter:seed');
       const buildStart = performance.now();
       const stats = stamps.length > 0
         ? rasterizeSweepSeed(stamps, layerW, layerH, seedW, seedH, seedData)
