@@ -12,6 +12,10 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
   partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
   (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+- [ ] **The blast distortion ignores depth** (owner, 2026-10-29). `postAaBlastWarp` in `webgpu/post-aa.ts` (numbers in
+  `blast-refraction.ts`) warps the final colour in screen space, so walls, the viewmodel and anything in front of the
+  blast bend too. Fix in the explosion-side pass: depth-gate it, or (preferred) an in-scene refracting shockwave shell,
+  depth-tested, which could also be the visible link that travels from the blast to the bodies.
 
 - [x] **Blast-to-gib switch pass (2026-10-29)** — the switch side of the item above. Toggle
   `?gibswitch=beat,blood,launch,timing` (no param = all four, the new default; `none` = the old switch; `all`; any
