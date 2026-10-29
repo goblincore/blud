@@ -20,6 +20,7 @@ import { eyeOf } from './game-player';
 import { slotLowerAmount, stepWeaponSlot, slotReady } from './game-weapon-slots';
 import { aimArm } from './game-arms';
 import { type Projectile, GRAPESHOT, PLAYER_GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
+import { goreSpreadEnabled } from '../gore-spread';
 import { updateHud } from './game-hud';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-hit-trace';
@@ -443,13 +444,19 @@ export function prewarmTracer(ctx: GameContext): boolean {
   if (state === 'done') return false;
   if (state === 'shown') { tracerWarm.set(ctx, 'done'); return false; }
   if (ctx.weapon.pellets.length > 0) return false;   // a live round draws (and builds) them itself
-  if (ctx.weapon.pelletViews.length === 0) ctx.weapon.pelletViews.push(newTracerView(ctx));
-  const v = ctx.weapon.pelletViews[0]!;
-  for (const m of [v.streak, v.ember]) {
-    (m.material as THREE.MeshBasicMaterial).opacity = 0;
-    m.matrix.makeScale(1e-6, 1e-6, 1e-6).setPosition(0, -1000, 0);
-    m.matrixWorldNeedsUpdate = true;
-    m.visible = true;
+  // GORE SPREAD PASS (2026-10-29): the WHOLE double-barrel pool, not one view. Each view is two meshes with their own
+  // materials, and each one's first draw builds its render object (bindings, uniform buffers, cache keys): the first
+  // volley in flight grew and drew 19 new views in its first frame (effects pass 2.0-2.5 ms vs 0.6 after). The pool
+  // only ever grows, so the views warmed here are the ones the first volley uses. `?gorespread=0`: one view.
+  const warmViews = goreSpreadEnabled() ? 2 * PLAYER_GRAPESHOT.pelletsPerBarrel : 1;
+  while (ctx.weapon.pelletViews.length < warmViews) ctx.weapon.pelletViews.push(newTracerView(ctx));
+  for (const v of ctx.weapon.pelletViews.slice(0, warmViews)) {
+    for (const m of [v.streak, v.ember]) {
+      (m.material as THREE.MeshBasicMaterial).opacity = 0;
+      m.matrix.makeScale(1e-6, 1e-6, 1e-6).setPosition(0, -1000, 0);
+      m.matrixWorldNeedsUpdate = true;
+      m.visible = true;
+    }
   }
   tracerWarm.set(ctx, 'shown');
   return true;
