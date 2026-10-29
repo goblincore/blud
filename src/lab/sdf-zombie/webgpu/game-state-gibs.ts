@@ -121,6 +121,8 @@ export interface MeshGib {
   tag: string;
   /** A stable id for the blood-trail emitter clock (game-tick emitTrails; MESH_TRAIL_ID_BASE + id). */
   id?: number;
+  /** MeshGibOpts.onRemove: called once the object has left the scene. */
+  onRemove?: (object: Object3D) => void;
 }
 
 /** Every call returns a fresh object, the set and arrays included. */

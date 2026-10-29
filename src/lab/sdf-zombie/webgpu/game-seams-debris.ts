@@ -48,6 +48,21 @@ export function createDebrisSeams(ctx: GameContext) {
         ? [...ctx.world.loop.meshes.entries()].map(([id, m]) => ({ id, pos: [m.position.x, m.position.y, m.position.z] }))
         : [],
     }),
+    /** TORN MEAT (game-meat-gib.ts) as drawn: each live chunk's size bucket, variant, where it is and where it was
+     *  thrown from (and on which sim frame), and whether it can draw (in the scene, `.visible`, layer mask). The meat
+     *  pool pass's chunk check (2026-10-29). */
+    meatChunks: () => ({
+      simFrame: ctx.demo.simFrame,
+      pool: ctx.boot.meatGib?.poolStats() ?? null,
+      chunks: ctx.gibs.meshGibs.filter(g => g.tag === 'meat').map(g => {
+        const u = g.object.userData as { meatSize?: number; meatVariant?: number; thrownFrom?: number[]; thrownFrame?: number };
+        return {
+          id: g.id ?? -1, size: u.meatSize ?? -1, variant: u.meatVariant ?? -1, pos: [...g.state.pos],
+          from: u.thrownFrom ?? null, frame: u.thrownFrame ?? -1, settled: chunkSettled(g.state),
+          inScene: g.object.parent !== null, visible: g.object.visible, mask: g.object.layers.mask,
+        };
+      }),
+    }),
     /** Collapse an actor where it stands (a corpse: its gun drops, its kit falls with it). `reaction: 'none'`: no
      *  blast shot signal, so a living soldier drops without a stagger first. False, touching nothing, for an actor
      *  that is gone (gibbed actors leave the list), tearing apart, or already down. */

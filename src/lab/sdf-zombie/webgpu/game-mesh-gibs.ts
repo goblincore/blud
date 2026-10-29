@@ -49,6 +49,7 @@ function remove(ctx: GameContext, g: MeshGib): void {
     const mesh=o as THREE.Mesh;
     if(mesh.isMesh && mesh.geometry.userData.ownedSkullDebris)mesh.geometry.dispose();
   });
+  g.onRemove?.(g.object);
 }
 
 /** ctx.boot.spawnMeshGib: add `object` to the scene riding a new chunk. */
@@ -63,7 +64,7 @@ export function spawnMeshGib(
   object.matrixAutoUpdate = false;
   ctx.boot.handle.scene.add(object);
   ctx.boot.deferredApi?.router.register(object, 'mesh', 'level-only');
-  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId };
+  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId, onRemove: opts?.onRemove };
   pose(g);
   ctx.gibs.meshGibs.push(g);
   const poolOf = (t: string) => (t === 'skull' || t === 'meat' ? t : 'mesh');

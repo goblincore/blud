@@ -42,6 +42,9 @@ export interface MeshGibOpts {
   /** SECTOR levels (plan 3b): the body centre the gib came from — the spawn is clamped inside the level from it and
    *  its floor seeds the gib's floorY. Absent: no clamp, the floor under the gib. Ignored on room levels. */
   from?: Vec3 | null;
+  /** Called with the object once it has left the scene (the cap's eviction, a cast rebuild): the torn meat pool
+   *  (game-meat-gib.ts) takes its mesh back. */
+  onRemove?: (object: import('three/webgpu').Object3D) => void;
 }
 
 /** The handle `boot.attachPiece` returns. */

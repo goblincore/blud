@@ -11,6 +11,9 @@
 // variant's geometry and one wet material per light list (the level's list for the room it is thrown in, in the
 // forward path; joined to ctx.world.levelNodeMaterials so refreshLevelLights rebuilds it). Until the GLB has loaded
 // (or if it failed), throw() returns false and the caller throws the SDF flesh bits instead.
+//
+// The meshes are POOLED (meat-pool.ts, `?meatpool=0` for a new mesh a chunk): kept for good by variant, size bucket
+// and material, handed back out on the next throw, and pre-warmed (made and drawn once) in the play-step prewarm.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GameContext } from './game-context';
@@ -18,6 +21,7 @@ import type { Vec3 } from '../types';
 import type { GoreTuning } from '../gore-tuning';
 import { FLESH_BITS } from '../flesh-bits';
 import { shotFixEnabled } from '../body-field';
+import { createKeyedPool, meatPoolEnabled, meatPoolKey, MEAT_WARM_PER_KEY } from '../meat-pool';
 
 export const MEAT_GLB = '/assets/lab/meat-chunks.glb';
 
@@ -61,6 +65,9 @@ export interface MeatGibLeaf {
   /** `from`: SECTOR levels (plan 3b), the body centre the spawn is clamped inside the level from. */
   throw(pos: Vec3, vel: Vec3, angVel: Vec3, r: number, from?: Vec3 | null): boolean;
   ready(): boolean;
+  /** The mesh pool (meat-pool.ts): meshes made, made in a throw (a pool miss: a new render object in the gore
+   *  frame), handed back out. */
+  poolStats(): { made: number; missed: number; reused: number };
   /** Draw the chunk material once (degenerate, far below the floor) for one live body's room light list that has
    *  not had it yet; take out the last step's warm mesh. Called every step. */
   prewarm(): void;
@@ -129,10 +136,83 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
   const warmedLists = new Set<THREE.LightsNode | null>();
   let warmMesh: THREE.Mesh | null = null;
 
+  // THE MESH POOL (meat pool pass, 2026-10-29; meat-pool.ts): a chunk mesh is kept for good and handed back out by
+  // (variant, size bucket, material), so its render object (three keys it by object + material) is built once. The
+  // pre-warm makes and draws MEAT_WARM_PER_KEY of each key the live bodies can throw. `?meatpool=0`: a new mesh a
+  // chunk, as before.
+  const pool = createKeyedPool<THREE.Mesh>();
+  let missed = 0, reused = 0;
+  const matIds = new WeakMap<THREE.Material, number>();
+  let nextMatId = 0;
+  const matId = (m: THREE.Material): number => { let id = matIds.get(m); if (id === undefined) { id = nextMatId++; matIds.set(m, id); } return id; };
+  const giveBack = (o: THREE.Object3D): void => { pool.give(o as THREE.Mesh); };
+  /** A warm mesh drawn this step that goes on the free list next step (it was made for the pool). */
+  let warmPooled = false;
+  /** The light list each actor's keys were last all warmed for (an actor that changes room is warmed again). */
+  const warmedFor = new WeakMap<object, THREE.LightsNode | null>();
+  const meshFor = (v: number, size: number, mat: THREE.Material): { mesh: THREE.Mesh; key: string; fresh: boolean } => {
+    const key = meatPoolKey(v, size, matId(mat));
+    const old = pool.take(key);
+    if (old) return { mesh: old, key, fresh: false };
+    const mesh = new THREE.Mesh(scaled(v, size), mat);
+    mesh.name = 'meat-gib';
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    pool.adopt(key, mesh);
+    return { mesh, key, fresh: true };
+  };
+  /** The pool's warm: one missing key a step, nearest body first; true when it drew one. */
+  function warmPoolStep(): boolean {
+    const eye = ctx.boot.handle.camera.position;
+    const actors = ctx.world.actors.filter(a => {
+      const list = ctx.boot.deferredMode ? null : deps.lightsAt(a.pose().pos);
+      return !warmedFor.has(a) || warmedFor.get(a) !== list;
+    });
+    if (actors.length === 0) return false;
+    const d2 = (a: (typeof actors)[number]) => { const p = a.pose().pos; return (p[0] - eye.x) ** 2 + (p[2] - eye.z) ** 2; };
+    actors.sort((a, b) => d2(a) - d2(b));
+    for (const a of actors) {
+      const pos = a.pose().pos;
+      const mat = materialFor(pos);
+      for (const size of meatSizesFor(a.gore)) {
+        for (let v = 0; v < variants.length; v++) {
+          if (pool.made(meatPoolKey(v, size, matId(mat))) >= MEAT_WARM_PER_KEY) continue;
+          const { mesh } = meshFor(v, size, mat);
+          mesh.name = 'meat-warm';
+          mesh.matrixAutoUpdate = true;
+          mesh.position.set(0, -1000, 0);
+          mesh.scale.setScalar(1e-6);
+          mesh.frustumCulled = false;
+          ctx.boot.handle.scene.add(mesh);
+          ctx.boot.deferredApi?.router.register(mesh, 'mesh', 'level-only');
+          warmMesh = mesh;
+          warmPooled = true;
+          return true;
+        }
+      }
+      warmedFor.set(a, ctx.boot.deferredMode ? null : deps.lightsAt(pos));
+    }
+    return false;
+  }
+
   return {
     ready: () => variants.length > 0 && base !== null,
+    poolStats: () => ({ made: pool.size, missed, reused }),
     prewarm() {
-      if (warmMesh) { ctx.boot.deferredApi?.router.unregister(warmMesh); warmMesh.removeFromParent(); warmMesh = null; }
+      if (warmMesh) {
+        ctx.boot.deferredApi?.router.unregister(warmMesh);
+        warmMesh.removeFromParent();
+        if (warmPooled) {
+          // Into the pool as a throw would have made it (spawnMeshGib poses it by its matrix).
+          warmMesh.name = 'meat-gib';
+          warmMesh.frustumCulled = true;
+          warmMesh.position.set(0, 0, 0);
+          warmMesh.scale.setScalar(1);
+          pool.give(warmMesh);
+          warmPooled = false;
+        }
+        warmMesh = null;
+      }
       if (variants.length === 0 || !base) return;
       // THE SCALED COPIES TOO (shot frame pass, 2026-10-29): each new size bucket cloned and scaled its variant's
       // geometry and uploaded the buffers in the frame of the hit (~1.7 ms for one E1M1 soldier volley). Once every
@@ -153,6 +233,7 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
         warmMesh = m;
         return;
       }
+      if (meatPoolEnabled()) { warmPoolStep(); return; }
       if (!shotFixEnabled()) return;
       for (const a of ctx.world.actors) {
         for (const size of meatSizesFor(a.gore)) {
@@ -181,12 +262,26 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
       // rotation; no scale) and the deferred router registers the object itself as a mesh, so neither a scaled mesh
       // nor a scaling parent survives. Sizes snap to SIZE_STEP buckets so the scaled copies stay few and shared.
       const size = meatSize(r);
-      const mesh = new THREE.Mesh(scaled(v, size), materialFor(pos));
-      mesh.name = 'meat-gib';
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
+      const pooled = meatPoolEnabled();
+      let mesh: THREE.Mesh;
+      if (pooled) {
+        const got = meshFor(v, size, materialFor(pos));
+        mesh = got.mesh;
+        if (got.fresh) missed++; else reused++;
+      }
+      else {
+        mesh = new THREE.Mesh(scaled(v, size), materialFor(pos));
+        mesh.name = 'meat-gib';
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+      }
+      // For the seams (__sdfGame.meatChunks): the bucket, the shape and where and when it left the body.
+      mesh.userData.meatSize = size;
+      mesh.userData.meatVariant = v;
+      mesh.userData.thrownFrom = [pos[0], pos[1], pos[2]];
+      mesh.userData.thrownFrame = ctx.demo.simFrame;
       ctx.boot.spawnMeshGib(mesh, pos, vel, angVel, size * MEAT_LOOK.physicsRadius,
-        { longAxis: [1, 0, 0], restitution: MEAT_LOOK.restitution, tag: 'meat', from });
+        { longAxis: [1, 0, 0], restitution: MEAT_LOOK.restitution, tag: 'meat', from, onRemove: pooled ? giveBack : undefined });
       return true;
     },
   };
