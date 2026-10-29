@@ -58,7 +58,7 @@ Each line is the first sentence of the module's header comment.
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
 | [SDF march renderer](#sdf-march-renderer) | 58 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
-| [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
+| [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
@@ -715,6 +715,7 @@ The `.blob` language, body building, validation, silhouette fitting.
 - `blob-emit.ts` — Writes a `.blob` document back to text, preserving comments and layout, with optional face overrides spliced in.
 - `blob-face-sheet.ts` — A procedurally generated greyscale face sheet.
 - `blob-parse.ts` — The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
+- `body-field.ts` — FAST CPU BODY FIELDS for the shot path (shot frame pass, 2026-10-29).
 - `body-grain.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md).
 - `body-normal-bake/bake.wgsl.ts` — THE BAKE FIELD in WGSL: `sdBodyClosed` (validate.ts) line for line, built from the SAME leaf functions the game marches with…
 - `body-normal-bake/cpu-bake.ts` — The CPU backend, and the REFERENCE every other backend is held to: per texel it finds the plain skin along a ray toward the region's axis, the…

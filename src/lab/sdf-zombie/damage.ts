@@ -7,6 +7,7 @@ import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub }
 import { rotateYaw } from './gait';
 import { sdBody, sdBodyClosed, sdPrimitive, type Body } from './validate';
 import { unwarpDir, unwarpPoint } from './head-split';
+import { bodyField, shotFixEnabled } from './body-field';
 
 /** Wounds per body (the ring cap). Every WGSL wound loop bound and the per-ray
  *  wound list size are built from this constant. The frozen GLSL twin
@@ -419,8 +420,9 @@ export interface UnwarpedHit {
  */
 export function unwarpHit(body: Body, hit: Vec3): UnwarpedHit {
   const split = body.split;
-  if (!split) return { hit, piece: 0, field: p => sdBody(p, body), dir: v => v };
-  const field = (p: Vec3) => sdBodyClosed(p, body);
+  // body-field.ts: the same fold, bit for bit, minus the limbs that cannot change it (?shotfix=0: sdBody).
+  if (!split) return { hit, piece: 0, field: shotFixEnabled() ? bodyField(body) : p => sdBody(p, body), dir: v => v };
+  const field = shotFixEnabled() ? bodyField({ ...body, split: null }) : (p: Vec3) => sdBodyClosed(p, body);
   const { q, piece } = unwarpPoint(split, hit, field);
   return { hit: q, piece, field, dir: v => unwarpDir(split, piece, v) };
 }

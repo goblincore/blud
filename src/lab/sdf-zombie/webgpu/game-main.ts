@@ -204,6 +204,7 @@ import {
   WEAPON_SLOTS, makeWeaponSlotState, requestSlot, slotForKey, slotLowerAmount, slotReady,
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
+import { setShotFix, shotFixOn } from '../body-field';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { boneExposureOf } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
@@ -4938,6 +4939,8 @@ async function main() {
   // the A/B control for the wound-stamping cost, settable per boot so the two
   // arms can be measured interleaved rather than across runs.
   setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
+  // ?shotfix=0 restores the full CPU body folds on the shot path (body-field.ts: the pellet trace and the wound probes).
+  setShotFix(shotFixOn(location.search));
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   ctx.vfx.explosionLights = [];
 
