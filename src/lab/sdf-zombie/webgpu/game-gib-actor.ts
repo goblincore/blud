@@ -13,6 +13,7 @@ import { spawnImpactGout } from '../blood-sim';
 import { type BuildResult } from '../build-body';
 import { concussionVelocity } from '../explosion-aoe';
 import { gibLaunchVelocity } from '../gib-launch';
+import { GIB_SWITCH_BLOOD, blastBloodPlacement } from '../gib-switch';
 import { carryGibPieces, displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
 import { gibAll, gibAllPieces } from '../sever';
 import { type Vec3 } from '../types';
@@ -357,7 +358,15 @@ export function gibActor(ctx: GameContext,
   // Gore: the blast opens the body, so one gout at the epicentre. `spawnImpactGout`
   // takes the SIM directly (its droplets are rendered by bloodView.sync), and
   // 'slug' is the heaviest profile BleedKind has — there is no 'blast' one.
-  if (ctx.vfx.bleedEnabled) {
+  if (ctx.vfx.bleedEnabled && ctx.gibs.switchSteps.has('blood')) {
+    // `?gibswitch=blood`: the gout leaves the BODY (as drawn, so a beaten body's shoved torso) on its blast side,
+    // carried away from the blast and up with the pieces, instead of sitting at the blast point. Sector levels
+    // keep seatBloodSpawn's clamp from the body centre and its floor.
+    const b = blastBloodPlacement(torsoC, at);
+    const seat = seatBloodSpawn(ctx, a, b.anchor);
+    spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, b.dirN, rngStreams.bleed, ctx.boot.nextEmitterStream++,
+      { speedMul: GIB_SWITCH_BLOOD.swapSpeedMul }, seat.floorY);
+  } else if (ctx.vfx.bleedEnabled) {
     const seat = seatBloodSpawn(ctx, a, at);   // sector levels: inside the level, on the body's floor (plan 3b)
     spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++,
       undefined, seat.floorY);

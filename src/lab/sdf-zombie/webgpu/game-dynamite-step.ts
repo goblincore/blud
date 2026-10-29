@@ -10,14 +10,16 @@
 import type { GameContext } from './game-context';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { FLIGHT_TUNING, detonated as flightDetonated, stepFlight } from '../dynamite-flight';
-import { GIB_SWITCH_BEAT_GAIN } from '../gib-switch';
+import { GIB_SWITCH_BEAT_GAIN, GIB_SWITCH_BLOOD, blastBloodPlacement } from '../gib-switch';
+import { spawnImpactGout } from '../blood-sim';
+import { rngStreams } from './rng';
 import { EXPLOSION_PROFILE, resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { chargeFraction, stepCook, type CookSignal } from '../fpv';
 import { type Vec3 } from '../types';
 import { EXPLOSION_LIGHT, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld, throwBundle } from './game-dynamite-throw';
 import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
-import { blastShielded, ceilingAt, clampSpawnInside, debrisGround } from './game-hit-trace';
+import { blastShielded, ceilingAt, clampSpawnInside, debrisGround, seatBloodSpawn } from './game-hit-trace';
 import { eyeOf } from './game-player';
 import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
@@ -142,6 +144,16 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: 
         // The rupture follows the moved pose (TearTuning.followPose) and the pieces spawn where it is drawn.
         if (chosen && ctx.gibs.switchSteps.has('beat')) {
           a.blast({ wounds: [], meterCredit: 0, impulse: pb.rigImpulse, gain: GIB_SWITCH_BEAT_GAIN, forceKnock: true });
+        }
+        // THE FIRST SPRAY (`?gibswitch=blood`): on the hit frame, from the torso's blast-facing side, away from
+        // the blast — not only at the swap 200 ms later. (The resolver's nearest surface point is the shins for a
+        // floor blast: blood there read as a puddle, not a hit.)
+        const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
+        if (chosen && torso && ctx.gibs.switchSteps.has('blood') && ctx.vfx.bleedEnabled) {
+          const b = blastBloodPlacement([torso[0], torso[1], torso[2]], at, GIB_SWITCH_BLOOD.hitSideM);
+          const seat = seatBloodSpawn(ctx, a, b.anchor);
+          spawnImpactGout(ctx.vfx.bloodSim, 'stump', seat.pos, b.dirN, rngStreams.bleed, ctx.boot.nextEmitterStream++,
+            { countMul: GIB_SWITCH_BLOOD.hitCountMul, speedMul: GIB_SWITCH_BLOOD.hitSpeedMul }, seat.floorY);
         }
         if (chosen) {
           remaining = gibDebit(ctx, remaining, chosen.reserve);

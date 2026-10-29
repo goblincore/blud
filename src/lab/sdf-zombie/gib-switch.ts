@@ -21,7 +21,7 @@ export type GibSwitchStep = 'beat' | 'blood' | 'launch' | 'shade' | 'timing';
 export const GIB_SWITCH_STEPS: readonly GibSwitchStep[] = ['beat', 'blood', 'launch', 'shade', 'timing'];
 
 /** What a page with no `?gibswitch=` gets: the steps that were judged to read right. */
-export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat'];
+export const DEFAULT_GIB_SWITCH: readonly GibSwitchStep[] = ['beat', 'blood'];
 
 /** The steps a `?gibswitch=` value turns on: absent or '' = DEFAULT_GIB_SWITCH, 'none', 'all', or a comma list
  *  (unknown names ignored). */
@@ -53,9 +53,10 @@ export const GIB_SWITCH_BLOOD = {
   sideM: 0.14,
   /** Up share of the spray axis: away-from-blast plus this much up, then normalized. */
   upK: 0.55,
-  /** The hit-frame spray: the stump profile (fast, wide) at this count/speed share. */
-  hitCountMul: 0.45,
-  hitSpeedMul: 0.55,
+  /** The hit-frame spray: the stump profile (fast, wide) at this count/speed share, off the torso surface. */
+  hitSideM: 0.17,
+  hitCountMul: 0.7,
+  hitSpeedMul: 0.7,
   /** The swap gout: the owner's near-stationary slug goo, carried along with the pieces at this speed share. */
   swapSpeedMul: 5,
 } as const;
