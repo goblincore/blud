@@ -12,6 +12,10 @@ import { DEFAULT_EMITTER_GAINS, type EmitterGainKey } from './sector-materials';
 import { DEFAULT_SECTOR_LIGHT, gainParam, writeSectorLevels, type SectorLightConfig } from './sector-light';
 import { simTimeMs } from './sim-clock';
 import { wrapGlowTime } from '../../../game/level/emitter-layout';
+import { parseEmitPush, type EmitPushStep } from './emit-push';
+
+/** The emitter push steps this boot (emit-push.ts; ?emitpush=spill,exit,key, none, all; no param = all). */
+export const EMIT_PUSH: ReadonlySet<EmitPushStep> = parseEmitPush(typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('emitpush'));
 
 /** The ceilings' fixed whisper of self-light while sector light is off (plan 1's look). */
 export const CEIL_WHISPER = 0.10;

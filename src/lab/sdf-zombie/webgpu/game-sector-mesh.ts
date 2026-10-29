@@ -44,10 +44,12 @@ import { blankPanel, fillPanel, generatePanel, mottleTexture, panelTextures, wra
 import { runPool, type PoolWorker } from './panel-pool';
 import { emittersOn, flatFit, isStone, lineSeedTiles, polyBox, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import { createEmitterBounce, emitterReach, emitterSurfaces, type EmitBake, type EmitterBounce } from './sector-emitters';
+import { DEFAULT_PUSH_BAKE, pushBakeGains } from './emit-push';
 import { FLUORO_RGB, SIGN_RGB } from '../../../game/level/emitter-layout';
 import { EM_HASH, EM_RAND, EMITTER_FN, type EmitterKind } from './emitter-glow.wgsl';
 import type { GameContext } from './game-context';
-import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
+import { createSectorFx, CEIL_WHISPER, EMIT_PUSH, type SectorFxRuntime } from './game-sector-light';
+import { gainParam } from './sector-light';
 import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
 import { BOUNCE_CUTOFF_M, createGlowBounce, glowSources, nearAny, refineFaces, refineNear, wallRows, wallStrip, type GlowBounce, type Reach, type RGB } from './sector-bounce';
@@ -322,7 +324,11 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   // The emitters as light sources (none with ?emitters=0 or ?sectormat=0: the old kinds do not glow).
   const tEmit = performance.now();
   const emitSurfs = emitterSurfaces(map, emitOn && matsOn);
-  const emitBounce = emitSurfs.length > 0 ? createEmitterBounce(emitSurfs) : null;
+  // ?emitpush= spill / exit (emit-push.ts): the screen banks', signs' and sign-side fluorescents' bake.
+  const emitBounce = emitSurfs.length > 0 ? createEmitterBounce(emitSurfs, pushBakeGains(emitSurfs, EMIT_PUSH, {
+    spill: gainParam(search.get('spillbake'), DEFAULT_PUSH_BAKE.spill),
+    sign: gainParam(search.get('exitbake'), DEFAULT_PUSH_BAKE.sign),
+    fluoroDim: gainParam(search.get('exitdim'), DEFAULT_PUSH_BAKE.fluoroDim) })) : null;
   const emitSurfMs = performance.now() - tEmit;
   const emitReach = emitterReach(emitSurfs);
   const flatReach = emitReach.map(r => ({ ...r, reach: FLAT_REFINE_REACH_M }));

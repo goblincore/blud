@@ -257,3 +257,23 @@ describe('parseLevelJson: none fixture (a light whose lamp the level art draws)'
     expect(() => parseLevelJson(g)).toThrow('lights[0].shadow: only a tube fixture takes it');
   });
 });
+
+describe('parseLevelJson: emitter push combos (emit-push.ts)', () => {
+  const tagged = () => {
+    const f = fixture('two-rooms');
+    f.lights.push({ ...f.lights[0], power: 4, push: ['spill', 'spill+exit'] });
+    f.lights[0].push = ['none', 'exit'];
+    return f;
+  };
+  it('keeps a tagged light only in its combos (default: every step on)', () => {
+    expect(parseLevelJson(tagged()).rooms[0]!.accents.map(a => a.power)).toEqual([4]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set() }).rooms[0]!.accents.map(a => a.power)).toEqual([9]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set(['exit']) }).rooms[0]!.accents.map(a => a.power)).toEqual([9]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set(['spill', 'key']) }).rooms[0]!.accents.map(a => a.power)).toEqual([4]);
+  });
+  it('rejects an unknown combo', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].push = ['spill', 'loud'];
+    expect(() => parseLevelJson(f)).toThrow('lights[0].push');
+  });
+});

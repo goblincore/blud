@@ -111,7 +111,7 @@ import { freezeLevelMatrices } from './game-level-batch';
 import { doorTravel } from './sector-doors';
 import { SECTOR_BODY_RADIUS_M } from './sector-def';
 import { createDoorSeams } from './game-seams-doors';
-import { emitterAccent } from './game-sector-light';
+import { EMIT_PUSH, emitterAccent } from './game-sector-light';
 import { standingFloor } from './level-ground';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-rooms';
 import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
@@ -622,7 +622,7 @@ async function main() {
     if (levelParam) {
       const res = await fetch(`/assets/levels/${levelParam}.level.json`);
       if (!res.ok) throw new Error(`level ${levelParam}: HTTP ${res.status}`);
-      const def = parseLevel(await res.json(), { state: q.get('state') ?? undefined });
+      const def = parseLevel(await res.json(), { state: q.get('state') ?? undefined, emitPush: EMIT_PUSH });
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
       ctx.world.level = def.sectors ? sectorActiveLevel(def) : authoredLevel(def);

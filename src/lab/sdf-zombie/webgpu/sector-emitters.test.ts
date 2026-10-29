@@ -96,3 +96,15 @@ describe('createEmitterBounce', () => {
     expect(SIGN_RGB[0]).toBeGreaterThan(SIGN_RGB[1]);
   });
 });
+
+describe('createEmitterBounce gains (the emitter push)', () => {
+  it('a surface\'s gain scales its bake; 0 drops it', () => {
+    const surfs = emitterSurfaces(rooms());
+    const p: [number, number, number] = [5, 0, 3], n: [number, number, number] = [0, 1, 0];
+    const one = [...createEmitterBounce(surfs).at(p, n, [0, 1])];
+    const two = [...createEmitterBounce(surfs, surfs.map(s => (s.cls === 'screen' ? 2 : 1))).at(p, n, [0, 1])];
+    expect(one[1]).toBeGreaterThan(0);
+    expect(two[1]).toBeCloseTo(2 * one[1]!, 12);
+    expect([...createEmitterBounce(surfs, surfs.map(() => 0)).at(p, n, [0, 1])]).toEqual([0, 0, 0, 0, 0]);
+  });
+});

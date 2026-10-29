@@ -235,7 +235,8 @@ export interface EmitterBounce {
   at(p: V3, n: V3, into: XZ, out?: EmitBake): EmitBake;
 }
 
-export function createEmitterBounce(surfaces: readonly EmitterSurface[]): EmitterBounce {
+/** `gains` (optional, one per surface): a multiplier on that surface's bake (the emitter push, emit-push.ts pushBakeGains). */
+export function createEmitterBounce(surfaces: readonly EmitterSurface[], gains?: readonly number[]): EmitterBounce {
   const R = EMIT_CUTOFF_M;
   return {
     surfaces,
@@ -244,7 +245,10 @@ export function createEmitterBounce(surfaces: readonly EmitterSurface[]): Emitte
       const il = Math.hypot(into[0], into[1]) || 1;
       const start: V3 = [p[0] + n[0] * START_OFF_M + (into[0] / il) * START_OFF_M, p[1] + n[1] * START_OFF_M,
         p[2] + n[2] * START_OFF_M + (into[1] / il) * START_OFF_M];
-      for (const s of surfaces) {
+      for (let si = 0; si < surfaces.length; si++) {
+        const s = surfaces[si]!;
+        const g = gains?.[si] ?? 1;
+        if (g <= 0) continue;
         if (p[0] < s.min[0] - R || p[0] > s.max[0] + R || p[2] < s.min[1] - R || p[2] > s.max[1] + R) continue;
         // In front of the surface at all? (Its plane: a wall's line, a ceiling's height.)
         const ne = s.normal;
@@ -271,7 +275,7 @@ export function createEmitterBounce(surfaces: readonly EmitterSurface[]): Emitte
             seen = ok / picks.length;
             if (seen === 0) break;
           }
-          const w = (pt.area * ce * cr) / (Math.PI * d2 + pt.area) * emitFade(d) * seen * EMIT_CLASS_BAKE[s.cls];
+          const w = (pt.area * ce * cr) / (Math.PI * d2 + pt.area) * emitFade(d) * seen * EMIT_CLASS_BAKE[s.cls] * g;
           if (s.cls === 'screen') { out[0] += pt.rgb[0] * w; out[1] += pt.rgb[1] * w; out[2] += pt.rgb[2] * w; }
           else if (s.cls === 'fluoro') out[3] += (pt.rgb[1] / FLUORO_RGB[1]) * w;
           else out[4] += (pt.rgb[0] / SIGN_RGB[0]) * w;
