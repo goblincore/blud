@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 58 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 59 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 19 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 21 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -686,6 +686,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
 - `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
+- `webgpu/seed-upload.ts` — SEED ROW UPLOAD (meat pool and seed upload pass, 2026-10-29): a shutter motion seed (shutter-game-layer.ts, gib-shutter-layer.ts: an RGBA32F…
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
@@ -894,7 +895,9 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
 - `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
 - `march.glsl.ts` — Shader source as strings.
+- `meat-pool.ts` — MEAT POOL: the bookkeeping behind the torn meat mesh pool (meat pool pass, 2026-10-29).
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
 - `pellet-falloff.ts` — PELLET DAMAGE FALLOFF (owner 2026-10-27: "add logic where the pellets do less damage after a certain range — damage falloff; close range = full…
+- `seed-band.ts` — SEED DIRTY BAND: which rows of a shutter motion seed changed since the last upload (meat pool and seed upload pass, 2026-10-29).
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…

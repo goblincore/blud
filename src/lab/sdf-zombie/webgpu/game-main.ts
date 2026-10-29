@@ -206,6 +206,8 @@ import {
 } from './game-weapon-slots';
 import { setShotFix, shotFixOn } from '../body-field';
 import { goreSpreadOn, setGoreSpread } from '../gore-spread';
+import { meatPoolOn, setMeatPool } from '../meat-pool';
+import { seedUploadOn, setSeedUpload } from '../seed-band';
 import { warmGore } from './game-gore-spread';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { boneExposureOf } from '../cut-wound';
@@ -4951,6 +4953,10 @@ async function main() {
   setShotFix(shotFixOn(location.search));
   // ?gorespread=0 restores the gore in the hit frame and drops the boot gore warm (gore-spread.ts, game-gore-spread.ts).
   setGoreSpread(goreSpreadOn(location.search));
+  // ?meatpool=0: a new torn-meat mesh a chunk (meat-pool.ts). ?seedupload=0: the shutter seed uploaded whole every
+  // frame (seed-band.ts, seed-upload.ts).
+  setMeatPool(meatPoolOn(location.search));
+  setSeedUpload(seedUploadOn(location.search));
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   ctx.vfx.explosionLights = [];
 

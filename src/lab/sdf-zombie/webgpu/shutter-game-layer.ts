@@ -40,6 +40,9 @@ import {
   SHUTTER_CANDIDATE_TAPS, DEFAULT_DEPTH_BIAS_M, EMPTY_SEED_STATS,
   type ShutterProjection, type ShutterResolveHandle, type SweepSeedStats, type SweepStamp,
 } from './shutter-blur';
+import { SWEEP_MAX_HALF_TEXELS, SWEEP_MIN_HALF_TEXELS } from './shutter-blur';
+import { createSeedUploader, readSeedTexture, type SeedUploadStats } from './seed-upload';
+import { stampRowBand } from '../seed-band';
 
 // ---------------------------------------------------------------------------
 // Owner-accepted defaults / bounds. Every value here is either the accepted
@@ -239,11 +242,15 @@ export interface ShutterGameDiagnostics {
   layer: { width: number; height: number };
   selectedDroplets: number;
   last: SweepSeedStats & { buildMs: number };
+  /** The seed's upload this frame (seed-upload.ts) and the running totals. */
+  upload: SeedUploadStats & { totalBytes: number; totalMs: number; frames: number };
   passes: { sceneRenders: number; gooChains: number; fullscreen: number };
   error: string | null;
 }
 
 export interface ShutterGameLayer {
+  /** DEBUG: the GPU seed read back and compared with the CPU buffer (texels that differ; null: no seed yet). */
+  verifySeed(): Promise<{ mismatches: number; texels: number; nonZero: number; upload: SeedUploadStats } | null>;
   readonly enabled: boolean;
   readonly exposureSeconds: number;
   readonly exposureMs: number;
@@ -327,6 +334,9 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
   let lastError: string | null = null;
 
   let lastStats: SweepSeedStats & { buildMs: number } = { ...EMPTY_SEED_STATS, buildMs: 0 };
+  // The seed goes up by its dirty rows (seed-upload.ts; `?seedupload=0`: whole, every frame).
+  const seedUploader = createSeedUploader(opts.renderer);
+  let uploadTotalBytes = 0, uploadTotalMs = 0, uploadFrames = 0;
   let selectedDroplets = 0;
 
   const stamps: SweepStamp[] = [];
@@ -381,6 +391,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     seedTex.minFilter = THREE.NearestFilter;
     seedTex.magFilter = THREE.NearestFilter;
     seedTex.needsUpdate = true;
+    seedUploader.reset();
     resolve = createShutterResolve(
       {
         layerTex: layerTarget.texture,
@@ -491,7 +502,9 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
         ? rasterizeSweepSeed(stamps, layerW, layerH, seedW, seedH, seedData)
         : { ...EMPTY_SEED_STATS };
       if (stamps.length === 0) seedData.fill(0);
-      seedTex.needsUpdate = true;
+      const up = seedUploader.upload(seedTex, seedData, seedW, seedH,
+        stampRowBand(stamps, layerW, layerH, seedW, seedH, SWEEP_MIN_HALF_TEXELS, SWEEP_MAX_HALF_TEXELS));
+      uploadTotalBytes += up.bytes; uploadTotalMs += up.ms; uploadFrames++;
       const buildMs = performance.now() - buildStart;
 
       // 3. ONE bounded fullscreen resolve over the captured scene + its depth.
@@ -571,9 +584,21 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
         layer: { width: layerW, height: layerH },
         selectedDroplets,
         last: { ...lastStats },
+        upload: { ...seedUploader.last, totalBytes: uploadTotalBytes, totalMs: uploadTotalMs, frames: uploadFrames },
         passes: { sceneRenders: 0, gooChains: 1, fullscreen: 1 },
         error: lastError,
       };
+    },
+    async verifySeed() {
+      if (!seedTex || !seedData) return null;
+      const cpu = seedData.slice();
+      const w = seedW, h = seedH, up = { ...seedUploader.last };
+      const gpu = await readSeedTexture(renderer, seedTex, w, h);
+      if (!gpu) return null;
+      let mismatches = 0, nonZero = 0;
+      const gi = new Uint32Array(gpu.buffer), ci = new Uint32Array(cpu.buffer);
+      for (let i = 0; i < ci.length; i++) { if (gi[i] !== ci[i]) mismatches++; if (ci[i] !== 0) nonZero++; }
+      return { mismatches, texels: w * h, nonZero, upload: up };
     },
     dispose() {
       disposeTargets();
