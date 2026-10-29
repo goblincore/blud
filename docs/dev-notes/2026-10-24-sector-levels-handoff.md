@@ -50,7 +50,7 @@ gore tear-off frames 50-140 ms for ~1.5 s (blood sim), first sight of an E1M1 ro
 two unattributed 1.2/1.9 s E1M1 frames, the arena respawn frame itself (~760 ms). Doom gate PAUSED by the owner
 (manual playtests for now).
 
-**Gore tear-off pass (2026-10-28, 3079ce7d).** The old `stepBlood`/`emitTrails` blame was a profiler artifact (process stalls charged to whatever ran); blood sim is ~2–7 ms/s and GPU-bound. Real fix: blood/gib blur pre-warm used `compileAsync` (wrong target keys) so first gore built 3 pipelines; now warms by drawing into the real no-depth half-float targets outside the post callback. Tear-off now 0 new pipelines (arena) / 2 (E1M1). Remaining ~50–65 ms frame is the **shot** (pellet `hit`/`woundFromPellet`/`traceProjectile` + 2 first-use MeshBasicMaterial on E1M1). Open: teratoma kit pipelines compile on first sight (~300 ms) — pre-warm like kit-eye. Probes `tear.mjs`, `ab-tear.sh` in the session scratchpad.
+**Gore tear-off pass (2026-10-28, 3079ce7d).** The old `stepBlood`/`emitTrails` blame was a profiler artifact (process stalls charged to whatever ran); blood sim is ~2–7 ms/s and GPU-bound. Real fix: blood/gib blur pre-warm used `compileAsync` (wrong target keys) so first gore built 3 pipelines; now warms by drawing into the real no-depth half-float targets outside the post callback. Tear-off now 0 new pipelines (arena) / 2 (E1M1). Remaining ~50–65 ms frame is the **shot** (pellet `hit`/`woundFromPellet`/`traceProjectile` + 2 first-use MeshBasicMaterial on E1M1). Open: teratoma kit pipelines compile on first sight (~300 ms) — pre-warm like kit-eye. Probes `tear.mjs`, `ab-tear.sh` in the session scratchpad. **Follow-up: shot frame pass (2026-10-29)** below — the shot's cost was the pellet trace and wound probes (CPU folds) plus the tracer pipelines; `?shotfix=0`.
 
 **Teratoma kit pre-warm (2026-10-28, db14ad19).** Kits (skinned glTF, `kit-overlay.ts`) were culled off-screen so first sight built 9–14 materials (0.3–1.0 s); also each kit made its own env texture whose id is in the build key, so copies never shared. Now one shared never-disposed env per renderer + `game-kit-prewarm.ts` un-culls one real kit mesh per step off-camera (then each further copy once, for cacoeye). E1M1 first sight: 0 kit builds; frame still 475–770 ms from **sector zone materials (23–27 builds, ~15–20 ms each) + pickup** — next first-sight target. Boot-in-play warm in drawOnce tried and dropped (keys mismatch). Seam `kitPrewarmPending()`.
 
@@ -258,6 +258,61 @@ Queued next (owner-approved):
    first (frameSplit seam), then cull; doors become natural portals.
 5. Later: cross-zone lights, pickup balance, more zombies
    (sparse), room-level barrels, doom gate run on a quiet machine.
+
+## Shot frame pass (2026-10-29)
+**The cost.** A double-barrel volley (2 × 10 pellets, 80 m/s) into a body 2.5 m off made one frame of 50–65 ms
+(steady 10–25 ms). Telemetry captures (`__sdfGame.telemetry.start()/stop()/lastCapture()`, which keep per-frame
+`tickCpuMs`/`drawCpuMs`, exclusive spans and a GPU busy/idle summary) showed the frame was **CPU-bound JS**, not the
+march: tick 20–42 ms, draw 10–23 ms, GPU busy 15–20 ms with 40–70 ms idle.
+
+**Root causes** (new `hit:*` spans split `projectiles-and-hits`: `hit:trace`, `hit:actor`, `hit:bleed`, `hit:flesh`,
+`hit:headshot`, `hit:segmesh`, `hit:sector`, `hit:boxes`, `hit:skull`, `hit:kiteye`, `hit:adrenaline`, `hit:corpses`):
+1. **The pellet trace** (`traceProjectile` with `sdBody`): 5 cm substeps over each pellet's frame segment, one CPU
+   fold (~10 µs on the zombie) each, 880–1540 folds a volley. Worst on E1M1, whose first sector step starts at the
+   EYE and reaches nothing: 2.7 m of empty air traced per pellet, 14–33 ms in the frame BEFORE the hits.
+2. **The wound probes** (`woundFromPellet` → `rimScaleFor` + `probeFlesh`): ~45 folds per pellet hit, 7–14 ms.
+3. **The pellet tracers' pipelines** (the 2 first-use `MeshBasicMaterial` builds on E1M1): additive, double-sided,
+   so three draws them twice (cw + ccw pipelines). Built the first frame a pellet is still in flight when the
+   effects overlay draws — on E1M1 the hit frame; the arena's pellets hit in their first step and are never drawn.
+4. **Torn meat scaled copies** (`game-meat-gib.ts`): each new size bucket cloned + scaled its GLB geometry in the
+   hit frame (~1.7 ms for an E1M1 soldier volley). Small.
+Not it: blood sim, decals, sound, sector ray tests (`hit:sector` 0.1–0.4 ms), sever/repose/upload (`wound-flush` 1.5–4 ms).
+The per-pellet arithmetic warning of 2026-09-04 in damage.ts was not the cost.
+
+**What changed** (all behind **`?shotfix=0`**, which restores the old paths):
+- `body-field.ts` **`bodyField`**: sdBody minus the limbs and prims that cannot change it. Each additive prim / cluster
+  gets a sphere; `(|p−c|−R)/distort` lower-bounds its field, and the quadratic smin / chamfer return `d` exactly once
+  the new value clears `|d| + 4k`, so the skip is **bit-identical** (`body-field.test.ts`, whole cast, at rest and
+  severed). Shells and strands under-report past the scale ratio and always fold. No per-cluster slices. The wound
+  probes get it through `damage.ts unwarpHit`. Zombie fold 7.9 → 3.4 µs, cultist 30 → 4 µs (vitest).
+- **`traceField`**: the trace's field answers "no hit" without folding outside every limb sphere + blend margin
+  (the GPU march draws no surface outside the same spheres). Pellet landings pinned identical over the cast.
+  Trace 4–8× faster (vitest).
+- **`prewarmTracer`** (`game-weapon-rig.ts`): one pooled tracer view drawn once at opacity 0, far under the floor,
+  on a step the kit warm built nothing, while no round is in flight.
+- **Meat copies** pre-built one a step in `meatGib.prewarm()` for the sizes the live bodies can throw (`meatSizesFor`).
+
+**Before / after** (shot only, `NODECAP=1`, 2.5 m, interleaved A/B rounds on a loaded machine — an Android emulator
+and other apps were running, steady medians swing 10–26 ms between runs). `tearMax`/`n50`/`pipes`/steady from 7
+rounds per arm (`tear.mjs` ×4 + `tel.mjs` ×3); CPU numbers from the 3 telemetry rounds (medians):
+
+| | arena before | arena after | E1M1 before | E1M1 after |
+|---|---|---|---|---|
+| `tearMax` median (range) | 47 (43–77) | 44 (39–75) | 51 (44–100) | 47 (43–69) |
+| frames > 50 ms (total over 7) | 1 | 2 | 9 | 3 |
+| new pipelines on the shot | 0 | 0 | 2 | **0** |
+| steady median | 20.0 | 13.8 | 23.7 | 24.5 |
+| worst shot-frame CPU (tick + draw) | 30.1 | 26.8 | 39.9 (82 worst) | 37.8 (51 worst) |
+| `hit:trace` (volley) | 6.5 | **2.3** | 16.4 (32 worst) | **4.3** |
+| `hit:actor` (volley) | 7.1 | **4.5** | 8.9 (18 worst) | **4.7** |
+| `hit:flesh` | 0 | 0 | 3.2 | 1.1 |
+
+The hit path's own CPU fell ~17 → ~10 ms (arena) and ~31 → ~12 ms (E1M1). `tearMax` moves less than the CPU because
+the headless page is capped at 30 Hz (a 34–40 ms frame is still one long interval) and the machine noise is as large
+as the effect. **Left open:** the hit frame still does ~10 ms of hit work plus the first gore draw (goo layer,
+`sdf:polys`, `shell-hull` 2–3× their steady CPU while new blood appears) — draw-side CPU, not the march (GPU busy
+stays 15–20 ms). Next suspects if it matters: `hit:actor`'s 45 probe folds a hit, `wound-flush`, and spreading the
+gout spawns. Probes: `tel.mjs`, `ab-tel-final.sh`, `ab-final.sh` in the session scratchpad.
 
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
