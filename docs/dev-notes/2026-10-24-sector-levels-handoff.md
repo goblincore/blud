@@ -314,6 +314,66 @@ as the effect. **Left open:** the hit frame still does ~10 ms of hit work plus t
 stays 15–20 ms). Next suspects if it matters: `hit:actor`'s 45 probe folds a hit, `wound-flush`, and spreading the
 gout spawns. Probes: `tel.mjs`, `ab-tel-final.sh`, `ab-final.sh` in the session scratchpad.
 
+## Gore spread pass (2026-10-29)
+**The question.** After the shot frame pass the hit frame still did ~10 ms of hit maths (left alone: owner call) plus
+the first gore draw (goo layer, `sdf:polys`, `shell-hull` 2–3× steady). Goal: spread the gore, no visible change.
+
+**Root causes** (telemetry; every suspect confirmed by A/B, not a profile):
+1. **Most of it was a once-a-session cold start, not per-volley work.** The probes measure the FIRST volley on a fresh
+   page. A second volley on the same page (scratchpad `tel2.mjs WARMFIRE=1500`) draws its hit frame at steady
+   (draw 6.5 vs 11 ms, arena) even with every droplet of the first volley gone. Cold vs warm, hit frame: shutter seed
+   raster 2.3 vs 0.4 ms, its stamp planner 0.9–1.1 vs 0.1, the goo sync 0.8 vs 0.3, bleed/gout spawns 0.9–1.4 vs 0.3,
+   blood step 0.7–1.9 vs 0.2. JS that had never run (lazy compile, no type feedback) plus first draws of render objects.
+2. **`cpu:goo:layer` was mislabelled**: the label stayed set through the shutter's CPU seed raster
+   (`rasterizeSweepSeed`), which was the real cost. New pass labels `shutter:plan`, `shutter:goo-sync`, `shutter:seed`,
+   `effects:tail` and tick spans `blood:step`, `blood:view-sync`, `gore-spread` split it.
+3. **E1M1's `effects` 1.6–3.1 ms on the fire frame** (median 2.3; 0.6 on a second volley): the first volley in flight
+   grew the tracer pool by 19 views (two meshes, own materials each) and drew them all for the first time.
+   `prewarmTracer` had warmed one view.
+4. **Per volley, the gore itself** (bleed registration, ~14 droplets a pellet gout, torn meat) sat in the hit frame on
+   top of the hit maths.
+Not it: the seed `fill(0)` (0.02 ms), the bbox raster loop (a capsule row-span version was bit-identical and measured
+no gain — stamps are radius-bound, not long diagonals; dropped).
+
+**What changed** (all behind **`?gorespread=0`**, which restores the old paths):
+- **Gun gore one tick later** (`gore-spread.ts` queue, `game-gore-spread.ts`): the hit frame stamps and flushes the
+  wounds as before (they show that frame); `registerBleed` + `throwGunFlesh` are queued and run at the start of the next
+  tick's projectile block, `GORE_SPREAD_BUDGET` = 8 jobs a tick, so a 20-pellet volley's gouts land over 2–3 frames.
+  The job reads the body as it is then (the per-frame emitters do the same), world time, its own `gore-spread` span.
+- **Boot gore warm** (`warmGore`): the warm's ONE REAL FRAME draws a scratch blood sim (gouts spawned, stepped to land,
+  a fresh batch in the air) through the live spawn/step/sync code, the goo layer and the shutter capture; the live sim is
+  swapped back and every view re-synced after. Own rng (`warmRng`): the shared streams never move. 2.3 ms of setup behind the loader (E1M1, `__warmDone.phases.goreWarm`); the live sim is empty after boot.
+- **`prewarmTracer` warms the whole double-barrel pool** (20 views) instead of one.
+- Left in the hit frame on purpose: **`wound-flush`** (sever checks, repose, upload: 1–2 ms). Deferring it keeps the
+  actor's hit batch open across ticks and moves the sever (gameplay) a frame; not worth 1–2 ms.
+
+**Before / after** (`NODECAP=1`, 2.5 m, interleaved, 3 rounds per arm for the first volley, 2 for the second; medians,
+CPU ms; loaded machine, headless 30 Hz cap):
+
+| | arena before | arena after | E1M1 before | E1M1 after |
+|---|---|---|---|---|
+| FIRST volley: worst frame CPU (tick + draw) | 24.0 (20–33) | 22.1 (20–25) | 30.4 (24–31) | 23.0 (18–25) |
+| hit-frame draw CPU | 11.3 | 6.7 | 14.9 | 9.8 |
+| gore spans, worst frame (sum) | 8.6 | 3.6 | 12.6 | 7.5 |
+| hit-frame `shutter:seed` / `hit:bleed` | 2.9 / 0.7 | 0 / 0.1 | 2.7 / 2.0 | 0 / 0.1 |
+| `effects` on the fire frame | – | – | 2.3 | 0.7 |
+| `tearMax` (n50) | 41 (0) | 38 (0) | 47 (0) | 40 (0) |
+| SECOND volley: worst frame CPU | 15.4 | 15.5 | 20.6 | 13.9 |
+| SECOND volley: hit-frame draw | 6.5 | 5.3 | 11.6 | 6.8 |
+
+The hit frame now carries the hit maths and `wound-flush`; the next frame carries `gore-spread` (0.5–1.7 ms) and the
+new droplets' first sim/sync/seed. Counts after a volley match (torn meat 10/10 on E1M1, splats 256/256); the arena's
+droplet peak is ~20 lower (306–311 vs 324–326) because the wound trickles start a frame or two later. Screenshots:
+`.lab-tmp/gore-spread/{arena,e1m1}-{before,after}.png` (same volley, `?gorespread=0` vs default; the spray is a frame or
+two younger in "after").
+
+**Left:** the hit maths (owner: leave); `wound-flush`; E1M1's torn meat makes a **new `THREE.Mesh` per chunk**
+(`game-meat-gib.ts throw`), so its gore frame's `sdf:polys` reads +1–3 ms (render-object creation) — a mesh pool keyed
+by variant/size/material would remove it; the shutter seed's full 2.4 MB `seedTex` upload each frame blood flies
+(three r186's WebGPU backend has no partial texture upload). First-blood code that the warm cannot reach without a
+body (`registerBleed`, `woundEmitAnchorAndNormal`, `spillVerdict`) still runs cold once (`gore-spread` 1.2–1.7 ms on E1M1's
+first gore frame vs 0.5 later).
+
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
 abstract test spaces (ring, arena). Theory: non-architectural, Doom-like layouts feel more alien.
