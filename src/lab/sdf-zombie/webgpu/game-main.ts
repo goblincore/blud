@@ -205,6 +205,8 @@ import {
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
 import { setShotFix, shotFixOn } from '../body-field';
+import { goreSpreadOn, setGoreSpread } from '../gore-spread';
+import { warmGore } from './game-gore-spread';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { boneExposureOf } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
@@ -4018,10 +4020,16 @@ async function main() {
       // Every skeleton segment batch of the cast, built and drawn once (degenerate) in this real frame: otherwise
       // the first hit that exposes bone builds ~20 of them in one frame (mesh-renderer.ts PREWARM_PER_UPDATE).
       ctx.render.segMeshRenderer?.prewarmNext();
+      // The first blood's cold start (game-gore-spread.ts warmGore): a scratch blood sim drawn in this frame, its
+      // spawn/step/sync code run once, the live sim swapped back after. `?gorespread=0` skips it.
+      const tg = performance.now();
+      const unwarmGore = warmGore(ctx, camera);
+      phases.goreWarm = performance.now() - tg;
       try {
         ctx.boot.handle.drawOnce();
       } finally {
         unwarmFire();
+        unwarmGore();
       }
       phases.drawOnce = performance.now() - tp;
       mark('warm-draw-once-done');
@@ -4941,6 +4949,8 @@ async function main() {
   setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
   // ?shotfix=0 restores the full CPU body folds on the shot path (body-field.ts: the pellet trace and the wound probes).
   setShotFix(shotFixOn(location.search));
+  // ?gorespread=0 restores the gore in the hit frame and drops the boot gore warm (gore-spread.ts, game-gore-spread.ts).
+  setGoreSpread(goreSpreadOn(location.search));
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   ctx.vfx.explosionLights = [];
 
