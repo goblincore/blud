@@ -374,6 +374,65 @@ by variant/size/material would remove it; the shutter seed's full 2.4 MB `seedTe
 body (`registerBleed`, `woundEmitAnchorAndNormal`, `spillVerdict`) still runs cold once (`gore-spread` 1.2–1.7 ms on E1M1's
 first gore frame vs 0.5 later).
 
+## Meat pool and seed upload pass (2026-10-29)
+**1. Are torn-meat chunks missing or smaller after the gore spread pass? No.** New seam `__sdfGame.meatChunks()` (every
+live chunk's size bucket, variant, position, where and on which sim frame it was thrown, whether it can draw: in the
+scene, `.visible`, layer mask). E1M1, same volley, 2 rounds per arm, every frame for 1.3 s (scratchpad `meat.mjs`):
+both arms throw **10 chunks with the same size buckets** (0.18, 0.20, 0.22 ×4, 0.24 ×2, 0.26, 0.28 m), all drawable for
+the whole second, none zone-hidden (meat gibs live in the scene, not `levelGroup`), none evicted. The only difference is
+time: `?gorespread=0` throws all 10 on the hit tick; the default throws 4 on hit+1 and 6 on hit+2 (the 8-jobs-a-tick
+budget). Spawn points sit within ~0.1 m of the old ones in round 2; in round 1 two chunks left 0.4 m higher — the
+deferred job reads the body after `wound-flush` reposed it, i.e. where the wound is drawn, which is the intent. The
+gore-spread screenshot pair differed by capture timing (a younger spray), not by lost chunks. Strips (33–800 ms after the
+shot): `.lab-tmp/meat-pool/strip-{before,after}-r2.png`, frames `e1m1-{before,after}-r{1,2}-*.png`, per-frame data
+`e1m1-*.json`, a 200 ms pair `pair-200-r2.png`. No fix needed.
+
+**2. Torn meat mesh pool** (`meat-pool.ts`, `game-meat-gib.ts`; **`?meatpool=0`** = a new mesh a chunk). Every chunk mesh
+is kept, keyed by variant, size bucket and material (three keys a render object by object + material + render context +
+light list, so the key is what the render object depends on). `spawnMeshGib`'s new `onRemove` hands a mesh back when the
+meat cap evicts it (or a cast rebuild clears it). The play-step `prewarm` makes and draws one mesh per key, nearest body
+first, one a step, far below the floor at 1e-6 scale (drawn for real: no `compileAsync`), then parks it in the pool. E1M1:
+128 meshes warmed (8 variants × the size buckets × the room lists in play); the first volley's 10 chunks were all pool hits
+(0 new meshes in the gore frame); later volleys miss a few (a second live chunk of one key) and keep them. Measured
+gain is **within the noise**: E1M1 gore-frame `sdf:polys` excess over the pre-shot median, 4 rounds × cold/warm per arm:
+old 0.2–1.6 ms, pool −0.5–3.9 ms (medians ~0.9 vs ~0.6). After the gore spread pass the chunks already land over two
+ticks, so the +1–3 ms the earlier note saw no longer shows up as one spike.
+
+**3. Shutter seed upload** (`seed-band.ts`, `webgpu/seed-upload.ts`; both shutter layers; **`?seedupload=0`** = whole upload
+every frame). The seed is RGBA32F (400 × 300 here, 1.92 MB). Options weighed: a half-float format is out (channel z is
+non-linear clip depth; half precision near 1 moves the occlusion test), a lower-res seed changes the streaks, a GPU
+raster is not small (single-owner max-weight/nearer-depth rule, f32 vs JS f64 maths: not bit-identical). Picked: upload
+only the **dirty row band** — this frame's stamp bboxes (computed exactly as `rasterizeSweepSeed` does) union the rows the
+last upload wrote (now cleared) — with `device.queue.writeTexture` on the backend's GPUTexture, leaving the texture's
+version alone so three never re-uploads over it; an empty union skips the upload; the first upload of a texture goes
+through `needsUpdate`. Trap found: hand `writeTexture` a **view of the band** (offset 0) — given the whole buffer with an
+offset, the browser copies the whole view across (measured: slower than three's own full upload).
+Proof: `__sdfGame.verifyBloodSeed()` reads the GPU seed back and compares it word for word with the CPU buffer —
+**0 mismatched texels** on every frame sampled (E1M1 3 volleys × 6 frames mid-air, arena stepped frames, band and full
+paths). The resolve reads the seed only by `textureLoad`, so identical texels are an identical image. A screen pixel diff
+was tried (`seedlock.mjs`, render lock, toggling the path): two frames on the SAME path already differ in ~120k pixels
+(VHS/temporal noise), so the screenshots cannot resolve it; the texture readback is the instrument.
+
+**Before / after** (interleaved, `?meatpool=0&seedupload=0` vs default, 3 cold + 2 warm rounds per level, `NODECAP=1`
+2.5 m double barrel, loaded machine, 30 Hz headless; medians; "air" = mean over the frames the shutter seed ran in the 1.5
+s after the shot):
+
+| | arena old | arena new | E1M1 old | E1M1 new |
+|---|---|---|---|---|
+| seed bytes / frame in the air (cold) | 1.92 MB | 1.24 MB | 1.92 MB | 1.80 MB |
+| seed upload CPU / frame in the air (cold) | 0.61 (in `shutter:resolve`) | 0.44 (`writeTexture`) | 0.55 | 0.53 |
+| `shutter:seed` + `shutter:resolve` / frame (cold / warm) | 1.42 / 1.43 | 1.42 / 1.34 | 2.93 / 3.36 | 2.80 / 2.96 |
+| hit-window worst CPU, tick + draw (cold / warm) | 17.7 / 15.2 | 20.3 / 16.7 | 22.5 / 20.8 | 19.6 / 16.7 |
+| `sdf:polys` max, first 5 frames (cold / warm) | 3.1 / 2.5 | 2.7 / 3.1 | 5.3 / 6.1 | 4.5 / 4.0 |
+
+Read: the seed upload is ~0.6 ms a frame while blood flies; the band trims bytes 35 % in the arena close-up and 6–12 % on
+E1M1 (the spray fills the view at 2.5 m; a smaller spray on screen saves more) and ~0.1–0.2 ms. Real but small.
+
+**Left:** the seed's bigger cost is the CPU raster itself (`shutter:seed` 0.8–2.7 ms a frame on E1M1 while blood flies,
+plus the upload): moving the stamp raster to the GPU (stamps as a storage buffer, one fragment pass over the seed target)
+would remove both, at the price of bit-identity (f32 maths) and a lab A/B for the look. The pool could warm two meshes per
+key if the later-volley misses ever matter.
+
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
 abstract test spaces (ring, arena). Theory: non-architectural, Doom-like layouts feel more alien.
