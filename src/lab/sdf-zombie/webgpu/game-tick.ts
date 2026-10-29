@@ -30,7 +30,8 @@ import { reticleNdc } from './fisheye';
 import { easeAimToCentre } from './aim-style';
 import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, shotAim, strafeSpeed01, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
-import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
+import { stepGutRopes } from './game-bleed';
+import { drainGunGore, gunGore } from './game-gore-spread';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
 import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
@@ -896,6 +897,10 @@ export function tick(ctx: GameContext, dt: number) {
     aimArms(ctx);
   }
   {
+    // GORE SPREAD: the earlier ticks' gun gore (game-gore-spread.ts), before this tick's hits queue theirs.
+    const gs = ctx.telemetry.telemetry.begin();
+    drainGunGore(ctx);
+    ctx.telemetry.telemetry.end('gore-spread', gs);
     const projectileTiming = ctx.telemetry.telemetry.begin();
     const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
     // The PLAYER's pellets fly on their own scale (BULLET_TIME.shotScale): in bullet time the world crawls, your shot
@@ -1085,12 +1090,11 @@ export function tick(ctx: GameContext, dt: number) {
             woundCount: hitActor.wounds().length,
           });
           if (stamped) {
+            // The hit's gore (the gout, the bleed emitter, the torn flesh): queued for the next tick, which spawns it
+            // before its own hits (game-gore-spread.ts; ?gorespread=0: here, in the hit frame).
             const bl = ctx.telemetry.telemetry.begin();
-            registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            gunGore(ctx, { actor: hitActor, wound: stamped, kind: p.kind, point: hitPoint, dir: dirN });
             ctx.telemetry.telemetry.end('hit:bleed', bl);
-            const fl = ctx.telemetry.telemetry.begin();
-            throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
-            ctx.telemetry.telemetry.end('hit:flesh', fl);
           }
           // A kit eye in the line of fire pops; a dangling one snaps (game-kit-eye.ts; profile.eye only).
           const ke = ctx.telemetry.telemetry.begin();
@@ -1413,11 +1417,15 @@ export function tick(ctx: GameContext, dt: number) {
         ],
         cdt, rngStreams.bleed,
       );
+      const sbT = ctx.telemetry.telemetry.begin();
       stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed, undefined,
         ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined, debrisGround(ctx) ?? undefined);
+      ctx.telemetry.telemetry.end('blood:step', sbT);
+      const bvT = ctx.telemetry.telemetry.begin();
       // Re-pose every instance from sim state (billboards track the camera
       // even frozen — same contract as the lab's always-sync).
       ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
+      ctx.telemetry.telemetry.end('blood:view-sync', bvT);
     }
     ctx.vfx.surfaceBlood?.sync();
     ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
