@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 49 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 52 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 21 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 22 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -542,9 +542,12 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/ending-sequence.ts` — SHORT SCRIPTED SEQUENCES (spec 2026-09-30-night-train-egg-ending-design.md §3): a timeline of shots, each a duration, a cut type, a camera and an…
 - `webgpu/grid-navigation.ts` — GRID NAVIGATION CORE: an 8-connected grid of standable cells over a level's bounds, a BFS route between the nearest reachable cells, and `follow`…
 - `webgpu/kit-bounds.ts` — A cheap, conservative bounding sphere for a skinned kit mesh — the "bone sphere" — so frustum culling stays valid without skinning every vertex on…
+- `webgpu/kit-burst-mesh.ts` — THE KIT COMES APART (kit-burst.ts's header has why): every group of vertices is re-weighted to one bone, and from then on moving that bone moves the…
 - `webgpu/kit-damage.ts` — Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
 - `webgpu/kit-occluder.ts` — KIT OCCLUSION (owner, 2026-10-26: "not render the flesh if clothes is over it, also a performance enhancer").
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
+- `webgpu/kit-remains-ground.ts` — What a gibbed body's kit and gun land on (kit-remains.ts): the sector debris ground on a sector level; on a room level the same walls the gib chunks…
+- `webgpu/kit-remains.ts` — WHO HOLDS A KIT AFTER ITS BODY IS GONE.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
 - `webgpu/level-batch.ts` — LEVEL BATCHING, THE PURE CORE (draw-count pass, 2026-10-28).
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
@@ -894,6 +897,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `gore-spread.ts` — GORE SPREAD: the queue that moves a gun hit's gore one tick past the hit frame, a few jobs a tick (gore spread pass, 2026-10-29).
 - `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
 - `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
+- `kit-burst.ts` — A KIT THAT OUTLIVES ITS BODY (owner, 2026-10-29: "kit vanishes when a body gibs").
 - `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
 - `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
 - `march.glsl.ts` — Shader source as strings.

@@ -113,7 +113,7 @@ export interface GibLaunchTuning {
  *  global seeds (the page's `?seed=`) give different bursts. Deliberately NOT
  *  the shared `rngStreams.misc` stream, so adding this launch cannot shift the
  *  draws of any other system (torn-end radii, head faces, ...). */
-function hash01(key: string, salt: number, seed: number): number {
+export function hash01(key: string, salt: number, seed: number): number {
   let h = (2166136261 ^ Math.imul(salt >>> 0, 2654435761)) >>> 0;
   h = (h ^ Math.imul((seed >>> 0) + 1, 40503)) >>> 0;
   for (let i = 0; i < key.length; i++) {

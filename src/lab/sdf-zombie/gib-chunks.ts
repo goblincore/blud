@@ -249,6 +249,22 @@ function resolveBoxes(
 }
 
 /**
+ * A ROOM LEVEL'S COLLIDERS AS A DEBRIS GROUND, for debris that must stop at walls there too (kit-remains.ts: a kit
+ * thrown by a blast). Floor at y = 0 and the same wall boxes and sphere test the gib chunks step against. The bounce's
+ * normal is unused by the steppers that take this ground, so it is not derived.
+ */
+export function roomDebrisGround(boxes: readonly ChunkBox[], ceilAt: (x: number, z: number) => number): DebrisGround {
+  return {
+    floorAt: () => 0,
+    ceilAt,
+    bounce(_prev, next, vel, restitution, _friction, radius = 0) {
+      const r = resolveBoxes(next, vel, radius, boxes, restitution);
+      return r.hit ? { pos: r.pos, vel: r.vel, normal: [0, 0, 0] } : null;
+    },
+  };
+}
+
+/**
  * How far the chunk ORIGIN sits above its LOWEST world point, for the current
  * orientation. This is the NARROW-PHASE floor support: `pos[1] ===
  * chunkSupportOffset(c)` puts the piece exactly on the floor, whatever its

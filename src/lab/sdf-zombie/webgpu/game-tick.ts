@@ -45,6 +45,7 @@ import { stepPendingGibImpulses } from './game-gib-spawn';
 import { blastShielded, ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
+import { kitRemainsGround } from './kit-remains-ground';
 import { stepMeshGibs } from './game-mesh-gibs';
 import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
@@ -1330,6 +1331,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    ctx.gibs.kitRemains.step(cdt, ctx.gibs.kitRemains.moving ? kitRemainsGround(ctx) : null);
     ctx.boot.kitEye?.step(cdt);
     ctx.boot.meatGib?.prewarm();
     // Kit meshes, then level meshes (game-level-prewarm.ts): never two first builds in one frame.

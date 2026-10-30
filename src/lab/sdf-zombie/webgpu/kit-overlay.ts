@@ -45,8 +45,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
-import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
-import type { DebrisGround, DebrisSeat } from '../debris-ground';
+import { createKitBurst, prepareKitBurst, type KitBurstPieceReport } from './kit-burst-mesh';
+import { createKitDamage, piecesOf, type KitArmorInput, type KitDamageEvent } from './kit-damage';
+import { KIT_BURST } from '../kit-burst';
+import { PLANE_GROUND, type DebrisGround, type DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
 import { addKitOccluders } from './kit-occluder';
 import type { BuildResult } from '../build-body';
@@ -278,6 +280,15 @@ const PULSED = ['led', 'core'] as const;
  */
 const LOOK_DEFAULT = { metalness: 0.05, roughness: 0.35, envIntensity: 0.9 };
 
+/** A kit whose body is gone (KitOverlay.burst). Its pieces, and any shed earlier, until its holder disposes the kit. */
+export interface KitWreck {
+  /** True while anything still moves. */
+  step(dt: number, ground: DebrisGround | null): boolean;
+  report(): KitBurstPieceReport[];
+  /** Index entries still drawn: what the wreck costs to keep (kit-remains.ts's cap). */
+  readonly indexCount: number;
+}
+
 export interface KitOverlay {
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
   object: THREE.Object3D;
@@ -303,6 +314,10 @@ export interface KitOverlay {
     ground?: DebrisGround | null; seat?: DebrisSeat | null;
   }): KitDamageEvent[];
   resetDamage(): void;
+  /** The body has gibbed: the kit comes apart where it was last posed (kit-burst.ts) and is stepped by whoever holds the
+   *  result from now on. pose() must not be called again. Null for a kit never posed (it would fly from the origin). */
+  burst(launch: (key: string, centre: Vec3) => Vec3, rolls: (key: string) => readonly [number, number, number],
+    seat?: DebrisSeat | null): KitWreck | null;
   /** The shed pieces (kit-damage.ts dropped; empty for an unbreakable kit) — the debris seam. */
   dropped(): { x: number; z: number; minY: number; resting: boolean }[];
   /** Scale the PULSED materials' emissive intensity from their authored
@@ -534,7 +549,12 @@ export async function loadKit(
   // Distance twins of the opaque cloth for the march's occT bound (kit-occluder.ts). After createKitDamage, which
   // clones the geometry the twins must share. Drawn only by pass 1c, and only while it is on.
   const occluders = addKitOccluders(object);
+  // A kit too big to split into islands on the gib frame has its split by bone worked out here instead (kit-burst.ts).
+  const kitIndexCount = skinned.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
+  const byBone = !breakable && kitIndexCount > KIT_BURST.islandIndexLimit ? prepareKitBurst(skinned) : null;
+  let posed = false;
   const pose: KitOverlay['pose'] = (frames, damage) => {
+    posed = true;
     poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
@@ -555,6 +575,25 @@ export async function loadKit(
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
     dropped: () => damageView?.dropped() ?? [],
+    burst(launch, rolls, seat) {
+      if (!posed) return null;
+      // The twins bound the march over a body that is no longer there.
+      occluders.dispose();
+      object.visible = true; // the sight cull's, while there was a body to cull
+      const drawn = skinned.filter(m => m.visible);
+      const indexCount = drawn.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
+      const islands = damageView?.livePieces()
+        ?? (indexCount <= KIT_BURST.islandIndexLimit ? drawn.flatMap(piecesOf) : null);
+      const pieces = createKitBurst({ meshes: skinned, islands, byBone, launch, rolls, seat });
+      return {
+        step(dt, ground) {
+          damageView?.stepDrops(dt, ground);
+          return pieces.step(dt, ground ?? PLANE_GROUND) || (damageView?.dropped().some(d => !d.resting) ?? false);
+        },
+        report: () => pieces.report(),
+        indexCount,
+      };
+    },
     glow(levels) {
       for (const p of pulsed) {
         p.mat.emissiveIntensity = p.base * (p.name === 'led' ? levels.led : levels.core);

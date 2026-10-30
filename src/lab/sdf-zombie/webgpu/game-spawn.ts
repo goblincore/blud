@@ -623,6 +623,7 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headSplit?.reset();
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
+  ctx.gibs.kitRemains.clear();
   ctx.boot.kitEye?.clear();
   ctx.boot.kitPrewarm?.clear();
   ctx.world.soldierCorpses?.dispose();

@@ -8,7 +8,7 @@
 // layer and its occluder switch, the sprite atlas, the offline-asset runtime
 // and the two pending-release queues.
 //
-// Pure by construction: the only non-local imports are erased `import type`s,
+// Pure by construction: the only non-local imports are erased `import type`s (and kit-remains.ts, itself three-free),
 // so this module carries no runtime Three.js/WebGPU dependency. Fields are
 // plain and mutable — no getters, setters, `readonly` or `Object.freeze` —
 // because the codemod moves the original assignments onto these fields and an
@@ -30,6 +30,7 @@ import type { GibAssetHeadFactory } from './gib-asset-head';
 import type { GibAssetRuntime } from './gib-asset-runtime';
 import type { GibShutterLayer } from './gib-shutter-layer';
 import type { GibSpriteAtlas } from './gib-sprites';
+import { createKitRemains, type KitRemains } from './kit-remains';
 
 /**
  * Placeholder for a binding whose real value is a live handle built at that
@@ -84,6 +85,10 @@ export interface GibsState {
   tearSec: number;
   /** The live-body -> gib switch steps on this boot (`?gibswitch=`, gib-switch.ts). */
   switchSteps: ReadonlySet<GibSwitchStep>;
+  /** `?gibkit=0` makes a gibbed body's kit and gun vanish instead of coming off as debris. */
+  kitDebris: boolean;
+  /** Kits and guns whose bodies have gibbed (kit-remains.ts). */
+  kitRemains: KitRemains;
   /** The loaded sprite atlas, or null before `ensureGibAtlas` resolves. */
   atlas: GibSpriteAtlas | null;
   /** Which atlas the bench shows: `placeholder` (default) or the shipped `sheet`. */
@@ -152,6 +157,8 @@ export function makeGibsState(): GibsState {
     wounds: false,
     tearSec: 0,
     switchSteps: new Set<GibSwitchStep>(),
+    kitDebris: true,
+    kitRemains: createKitRemains(),
     atlas: null,
     atlasSource: 'placeholder',
     spriteAtlasWarned: false,

@@ -4562,6 +4562,7 @@ async function main() {
   // THE LIVE -> GIB SWITCH steps (gib-switch.ts, `?gibswitch=beat,blood,launch,timing`; `none` = the old
   // switch). `timing` shortens the window to GIB_SWITCH_TEAR_SEC; an explicit `?gibtear=` still wins.
   ctx.gibs.switchSteps = parseGibSwitch(DYN_PARAMS.get('gibswitch'));
+  ctx.gibs.kitDebris = DYN_PARAMS.get('gibkit') !== '0';
   ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 })
     ?? (ctx.gibs.switchSteps.has('timing') ? GIB_SWITCH_TEAR_SEC : 0.2);
   /**

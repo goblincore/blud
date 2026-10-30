@@ -34,6 +34,8 @@ export interface HeldProp {
   muzzle(forward?: number): Vec3;
   /** True once released. */
   readonly released: boolean;
+  /** False until the first pose: the prop stands at the world origin until then. */
+  readonly posed: boolean;
   /** Reclaim the prop for a fresh body; the caller supplies its next held pose. */
   reset(): void;
   dispose(): void;
@@ -73,6 +75,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
   const pos = new THREE.Vector3(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   let last: GunPose = { root: [0, 0, 0], quat: [0, 0, 0, 1] };
   let drop: DropState | null = null;
+  let posed = false;
 
   const write = (root: Vec3, quat: Quat) => {
     pos.set(root[0], root[1], root[2]);
@@ -85,12 +88,14 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
   return {
     object,
     get released() { return drop !== null; },
+    get posed() { return posed; },
     reset() {
       drop = null;
       object.visible = true;
     },
     pose(gun, sinceFire, bodyRight, barrelSpin = 0) {
       if (drop) return;
+      posed = true;
       if (barrels) barrels.rotation.z = barrelSpin;
       const rise = muzzleRise(sinceFire);
       const quat: Quat = rise === 0 ? gun.quat : qMul(qFromAxisAngle(bodyRight, -rise), gun.quat);

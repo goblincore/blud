@@ -31,6 +31,9 @@ export interface DebrisGround {
   bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number, radius?: number): WallBounce | null;
 }
 
+/** The y = 0 plane as a ground: no walls, no ceiling. */
+export const PLANE_GROUND: DebrisGround = { floorAt: () => 0, bounce: () => null };
+
 /** SPAWNS START INSIDE THE LEVEL (plan 3b), for a stepper that cannot see the level: where a piece spawned at `at`
  *  with collision radius `radius` actually starts (clamped inside the level from its body's centre) and the floor to
  *  seed it with (the body's floor; undefined when none is known). The game builds it per actor (game-spawn.ts). */

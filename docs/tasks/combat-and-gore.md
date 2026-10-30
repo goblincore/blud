@@ -12,10 +12,15 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
   partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
   (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
-- [ ] **Kit vanishes when a body gibs** (owner, 2026-10-29). `retireActor` calls `retireEquipment()`
-  (`webgpu/game-gib-spawn.ts:210`), which removes the kit outright. Idea: shed the pieces through the existing armor debris
-  path (`webgpu/kit-damage.ts`) with the blast's push, so it keeps working when the soldier's kit is remade in higher quality.
-  Check the held gun too. The owner likes the improved switch but expects more tweaking later.
+- [x] **Kit vanishes when a body gibs** (owner, 2026-10-29; done 2026-10-30). The kit now comes apart and is thrown with
+  the gibs, and the held gun (it vanished too) lets go and lands. Toggle `?gibkit=0` restores vanishing. Each piece is a set
+  of vertices re-weighted to one skeleton bone, so the kit's existing skinned draw carries it: no new pipelines, nothing
+  baked (a piece baked as in `kit-damage.ts` is an unskinned draw, which would build on the gib frame). Independent of the
+  mesh: pieces are the kit's islands up to 15k index entries, spare bones permitting (soldier 19), and its bones above that
+  (butcher 13, teratoma 5); a smoothly weighted remake is torn at bone seams. Pure: `kit-burst.ts`; mesh:
+  `webgpu/kit-burst-mesh.ts`; owner after the view retires, capped at 16 bodies and 2.4M indices, oldest first:
+  `webgpu/kit-remains.ts`. Seam: `__sdfGame.debris().kitRemains`. Sheets: `.lab-tmp/gib-kit/s-*.png`. Left: a body's casings
+  still vanish with it; a kit piece shed BEFORE the gib still builds its unskinned pipelines on first shed.
 - [ ] **The blast distortion ignores depth** (owner, 2026-10-29). `postAaBlastWarp` in `webgpu/post-aa.ts` (numbers in
   `blast-refraction.ts`) warps the final colour in screen space, so walls, the viewmodel and anything in front of the
   blast bend too. Fix in the explosion-side pass: depth-gate it, or (preferred) an in-scene refracting shockwave shell,

@@ -24,10 +24,12 @@ function boneLimb(name: string): LimbId {
   return /skull|neck|head/.test(k) ? 'head' : 'torso';
 }
 
-interface Piece {
+export interface Piece {
   source: THREE.SkinnedMesh;
   indices: number[];
   bone: string;
+  /** Index of that bone in the skeleton (kit-burst-mesh.ts). */
+  joint: number;
   /** kitSupportKey(bone), fixed at load. */
   support: string;
   limb: LimbId;
@@ -52,7 +54,7 @@ export interface KitArmorInput { spec: ArmorSpec; shed: ReadonlySet<string>; hit
 /** WAM keeps part shapes disconnected but merges them per material. Join
  * UV-seam duplicates by position, then collect triangle islands once at load.
  * The intact mesh keeps its original draw calls; only detached islands bake. */
-function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
+export function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
   const g = mesh.geometry, pos = g.getAttribute('position');
   const skin = g.getAttribute('skinIndex'), weight = g.getAttribute('skinWeight');
   if (!pos || !skin || !weight) return [];
@@ -82,7 +84,7 @@ function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     const joint=[...votes].sort((a,b)=>b[1]-a[1])[0]?.[0]??0;
     const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
     const centre=bounds.getCenter(new THREE.Vector3());
-    return {source:mesh,indices:list,bone,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
+    return {source:mesh,indices:list,bone,joint,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
       armor:material?.name==='plate',released:false,damage:0};
   });
 }
@@ -183,6 +185,38 @@ export function createKitDamage(object:THREE.Object3D) {
     for(const i of new Set(piece.indices)) { p.fromBufferAttribute(pos,i); piece.source.applyBoneTransform(i,p); p.applyMatrix4(piece.source.matrixWorld); box.expandByPoint(p); }
     return box;
   };
+  /** Advance the shed pieces. Named apart from update(): a kit the body has left (kit-remains.ts) has only this to do. */
+  const stepDrops=(dt:number,ground?:DebrisGround|null)=>{
+    const step=Math.min(Math.max(dt,0),1/30);
+    for(const d of drops) {
+      if(d.resting || step===0) continue;
+      d.velocity.y-=10*step;
+      const p=d.mesh.position, start:Vec3|null=ground?[p.x,p.y,p.z]:null;
+      p.addScaledVector(d.velocity,step);
+      if(ground) {
+        const b=ground.bounce(start!,[p.x,p.y,p.z],[d.velocity.x,d.velocity.y,d.velocity.z],.22,.6,d.radius);
+        if(b) { p.set(b.pos[0],b.pos[1],b.pos[2]); d.velocity.set(b.vel[0],b.vel[1],b.vel[2]); }
+      }
+      d.mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(d.spin.x*step,d.spin.y*step,d.spin.z*step)));
+      d.mesh.updateMatrixWorld(true);
+      const bounds=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
+      if(ground) {
+        // Under a non-sky ceiling the piece's top stays under it (NaN off the map, Infinity under sky: no clamp).
+        const ceil=ground.ceilAt?.(p.x,p.z)??Infinity;
+        if(Number.isFinite(ceil) && bounds.max.y>ceil-.01) {
+          const down=bounds.max.y-(ceil-.01);
+          p.y-=down; bounds.min.y-=down; bounds.max.y-=down;
+          if(d.velocity.y>0) d.velocity.y*=-.22;
+        }
+      }
+      const lift=ground?(d.floorY=landingFloor(ground,p.x,p.z,d.floorY))+.01:.01;
+      if(bounds.min.y<lift) {
+        d.mesh.position.y+=lift-bounds.min.y;
+        d.velocity.set(d.velocity.x*.6,Math.abs(d.velocity.y)*.22,d.velocity.z*.6); d.spin.multiplyScalar(.65);
+        if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
+      }
+    }
+  };
   return {
     debris,
     reset,
@@ -233,37 +267,12 @@ export function createKitDamage(object:THREE.Object3D) {
         const index=pieces.filter(p=>p.source===mesh && !p.released).flatMap(p=>p.indices);
         mesh.geometry.setIndex(index); mesh.visible=index.length>0;
       }
-      const step=Math.min(Math.max(dt,0),1/30);
-      for(const d of drops) {
-        if(d.resting || step===0) continue;
-        d.velocity.y-=10*step;
-        const p=d.mesh.position, start:Vec3|null=ground?[p.x,p.y,p.z]:null;
-        p.addScaledVector(d.velocity,step);
-        if(ground) {
-          const b=ground.bounce(start!,[p.x,p.y,p.z],[d.velocity.x,d.velocity.y,d.velocity.z],.22,.6,d.radius);
-          if(b) { p.set(b.pos[0],b.pos[1],b.pos[2]); d.velocity.set(b.vel[0],b.vel[1],b.vel[2]); }
-        }
-        d.mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(d.spin.x*step,d.spin.y*step,d.spin.z*step)));
-        d.mesh.updateMatrixWorld(true);
-        const bounds=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
-        if(ground) {
-          // Under a non-sky ceiling the piece's top stays under it (NaN off the map, Infinity under sky: no clamp).
-          const ceil=ground.ceilAt?.(p.x,p.z)??Infinity;
-          if(Number.isFinite(ceil) && bounds.max.y>ceil-.01) {
-            const down=bounds.max.y-(ceil-.01);
-            p.y-=down; bounds.min.y-=down; bounds.max.y-=down;
-            if(d.velocity.y>0) d.velocity.y*=-.22;
-          }
-        }
-        const lift=ground?(d.floorY=landingFloor(ground,p.x,p.z,d.floorY))+.01:.01;
-        if(bounds.min.y<lift) {
-          d.mesh.position.y+=lift-bounds.min.y;
-          d.velocity.set(d.velocity.x*.6,Math.abs(d.velocity.y)*.22,d.velocity.z*.6); d.spin.multiplyScalar(.65);
-          if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
-        }
-      }
+      stepDrops(dt,ground);
       return events;
     },
+    stepDrops,
+    /** The pieces still on the body (kit-burst-mesh.ts). */
+    livePieces:()=>pieces.filter(p=>!p.released),
     /** Every shed piece's x/z, its world bounds' lowest y and whether it has settled (the debris seam). Named
      *  `dropped`, not `debris`: that is the pieces' scene group. */
     dropped():{x:number;z:number;minY:number;resting:boolean}[] {

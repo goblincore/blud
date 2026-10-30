@@ -42,9 +42,11 @@ import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import type { VisualWound } from '../shared-wounds/torso';
 import { tearUpload, wetLipUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
-import { loadKit, type KitOverlay } from './kit-overlay';
+import { loadKit, type KitOverlay, type KitWreck } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
+import { hash01 } from '../gib-launch';
+import { KIT_BURST, kitBurstLaunch } from '../kit-burst';
 import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { levelBatchOn } from './level-batch';
@@ -484,6 +486,13 @@ export function createWoundRing(): WoundRing {
   };
 }
 
+/** What a gibbed body leaves behind (surrenderEquipment). */
+export interface SurrenderedEquipment {
+  kit: KitOverlay | null;
+  wreck: KitWreck | null;
+  prop: HeldProp | null;
+}
+
 export interface CharacterView {
   readonly entry: CharacterEntry;
   /** This body's wounds and their carve upload. */
@@ -540,6 +549,10 @@ export interface CharacterView {
     kit: { x: number; z: number; minY: number; resting: boolean }[] };
   /** Restore equipment and clear detached armor when a fresh body replaces this one. */
   resetEquipment(): void;
+  /** The body has gibbed: the kit comes apart and the gun lets go, both thrown by `launch`, and both are handed to the
+   *  caller, who steps and disposes them from now on (kit-remains.ts). A later retireEquipment leaves them alone.
+   *  Null when there is nothing to hand over. */
+  surrenderEquipment(launch: (key: string, centre: Vec3) => Vec3, torso: Vec3, seed: number): SurrenderedEquipment | null;
   /** Permanently remove attachments when the actor leaves the simulation. */
   retireEquipment(): void;
   dispose(): void;
@@ -661,6 +674,27 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
   }
 
+  function surrenderEquipment(launch: (key: string, centre: Vec3) => Vec3, torso: Vec3, seed: number): SurrenderedEquipment | null {
+    if (equipmentRetired) return null;
+    const rolls = (key: string) => [hash01(key, 5, seed), hash01(key, 6, seed), hash01(key, 7, seed)] as const;
+    const launchKit = (key: string, centre: Vec3) => kitBurstLaunch(launch(key, centre), centre, torso, rolls(key));
+    const wreck = kit?.burst(launchKit, rolls, opts.seat) ?? null;
+    const keptKit = wreck ? kit : null;
+    if (keptKit) kit = null; // never posed: left for retireEquipment, which disposes it
+    let prop: HeldProp | null = null;
+    if (heldProp?.posed) {
+      prop = heldProp;
+      heldProp = null;
+      prop.object.visible = true; // the sight cull's, while there was a body to cull
+      if (!prop.released) {
+        const m = prop.muzzle();
+        const v = launchKit('prop', m);
+        prop.release([v[0] * KIT_BURST.velGain, v[1] * KIT_BURST.velGain, v[2] * KIT_BURST.velGain], seed, opts.seat);
+      }
+    }
+    return keptKit || prop ? { kit: keptKit, wreck, prop } : null;
+  }
+
   function retireEquipment(): void {
     if (equipmentRetired) return;
     equipmentRetired = true;
@@ -743,6 +777,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },
+    surrenderEquipment,
     retireEquipment,
     dispose() {
       if (disposed) return;

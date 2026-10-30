@@ -41,6 +41,7 @@ export function createDebrisSeams(ctx: GameContext) {
       equipment: ctx.world.actors.map(a => ({
         actor: a.id, ...(a.character?.debris() ?? { casings: [], prop: null, kit: [] }),
       })),
+      kitRemains: ctx.gibs.kitRemains.report(),
       bundles: ctx.bake.liveBundles.map(b => ({
         pos: [...b.state.pos], vel: [...b.state.vel], floorY: b.state.floorY ?? 0,
       })),

@@ -376,6 +376,12 @@ export function gibActor(ctx: GameContext,
     spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++,
       undefined, seat.floorY);
   }
+  // THE KIT AND THE GUN GO WITH THE GIBS (`?gibkit=0`: they vanish), on the same launch as the pieces. Out of the view
+  // before retireActor below disposes what the view still holds.
+  if (ctx.gibs.kitDebris) {
+    const left = a.character?.surrenderEquipment(launchFor, torsoC, ctx.demo.seed ^ a.id);
+    if (left) ctx.gibs.kitRemains.add(left);
+  }
   retireActor(ctx, a);
   ctx.telemetry.telemetry.event('dynamite-gib', {
     actor: a.id, mode: ctx.gibs.mode, tier, pieces: spawned, dropped, bones: boneSpawned,
