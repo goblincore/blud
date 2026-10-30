@@ -1,5 +1,5 @@
 // Source tripwires for the burn uniforms' NAME bindings. Keys in the wgslFn
-// call object bind BY NAME (three 0.186 resolves each WGSL input via
+// call object bind BY NAME (three 0.187 resolves each WGSL input via
 // parameters[inputNode.name]; proven GPU-free in wgslfn-binding.test.ts), so
 // key ORDER cannot misbind — but a MISSING key binds float(0) with only a
 // console error (see zombie-gpu.ts's KEYS BIND BY NAME note), so key PRESENCE

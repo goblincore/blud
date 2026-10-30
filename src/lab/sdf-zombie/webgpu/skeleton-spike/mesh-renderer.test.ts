@@ -562,7 +562,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
      *  values declared ahead of the branch on the clip (real variables: an intent is written where it is first read),
      *  `branch` what the branch stacks. */
     const colourOf = (m: MeshBasicNodeMaterial) => {
-      const body = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+      const body = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
       const was = getCurrentStack(), outer = stack();
       try {
         setCurrentStack(outer); body.jsFunc();

@@ -51,7 +51,7 @@ const calls = (nodes: readonly Graph[]) => new Set(nodes.flatMap(n => (n.functio
 /** A split material's colour as three builds it: `held` the values declared ahead of the branch on the clip (real
  *  variables), `branch` what the branch stacks. */
 const colourOf = (m: MeshBasicNodeMaterial) => {
-  const fn = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+  const fn = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
   const was = getCurrentStack(), outer = stack();
   try {
     setCurrentStack(outer); fn.jsFunc();

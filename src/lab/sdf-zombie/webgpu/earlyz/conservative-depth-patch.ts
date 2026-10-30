@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/earlyz/conservative-depth-patch.ts
 //
-// CONSERVATIVE DEPTH FOR THREE r186 (spec 2026-10-01 §4 A, D8). three emits every
+// CONSERVATIVE DEPTH FOR THREE r187 (spec 2026-10-01 §4 A, D8). three emits every
 // depthNode as plain `@builtin(frag_depth)`, which disables hardware early-Z. This
 // wraps WGSLNodeBuilder.getFragDepth so a material that opts in with the OWN property
 // `conservativeDepth = 'greater'` (own properties enter three's render-object cache key;
@@ -22,7 +22,7 @@
 import { WGSLNodeBuilder, REVISION } from 'three/webgpu';
 
 export const CONSERVATIVE_DEPTH_BUILTIN = 'frag_depth, greater';
-export const PATCHED_THREE_REVISION = '186';
+export const PATCHED_THREE_REVISION = '187';
 
 interface BuilderLike {
   material?: { conservativeDepth?: unknown } | null;
