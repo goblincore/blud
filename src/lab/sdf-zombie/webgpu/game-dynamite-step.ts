@@ -10,14 +10,18 @@
 import type { GameContext } from './game-context';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { FLIGHT_TUNING, detonated as flightDetonated, stepFlight } from '../dynamite-flight';
+import { GIB_SWITCH_BEAT_GAIN, GIB_SWITCH_BLOOD, blastBloodPlacement } from '../gib-switch';
+import { spawnImpactGout } from '../blood-sim';
+import { rngStreams } from './rng';
 import { EXPLOSION_PROFILE, resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { chargeFraction, stepCook, type CookSignal } from '../fpv';
 import { type Vec3 } from '../types';
 import { EXPLOSION_LIGHT, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld, throwBundle } from './game-dynamite-throw';
 import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
-import { ceilingAt } from './game-hit-trace';
+import { blastShielded, ceilingAt, clampSpawnInside, debrisGround, seatBloodSpawn } from './game-hit-trace';
 import { eyeOf } from './game-player';
+import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
 import { slotReady } from './game-weapon-slots';
 import { scaleBurstVisual, spillVerdict } from './game-wound-vfx';
@@ -30,15 +34,20 @@ export const BLAST_KICK_RAD_PER_UNIT = 0.015;
 /** The bundle that never left the hand: an overcook, or a fuse that burned
  *  out while held. Detonates AT the player. */
 export function overcookInHand(ctx: GameContext): void {
-  const at = propWorld(ctx, ctx.weapon.heldProp);
+  // Sector levels (plan 3b review): the hand can sit past a wall the player hugs — the blast goes off on the
+  // player's side of it (clamped from the eye). Room levels: the hand position, as before.
+  const hand = propWorld(ctx, ctx.weapon.heldProp);
+  const at = ctx.world.level.def?.sectors ? clampSpawnInside(ctx, eyeOf(ctx.player.player), hand) : hand;
   ctx.telemetry.telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
-  detonateAt(ctx, at, true);
+  detonateAt(ctx, at, true, ctx.world.level.def?.sectors ? eyeOf(ctx.player.player) : undefined);
 }
 
-/** `spareActorId`: an actor the blast does not touch, its FIRER (a rocket's owner, rockets.ts). Doom's rule: a
+/** `inside` (sector levels): an open point on the blast's own side — the shield probes' seat hint (seatBlastProbe),
+ *  so a blast at a thin wall never reaches through it.
+ *  `spareActorId`: an actor the blast does not touch, its FIRER (a rocket's owner, rockets.ts). Doom's rule: a
  *  monster is never hurt by its own projectile. Without it the teratoma's point-blank spit blew the teratoma itself apart
  *  (owner, enemy test arena, 2026-10-24); the warbull's rocket in the same spot would have done the same to him. */
-export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, spareActorId?: number): void {
+export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: Vec3, spareActorId?: number): void {
   const t0 = performance.now();
   ctx.dynamite.gibTierLog = [];
   const prof = newBlastProfile(ctx);
@@ -48,16 +57,26 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, spareActo
   EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
   EXPLOSION_PROFILE.traces = 0;
   ctx.dynamite.detonations++;
-  const bodies: ExplosionBody[] = ctx.world.actors.filter(a => a.id !== spareActorId).map(a => ({
+  // SECTOR-SHIELDED BLASTS (plan 3b; Doom's radius-damage sight check): on a sector level a body whose torso centre is
+  // behind sector geometry from the blast takes nothing (one probe per body from the blast's seated probe start —
+  // blastShielded). A body with no torso cluster is kept. Room levels: every actor, as before. The firer
+  // (`spareActorId`) is spared on every level.
+  const unspared = ctx.world.actors.filter(a => a.id !== spareActorId);
+  const inBlast = ctx.world.level.def?.sectors
+    ? unspared.filter(a => {
+      const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
+      return !torso || !blastShielded(ctx, at, [torso[0], torso[1], torso[2]], inside);
+    })
+    : unspared;
+  const bodies: ExplosionBody[] = inBlast.map(a => ({
     id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
   }));
   const tResolve = performance.now();
   const fx = resolveExplosion(at, bodies, {
     eye: eyeOf(ctx.player.player),
-    // Floor distance IS the height above y = 0, this level's real floor, so
-    // the resolver's air-vs-ground burst choice is exact here without
-    // overriding its default.
-    floorDistM: Math.max(0, at[1]),
+    // The blast's height over the floor under it (sector levels: that sector's floor; room levels: y = 0, the old
+    // value exactly) — the resolver's air-vs-ground burst choice.
+    floorDistM: Math.max(0, at[1] - standingFloor(ctx.world.level.ground, at[0], at[2])),
     // A gibbed body's wounds are never read (see `gibWounds` above).
     woundsOnGibbed: ctx.gibs.wounds,
     // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
@@ -120,6 +139,22 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, spareActo
         // are RESERVED out of `gibBudget()` until release, so the preview is
         // the shape that will spawn and a later blast cannot spend its slots.
         const chosen = scheduleGib(ctx, a, at, pb.falloff, gibAllowance(ctx, remaining, condemnedLeft));
+        // THE HIT BEAT (`?gibswitch=beat`): the doomed body takes the survivor's blast REACTION — root knock and
+        // stagger lurch, no wounds, no meter — so the body that dies reacts at least as hard as one that lives.
+        // The rupture follows the moved pose (TearTuning.followPose) and the pieces spawn where it is drawn.
+        if (chosen && ctx.gibs.switchSteps.has('beat')) {
+          a.blast({ wounds: [], meterCredit: 0, impulse: pb.rigImpulse, gain: GIB_SWITCH_BEAT_GAIN, forceKnock: true });
+        }
+        // THE FIRST SPRAY (`?gibswitch=blood`): on the hit frame, from the torso's blast-facing side, away from
+        // the blast — not only at the swap 200 ms later. (The resolver's nearest surface point is the shins for a
+        // floor blast: blood there read as a puddle, not a hit.)
+        const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
+        if (chosen && torso && ctx.gibs.switchSteps.has('blood') && ctx.vfx.bleedEnabled) {
+          const b = blastBloodPlacement([torso[0], torso[1], torso[2]], at, GIB_SWITCH_BLOOD.hitSideM);
+          const seat = seatBloodSpawn(ctx, a, b.anchor);
+          spawnImpactGout(ctx.vfx.bloodSim, 'stump', seat.pos, b.dirN, rngStreams.bleed, ctx.boot.nextEmitterStream++,
+            { countMul: GIB_SWITCH_BLOOD.hitCountMul, speedMul: GIB_SWITCH_BLOOD.hitSpeedMul }, seat.floorY);
+        }
         if (chosen) {
           remaining = gibDebit(ctx, remaining, chosen.reserve);
           condemnedLeft = Math.max(0, condemnedLeft - 1);
@@ -204,6 +239,8 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, spareActo
     x: at[0], y: at[1], z: at[2], radiusM: fx.radiusM,
     bodies: fx.perBody.length, gibbed, pieces, ms: ctx.dynamite.lastBlastMs,
   });
+  // BARRELS (plan 3b): every blast lights the drums in reach — a barrel's own detonation comes here too: the chain.
+  ctx.world.barrels?.catchBlast(at, inside);
 }
 
 /**
@@ -237,13 +274,21 @@ export function stepDynamite(ctx: GameContext, dt: number): void {
     // see ceilingAt. One frame of lag across a doorway is invisible (the wall
     // boxes catch that frame), and a 5-entry lookup per bundle per frame is
     // nothing next to getting the roof wrong.
-    const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, b.state.pos[0], b.state.pos[2]) };
+    // Sector levels (plan 3b) add the debris ground: the floor under the
+    // bundle, the ceiling over it per sub-step, and the sector walls. Room
+    // levels get the same two fields as before (the y = 0 flight unchanged).
+    const g = debrisGround(ctx);
+    const world = {
+      colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, b.state.pos[0], b.state.pos[2]), ...(g ? { ground: g } : {}),
+    };
     let remaining = Math.min(dt, 0.25);
     let boom: Vec3 | null = null;
+    let lastOpen: Vec3 = b.state.pos;   // the bundle's last open position: the blast's shield seat hint
     while (remaining > 1e-9 && !flightDetonated(b.state)) {
       const sub = Math.min(remaining, FLIGHT_TUNING.subStepSec);
       remaining -= sub;
       const from = b.state.pos;
+      lastOpen = from;
       // bounds: null — the dungeon has no arena rect; `colliders` is its
       // real solid geometry and `ceilM` its ceiling.
       b.state = stepFlight(b.state, sub, null, world);
@@ -254,7 +299,7 @@ export function stepDynamite(ctx: GameContext, dt: number): void {
       // Hand the prop back BEFORE the blast so the very next cook has one.
       if (b.prop) { b.prop.object.visible = false; ctx.bake.spareBundles.push(b.prop); }
       ctx.bake.liveBundles.splice(i, 1);
-      detonateAt(ctx, boom);
+      detonateAt(ctx, boom, false, ctx.world.level.def?.sectors ? lastOpen : undefined);
       continue;
     }
     b.prop?.pose({ mode: 'flight', pos: b.state.pos, spin: b.state.spin, fuseBurning: true });

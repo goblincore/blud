@@ -18,10 +18,11 @@ export const LEVEL_POINT_DECAY = 2;
 
 export interface LevelCheapInput { fixture?: 'bulb' | 'tube' | 'beacon' | 'none'; mood?: string; shadow?: boolean }
 
-/** The one rule for the tier: fire-mood lights and shadowless tubes. Beacons are shadowed sweeps: never. */
+/** The one rule for the tier: fire- and glow-mood lights (pools, emitter surfaces) and shadowless tubes.
+ *  Beacons are shadowed sweeps: never. */
 export function isLevelCheap(a: LevelCheapInput): boolean {
   if (a.fixture === 'beacon') return false;
-  if (a.mood === 'fire') return true;
+  if (a.mood === 'fire' || a.mood === 'glow') return true;
   return a.fixture === 'tube' && a.shadow === false;
 }
 

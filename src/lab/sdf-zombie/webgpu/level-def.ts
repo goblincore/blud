@@ -17,6 +17,7 @@ import {
   type RoomDef, type TunnelDef,
 } from './game-level';
 import { SKY_PRESETS, type EdgeStyle, type GroundName, type SkyName, type SkylineName } from './outdoor-presets';
+import type { SectorMap } from './sector-def';
 
 export const LEVEL_WALL_T = 0.3;
 /** Spec §3: validation and opening-detection tolerance, metres. */
@@ -35,7 +36,7 @@ export const DEFAULT_PALETTE: LevelPalette = {
   solid: [0.34, 0.33, 0.32],
 };
 
-export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art';
+export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art' | 'sectors';
 export type WallSide = 'n' | 's' | 'e' | 'w';
 export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
 export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
@@ -83,10 +84,15 @@ export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
 export interface WindowDef { id: string; view: string; room: number; side: WallSide; box: Aabb }
 export interface PickupDef { id: string; item: PickupItem; pos: Vec3 }
-export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull';
+/** A spawn's kind is the registry character it spawns (game-spawn.ts spawnAll). `teratoma` is the floater
+ *  (2026-10-27, E1M1 overrides): it hovers over the floor under it and walks the same sector navigation. */
+export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull' | 'deadeye' | 'butcher' | 'flayer' | 'teratoma';
+export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist', 'juggernaut', 'warbull', 'deadeye', 'butcher', 'flayer', 'teratoma'];
 export interface SpawnDef { id: string; kind: SpawnKind; pos: Vec3; yaw: number }
 export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }
+/** Sector levels (plan 3b): an exploding barrel, its feet at `pos` (on its floor). */
+export interface BarrelDef { id: string; pos: Vec3 }
 export interface TriggerDef { id: string; event: string; once: boolean; box: Aabb }
 export interface GateDef { id: string; opensOn: string; box: Aabb }
 /** Dynamic light §3: when `on` fires, the level also fires every event in `emit`. */
@@ -127,6 +133,11 @@ export interface LevelDef {
   portals: PortalDef[];
   /** Mesh key §3: the level's art file (beside the JSON), or null. */
   art: string | null;
+  /** Sector levels (spec 2026-10-24 §4): the sector geometry; absent on room levels. Its zones
+   *  are `rooms` with `shell: 'art'` (collision comes from the sectors, not their boxes). */
+  sectors?: SectorMap;
+  /** Sector levels (plan 3b): exploding barrels, feet on their floor. Absent when the file has none. */
+  barrels?: BarrelDef[];
 }
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }

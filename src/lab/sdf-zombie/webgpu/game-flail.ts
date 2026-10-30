@@ -33,6 +33,8 @@ import {
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
+import { barrelsInStrike } from './barrel-runtime';
+import { sectorHitBetween } from './game-hit-trace';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
@@ -48,6 +50,7 @@ import {
   stepImpact, timeScale,
 } from './flail-impact';
 import { bloodHit, makeFlailBlood, setBloodLevel, stepBlood } from './flail-blood';
+import { triggerAdrenalineRush } from './game-bullet-time';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
 
@@ -512,6 +515,12 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     const heads: Record<number, Vec3> = {};
     for (const a of actors) if (a.head) heads[a.id] = a.head.centre;
     const hits = resolveStrike(eye, aimYaw, aim, actors, FLAIL_ARC_DEG[side]);
+    // BARRELS (plan 3b Task 14, sector levels only): every intact drum in this strike's reach and arc, not behind a
+    // sector wall from the eye, takes one melee hit (10: two strikes pop a drum), at the drum point nearest the eye.
+    const drums = ctx.world.barrels
+      ? barrelsInStrike(ctx.world.barrels.states, eye, aimYaw, FLAIL_ARC_DEG[side], (a, b) => sectorHitBetween(ctx, a, b) !== null)
+      : [];
+    for (const dh of drums) ctx.world.barrels!.hit(dh.id, 'melee', dh.point);
     const struckHeads: Record<number, number> = {};
     const struckPoints: Record<number, Vec3> = {};
     const magnet: Record<number, boolean> = {};
@@ -589,12 +598,13 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // punch, rig kick and chain relax (setImpactFx). Replaces the old 0.02 rad recoilPitch kick.
       contact(impact, impactKick(side, anyHead), { time: hitStopOn, view: impactFxOn });
       contacts++;
+      triggerAdrenalineRush(ctx, 'flail');   // ADRENALINE (adrenaline.ts): a connecting strike starts the rush too
       // BLOOD (flail-blood.ts): one contact, one dose — ×1.5 on H, ×1.3 when any hit was a head hit.
       bloodHit(blood, side, anyHead);
       bloodU.value = blood.level;
       ctx.weapon.shotAlert = true;
     }
-    ctx.telemetry.telemetry.event('flail-strike', { side, hits: hits.length });
+    ctx.telemetry.telemetry.event('flail-strike', drums.length ? { side, hits: hits.length, barrels: drums.length } : { side, hits: hits.length });
   }
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _roll = new THREE.Quaternion();

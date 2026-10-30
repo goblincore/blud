@@ -27,6 +27,10 @@ import type { DiscoRuntime } from './game-disco';
 import type { EggRuntime } from './game-egg';
 import type { EmergenceRuntime } from './game-emergence';
 import type { SequenceRuntime } from './game-sequence';
+import type { SectorFxRuntime } from './game-sector-light';
+import type { ZoneCullRuntime } from './game-zone-cull';
+import type { GameBarrels } from './game-barrels';
+import type { GameDoors } from './game-doors';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -34,6 +38,7 @@ import type { BakedChunkMaterial } from './baked-chunks';
 import type { EncounterNavigation } from './encounter-navigation';
 import type { ZombieActor } from './game-actor';
 import type { Aabb } from './game-level';
+import type { SightOccluder } from './actor-sight';
 import type { RoomProbes } from './room-probes';
 import type { OuterHull } from './shell-hull-outer';
 import type { ThemeMaterialSet } from '../../../game/level/theme-material-set';
@@ -83,6 +88,12 @@ export interface WorldState {
   emergence: EmergenceRuntime | null;
   /** The running scripted sequence (the Night Train ending); null until one starts. */
   sequence: SequenceRuntime | null;
+  /** Sector light and glow floors (game-sector-light.ts); null unless the level is built from sectors. */
+  sectorFx: SectorFxRuntime | null;
+  /** Sector levels (plan 3b): the level's barrels, or null. */
+  barrels: GameBarrels | null;
+  /** Sector levels: the level's doors (game-doors.ts), or null without any. */
+  doors: GameDoors | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -102,6 +113,11 @@ export interface WorldState {
   coverage: { screenFrac: number; nearestM: number; biggestFrac: number };
   /** Scratch direction/point vector for the actor sight test. */
   sightA: [number, number, number];
+  /** The level geometry the box colliders do not hold, for the render culls' sight test
+   *  (actor-sight.ts sectorOcclusion): set on sector levels, null on room levels. */
+  sightOccluder: SightOccluder | null;
+  /** Sector levels: the portal flood cull and the enemy update LOD (game-zone-cull.ts); null on room levels. */
+  zoneCull: ZoneCullRuntime | null;
   /** Navigation graph the encounter director paths over. */
   encounterNav: EncounterNavigation;
   /** The encounter director itself (per-agent memory, routes, sight). */
@@ -147,6 +163,9 @@ export function makeWorldState(): WorldState {
     egg: null,
     emergence: null,
     sequence: null,
+    sectorFx: null,
+    barrels: null,
+    doors: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -156,6 +175,8 @@ export function makeWorldState(): WorldState {
     cullCounts: { visible: 0, total: 0 },
     coverage: { screenFrac: 0, nearestM: 0, biggestFrac: 0 },
     sightA: [0, 0, 0],
+    sightOccluder: null,
+    zoneCull: null,
     encounterNav: unbuilt<EncounterNavigation>(),
     encounter: unbuilt<EncounterDirector>(),
     encounterHomes: new Map<number, Vec3>(),
@@ -187,6 +208,9 @@ export const WORLD_BINDINGS = {
   egg: 'world.egg',
   emergence: 'world.emergence',
   sequence: 'world.sequence',
+  sectorFx: 'world.sectorFx',
+  barrels: 'world.barrels',
+  doors: 'world.doors',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

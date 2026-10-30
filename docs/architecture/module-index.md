@@ -37,35 +37,35 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 57 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 3 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
-| [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
+| [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
-| [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 81 | Gameplay features wired into the game loop. |
+| [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
+| [Game: feature modules](#game-feature-modules) | 91 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 28 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 52 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
-| [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
+| [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 47 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
-| [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
+| [SDF march renderer](#sdf-march-renderer) | 59 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
-| [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
+| [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
-| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
+| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 15 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 22 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -167,6 +167,7 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/sculpt-fragments.ts` — The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head…
 - `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full-1cm`, `full`, the default).
 - `webgpu/skeleton-spike/sculpt-variant.ts` — Which skull a page draws, character by character: resolveSkull reads `?skull=`, `?sculpt=` and `?skullfit=` and answers the sculpted skull's variant…
+- `webgpu/skeleton-spike/segment-instance.ts` — Skeleton segment batches drawn instanced from a NAMED per-instance matrix attribute, so every batch of a material shares one node build, one shader…
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
 - `webgpu/skeleton-spike/skull-cast.ts` — The cast's skulls: which humanoids draw the anatomical skull in place of their sculpted head bone, and how it is fitted to each.
 - `webgpu/skeleton-spike/skull-fit.ts` — FITTING THE ANATOMICAL SKULL TO A HEAD'S FLESH, in two stages.
@@ -243,12 +244,14 @@ One module per HTML page; see the entrypoint table above.
 Tuning panels for the labs and the game.
 
 - `panel.ts` — Dev panel helpers for the lab: per-character override storage and slider, select and button widgets.
+- `webgpu/bullet-time-panel.ts` — The BULLET TIME tuning panel: one slider per bullet-time.ts knob, live.
 - `webgpu/dynamite-panel.ts` — The DYNAMITE / GIB tuning panel.
 - `webgpu/flame-panel.ts` — The flame lab's tuning panel.
 - `webgpu/game-state-panels.ts` — PANELS slice of the GameContext decomposition.
 - `webgpu/goo-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) every tuning panel sits in.
 - `webgpu/light-layers-panel.ts` — The LIGHT LAYERS panel (owner 2026-09-28): one checkbox per body-lighting layer added since the melee branch (light-layers.ts), all off by default,…
 - `webgpu/panel-chrome.ts` — The shell every tuning panel sits in: fixed frame, title bar, collapse caret, close button, and a body the caller fills with rows.
+- `webgpu/panel-pool.ts` — A small job pool for the sector materials' off-thread texture builds (game-sector-mesh.ts).
 - `webgpu/shutter-panel.ts` — FOCUSED PLAYER/DEV CONTROLS for the selective shutter blur (2026-09-17).
 - `webgpu/vhs-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) the tuning panels sit in.
 - `webgpu/wound-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) every tuning panel sits in.
@@ -283,10 +286,14 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 
 `window.__sdfGame` members, read by the gate and capture scripts.
 
+- `webgpu/game-seams-barrels.ts` — Barrel seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 13): the level's barrels as plain data, a hit by…
 - `webgpu/game-seams-bench.ts` — Seam module: the `bench` and `demoScenario` members lifted verbatim out of the `__sdfGame` object literal in game-main.ts.
+- `webgpu/game-seams-blast-trace.ts` — READ-ONLY diagnostic seam for the blast -> damage -> gib frame-strip probe (2026-10-29, "the explosion and the gib do not feel connected").
 - `webgpu/game-seams-boot.ts` — The window.__sdfGame boot and frame diagnostics: backend, tiles, frame hash, pass timings, draw counts, frame cap and shadow toggles.
+- `webgpu/game-seams-debris.ts` — Debris seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 9): where every loose piece a fight leaves behind…
 - `webgpu/game-seams-debug-probe.ts` — Debug probe and world inspection seams, lifted verbatim out of the window.__sdfGame object literal in game-main.ts.
 - `webgpu/game-seams-demo-step.ts` — The window.__sdfGame demo recording, demo info, manual stepping, bodies-on-screen and demo-hold members.
+- `webgpu/game-seams-doors.ts` — Door seams (game-doors.ts): the level's doors as plain data, forcing one open or shut, the phase-change log, and `doorRay` — the same sector ray…
 - `webgpu/game-seams-dynamite.ts` — Dynamite/explosion seams: the panel's tuning surface and the wound-only diagnostic detonation (the real `detonate`/`overcook` stay in game-main.ts's…
 - `webgpu/game-seams-earlyz.ts` — EARLY-Z console/capture seam (spec 2026-10-01): plain data only.
 - `webgpu/game-seams-fire.ts` — Fire/burn seams: the flare test harness plus every burn/fire-technique tuning readback.
@@ -317,6 +324,8 @@ Gameplay features wired into the game loop.
 - `webgpu/game-arms-math.ts` — The FPV arms' pure half: the node contract, the material-name mapping, and the basis that aims an arm.
 - `webgpu/game-arms.ts` — The FPV goblin arms: loads goblin-arm.glb, dresses it, and hands two arm groups (origin = hand centre, local +Y = toward the elbow) to game-main.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
+- `webgpu/game-barrel-view.ts` — THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Tasks 12–13, owner look pass 2026-10-25): the three.js side of barrel-look.ts.
+- `webgpu/game-barrels.ts` — BARRELS IN PLAY (plan 2026-10-25-sector-levels-3b Task 13): the level's barrels on ctx.world.barrels — the pure core (barrel-runtime.ts: states,…
 - `webgpu/game-bench-scenario.ts` — The scripted firefight, as DATA.
 - `webgpu/game-bench.ts` — Runs a Scenario against the page and reports per-segment frame cost.
 - `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
@@ -335,6 +344,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-demo-replay.ts` — Demo replay: applying a recording's boot flags, the replay driver that owns the sim clock, and demo synthesis.
 - `webgpu/game-demo-save.ts` — Demo recording stop: ends the recorder and saves the demo file to the dev server.
 - `webgpu/game-disco.ts` — THE BOILER ROOM DISCO BALL in the game (spec 2026-09-27-disco-ball-design.md): the ball gets a mirror-tile material (hand-written WGSL,…
+- `webgpu/game-doors.ts` — DOORS IN PLAY (owner design 2026-10-28): the level's door entities (sector-def.ts SectorDoorDef) on ctx.world.doors.
 - `webgpu/game-dynamic-light.ts` — DYNAMIC LIGHT in the game (docs/superpowers/specs/2026-09-26-night-train-dynamic-light-design.md): every level lamp follows its mood and scripted…
 - `webgpu/game-dynamite-step.ts` — The dynamite per-tick step: fuse and flight, overcooking in the hand, and detonateAt (blast damage, kick, gibs, light).
 - `webgpu/game-dynamite-throw.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
@@ -346,6 +356,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-gib-actor.ts` — Gibbing a whole actor (gibActor: chunks, blood, blast profile, retire) and spawning the gibs scheduled for later frames.
 - `webgpu/game-gib-pieces.ts` — Gib piece spawners: building one asset-mesh gib piece or one sprite gib piece and registering it with the game.
 - `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
+- `webgpu/game-gore-spread.ts` — GORE SPREAD in the game: a gun hit's gore queued to the next tick, and the boot warm that runs the first blood's code and draws once behind the…
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
 - `webgpu/game-head-damage.ts` — THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15; plan Task 17).
 - `webgpu/game-head-shot.ts` — THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a precise slug from close to…
@@ -353,9 +364,12 @@ Gameplay features wired into the game loop.
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
 - `webgpu/game-kit-eye.ts` — THE POPPING KIT EYE, in the game (kit-eye.ts has the rules and the shape).
+- `webgpu/game-kit-prewarm.ts` — KIT PRE-WARM: every cast kit mesh is drawn once, one build a step, before the player first sees it (teratoma first-sight hitch, 2026-10-28).
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
 - `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
+- `webgpu/game-level-batch.ts` — LEVEL BATCHING, THE RENDERER SIDE (draw-count pass, 2026-10-28; the pure core is level-batch.ts): pickup batches and the static level matrices.
 - `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
+- `webgpu/game-level-prewarm.ts` — LEVEL PRE-WARM: every level mesh is drawn once, one material build a step, nearest the player first, before the player first sees it (E1M1…
 - `webgpu/game-level-rooms.ts` — Runtime helpers for the active level (Level Format v1 — spec docs/superpowers/specs/2026-09-23-level-format-design.md).
 - `webgpu/game-level.ts` — The grey-box ring for sdf-game.html: four rooms in quadrants, connected 1 -> 2 -> 3 -> 4 -> 1 by short tunnels through the dividing bands, with NO…
 - `webgpu/game-light-list.ts` — THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6).
@@ -373,6 +387,8 @@ Gameplay features wired into the game loop.
 - `webgpu/game-probe-weight.ts` — Clamped setter for the global probe-lighting weight on the game context.
 - `webgpu/game-render-controls.ts` — Render helpers: SDF scale and adaptive scaling, fisheye and viewmodel FOV, actor culling, bone cull modes and the trained upscale.
 - `webgpu/game-rod.ts` — WEAPON SLOT 6: THE ROD (cut wounds M1, spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §5).
+- `webgpu/game-sector-light.ts` — SECTOR LIGHT AND GLOW at runtime (spec 2026-10-24 §7–§8): owns the per-sector level uniform array the sector meshes read, refreshes it every tick…
+- `webgpu/game-sector-mesh.ts` — SECTOR LEVEL MESHES (spec 2026-10-24-doom-sector-levels-design.md §6.4): floors, ceilings and walls from sector-geometry.ts, merged into one mesh per…
 - `webgpu/game-sequence.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
 - `webgpu/game-skeleton-actors.ts` — An actor's skeleton resources: bone field sources, the shared volume atlas (acquire, release), binding and release.
 - `webgpu/game-skull-shots.ts` — A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT.
@@ -392,6 +408,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-wound-tuning.ts` — applyWoundTuning: writes wound panel values into the game (ramp, viscera, gut ropes), rebuilding the cast when boneRatio changes.
 - `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
 - `webgpu/game-zombie-face.ts` — The zombie's flat face sheet (url, atlas rect, mean) and headShape, the head prim that normalises the face projection.
+- `webgpu/game-zone-cull.ts` — ZONE / PORTAL CULL AND ENEMY UPDATE LOD IN PLAY (occlusion pass, 2026-10-28).
 
 ## Weapons and viewmodel (render)
 
@@ -511,6 +528,9 @@ Light lists, profiles, layers, probe grids, outdoor light.
 Level definitions, kits, the train, the disco, the egg, sky, encounters.
 
 - `webgpu/active-level.ts` — THE ACTIVE LEVEL. Everything in the game that used to read the ring's globals (ROOMS, TUNNELS, FURNITURE, PLAYER_START, levelColliders(), ...) reads…
+- `webgpu/barrel-look.ts` — THE BARREL'S LOOK (spec 2026-10-24 §8, plan 2026-10-25-sector-levels-3b Task 12): our own toxic drum, no WAD data.
+- `webgpu/barrel-runtime.ts` — BARRELS IN PLAY, THE PURE CORE (plan 2026-10-25-sector-levels-3b Task 13): the level's barrel states over time — hits, blast catches, the fuse step,…
+- `webgpu/barrel-state.ts` — EXPLODING BARRELS (spec 2026-10-24 §8, plan 2026-10-25-sector-levels-3b): hit points, hits by kind, the blast catch (every intact barrel within…
 - `webgpu/disco-star.wgsl.ts` — A disco ball's reflected star (spec 2026-09-27-disco-ball-design.md §2), hand-written WGSL: a soft round spot with a hot core, drawn additive on a…
 - `webgpu/disco-stars.ts` — THE BOILER ROOM DISCO BALL (spec 2026-09-27-disco-ball-design.md).
 - `webgpu/disco-tiles.wgsl.ts` — The disco ball's mirror tiles (spec 2026-09-27-disco-ball-design.md §1), hand-written WGSL.
@@ -520,17 +540,38 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/encounter-director.ts` — Encounter director: line-of-sight and fire-lane tests, plus the per-agent orders (idle, combat, pursue, search, return, yield).
 - `webgpu/encounter-navigation.ts` — Static floor navigation for encounters: a grid path planner over rooms and tunnels that keeps actors clear of solid boxes.
 - `webgpu/ending-sequence.ts` — SHORT SCRIPTED SEQUENCES (spec 2026-09-30-night-train-egg-ending-design.md §3): a timeline of shots, each a duration, a cut type, a camera and an…
+- `webgpu/grid-navigation.ts` — GRID NAVIGATION CORE: an 8-connected grid of standable cells over a level's bounds, a BFS route between the nearest reachable cells, and `follow`…
 - `webgpu/kit-bounds.ts` — A cheap, conservative bounding sphere for a skinned kit mesh — the "bone sphere" — so frustum culling stays valid without skinning every vertex on…
+- `webgpu/kit-burst-mesh.ts` — THE KIT COMES APART (kit-burst.ts's header has why): every group of vertices is re-weighted to one bone, and from then on moving that bone moves the…
 - `webgpu/kit-damage.ts` — Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
 - `webgpu/kit-occluder.ts` — KIT OCCLUSION (owner, 2026-10-26: "not render the flesh if clothes is over it, also a performance enhancer").
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
+- `webgpu/kit-remains-ground.ts` — What a gibbed body's kit and gun land on (kit-remains.ts): the sector debris ground on a sector level; on a room level the same walls the gib chunks…
+- `webgpu/kit-remains.ts` — WHO HOLDS A KIT AFTER ITS BODY IS GONE.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
+- `webgpu/level-batch.ts` — LEVEL BATCHING, THE PURE CORE (draw-count pass, 2026-10-28).
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
 - `webgpu/level-events.ts` — LEVEL EVENTS. Triggers fire string events when the player walks in; gates open on events; a small vocabulary of events turns into commands the game…
+- `webgpu/level-ground.ts` — THE GROUND a body stands on (spec 2026-10-24-doom-sector-levels-design.md §6.1): the floor and ceiling under a point and the wall lines that block a…
 - `webgpu/level-json.ts` — LEVEL FORMAT v1 — parse, validate, filter to one state, derive capabilities.
 - `webgpu/level-list-node.ts` — THE CHEAP LEVEL TIER'S NODE (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/level-tier.ts` — THE CHEAP LEVEL TIER (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/portal.wgsl.ts` — The Void's portal, embers and glow pool, hand-written WGSL (spec 2026-09-24-void-portal-design.md §5).
+- `webgpu/sector-bounce.ts` — GLOW BOUNCE (hand-off 2026-10-24 item 2b): the green a nukage pool (lava, acid) throws on the room round it, baked once per vertex at mesh build.
+- `webgpu/sector-debris.ts` — THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level.
+- `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
+- `webgpu/sector-doors.ts` — SECTOR DOORS (owner design 2026-10-28): sci-fi doors whose two leaves split sideways into the jambs, opening by themselves for the player and for…
+- `webgpu/sector-edges.ts` — SECTOR EDGES — the one rule for a sector's directed boundary, shared by the parser (closure, winding), the loop builder and the point-in-sector test…
+- `webgpu/sector-emitters.ts` — EMITTER LIGHT (hand-off item 2g, part B1): the self-lit walls and ceilings (screen banks, the viewscreen, fluorescents, exit signs) as LIGHT SOURCES.
+- `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…
+- `webgpu/sector-glow.wgsl.ts` — GLOWING HAZARD FLOORS (spec 2026-10-24 §8): nukage, lava and acid as a self-lit, slowly flowing surface in world space (so a pool split across…
+- `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
+- `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
+- `webgpu/sector-light.ts` — SECTOR LIGHT (spec 2026-10-24-doom-sector-levels-design.md §7).
+- `webgpu/sector-materials.ts` — SECTOR MATERIALS: the converter's family names (scripts/levels/doom_tables.py — tech, rust, metal, door, light-panel, concrete, metal-plate, tile) to…
+- `webgpu/sector-navigation.ts` — NAVIGATION OVER SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.3): the grid core of grid-navigation.ts, with standing and travel read…
+- `webgpu/sector-portals.ts` — SECTOR PORTAL VISIBILITY (occlusion pass, 2026-10-28): which sectors the camera can possibly see, from the sector graph alone.
+- `webgpu/sector-ray.ts` — SEGMENT VS SECTOR GEOMETRY (plan 2026-10-24-sector-levels-3a Task 3): where a 3D segment a→b first meets a sector level's walls, floors or ceilings —…
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).
 - `webgpu/sky.wgsl.ts` — The sky dome's colour, hand-written WGSL (Outdoor v1 §6).
 - `webgpu/train-motion.ts` — The train's motion (carriage kit spec §6), as pure functions of SIM time and speed: camera roll and bob, rail-joint jolts, lamp and curtain swing.
@@ -580,6 +621,8 @@ AA, glow, VHS, shutter blur, fisheye.
 
 - `webgpu/fisheye.ts` — THE LENS. A radial magnifying warp applied at the canvas blit: the middle of the screen samples a small patch of the rendered frame (magnified,…
 - `webgpu/post-aa.ts` — X1.25: PSX-friendly anti-aliasing for the SDF lab.
+- `webgpu/post-adrenaline-border.wgsl.ts` — THE LOW-HEALTH RED BORDER (owner 2026-10-27: "once you're below a certain health and the time scale is affecting you, there should be a red border…
+- `webgpu/post-adrenaline-edge.wgsl.ts` — THE ADRENALINE EDGE (owner 2026-10-27: "there needs to be a visual indicator of this state — maybe distortion around the border/edges of the…
 - `webgpu/post-contrast.wgsl.ts` — THE FINAL S-CURVE (owner 2026-09-27: "the overall scene lacks a little contrast - everything a bit medium grey"; softened after a replay: "still…
 - `webgpu/post-flash-grade.wgsl.ts` — THE LIGHTNING GRADE (owner, 2026-09-26), hand-written WGSL, applied at the final blit.
 - `webgpu/post-glow.ts` — THE GLOW PASS, as pure numbers plus the two WGSL sources post-aa.ts wires into quad scenes.
@@ -608,18 +651,27 @@ Benchmarks, demo record/replay, frame hashes, GPU timing.
 
 The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation.
 
+- `webgpu/actor-lod.ts` — ENEMY UPDATE LOD (occlusion pass, 2026-10-28; owner: "not rendering or updating enemies that aren't visible").
+- `webgpu/aim-style.ts` — PER-WEAPON AIM STYLE (owner 2026-10-27): "the dead-zone free look (inspired by Realms of the Haunting) will be a per-weapon setting.
 - `webgpu/arena-cycle.ts` — The TEST ARENA's character cycling (game-arena.ts), pure: which registry characters it steps through, and the next one from the current.
 - `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
 - `webgpu/cloth-proxy.ts` — THE RASTERISED CLOTH PROXY (SDF-cloth cost spike, option 1, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
+- `webgpu/door-frame-geometry.ts` — DOOR READABILITY CUES (owner playtest 2026-10-28: the shut doors "sometimes just look like wall panels" under fog and the flashlight).
+- `webgpu/door-leaf-geometry.ts` — THE DOOR LEAVES' MESH DATA (game-doors.ts draws them): a split door (sector-doors.ts) has two leaves, slabs that fill the doorway between its faces…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…
 - `webgpu/emergence-expressions.ts` — THE GOBLIN'S FACE through the emergence (spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): which of the goblin's expression…
 - `webgpu/emergence-field.ts` — THE SCREEN EMERGENCE's field, CPU twin (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4).
 - `webgpu/emergence-placement.ts` — Where the screen frame (origin at the glass centre, +x right, +y up, +z out of the screen toward the room, metres: emergence-field.ts) sits in the…
 - `webgpu/emergence-timeline.ts` — THE SCREEN EMERGENCE's cue curves (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 5): from a time `t` in…
+- `webgpu/emit-push.ts` — EMITTER PUSH (owner 2026-10-29, after the B1 sheet: "push the screens and exit signs harder").
+- `webgpu/emitter-glow.wgsl.ts` — EMITTER GLOW (hand-off item 2g, part A): the animated self-light of the four emitter panel kinds, drawn in the fragment shader on the sim clock.
 - `webgpu/field-render.ts` — INTERLACED FIELD RENDERING — the pure math.
+- `webgpu/floater-move.ts` — FLOATERS ON SECTOR LEVELS (the teratoma; owner 2026-10-27: "replicate the logic from Doom for their wandering").
+- `webgpu/fog-range.ts` — fogRange: the scene fog's near/far for a level — the ambient rig's own range on room levels, a longer, thinner veil on sector levels, then URL…
 - `webgpu/goblin-puppet.ts` — THE GOBLIN PUPPET (emergence in the Flat, plan Task 4; spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): the SDF goblin of the…
+- `webgpu/hazard-floor.ts` — HURT FLOORS (spec 2026-10-24 §8): standing on a hurt sector deals whole points of damage once a second, the first after half a second (Doom hits…
 - `webgpu/hull-refine-view.ts` — Wraps a shipped body/chunk view so it can be drawn EITHER through its own proxy-box march (unchanged) OR through a per-frame surface-nets hull whose…
 - `webgpu/march-private-reads.ts` — The ONE wgslFn node that carries MARCH_NORMAL_OUT — and with it the march body's module-scope privates `gMarchNormal` and `gMarchAnchor` — plus the…
 - `webgpu/march-test-support.ts` — Shared fixtures for the march shader-text tests (split out of march.wgsl.test.ts by march split task 3, 2026-09-19).
@@ -632,16 +684,19 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/normal-gradient-support.ts` — Support checks for the analytic normal gradient: which bodies and primitives are supported, owner stability and hit point reconstruction.
 - `webgpu/normal-gradient.wgsl.ts` — WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
 - `webgpu/occluder-hull.ts` — A conservative INNER hull of the bodies, rasterised so the march can stop early where something solid already covers the ray.
+- `webgpu/prewarm-order.ts` — WARM ORDER for the level pre-warm (game-level-prewarm.ts): of the meshes still to warm, the one whose bounding sphere is nearest the player goes…
 - `webgpu/screen-emergence.wgsl.ts` — THE SCREEN EMERGENCE's march and shading (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 4; plan Task 6, round…
 - `webgpu/screen-lab-goblin.ts` — THE SCREEN LAB's goblin, pure half (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 6, plan Task 5; look round 1,…
 - `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
 - `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
+- `webgpu/seed-upload.ts` — SEED ROW UPLOAD (meat pool and seed upload pass, 2026-10-29): a shutter motion seed (shutter-game-layer.ts, gib-shutter-layer.ts: an RGBA32F…
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
 - `webgpu/soft-fade.ts` — SHARED SOFT-PARTICLE DEPTH FADE (flame-polish task 1, extracted for the explosion-curl task).
 - `webgpu/split-ablate.ts` — THE OPEN HEAD'S COST, TAKEN APART (docs/dev-notes/2026-10-06-open-head-cost/NOTES.md; scripts/open-head-cost.mjs is the driver).
+- `webgpu/stress-spawns.ts` — STRESS CAST (occlusion pass, 2026-10-28): `?stress=N` on a sector level adds N enemies to the level's own spawns, for measuring culling at Doom 2…
 - `webgpu/surface-blood-view.ts` — Persistent surface blood (opt-in, `?surfaceblood=1`): sweeps the blood sim's droplets against the level's meshes, keeps the stains as per-receiver…
 - `webgpu/surface-blood.wgsl.ts` — Original procedural splatter masks, shared by the shader entrypoints.
 - `webgpu/surface-nets-compute.ts` — GPU side of the hull extraction: buffers sized ONCE at the worst case, compute nodes built once, a per-frame extract() that moves only uniforms (the…
@@ -666,6 +721,7 @@ The `.blob` language, body building, validation, silhouette fitting.
 - `blob-emit.ts` — Writes a `.blob` document back to text, preserving comments and layout, with optional face overrides spliced in.
 - `blob-face-sheet.ts` — A procedurally generated greyscale face sheet.
 - `blob-parse.ts` — The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
+- `body-field.ts` — FAST CPU BODY FIELDS for the shot path (shot frame pass, 2026-10-29).
 - `body-grain.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md).
 - `body-normal-bake/bake.wgsl.ts` — THE BAKE FIELD in WGSL: `sdBodyClosed` (validate.ts) line for line, built from the SAME leaf functions the game marches with…
 - `body-normal-bake/cpu-bake.ts` — The CPU backend, and the REFERENCE every other backend is held to: per texel it finds the plain skin along a ray toward the region's axis, the…
@@ -773,6 +829,7 @@ Gib parts, launch, tearing, entrails, strands.
 - `gib-launch.ts` — WHERE A GIB PIECE COMES FROM, PHYSICALLY — the active lab's replacement for the correlated radial concussion shove the owner reported as "pieces…
 - `gib-look-tuning.ts` — ONE constant, shared by the GPU march shader and the CPU bake so the two cannot drift: the fraction of a piece's gore a HEAD's non-face exterior…
 - `gib-parts.ts` — THE PIECE SET — what a body actually becomes when a blast takes it apart.
+- `gib-switch.ts` — THE LIVE-BODY -> GIB SWITCH (owner 2026-10-29: "explosion -> enemy damaged -> gibbed does not read as one sequence", mostly with dynamite that lands…
 - `gib-tear.ts` — THE RUPTURE WINDOW — the body coming apart BEFORE it becomes chunks.
 - `gobs.ts` — Amorphous gib shapes (spec: gobs-and-goo §1).
 - `gore-parts.ts` — PROCEDURAL GORE PARTS: chunky meat and classic bones.
@@ -799,6 +856,7 @@ Brains, the soldier, crowd logic.
 First-person mode, dynamite flight, explosions, rockets, bile, tracers.
 
 - `bile.ts` — The gibbet's BILE (characters/gibbet.blob): a glob squirted from the drip at the bottom of its caged sac and LOBBED at the player.
+- `blast-player.ts` — THE PLAYER'S SHARE OF A BLAST (plan 2026-10-25-sector-levels-3b): the rocket's rule (rockets.ts blastFalloff — 1 at the epicentre, quadratic to 0 at…
 - `blast-refraction.ts` — THE OPTICAL BLAST WAVE — pure scheduling math for the screen-space refraction band that post-aa.ts's blit draws.
 - `dynamite-flight.ts` — Pure ballistic integrator for a thrown dynamite bundle (spec §3): gravity, floor bounce and wall bounce with Blood's elastic feel, fuse countdown…
 - `explosion-aoe.ts` — PURE explosion AOE resolver (spec §4, task X1.23-3): turns a detonation point into the complete effect bundle the lab's gore stack already…
@@ -828,17 +886,24 @@ Blood simulation, probe grids, ambient.
 What fits no area above: the original WebGL lab shader, resolution scaling, samplers.
 
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
+- `adrenaline.ts` — ADRENALINE (owner 2026-10-27: "a subtle bullet time that automatically kicks in when you hit an enemy with your shot ...
 - `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
 - `cloth-sway.ts` — CLOTH SWAY (2026-10-26; eased 2026-10-27).
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
+- `debris-ground.ts` — WHAT LOOSE DEBRIS LANDS ON (plan 2026-10-25-sector-levels-3b): the floor under a piece at its CURRENT x/z and the walls it must not pass.
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
+- `gore-spread.ts` — GORE SPREAD: the queue that moves a gun hit's gore one tick past the hit frame, a few jobs a tick (gore spread pass, 2026-10-29).
 - `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
 - `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
+- `kit-burst.ts` — A KIT THAT OUTLIVES ITS BODY (owner, 2026-10-29: "kit vanishes when a body gibs").
 - `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
 - `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
 - `march.glsl.ts` — Shader source as strings.
+- `meat-pool.ts` — MEAT POOL: the bookkeeping behind the torn meat mesh pool (meat pool pass, 2026-10-29).
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
+- `pellet-falloff.ts` — PELLET DAMAGE FALLOFF (owner 2026-10-27: "add logic where the pellets do less damage after a certain range — damage falloff; close range = full…
+- `seed-band.ts` — SEED DIRTY BAND: which rows of a shutter motion seed changed since the last upload (meat pool and seed upload pass, 2026-10-29).
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…

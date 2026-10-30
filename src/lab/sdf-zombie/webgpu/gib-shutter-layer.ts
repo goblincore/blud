@@ -37,9 +37,12 @@ import * as THREE from 'three/webgpu';
 import type { Chunk } from '../gib-chunks';
 import { setPassLabel } from './gpu-pass-timing';
 import {
-  createShutterResolve, rasterizeSweepSeed, seedDimsForOutput, EMPTY_SEED_STATS,
+  createShutterResolve, warmResolveDraw, rasterizeSweepSeed, seedDimsForOutput, EMPTY_SEED_STATS,
   type ShutterProjection, type ShutterResolveHandle, type SweepSeedStats, type SweepStamp,
 } from './shutter-blur';
+import { SWEEP_MAX_HALF_TEXELS, SWEEP_MIN_HALF_TEXELS } from './shutter-blur';
+import { createSeedUploader, type SeedUploadStats } from './seed-upload';
+import { stampRowBand } from '../seed-band';
 import {
   resolveDepthBiasM, resolveExposureMs, resolveMaxStreakPx, resolveSeedScale,
   secondsToShutterMs, shutterExposureLabel, SHUTTER_GAME_DEFAULTS,
@@ -122,6 +125,8 @@ export interface GibShutterDiagnostics {
   selectedPieces: number;
   stamps: number;
   last: SweepSeedStats & { buildMs: number };
+  /** The seed's upload this frame (seed-upload.ts) and the running totals. */
+  upload: SeedUploadStats & { totalBytes: number; totalMs: number; frames: number };
   passes: { layerDraws: number; fullscreen: number };
   error: string | null;
 }
@@ -228,6 +233,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
   let selectedPieces = 0;
   let lastStamps = 0;
   let lastStats: SweepSeedStats & { buildMs: number } = { ...EMPTY_SEED_STATS, buildMs: 0 };
+  // The seed goes up by its dirty rows (seed-upload.ts; `?seedupload=0`: whole, every frame).
+  const seedUploader = createSeedUploader(opts.renderer);
+  let uploadTotalBytes = 0, uploadTotalMs = 0, uploadFrames = 0;
 
   const selected: GibBlurSubject[] = [];
   /** Distinct `state` objects among `selected` — the piece count the cap bounds. */
@@ -279,7 +287,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     capsW = capsH = seedW = seedH = layerW = layerH = 0;
   }
 
-  function ensureTargets(capture: THREE.RenderTarget): void {
+  function ensureTargets(capture: THREE.RenderTarget, warm = true): void {
     const cw = Math.max(1, capture.width);
     const ch = Math.max(1, capture.height);
     // Gib seed grid: capture/2 at scale 1 — the same texel density the blood
@@ -310,6 +318,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     seedTex.minFilter = THREE.NearestFilter;
     seedTex.magFilter = THREE.NearestFilter;
     seedTex.needsUpdate = true;
+    seedUploader.reset();
     resolve = createShutterResolve(
       {
         layerTex: layerTarget.texture,
@@ -319,12 +328,18 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       },
       { depthBias: depthBiasM },
     );
-    warmOnce();
+    if (warm) warmOnce();
   }
 
-  function warmOnce(): void {
+  /** `draw`: warm by drawing into the real targets (outside post-aa's callback only — shutter-blur warmResolveDraw);
+   *  otherwise a compileAsync, which builds a look-alike pipeline the real draw may not reuse. */
+  function warmOnce(draw = false): void {
     if (warmed || !resolve) return;
     warmed = true;
+    if (draw && stageTarget && layerTarget) {
+      warmResolveDraw(renderer, resolve, stageTarget);
+      return;
+    }
     void renderer.compileAsync(resolve.scene, warmCam).catch(() => {});
   }
 
@@ -436,7 +451,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
         ? rasterizeSweepSeed(stamps, layerW, layerH, seedW, seedH, seedData)
         : { ...EMPTY_SEED_STATS };
       if (stamps.length === 0) seedData.fill(0);
-      seedTex.needsUpdate = true;
+      const up = seedUploader.upload(seedTex, seedData, seedW, seedH,
+        stampRowBand(stamps, layerW, layerH, seedW, seedH, SWEEP_MIN_HALF_TEXELS, SWEEP_MAX_HALF_TEXELS));
+      uploadTotalBytes += up.bytes; uploadTotalMs += up.ms; uploadFrames++;
       const buildMs = performance.now() - buildStart;
 
       // 3. ONE bounded fullscreen resolve over the CLEAN captured scene + its
@@ -556,7 +573,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     prewarm(capture) {
       if (!supported) return false;
       try {
-        ensureTargets(capture);
+        ensureTargets(capture, false);
+        // Boot, outside post-aa's callback: warm by drawing into the real targets.
+        warmOnce(true);
         return resolve !== null;
       } catch (err) {
         fail('prewarm failed', err);
@@ -580,6 +599,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
         selectedPieces,
         stamps: lastStamps,
         last: { ...lastStats },
+        upload: { ...seedUploader.last, totalBytes: uploadTotalBytes, totalMs: uploadTotalMs, frames: uploadFrames },
         passes: { layerDraws: 1, fullscreen: 1 },
         error: lastError,
       };

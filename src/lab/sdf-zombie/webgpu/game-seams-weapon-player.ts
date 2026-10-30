@@ -10,6 +10,8 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
+import { standingFloor } from './level-ground';
+import type { Projectile } from './game-weapon';
 
 export function createWeaponPlayerSeams(ctx: GameContext) {
   const { scene, camera } = ctx.boot.handle;
@@ -19,30 +21,37 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
      *  `teleport()` writes; returns the enclosure key under the feet so a
      *  caller can assert the pose landed in the intended room. */
     placePlayer(p: { x: number; z: number; yaw: number; pitch?: number }) {
-      ctx.player.player.pos = [p.x, 0, p.z];
+      ctx.player.player.pos = [p.x, standingFloor(ctx.world.level.ground, p.x, p.z), p.z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = p.yaw;
       ctx.player.player.pitch = p.pitch ?? 0;
       ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
       return ctx.world.level.keyAt(p.x, p.z);
     },
-    /** Set the player pose. y defaults to 0 (feet on the floor). */
-    setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
-      ctx.player.player.pos = [x, y, z];
+    /** Set the player pose. y defaults to the floor under (x, z) (0 on room levels). */
+    setPose(x: number, z: number, yaw: number, pitch = 0, y?: number) {
+      const floor = standingFloor(ctx.world.level.ground, x, z);
+      const feet = y ?? floor;
+      ctx.player.player.pos = [x, feet, z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = yaw;
       ctx.player.player.pitch = pitch;
-      ctx.player.player.grounded = y === 0;
+      ctx.player.player.grounded = feet === floor;
+      ctx.player.player.stepLag = 0;
     },
     pose: () => ({ pos: [...ctx.player.player.pos] as Vec3, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch }),
     /** Teleport to a room's centre, facing +z. */
     teleport(roomId: number) {
       const r = ctx.world.level.rooms.find(r => r.id === roomId);
       if (!r) return false;
-      ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+      const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
+      ctx.player.player.pos = [x, standingFloor(ctx.world.level.ground, x, z), z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = 0;
       ctx.player.player.pitch = 0;
+      ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
       return true;
     },
     /** The player's ground position — a capture rig needs it to stand beside a
@@ -59,6 +68,14 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     /** Free-aim seam, for the gate and for A/B by hand. */
     get freeAim() { return ctx.player.freeAimOn; },
     get aimPoint() { return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y }; },
+    /** Queue a mouse delta (pixels) exactly as the pointer-locked mousemove does: the next tick consumes it through
+     *  readInputFrame -> applyInputFrame, so free aim moves the reticle and mouselook turns the view. For headless
+     *  drivers, where pointer lock is refused. Returns the queued total. */
+    mouseDelta(dx: number, dy = 0) {
+      if (Number.isFinite(dx)) ctx.player.pendingDx += dx;
+      if (Number.isFinite(dy)) ctx.player.pendingDy += dy;
+      return { dx: ctx.player.pendingDx, dy: ctx.player.pendingDy };
+    },
     setAimPoint(x: number, y: number) {
       ctx.weapon.aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
       return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y };
@@ -150,6 +167,10 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     })),
     /** The gibbet's bile globs in flight (bile.ts): the in-game check of its squirt. */
     bile: () => ctx.weapon.bile.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
+    /** Enemy rounds in flight (soldier pellets, cultist/pistol/chaingun rounds), the LIVE objects so an
+     *  in-page sampler can follow each round by identity frame to frame (sdf-game-doom-gate's
+     *  through-a-wall check). Read only. */
+    enemyRounds: (): readonly Readonly<Projectile>[] => ctx.weapon.soldierPellets,
     /** HIDE THE VIEW MODEL (the held shotgun/arm rig parented to the camera).
      *  A capture that must see the BODY's silhouette has the player's own arm
      *  across the right half of the frame, which covers the very flesh the

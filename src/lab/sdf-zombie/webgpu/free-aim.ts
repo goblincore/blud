@@ -292,21 +292,26 @@ export function recentre(aim: AimPoint, dt: number): AimPoint {
 // ——— Weapon bob ————————————————————————————————————————————————————————
 
 export const BOB = {
-  /** Cycles per metre walked. A stride is ~0.75 m, and the weapon dips twice
-   *  per stride (once per footfall), so ~1.33 cycles/m. */
-  cyclesPerMetre: 1.33,
-  /** Lateral swing, metres, at full speed. */
-  amountX: 0.017,
-  /** Vertical bounce, metres, at full speed. Twice the lateral frequency,
-   *  which is what makes it read as footfalls rather than a sway. */
-  amountY: 0.011,
-  /** Roll, degrees, at full speed. */
-  amountRollDeg: 1.4,
-  /** How fast the bob amplitude follows the player's speed, 1/seconds. */
-  ramp: 6.0,
+  /** Lateral cycles per metre walked: ONE cycle is a left + right footfall, so this is 1 / (2 x step length).
+   *  Owner 2026-10-27: the bob was "spastic ... maybe the wavelength needs to be bigger". It was 1.33 (a 0.375 m
+   *  step: 9 dips a second at the old 3.4 m/s). Now a 1.4 m step — a long game stride — so 4.4 m/s is ~3.1
+   *  footfalls a second, a brisk jog's cadence (distance-driven, so the cadence scales with speed, never the size). */
+  cyclesPerMetre: 1 / 2.8,
+  /** Lateral swing, metres, at full speed (was 0.017). */
+  amountX: 0.011,
+  /** Vertical dip, metres, at full speed (was 0.011). Twice the lateral frequency, which is what makes it read as
+   *  footfalls rather than a sway. */
+  amountY: 0.006,
+  /** Roll, degrees, at full speed (was 1.4). */
+  amountRollDeg: 0.7,
+  /** How fast the bob amplitude follows the player's speed, 1/seconds (was 6: a 0.17 s time constant, now 0.25 s). */
+  ramp: 4.0,
 };
 
 export interface BobPose { x: number; y: number; rollDeg: number; }
+
+/** Smoothstep on [0, 1]: the envelope leaves 0 and arrives at 1 with zero slope. */
+const smooth01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 
 /**
  * Weapon bob from distance walked rather than elapsed time, so it stays locked
@@ -314,16 +319,24 @@ export interface BobPose { x: number; y: number; rollDeg: number; }
  * bob keeps swinging while you stand still and slides out of phase with the
  * stride the moment speed changes.
  *
+ * EASED EVERYWHERE (2026-10-27). The dip was -|sin|: a cusp at every footfall,
+ * where the gun's vertical velocity flipped sign in one frame — the "spastic"
+ * jolt. It is now -sin^2 (= -(1 - cos 2 phase) / 2): the same two dips per
+ * lateral cycle, the same depth, the same phase, but a pure sinusoid with no
+ * corner. The amplitude envelope goes through a smoothstep, so the bob also
+ * fades in and out with zero slope at rest instead of kicking on.
+ *
  * `amount` is the smoothed 0..1 speed envelope; see approachBob.
  */
 export function bobPose(distanceWalked: number, amount: number): BobPose {
   const phase = distanceWalked * BOB.cyclesPerMetre * Math.PI * 2;
-  const a = Math.min(1, Math.max(0, amount));
+  const a = smooth01(amount);
+  const s = Math.sin(phase);
   return {
-    x: Math.sin(phase) * BOB.amountX * a,
+    x: s * BOB.amountX * a,
     // Doubled frequency and offset so the low point lands with each footfall.
-    y: -Math.abs(Math.sin(phase)) * BOB.amountY * a,
-    rollDeg: Math.sin(phase) * BOB.amountRollDeg * a,
+    y: -(s * s) * BOB.amountY * a,
+    rollDeg: s * BOB.amountRollDeg * a,
   };
 }
 

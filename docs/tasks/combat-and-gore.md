@@ -2,6 +2,62 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Gore at scale and the blast-to-gib link — owner notes 2026-10-29
+
+- [ ] **Gore at scale.** Not urgent now, but rockets and groups of enemies will mean far more blood and gibs at once.
+  Starting points from the 2026-10-29 shot/gore passes (hand-off note `docs/dev-notes/2026-10-24-sector-levels-handoff.md`):
+  the shutter seed raster on the CPU (0.8–2.7 ms a frame on E1M1 while blood flies; a GPU raster would also drop the
+  upload but is not bit-identical, needs a look A/B); GPU compute particles for droplets; pool misses on later volleys.
+- [ ] **The blast → damage → gib sequence doesn't read as connected**, mostly with dynamite, where the explosion is often
+  off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
+  partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
+  (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+- [x] **Kit vanishes when a body gibs** (owner, 2026-10-29; done 2026-10-30). The kit now comes apart and is thrown with
+  the gibs, and the held gun (it vanished too) lets go and lands. Toggle `?gibkit=0` restores vanishing. Each piece is a set
+  of vertices re-weighted to one skeleton bone, so the kit's existing skinned draw carries it: no new pipelines, nothing
+  baked (a piece baked as in `kit-damage.ts` is an unskinned draw, which would build on the gib frame). Independent of the
+  mesh: pieces are the kit's islands up to 15k index entries, spare bones permitting (soldier 19), and its bones above that
+  (butcher 13, teratoma 5); a smoothly weighted remake is torn at bone seams. Pure: `kit-burst.ts`; mesh:
+  `webgpu/kit-burst-mesh.ts`; owner after the view retires, capped at 16 bodies and 2.4M indices, oldest first:
+  `webgpu/kit-remains.ts`. Seam: `__sdfGame.debris().kitRemains`. Sheets: `.lab-tmp/gib-kit/s-*.png`. Left: a body's casings
+  still vanish with it; a kit piece shed BEFORE the gib still builds its unskinned pipelines on first shed.
+- [ ] **The blast distortion ignores depth** (owner, 2026-10-29). `postAaBlastWarp` in `webgpu/post-aa.ts` (numbers in
+  `blast-refraction.ts`) warps the final colour in screen space, so walls, the viewmodel and anything in front of the
+  blast bend too. Fix in the explosion-side pass: depth-gate it, or (preferred) an in-scene refracting shockwave shell,
+  depth-tested, which could also be the visible link that travels from the blast to the bodies.
+
+- [x] **Blast-to-gib switch pass (2026-10-29)** — the switch side of the item above. Toggle
+  `?gibswitch=beat,blood,launch,timing` (no param = all four, the new default; `none` = the old switch; `all`; any
+  comma list). Code: `src/lab/sdf-zombie/gib-switch.ts` (+ `gib-switch.test.ts`). Strips, sheets and per-frame
+  numbers: `.lab-tmp/gib-switch/` (`final/<scenario>-none-vs-all.png`; per step `runs/cmp-*.png`; probe
+  `strip.mjs`/`metrics.py`/`compare.py`/`run.sh`). Arena zombie, dynamite offset 1.5/2.0/2.3 m, direct, survivor at
+  2.5 m, E1M1 soldier at 1.8 m; numbers below at 2.0 m unless stated (none → all).
+  - **beat**: the doomed body takes the survivor's `blast()` reaction (no wounds, no meter; gain 1.3; root knock
+    forced on soldiers too). The rupture follows the moving pose (`TearTuning.followPose`, `regionDrift`) and the
+    release carries the pivots (`carryGibPieces`), so pieces spawn on the drawn body. Body travel in the window
+    0.06 → 0.66 m at k8 (survivor 0.53–0.55, unchanged); E1M1 soldier 0.08 → 0.25 m. A first try that moved the
+    regions themselves (rupture offsets) CLIPPED the body to a sliver (the view's bounds/hull follow the pose, not
+    the offsets): move the pose, not the regions.
+  - **blood**: first spray on the hit frame (k1, was k13) from the torso's blast side, away from the blast + up
+    (1.9 m/s away, 1.1 up); the swap gout from the drawn torso, same direction. Old gout sat AT the blast point
+    (2.3 m from the body) and its `[0,1,0]` dirN made spawnImpactGout spray DOWN (-0.39 m/s).
+  - **launch**: `gibBlastLaunchVelocity` — speed 4.2→10 m/s with falloff, along the blast→body line far out,
+    burst out of the body centre close in, 1.5 m/s up floor. Up/sideways 6.0/3.3 → 2.5/4.6 m/s (1.5 m: 6.3/3.3 →
+    3.6/6.0; 2.3 m: 5.8/3.0 → 2.2/3.9), 9° off the blast line; direct hit: a radial burst (mean 116° off the line)
+    instead of a fountain. Pieces land on the floor (arena and E1M1). Counts unchanged (14 / 13).
+  - **timing**: pre-tear window 0.2 → 0.09 s (explicit `?gibtear=` wins): swap k13 (217 ms) → k6 (100 ms), beside
+    the explosion light's peak (k5). With the beat, the long window was ~100 ms of the body frozen in its lean; now
+    struck k1–k5, burst at k6. Below the old 0.15–0.25 s rupture contract on purpose. Release pop 0.10 → 0.16 m
+    (the body is still moving at release; the pieces continue it).
+  - **shade — NOT DONE, left alone.** Live asset path (`?gibrender=assets`, the owner-approved default). Swap-frame
+    flesh luminance 133 → 85 (all: 111 → 72; E1M1 122 → 66) with the same hue. Not a gain: a per-object colour lift
+    on the baked material (2.2×, fading over 3 frames) only reached 92 and blew out the highlights. The drop is
+    the seams between pieces, cut faces, the bared skeleton and the asset micro-detail, against the live body's
+    soft flesh shading. `?gibrender=march` pieces match the live body much better on that frame, so a real fix is a
+    renderer hand-off (marched for the first frames, then assets) or a dithered crossfade; not forced here.
+  - Gameplay unchanged: same gib decision, damage, AOE radius 3.84 m, piece counts. `explosion-vfx.ts` untouched
+    (next pass: the fire never reaches the body, the fireball peaks 0.5–1.2 s).
+
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch

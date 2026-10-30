@@ -7,6 +7,7 @@ import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub }
 import { rotateYaw } from './gait';
 import { sdBody, sdBodyClosed, sdPrimitive, type Body } from './validate';
 import { unwarpDir, unwarpPoint } from './head-split';
+import { bodyField, shotFixEnabled } from './body-field';
 
 /** Wounds per body (the ring cap). Every WGSL wound loop bound and the per-ray
  *  wound list size are built from this constant. The frozen GLSL twin
@@ -42,7 +43,9 @@ export interface ShotAim { eye: Vec3; dir: Vec3 }
 /** Gameplay provenance is independent of visual crater calibre. A slug carries the aim it was fired with
  *  (head-burst.ts headShotRule judges the shot's precision on it); one with none was not aimed by a crosshair. */
 export type ShotProvenance =
-  | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1 }
+  | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1;
+      /** Where the volley left the muzzle: the PLAYER's volleys only (pellet-falloff.ts measures range from it). */
+      origin?: Vec3 }
   | { weapon: 'slug'; shotId?: number; aim?: ShotAim }
   | { weapon: 'explosion' };
 
@@ -55,6 +58,9 @@ export interface Wound {
    *  crater: a new one with the same headRegion replaces its predecessor in place. */
   headRegion?: string;
   shot?: ShotProvenance;
+  /** Collapse-meter weight of this wound (collapse.ts stepCollapse multiplies its gain by it). Unset = 1. A far pellet
+   *  of the player's shotgun carries its range falloff here (pellet-falloff.ts). */
+  meterScale?: number;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
   /** Index into the built primitive array — the primitive this wound rides. */
@@ -414,8 +420,9 @@ export interface UnwarpedHit {
  */
 export function unwarpHit(body: Body, hit: Vec3): UnwarpedHit {
   const split = body.split;
-  if (!split) return { hit, piece: 0, field: p => sdBody(p, body), dir: v => v };
-  const field = (p: Vec3) => sdBodyClosed(p, body);
+  // body-field.ts: the same fold, bit for bit, minus the limbs that cannot change it (?shotfix=0: sdBody).
+  if (!split) return { hit, piece: 0, field: shotFixEnabled() ? bodyField(body) : p => sdBody(p, body), dir: v => v };
+  const field = shotFixEnabled() ? bodyField({ ...body, split: null }) : (p: Vec3) => sdBodyClosed(p, body);
   const { q, piece } = unwarpPoint(split, hit, field);
   return { hit: q, piece, field, dir: v => unwarpDir(split, piece, v) };
 }
@@ -780,7 +787,7 @@ const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegi
 /** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour (the survivor becomes the minimal
  *  sphere enclosing both), or null when none is in reach, or the enclosing sphere would pass MERGE.maxRadius (the caller
  *  then evicts, as before: a merge never shrinks below what covers both). */
-function mergeVictim(next: Wound[], victim: number): Wound[] | null {
+function mergeVictim(next: Wound[], victim: number, maxRadius: number = MERGE.maxRadius): Wound[] | null {
   const v = next[victim]!;
   if (v.shape === 'cut' || v.decal || headTagged(v)) return null;
   let best = -1, bd = Infinity;
@@ -803,7 +810,7 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
     const t = (radius - ro) / bd; // bd > 0 here: bd = 0 takes the containment branch
     local = [o.local[0] + (v.local[0] - o.local[0]) * t, o.local[1] + (v.local[1] - o.local[1]) * t, o.local[2] + (v.local[2] - o.local[2]) * t];
   }
-  if (radius > MERGE.maxRadius) return null;
+  if (radius > maxRadius) return null;
   const merged: Wound = { ...o, local, radius };
   if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
   // A merge never raises the sever calibre: always explicit, so connectivity never falls back to the grown radius. A
@@ -821,9 +828,10 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
  *  and the total cap takes the oldest wound that is not a 'keep' head crater: it is MERGED into its nearest
  *  same-prim crater when one is in reach (MERGE; head-tagged wounds, cuts and decals never merge), and only
- *  evicted when none is. When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
+ *  evicted when none is (`mergeMaxRadius`, default MERGE.maxRadius, caps the merged crater: a body whose gun craters
+ *  are scaled up, gore-tuning.ts craterScale, scales it with them). When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
  *  and the cut is evicted only when no crater can. A merged survivor is a NEW Wound object. */
-export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
+export function pushWound(ring: Wound[], wound: Wound, cap: number, mergeMaxRadius: number = MERGE.maxRadius): Wound[] {
   if (wound.headRegion !== undefined) {
     const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
     if (prev >= 0) {
@@ -844,13 +852,13 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   while (out.length > cap) {
     const i = out.findIndex(x => x.headSlot !== 'keep');
     const victim = i < 0 ? 0 : i;
-    let merged = mergeVictim(out, victim);
+    let merged = mergeVictim(out, victim, mergeMaxRadius);
     // A CUT never merges, so as the victim it would simply be evicted: a rod release stamps up to 3, and ~11 sweeps fill
     // the ring. Fold the oldest crater that CAN merge first (oldest first; mergeVictim keeps its own guards: same prim, in
     // reach, never a cut, decal or head-tagged crater), so old slashes outlive craters that still have room to merge. Only
     // when nothing can merge is the oldest evicted, as before.
     if (!merged && out[victim]!.shape === 'cut') {
-      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j);
+      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j, mergeMaxRadius);
     }
     if (merged) out = merged;
     else out.splice(victim, 1);

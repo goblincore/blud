@@ -340,6 +340,7 @@ function handOff(ctx: GameContext, rt: EmergenceRuntime, mine: SequenceRuntime |
   p.yaw = h.yaw;
   p.pitch = h.pitch;
   p.grounded = true;
+  p.stepLag = 0;
   if (mine) {
     const cam = ctx.boot.handle.camera;
     if (mine.fovBase > 0 && Math.abs(cam.fov - mine.fovBase) > 1e-4) {

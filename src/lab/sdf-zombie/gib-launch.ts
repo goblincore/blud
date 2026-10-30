@@ -113,7 +113,7 @@ export interface GibLaunchTuning {
  *  global seeds (the page's `?seed=`) give different bursts. Deliberately NOT
  *  the shared `rngStreams.misc` stream, so adding this launch cannot shift the
  *  draws of any other system (torn-end radii, head faces, ...). */
-function hash01(key: string, salt: number, seed: number): number {
+export function hash01(key: string, salt: number, seed: number): number {
   let h = (2166136261 ^ Math.imul(salt >>> 0, 2654435761)) >>> 0;
   h = (h ^ Math.imul((seed >>> 0) + 1, 40503)) >>> 0;
   for (let i = 0; i < key.length; i++) {
@@ -164,5 +164,84 @@ export function gibLaunchVelocity(args: {
     const k = t.maxSpeedMps / speed;
     vx *= k; vy *= k; vz *= k;
   }
+  return [vx, vy, vz];
+}
+
+/**
+ * THE BLAST-SHAPED LAUNCH (gib-switch.ts `launch`, 2026-10-29). The diagnosis: pieces left ~6.1 m/s UP and only
+ * ~3 m/s sideways at every distance (the 6 m/s `minUpKickMps` floor on the shared shove plus the 0-6.1 m/s up
+ * spread), so an offset blast read as a vertical fountain beside the explosion rather than the body being blown
+ * away from it. This keeps the independent per-piece spread (smaller, so the shared direction reads) and
+ * replaces the shared shove with one shaped by the blast:
+ *
+ *   - its SPEED rises with the falloff: a shove at the edge of the gib range, a violent burst point-blank;
+ *   - its DIRECTION is the horizontal blast -> body line far out, blending into a burst out of the body's own
+ *     centre (piece origin - torso) close in, so a direct hit still bursts instead of fountaining;
+ *   - a modest up tip and a LOW up floor, so every piece still arcs and lands on the floor.
+ *
+ * Pure and deterministic (same hash as gibLaunchVelocity).
+ */
+export const GIB_BLAST_LAUNCH = {
+  /** Falloff (resolver, nearest surface) at which the shaping starts: about the edge of the gib range. */
+  fallLo: 0.45,
+  /** Shared speed, m/s, at fallLo and at falloff 1. */
+  speedLo: 4.2,
+  speedHi: 10,
+  /** Falloff band over which the line direction blends into the body burst. */
+  burstLo: 0.6,
+  burstHi: 0.9,
+  /** The burst's vertical share of (origin - torso), so it fans out sideways rather than up. */
+  burstFlatten: 0.5,
+  /** Up tip added to the shared direction before normalizing. */
+  upK: 0.45,
+  /** Share of the per-piece table spread kept (horizontal, up). */
+  spreadH: 0.7,
+  spreadUp: 0.35,
+  /** Vertical floor, m/s (the old shove floored at 6). */
+  minUpMps: 1.5,
+} as const;
+
+export function gibBlastLaunchVelocity(args: {
+  key: string; seed: number;
+  /** The blast, the body's torso centre (as drawn) and this piece's origin. */
+  at: Vec3; torso: Vec3; origin: Vec3;
+  /** The resolver's falloff at this body (nearest surface), 0..1. */
+  falloff: number;
+  spread?: { atc: number; at10: number };
+  tuning?: typeof GIB_BLAST_LAUNCH;
+}): Vec3 {
+  const T = args.tuning ?? GIB_BLAST_LAUNCH;
+  const spread = args.spread ?? GIB_TABLE_SPREAD;
+  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+  const f = clamp01(args.falloff);
+  const u = clamp01((f - T.fallLo) / (1 - T.fallLo));
+  const speed = T.speedLo + (T.speedHi - T.speedLo) * u;
+  const w = clamp01((f - T.burstLo) / (T.burstHi - T.burstLo));
+  // The line: horizontal blast -> torso. Straight under the body there is none: all burst.
+  const lx = args.torso[0] - args.at[0], lz = args.torso[2] - args.at[2];
+  const ll = Math.hypot(lx, lz);
+  const wl = ll < 1e-3 ? 1 : w;
+  const line: Vec3 = ll < 1e-3 ? [0, 0, 0] : [lx / ll, 0, lz / ll];
+  // The burst: out of the body's own centre, flattened. A piece AT the centre takes a seeded horizontal heading.
+  let bx = args.origin[0] - args.torso[0], by = (args.origin[1] - args.torso[1]) * T.burstFlatten,
+    bz = args.origin[2] - args.torso[2];
+  let bl = Math.hypot(bx, by, bz);
+  if (bl < 1e-3) {
+    const a = hash01(args.key, 4, args.seed) * Math.PI * 2;
+    bx = Math.cos(a); by = 0; bz = Math.sin(a); bl = 1;
+  }
+  let dx = line[0] * (1 - wl) + (bx / bl) * wl;
+  let dy = (by / bl) * wl + T.upK;
+  let dz = line[2] * (1 - wl) + (bz / bl) * wl;
+  const dl = Math.hypot(dx, dy, dz) || 1;
+  dx /= dl; dy /= dl; dz /= dl;
+  const h = sourceSpreadMps(spread.atc) * GIB_LAUNCH.spreadScale * T.spreadH;
+  const up = sourceSpreadMps(spread.at10) * GIB_LAUNCH.spreadScale * T.spreadUp;
+  const r1 = hash01(args.key, 1, args.seed), r2 = hash01(args.key, 2, args.seed), r3 = hash01(args.key, 3, args.seed);
+  let vx = dx * speed + (r1 * 2 - 1) * h;
+  let vy = Math.max(dy * speed + r3 * up, T.minUpMps);
+  let vz = dz * speed + (r2 * 2 - 1) * h;
+  const s = Math.hypot(vx, vy, vz);
+  if (s > GIB_LAUNCH.maxSpeedMps) { const k = GIB_LAUNCH.maxSpeedMps / s; vx *= k; vy *= k; vz *= k; }
   return [vx, vy, vz];
 }

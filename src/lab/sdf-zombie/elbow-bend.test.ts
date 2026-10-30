@@ -172,6 +172,20 @@ describe('intact elbow bend direction', () => {
     expect(dot(fore, rig.bends[0]!.restPole)).toBeGreaterThanOrEqual(-1e-8);
   });
 
+  // Plan 3b Task 6: on a sector level the fallback reads the floor under the wrist.
+  it('lets a collapsed forearm over a lower floor hang below the body plane', () => {
+    const rig = makeRig([{pos: [-1, 1, 0], pinned: false},
+      {pos: [0, 0.1, 0], pinned: false}, {pos: [1, 0, 0], pinned: false}], []);
+    rig.bends = [{root: 0, mid: 1, end: 2,
+      restUpper: normalize([1, -0.9, 0]), restPole: normalize([-0.9, -1, 0])}];
+    const flat = constrainRigBends(rig, 0);
+    const ledge = constrainRigBends(rig, 0, x => (x > 0 ? -1 : 0));
+    expect(flat.points[2]!.pos[1]).toBeGreaterThanOrEqual(0);
+    expect(ledge.points[2]!.pos[1]).toBeLessThan(0);
+    expect(ledge.points[2]).toEqual(constrainRigBends(rig).points[2]);
+    expect(constrainRigBends(rig, 0, undefined)).toEqual(flat);
+  });
+
   it('does not constrain an elbow whose forearm has already detached', () => {
     const body = zombie();
     const firstFore = body.prims.findIndex(p => p.bone === 'foreArm.l');

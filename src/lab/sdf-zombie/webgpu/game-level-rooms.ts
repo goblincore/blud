@@ -8,12 +8,13 @@ import type { Vec3 } from '../types';
 import { type GameContext } from './game-context';
 import type { RoomDef } from './game-level';
 
-/** Rebuild the collider list in place from the level's static boxes and its
- *  closed gates. In place: movers hold the array reference for the session. */
+/** Rebuild the collider list in place from the level's static boxes, its
+ *  closed gates and its standing barrels (plan 3b). In place: movers hold the
+ *  array reference for the session. */
 export function refreshGateColliders(ctx: GameContext): void {
   const w = ctx.world;
   w.colliders.length = 0;
-  w.colliders.push(...w.level.staticColliders, ...w.level.gateColliders(w.openGates));
+  w.colliders.push(...w.level.staticColliders, ...w.level.gateColliders(w.openGates), ...(w.barrels?.liveBoxes() ?? []));
 }
 
 /** Open an authored level's gate by id: it stops colliding and its mesh hides.
@@ -35,10 +36,10 @@ export function roomIdAt(ctx: GameContext, x: number, z: number): number {
   return ctx.world.level.rooms.find(r => r.name === key)?.id ?? -1;
 }
 
-/** Tallest room ceiling in the level: the bundle/gib ceiling fallback for a
+/** Highest room ceiling in the level (world-space y, floor + height): the bundle/gib ceiling fallback for a
  *  point inside no enclosure. */
 export function levelCeilingM(ctx: GameContext): number {
-  return Math.max(...ctx.world.level.rooms.map(r => r.height));
+  return Math.max(...ctx.world.level.rooms.map(r => ((r as { floor?: number }).floor ?? 0) + r.height))   // LevelRoom has a floor, the ring's RoomDef is at 0;
 }
 
 /** A room's spawn positions in the active level, in spawn order. Not the

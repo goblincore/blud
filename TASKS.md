@@ -10,6 +10,7 @@
 
 ## In flight / next
 
+- [~] **Sector levels (Doom E1M1 experiment):** sectors, pools + light, enemies, materials, (2026-10-25, plan 3b) debris on sector floors + exploding barrels, barrel grime pass, emissive screens/light panels part A and B1 (they light the room: baked coloured bounce, cheap coloured lights), two Doom-style teratoma floaters, a start-room goo pit and (2026-10-28) sci-fi split doors that open on approach for the player and enemies, the zone/portal cull + update LOD, level batching (pickups/barrels/casings, `?batch=0`) and (2026-10-29) the shot-frame pass (pellet trace + wound probes fold less, tracer pipelines pre-warmed; E1M1 hit path ~31 → ~12 ms CPU, 2 → 0 shot pipelines; `?shotfix=0`) and the gore-spread pass (first-blood warm at boot, gun gore one tick after the hit; E1M1 first-volley worst frame 30 → 23 ms CPU; `?gorespread=0`) and the meat-pool / seed-band-upload pass (torn meat verified intact after gore spread; `?meatpool=0`, `?seedupload=0`) built; next emitters part B2 (light shafts, dust). Play `npm run dev:doom`. Detail: [levels](docs/tasks/levels.md) "Sector levels" items 5b, 5c.
 - [~] **Kit occlusion: flesh under opaque kit cloth is not marched or shaded** (owner, 2026-10-26; branch `claude/intelligent-bose-856348`). Skinned distance twins of cloth/boot/leather kit meshes (`kit-occluder.ts`, `KIT_OCCLUDER_LAYER`) feed pass 1c's occT; the march's tMax clamp is back (the 09-01 "decay" was fog). Bound sits 2 cm in front of the cloth (`KIT_OCCLUDER_INSET`), so flesh clipping through trousers now shows cloth. Arena, 12 zombies: flesh hits −16% (3 m) / −23% (7 m), paired frame delta −2..−4 ms median on a loaded machine. `?kitocc=0` / `__sdfGame.setKitOccluder`, `setKitOccluderInset`, `kitOccluderXray`. Owner look pending.
 - [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
   The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
@@ -23,7 +24,6 @@
   Step 3 done (2026-10-25): the bake runs on the GPU by default (gibbet 568 s -> 3.4 s; `--cpu` forces the reference),
   bake parity in CI, all ten maps re-baked on the GPU and committed (gamer's and teratoma's were stale: torso axis moved).
   Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
-
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)

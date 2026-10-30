@@ -57,6 +57,8 @@ interface TearShape {
   headFollow: number;
   neckGapM: number;
   recoilM: number;
+  /** The rupture follows the moving pose (gib-switch.ts `beat`); absent = off. */
+  followPose?: boolean;
 }
 
 // ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created

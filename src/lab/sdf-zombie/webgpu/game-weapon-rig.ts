@@ -19,12 +19,14 @@ import { type Vec3 } from '../types';
 import { eyeOf } from './game-player';
 import { slotLowerAmount, stepWeaponSlot, slotReady } from './game-weapon-slots';
 import { aimArm } from './game-arms';
-import { type Projectile, GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
+import { type Projectile, GRAPESHOT, PLAYER_GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
+import { goreSpreadEnabled } from '../gore-spread';
 import { updateHud } from './game-hud';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-hit-trace';
 import { firedSides, triggerMuzzleFlash } from './game-muzzle-flash';
 import { type BenchAction } from './game-bench-scenario';
+import { standingFloor } from './level-ground';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -274,7 +276,9 @@ export function aimDir(ctx: GameContext): Vec3 {
   const fwd: Vec3 = [
     Math.sin(ctx.player.player.yaw) * cp, Math.sin(ctx.player.player.pitch), -Math.cos(ctx.player.player.yaw) * cp,
   ];
-  if (!ctx.player.freeAimOn) return fwd;
+  // Mouselook (the shotgun's style, aim-style.ts) shoots down the view axis; the reticle offset only counts while
+  // it is still easing home after a switch out of free aim (game-tick.ts easeAimToCentre).
+  if (!ctx.player.freeAimOn && ctx.weapon.aim.x === 0 && ctx.weapon.aim.y === 0) return fwd;
   // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
   // a shot down the camera's forward axis would land wherever the player
   // happens to be FACING rather than where they are AIMING -- the one thing
@@ -425,6 +429,39 @@ export function placeTracer(ctx: GameContext, v: TracerView, p: Projectile, eye:
   setQuadMatrix(ctx, v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
 }
 
+/**
+ * TRACER PRE-WARM (shot frame pass, 2026-10-29). The tracers' one pipeline pair (additive, double-sided: three draws a
+ * transparent double-sided mesh twice, back faces then front, one pipeline each) was built the first frame a
+ * pellet was still in flight when the effects overlay drew: on E1M1, whose first pellet step starts at the eye and
+ * reaches nothing, that was the frame the volley hit (2 sync builds, 3-4 ms). Drawn once instead, with a real pooled
+ * view, while nothing is in flight: the streak and the ember shown at opacity 0 and a near-zero scale far under the
+ * floor, for one step (the pellet sync hides them again the next). Called after the pellet sync; `?shotfix=0` skips it.
+ * Returns true on the step it drew.
+ */
+const tracerWarm = new WeakMap<GameContext, 'shown' | 'done'>();
+export function prewarmTracer(ctx: GameContext): boolean {
+  const state = tracerWarm.get(ctx);
+  if (state === 'done') return false;
+  if (state === 'shown') { tracerWarm.set(ctx, 'done'); return false; }
+  if (ctx.weapon.pellets.length > 0) return false;   // a live round draws (and builds) them itself
+  // GORE SPREAD PASS (2026-10-29): the WHOLE double-barrel pool, not one view. Each view is two meshes with their own
+  // materials, and each one's first draw builds its render object (bindings, uniform buffers, cache keys): the first
+  // volley in flight grew and drew 19 new views in its first frame (effects pass 2.0-2.5 ms vs 0.6 after). The pool
+  // only ever grows, so the views warmed here are the ones the first volley uses. `?gorespread=0`: one view.
+  const warmViews = goreSpreadEnabled() ? 2 * PLAYER_GRAPESHOT.pelletsPerBarrel : 1;
+  while (ctx.weapon.pelletViews.length < warmViews) ctx.weapon.pelletViews.push(newTracerView(ctx));
+  for (const v of ctx.weapon.pelletViews.slice(0, warmViews)) {
+    for (const m of [v.streak, v.ember]) {
+      (m.material as THREE.MeshBasicMaterial).opacity = 0;
+      m.matrix.makeScale(1e-6, 1e-6, 1e-6).setPosition(0, -1000, 0);
+      m.matrixWorldNeedsUpdate = true;
+      m.visible = true;
+    }
+  }
+  tracerWarm.set(ctx, 'shown');
+  return true;
+}
+
 export function hideTracer(ctx: GameContext, v: TracerView): void {
   v.streak.visible = false;
   v.ember.visible = false;
@@ -501,8 +538,13 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   const muz = muzzleWorld(ctx);
   const dir = convergedDir(ctx, muz);
   // spawnPellets spreads around `dir`; convergence just re-centres the cone.
-  // One `misc` draw per volley is the pellet seed (mulberry32 inside).
-  ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
+  // One `misc` draw per volley is the pellet seed (mulberry32 inside). The player's volley flies flatter, faster
+  // and denser than an enemy's (PLAYER_GRAPESHOT); enemy volleys keep GRAPESHOT's dodgeable band.
+  const volley = spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc()), PLAYER_GRAPESHOT);
+  // Where the volley left: the range falloff measures from here at impact (pellet-falloff.ts). The player's only.
+  const origin: Vec3 = [muz[0], muz[1], muz[2]];
+  for (const p of volley) if (p.shot?.weapon === 'shotgun') p.shot.origin = origin;
+  ctx.weapon.pellets.push(...volley);
   return true;
 }
 
@@ -606,7 +648,7 @@ switch (a.kind) {
       const inset = 0.6;
       const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
       const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
-      ctx.player.player.pos = [px, 0, pz];
+      ctx.player.player.pos = [px, standingFloor(ctx.world.level.ground, px, pz), pz];
       ctx.player.player.vel = [0, 0, 0];
       // atan2(dx, −dz): the page's forward is (sin yaw, −cos
       // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
@@ -614,6 +656,7 @@ switch (a.kind) {
       ctx.player.player.yaw = Math.atan2(tx - px, -(tz - pz));
       ctx.player.player.pitch = 0;
       ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
     }
     break;
   }

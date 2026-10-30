@@ -15,7 +15,7 @@ import type { MeshGibOpts } from './game-state-boot';
 import type { MeshGib } from './game-state-gibs';
 import type { Vec3 } from '../types';
 import { chunkSettled, makeChunk, squashFactors, stepChunk } from '../gib-chunks';
-import { chunkCollidersAt } from './game-hit-trace';
+import { chunkCollidersAt, seatChunkSpawn } from './game-hit-trace';
 
 export const MESH_GIB_CAP = 8;
 /** Torn meat chunks (game-meat-gib.ts) keep their own pool, so a slug's burst never evicts a brain. */
@@ -49,6 +49,7 @@ function remove(ctx: GameContext, g: MeshGib): void {
     const mesh=o as THREE.Mesh;
     if(mesh.isMesh && mesh.geometry.userData.ownedSkullDebris)mesh.geometry.dispose();
   });
+  g.onRemove?.(g.object);
 }
 
 /** ctx.boot.spawnMeshGib: add `object` to the scene riding a new chunk. */
@@ -56,13 +57,14 @@ export function spawnMeshGib(
   ctx: GameContext, object: THREE.Object3D, pos: Vec3, vel: Vec3, angVel: Vec3, radius: number, opts?: MeshGibOpts,
 ): void {
   // A fixed rng: the tumble draw is overridden by `angVel`, and must not consume rngStreams.misc.
-  const state = makeChunk('head', [...pos] as Vec3, [...vel] as Vec3, radius, opts?.longAxis ?? [0, 1, 0], () => 0.5, 'gob',
-    { angVel: [...angVel] as Vec3 }, opts?.support);
+  // Sector levels (plan 3b): clamped inside the level from opts.from (the body centre) and seeded with its floor.
+  const state = seatChunkSpawn(ctx, makeChunk('head', [...pos] as Vec3, [...vel] as Vec3, radius, opts?.longAxis ?? [0, 1, 0], () => 0.5, 'gob',
+    { angVel: [...angVel] as Vec3 }, opts?.support), opts?.from);
   if (opts?.restitution !== undefined) state.restitution = opts.restitution;
   object.matrixAutoUpdate = false;
   ctx.boot.handle.scene.add(object);
   ctx.boot.deferredApi?.router.register(object, 'mesh', 'level-only');
-  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId };
+  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId, onRemove: opts?.onRemove };
   pose(g);
   ctx.gibs.meshGibs.push(g);
   const poolOf = (t: string) => (t === 'skull' || t === 'meat' ? t : 'mesh');

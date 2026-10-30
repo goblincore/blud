@@ -4,8 +4,16 @@
 // on its power) for its ambient mood and for a scripted event, at a time on the sim clock.
 // Seeded by the lamp, never Math.random, so a replay lights the same way.
 
-export type LampMood = 'steady' | 'flicker' | 'stutter' | 'dying' | 'dead' | 'fire';
-export const LAMP_MOODS: readonly LampMood[] = ['steady', 'flicker', 'stutter', 'dying', 'dead', 'fire'];
+/** `?flashes=reduced` (the repo's reduced-flashes setting): strobes and flash bursts become slow pulses. */
+export function reducedFlashes(search: URLSearchParams): boolean {
+  return search.get('flashes') === 'reduced';
+}
+
+/** `glow` (item 2g part B1): the light an emitter surface throws (screen banks, fluorescents, exit
+ *  signs on sector levels): steady, no wobble (the surface's own flicker is per panel, in its shader),
+ *  and on the cheap level tier (level-tier.ts isLevelCheap). */
+export type LampMood = 'steady' | 'flicker' | 'stutter' | 'dying' | 'dead' | 'fire' | 'glow';
+export const LAMP_MOODS: readonly LampMood[] = ['steady', 'flicker', 'stutter', 'dying', 'dead', 'fire', 'glow'];
 
 export type LampScript =
   | { mode: 'die'; at: number }
@@ -86,6 +94,8 @@ export function moodLevel(mood: LampMood, t: number, seed: number): number {
     }
     case 'dead':
       return 0;
+    case 'glow':
+      return 1;
     case 'fire': {
       const n = hash01(s + 11, Math.floor(t / 0.08)) - 0.5;
       return clamp(1 + 0.3 * Math.sin(t * 5.1 + seed) * 0.5 + 0.18 * Math.sin(t * 13.7 + seed * 1.7) * 0.5 + 0.1 * n, 0, 1.4);

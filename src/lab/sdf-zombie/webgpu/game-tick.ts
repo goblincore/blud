@@ -27,21 +27,25 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
+import { easeAimToCentre } from './aim-style';
 import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, shotAim, strafeSpeed01, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
-import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
+import { stepGutRopes } from './game-bleed';
+import { drainGunGore, gunGore } from './game-gore-spread';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
 import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
 import { stepDisco } from './game-disco';
 import { stepDynamicLight } from './game-dynamic-light';
+import { stepSectorLight } from './game-sector-light';
 import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepPendingGibImpulses } from './game-gib-spawn';
-import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
+import { blastShielded, ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
+import { kitRemainsGround } from './kit-remains-ground';
 import { stepMeshGibs } from './game-mesh-gibs';
 import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
@@ -54,13 +58,16 @@ import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
-import { stepBulletTimeFx } from './game-bullet-time';
+import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
-import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
-import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
+import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
+import { carryFreshShots, expired, GRAPESHOT, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
+import { shotFixEnabled, traceField } from '../body-field';
+import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
 import { headShape } from './game-zombie-face';
+import { bodyMaySee, kitPoseSkippable, lodStepDts, zoneCullTick } from './game-zone-cull';
 import { stepSpritePieces } from './gib-sprite-pieces';
 import { billboardGib } from './gib-sprites';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -69,6 +76,8 @@ import { carryWithRecoil } from './recoil-carry';
 import { rngStreams } from './rng';
 import { advance as advanceSimClock, simTimeMs } from './sim-clock';
 import { selectVisualActors } from './visual-actor-set';
+import { sectorSegmentHit, type SectorHit } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 
 /** Separation radius for any body in the melee ring — attacking, closing,
  *  recovering or waiting.
@@ -123,15 +132,27 @@ export function tick(ctx: GameContext, dt: number) {
   // feel's view springs — run on the unscaled step. The demo recorder stores
   // the scaled dt (a replay stays deterministic).
   dt *= ctx.weapon.flail?.timeScale(dt) ?? 1;
-  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`, the PLAYER —
-  // motion, aim, the view-model, firing and reload — on `pdt`, both scaled
-  // from `rdt`, the real step (the ramp eases on it). The recorder stores
-  // `rdt` (the toggle replays from the recorded keys, so the replay re-derives
-  // the scales).
+  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`; the PLAYER on
+  // four steps of its own — `moveDt` (walking, autopilot timers, the walk
+  // bob), `aimDt` (the view-model's catch-up, the free-aim turn, hit
+  // feedback), `fireDt` (cooldown, flash, recoil, weapon switch, melee) and
+  // `reloadDt` (the shotgun reload, the launcher) — all scaled from `rdt`,
+  // the real step (the ramp eases on it). The recorder stores `rdt` (the
+  // toggle replays from the recorded keys, so the replay re-derives the
+  // scales; a replay under a retuned BULLET_TIME differs, like any tuning).
   const rdt = dt;
-  dt *= stepBulletTime(ctx.player.bulletTime, rdt);
-  const btScales = scalesAt(ctx.player.bulletTime.intensity);
-  const pdt = rdt * btScales.player;
+  // ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off (triggered below, in the pellet
+  // loop, and by a flail strike). Stepped on the same real dt; per channel the slower of it and bullet time wins.
+  // Low health deepens it (adrenaline.ts lowHealthDanger: 35 HP normal .. 20 HP world 0.2), slewed on the same dt.
+  const adr = ctx.player.adrenaline;
+  stepAdrenaline(adr, rdt, ctx.player.bulletTime.on, ADRENALINE, ctx.world.loop?.vitals.health ?? Infinity);
+  const btScales = combineScales(stepBulletTime(ctx.player.bulletTime, rdt),
+    scalesAt(ctx.player.bulletTime.intensity), adrenalineScalesAt(adrenalineDrive(adr), ADRENALINE, adr.danger));
+  dt *= btScales.world;
+  const moveDt = rdt * btScales.move;
+  const aimDt = rdt * btScales.aim;
+  const fireDt = rdt * btScales.fire;
+  const reloadDt = rdt * btScales.reload;
   // The sim clock advances ONLY here, from the step's own dt — never from
   // wall time. This is the single source of "how much simulated time has
   // passed", so every dwell/timer that reads it is reproducible under a
@@ -142,6 +163,7 @@ export function tick(ctx: GameContext, dt: number) {
   stepVoid(ctx, dt);
   stepTrain(ctx, dt);
   stepDynamicLight(ctx, dt);
+  if (ctx.world.sectorFx) stepSectorLight(ctx);
   lightSteam(ctx);
   stepDisco(ctx);
   stepEgg(ctx);
@@ -191,7 +213,7 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.player.autopilot = null;
       input = { x: 0, z: 0, jump: false };
     } else if (ctx.player.strafeT > 0) {
-      ctx.player.strafeT -= pdt;
+      ctx.player.strafeT -= moveDt;
       input = { x: ctx.player.strafeDir, z: 0.2, jump: false };
     } else {
       ctx.player.player.yaw = Math.atan2(dx, -dz);
@@ -199,7 +221,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     if (ctx.player.lastWalkPos
       && Math.hypot(ctx.player.player.pos[0] - ctx.player.lastWalkPos[0], ctx.player.player.pos[2] - ctx.player.lastWalkPos[1]) < 0.02) {
-      ctx.player.stuckT += pdt;
+      ctx.player.stuckT += moveDt;
       if (ctx.player.stuckT > 0.5) {
         // Strafe AWAY from whatever is ahead: nearest zombie within 1.2 m
         // in front picks the side; walls just get the fallback flip.
@@ -228,19 +250,23 @@ export function tick(ctx: GameContext, dt: number) {
   // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
   const zombieBoxes = ctx.world.actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
     const p = a.pose().pos;
-    return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
+    // From the body's feet (its floor; 0 on room levels, so 0 .. 1.8 exactly as before).
+    return { min: [p[0] - 0.35, p[1], p[2] - 0.35] as Vec3, max: [p[0] + 0.35, p[1] + 1.8, p[2] + 0.35] as Vec3 };
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
   const preStep = [...ctx.player.player.pos] as Vec3;
   // Bullet time's shootdodge hang: the jump eases from the walk's pace into the apex hang (BULLET_TIME.airScale)
   // and back out for the landing (airScaleAt).
-  stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes],
+  stepPlayer(ctx.player.player, input, moveDt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground,
     airScaleAt(ctx.player.bulletTime.intensity, ctx.player.player.vel[1], ctx.player.player.grounded, PLAYER.jumpSpeed));
   // This tick's shots left the muzzle where last frame's camera put it; the
   // camera follows the step, so the shots must too (carryFreshShots).
   carryFreshShots(ctx.weapon.pellets, [
     ctx.player.player.pos[0] - preStep[0], ctx.player.player.pos[1] - preStep[1], ctx.player.player.pos[2] - preStep[2],
   ]);
+  // DOORS (sector levels): after the player's step (its motion triggers them), before the actors step (their travel
+  // reads this tick's leaves). A handful of doors, a few dot products each.
+  ctx.world.doors?.step(dt);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.
@@ -272,6 +298,8 @@ export function tick(ctx: GameContext, dt: number) {
   // exactly.
   {
     const visualSetTiming = ctx.telemetry.telemetry.begin();
+    // The zone cull's omni flood from this tick's eye (game-zone-cull.ts): the sight pre-test below and the LOD.
+    zoneCullTick(ctx, eyeOf(ctx.player.player));
     if (ctx.render.visualCullEnabled) {
       const cam = ctx.boot.handle.camera;
       const alsoKeep = new Set<number>();
@@ -291,7 +319,14 @@ export function tick(ctx: GameContext, dt: number) {
         bodies, alsoKeep, undefined,
         // Walls count: the same per-cluster sight test the march cull uses,
         // from this tick's eye. Only bodies the cone kept are ever asked.
-        (id) => { const a = byId.get(id); return !a || bodyInSight(eye, a.posed().clusters, ctx.world.colliders); },
+        (id) => {
+          const a = byId.get(id);
+          if (!a) return true;
+          // No sector the body's flesh reaches is in the flood: out of sight without casting a ray.
+          const torso = a.posed().clusters.find(c => c.limb === 'torso');
+          if (torso && !bodyMaySee(ctx, torso.center, 'tick')) return false;
+          return bodyInSight(eye, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
+        },
       );
       const visual = new Set<ZombieActor>();
       for (const a of unmeasurable) visual.add(a);
@@ -309,8 +344,11 @@ export function tick(ctx: GameContext, dt: number) {
     // view.update() render the corrected positions, so a resolved overlap
     // is never a frame late on screen.
     const pRoom = ctx.world.encounterNav.roomAt(ctx.player.player.pos);
+    // Sector levels also carry the player's feet (BrainPlayer.y): sight there is floor-relative.
     const pInfo = pRoom > 0
-      ? { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom }
+      ? ctx.world.level.def?.sectors
+        ? { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom, y: ctx.player.player.pos[1] }
+        : { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom }
       : null;
     // The snapshot build is INSIDE the phase on purpose: it calls pose()
     // per actor and is part of what the director costs per frame.
@@ -370,7 +408,23 @@ export function tick(ctx: GameContext, dt: number) {
 
     const bodyTiming = ctx.telemetry.telemetry.begin();
     ctx.world.soldierCorpses?.update(ctx.world.actors,dt);
-    for (const a of ctx.world.actors) a.step(dt);
+    // VIEW SYNC (sector levels): a CROWD-ATTACHED body outside the visual set steps, poses and thinks but
+    // skips its GPU view upload; the draw catches up any body the march cull then keeps (syncKitVisibility)
+    // before the crowd's visible set or the fallback proxies (shown = the march set) can read it. A
+    // per-body view (?crowd=0, an unattached actor) is marched by its own `.visible`, which the cull does
+    // not drive, so it always uploads. Room levels: every view uploads every frame, as before.
+    // catchUp false: a body coming back in is uploaded by its own step() just below, once.
+    const viewCull = !!ctx.world.sightOccluder;
+    // UPDATE LOD (sector levels, game-zone-cull.ts / actor-lod.ts): a body the player cannot see and that is not
+    // engaged steps at a quarter rate with its time accumulated (alert, far) or not at all (idle); everything else,
+    // and every body with ?cull=0 or on a room level, steps with `dt` as before.
+    const lodDt = lodStepDts(ctx, dt, orders);
+    for (const a of ctx.world.actors) {
+      const adt = lodDt.get(a) ?? dt;
+      if (adt <= 0) continue;
+      if (viewCull) a.setViewSync(!a.crowd || ctx.render.visualActors.has(a), false);
+      a.step(adt);
+    }
     // 'body-step' CLOSES HERE, before the kit pose below, because that is
     // the boundary main's telemetry numbers were taken with. Widening a
     // counter to cover more work without saying so makes every recorded
@@ -394,6 +448,7 @@ export function tick(ctx: GameContext, dt: number) {
     // do (see meshHold in the draw). Motion and the rig still advance —
     // only the VISUAL pose is held, so gameplay is untouched.
     if (!(ctx.render.sdfLayer.halfRate && ctx.render.sdfLayer.willHold)) {
+      const march = new Set(ctx.render.visibleActors);
       for (const a of ctx.world.actors) {
         if (!a.character) continue;
         const p = a.pose();
@@ -405,6 +460,8 @@ export function tick(ctx: GameContext, dt: number) {
           a.character.releaseProp(rotateYaw([-1.4, 1.6, 0.5], p.yaw), a.id);
           ctx.telemetry.telemetry.event('disarm', { actor: a.id });
         }
+        // Its kit and prop are hidden this frame (out of the visual and march sets): nothing reads their pose.
+        if (kitPoseSkippable(ctx, a, march)) continue;
         a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
       }
     }
@@ -512,12 +569,12 @@ export function tick(ctx: GameContext, dt: number) {
   // detached pieces fly ballistically through the shared chunk path.
   // ---------------------------------------------------------------
   ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
-  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - pdt);
-  ctx.weapon.flare?.tickCooldown(pdt);
-  ctx.weapon.rod?.tick(pdt);
-  ctx.weapon.axe?.tick(pdt);
-  ctx.weapon.launcher?.tick(pdt);
-  ctx.weapon.recoilPitch *= Math.exp(-9 * pdt);
+  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - fireDt);
+  ctx.weapon.flare?.tickCooldown(fireDt);
+  ctx.weapon.rod?.tick(fireDt);
+  ctx.weapon.axe?.tick(fireDt);
+  ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)
+  ctx.weapon.recoilPitch *= Math.exp(-9 * fireDt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
   // inside it, aiming is free and the world stays put. While strafing the
@@ -527,10 +584,15 @@ export function tick(ctx: GameContext, dt: number) {
   // walk-bob block below from this frame's displacement, so it lags one frame,
   // far inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, pdt, ctx.player.strafeAmount);
+    const turn = turnFromAim(ctx.weapon.aim, aimDt, ctx.player.strafeAmount);
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
+  } else {
+    // MOUSELOOK (the shotgun's style, or G off — aim-style.ts): the crosshair belongs at the centre. A reticle left
+    // off-centre by a switch out of free aim eases home; the gun, crosshair and shot all follow it, the camera does
+    // not move, so the hand-over has no jump. At the centre this is a no-op.
+    ctx.weapon.aim = easeAimToCentre(ctx.weapon.aim, aimDt);
   }
   {
     // The gun follows the SHOT aim, not the steering reticle: the same point
@@ -539,17 +601,19 @@ export function tick(ctx: GameContext, dt: number) {
     // exactly that scale (free-aim.ts viewmodelFrustum).
     const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
     const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
-    const w = ctx.player.freeAimOn ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
-    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, pdt);
-    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, pdt);
+    // Off-centre in mouselook only while easing home (above), so the lean eases out with it.
+    const aimed = ctx.player.freeAimOn || ctx.weapon.aim.x !== 0 || ctx.weapon.aim.y !== 0;
+    const w = aimed ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
+    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, aimDt);
+    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, aimDt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
     // alone pins the grip near screen centre at every reticle position --
     // that is what pivoting about the grip means -- so the gun read as bolted
     // to the camera with a hinged barrel (owner report). approachAngle is a
     // plain exponential catch-up, so it smooths metres as happily as degrees.
-    const s = ctx.player.freeAimOn ? weaponSlide(shot) : { x: 0, y: 0 };
-    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, pdt);
-    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, pdt);
+    const s = aimed ? weaponSlide(shot) : { x: 0, y: 0 };
+    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, aimDt);
+    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, aimDt);
   }
   // WALK BOB, driven by distance rather than time so it stays locked to the
   // stride when the player speeds up, slows down or stops.
@@ -558,11 +622,11 @@ export function tick(ctx: GameContext, dt: number) {
     const dx = pos[0] - ctx.player.prevPlayerPos[0], dz = pos[2] - ctx.player.prevPlayerPos[2];
     const step = Math.hypot(dx, dz);
     ctx.player.strafeAmount = approachStrafe(ctx.player.strafeAmount,
-      strafeSpeed01(dx, dz, ctx.player.player.yaw, pdt, PLAYER.walkSpeed), pdt);
+      strafeSpeed01(dx, dz, ctx.player.player.yaw, moveDt, PLAYER.walkSpeed), moveDt);
     ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
     ctx.player.bobDistance += step;
-    const speed01 = pdt > 0 ? Math.min(1, step / pdt / PLAYER.walkSpeed) : 0;
-    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, pdt);
+    const speed01 = moveDt > 0 ? Math.min(1, step / moveDt / PLAYER.walkSpeed) : 0;
+    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, moveDt);
   }
   if (ctx.weapon.aimRig) {
     const b = bobPose(ctx.player.bobDistance, ctx.player.bobAmount);
@@ -592,16 +656,17 @@ export function tick(ctx: GameContext, dt: number) {
   // (the holster travel is a local transform on gunRig/bundleRig, so it does
   // not care where the rig is — but the burst sprites the dynamite spawns are
   // world-space and want the frame's final camera).
-  stepWeaponSlots(ctx, pdt);
+  stepWeaponSlots(ctx, fireDt);
   // The flail, after the rig AND the holster are placed (game-flail.ts).
-  ctx.weapon.flail?.tick(pdt);
+  ctx.weapon.flail?.tick(fireDt);
   // The head damage model after the flail (actors stepped earlier this frame,
   // so the dangling eye follows this frame's pose).
   ctx.weapon.headDamage?.tick(dt);
   stepDynamite(ctx, dt);
   if (ctx.player.reticleEl) {
-    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
-    if (ctx.player.freeAimOn) {
+    // Shown in mouselook too (a conventional centre crosshair; it rides the reticle home after a switch).
+    ctx.player.reticleEl.style.display = !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
+    {
       // Position against the CANVAS, not the window. Percent-of-viewport put
       // the reticle outside the render area whenever the canvas did not fill
       // the page -- so the thing marking where you are aiming sat somewhere
@@ -618,7 +683,9 @@ export function tick(ctx: GameContext, dt: number) {
       const p = reticleNdc(shot, ctx.render.postAa.lens);
       ctx.player.reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
       ctx.player.reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
-      if (ctx.player.steerEl) {
+      if (ctx.player.steerEl && !ctx.player.freeAimOn) {
+        ctx.player.steerEl.style.display = 'none';   // mouselook: the mouse steers the camera, there is no cursor
+      } else if (ctx.player.steerEl) {
         // Shown only once it has come apart from the crosshair, fading in
         // with the separation so it never pops.
         const apart = Math.hypot(ctx.weapon.aim.x - shot.x, ctx.weapon.aim.y - shot.y);
@@ -629,13 +696,11 @@ export function tick(ctx: GameContext, dt: number) {
         ctx.player.steerEl.style.left = `${r.left + r.width * (0.5 + q.x * 0.5)}px`;
         ctx.player.steerEl.style.top = `${r.top + r.height * (0.5 - q.y * 0.5)}px`;
       }
-    } else if (ctx.player.steerEl) {
-      ctx.player.steerEl.style.display = 'none';
     }
   }
 
-  ctx.weapon.flashAge += pdt;
-  ctx.weapon.fireAge += pdt;
+  ctx.weapon.flashAge += fireDt;
+  ctx.weapon.fireAge += fireDt;
   // The flame jets are posed below, after the view-model matrices are current.
   stepFlashLight(ctx);
 
@@ -658,10 +723,10 @@ export function tick(ctx: GameContext, dt: number) {
   // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
   // a reload during recoil reads as both rather than one clobbering the other.
   const reloading = ctx.weapon.reloadAge <= RELOAD.totalSec;
-  if (reloading) ctx.weapon.reloadAge += pdt * ctx.weapon.reloadSpeed;
+  if (reloading) ctx.weapon.reloadAge += reloadDt * ctx.weapon.reloadSpeed;
   const rp = reloading ? reloadPose(ctx.weapon.reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
   // One frame late: the flash frame holds the gun where it fired (recoilAge).
-  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, pdt), ctx.weapon.fireBarrels);
+  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, fireDt), ctx.weapon.fireBarrels);
   if (ctx.weapon.gunGroup) {
     ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
     ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
@@ -833,18 +898,54 @@ export function tick(ctx: GameContext, dt: number) {
     aimArms(ctx);
   }
   {
+    // GORE SPREAD: the earlier ticks' gun gore (game-gore-spread.ts), before this tick's hits queue theirs.
+    const gs = ctx.telemetry.telemetry.begin();
+    drainGunGore(ctx);
+    ctx.telemetry.telemetry.end('gore-spread', gs);
     const projectileTiming = ctx.telemetry.telemetry.begin();
     const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
     // The PLAYER's pellets fly on their own scale (BULLET_TIME.shotScale): in bullet time the world crawls, your shot
     // only slows.
-    stepProjectiles(ctx.weapon.pellets, rdt * btScales.shot);
+    const shotDt = rdt * btScales.shot;
+    stepProjectiles(ctx.weapon.pellets, shotDt);
     // Hit batching: every actor hit this frame flushes its rig/repack/
     // wound-row tail ONCE after the loop (ZombieActor.beginHits).
     const hitThisFrame = new Set<ZombieActor>();
+    // BARRELS (plan 3b Task 14): the standing drums' boxes, skipped by the point-in-box test below — a round that
+    // misses the drum (segmentHit) past its box's corner flies on. Null on levels without barrels.
+    const pelletDrumBoxes = ctx.world.barrels ? new Set(ctx.world.barrels.liveBoxes()) : null;
     for (let i = ctx.weapon.pellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.pellets[i]!;
-      const from = prevs[i]!;
-      let dead = expired(p);
+      const sectorLevel = !!ctx.world.level.def?.sectors;
+      // Sector levels: a round's first step starts at the EYE, not the muzzle — the view-model muzzle
+      // can sit past a wall the player hugs (a segment starting in the void or on a wall line hits at
+      // t 0, and a body the muzzle overlaps behind the wall must not take the round). Every later step
+      // starts at the last frame's end, which was open. Room levels: the muzzle, as before. Fresh = its age is
+      // this frame's SHOT step (bullet time steps the player's pellets on shotDt, not the world's dt).
+      const from = sectorLevel && p.ageSec - shotDt < 1e-6 ? eyeOf(ctx.player.player) : prevs[i]!;
+      let dead = expired(p, sectorLevel);
+      // Sector levels: the frame's segment against the sector walls, floors and ceilings, FIRST — before
+      // the gib-chunk tests below, so a slug that hits a wall cannot gib a piece lying behind it. A hit
+      // cuts the segment at the hit point (everything below tests the cut segment: a chunk or an actor
+      // in front of the wall still takes the round) and kills the round after the actor test. Room
+      // levels keep their order: chunks, then the y 0.02 floor kill (see the ORDER comments).
+      let wallHit = false;
+      if (!dead && sectorLevel) {
+        const st = ctx.telemetry.telemetry.begin();
+        const h = sectorWorldHit(ctx, from, p.pos);
+        ctx.telemetry.telemetry.end('hit:sector', st);
+        if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
+      }
+      // BARRELS (plan 3b Task 14): the cut segment's first standing drum cuts it as the wall does, at the contact
+      // point on the drum's surface — everything below (chunks, actors) tests the segment up to the drum, so a body
+      // in front still takes the round; the drum takes it only if nothing in front did (after the actor test). The
+      // drum's box in ctx.world.colliders is not point-tested for this round (the drum test IS its collision), so a
+      // round hits a drum once, by kind, and is gone.
+      let barrelHit: { id: string; point: Vec3 } | null = null;
+      if (!dead && ctx.world.barrels) {
+        const bh = ctx.world.barrels.segmentHit(from, p.pos, p.radius);
+        if (bh) { p.pos = [bh.point[0], bh.point[1], bh.point[2]]; barrelHit = bh; }
+      }
       if (!dead && ctx.bake.chunks.length > 0) {
         // ORDER: this MUST precede the floor kill below — a settled piece
         // rests AT the y = 0.02 plane, so the slug that reaches it is
@@ -909,15 +1010,24 @@ export function tick(ctx: GameContext, dt: number) {
           break;
         }
       }
-      if (!dead && p.pos[1] <= 0.02) dead = true;
-      if (!dead) {
-        // Level geometry: a point-in-AABB test is enough — pellets are
-        // small and the substepped trace already bounds their travel.
+      // Room levels: the y 0.02 floor kill (sector levels stopped at their floors above).
+      if (!dead && !sectorLevel && p.pos[1] <= 0.02) dead = true;
+      if (!dead && !wallHit && !barrelHit) {
+        // Level geometry: the frame's SEGMENT against each box (segmentBoxHit), cut at the nearest entry. It
+        // was an end-point-in-box test, which a 35 m/s pellet's 0.58 m frame step mostly got away with; the
+        // player's 80 m/s pellets step 1.3 m a frame (2.7 m at 30 Hz), clean through a 0.3 m outer wall.
+        // The cut segment is what the actor test below reads, so a body behind the wall is not hit.
+        let boxHit: Vec3 | null = null, boxD2 = Infinity;
+        const bt = ctx.telemetry.telemetry.begin();
         for (const b of ctx.world.colliders) {
-          if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
-            && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
-            && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
+          if (pelletDrumBoxes?.has(b)) continue;        // a drum's box: the drum test above is its collision
+          const h = segmentBoxHit(from, p.pos, b.min, b.max);
+          if (!h) continue;
+          const d2 = (h[0] - from[0]) ** 2 + (h[1] - from[1]) ** 2 + (h[2] - from[2]) ** 2;
+          if (d2 < boxD2) { boxD2 = d2; boxHit = h; }
         }
+        ctx.telemetry.telemetry.end('hit:boxes', bt);
+        if (boxHit) { p.pos = boxHit; wallHit = true; }
       }
       if (!dead) {
         // Actors: bounding-sphere reject on the frame segment, then a
@@ -925,26 +1035,25 @@ export function tick(ctx: GameContext, dt: number) {
         let bestDist = Infinity;
         let hitActor: ZombieActor | null = null;
         let hitPoint: Vec3 | null = null;
-        const segLen = Math.hypot(p.pos[0] - from[0], p.pos[1] - from[1], p.pos[2] - from[2]);
+        const tt = ctx.telemetry.telemetry.begin();
         for (const a of ctx.world.actors) {
           const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
           if (!c) continue;
           // Segment-to-centre distance (clamped closest approach).
-          const t = Math.max(0, Math.min(segLen,
-            ((c[0]-from[0])*(p.pos[0]-from[0]) + (c[1]-from[1])*(p.pos[1]-from[1]) + (c[2]-from[2])*(p.pos[2]-from[2]))
-            / (segLen * segLen || 1)));
-          const qx = from[0] + (p.pos[0]-from[0]) * t / (segLen || 1);
-          const qy = from[1] + (p.pos[1]-from[1]) * t / (segLen || 1);
-          const qz = from[2] + (p.pos[2]-from[2]) * t / (segLen || 1);
-          if (Math.hypot(qx-c[0], qy-c[1], qz-c[2]) > 1.35) continue;
+          if (segmentPointDistance(from, p.pos, c) > 1.35) continue;
           const posedA = a.posed();
-          const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));
+          // body-field.ts traceField: the same landing as sdBody, folding only near the body (?shotfix=0: sdBody).
+          const field = traceField(posedA, GRAPESHOT.hitEps);
+          const hp = traceProjectile(from, p.pos, field);
           if (!hp) continue;
           const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
+        ctx.telemetry.telemetry.end('hit:trace', tt);
         // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
+        const sk = ctx.telemetry.telemetry.begin();
         skullPasses(ctx, p, from, hitActor, hitPoint);
+        ctx.telemetry.telemetry.end('hit:skull', sk);
         if (hitActor && hitPoint) {
           const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
           const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
@@ -959,15 +1068,21 @@ export function tick(ctx: GameContext, dt: number) {
           // path (impact: the eyes near the hit are ejected, the plate under it is damaged) is for the rounds the
           // leaf declines (every pellet, an imprecise slug, a slug from too far, not the head, not the zombie), which
           // then take the ordinary wound below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
+          const hs = ctx.telemetry.telemetry.begin();
           const burstHandled = !!ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind);
+          ctx.telemetry.telemetry.end('hit:headshot', hs);
           if (!burstHandled && ctx.render.segMeshRenderer) {
+            const sm = ctx.telemetry.telemetry.begin();
             const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
             if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
+            ctx.telemetry.telemetry.end('hit:segmesh', sm);
           }
+          const ah = ctx.telemetry.telemetry.begin();
           const stamped = burstHandled ? null
             : p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN, p.shot)
               : hitActor.hit(hitPoint, dirN, p.shot);
+          ctx.telemetry.telemetry.end('hit:actor', ah);
           ctx.telemetry.telemetry.end('wound-hit', hitTiming);
           if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
             actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
@@ -976,23 +1091,40 @@ export function tick(ctx: GameContext, dt: number) {
             woundCount: hitActor.wounds().length,
           });
           if (stamped) {
-            registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
-            throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
+            // The hit's gore (the gout, the bleed emitter, the torn flesh): queued for the next tick, which spawns it
+            // before its own hits (game-gore-spread.ts; ?gorespread=0: here, in the hit frame).
+            const bl = ctx.telemetry.telemetry.begin();
+            gunGore(ctx, { actor: hitActor, wound: stamped, kind: p.kind, point: hitPoint, dir: dirN });
+            ctx.telemetry.telemetry.end('hit:bleed', bl);
           }
           // A kit eye in the line of fire pops; a dangling one snaps (game-kit-eye.ts; profile.eye only).
+          const ke = ctx.telemetry.telemetry.begin();
           if (!burstHandled) ctx.boot.kitEye?.hit(hitActor, hitPoint, dirN);
+          ctx.telemetry.telemetry.end('hit:kiteye', ke);
           dead = true;
         }
       }
+      // The drum takes the round only when no chunk or actor in front of it did (both set `dead` above).
+      if (barrelHit && !dead) {
+        ctx.world.barrels!.hit(barrelHit.id, p.kind === 'slug' ? 'slug' : 'pellet', barrelHit.point);
+        dead = true;
+      }
+      if (wallHit) dead = true;
       if (dead) ctx.weapon.pellets.splice(i, 1);
     }
+    // ADRENALINE: a round on an actor this frame (not a drum, a gib or a wall) starts or refreshes the rush.
+    const ad = ctx.telemetry.telemetry.begin();
+    if (hitThisFrame.size > 0) triggerAdrenalineRush(ctx, 'shot');
+    ctx.telemetry.telemetry.end('hit:adrenaline', ad);
     const flushTiming = ctx.telemetry.telemetry.begin();
     for (const a of hitThisFrame) a.endHits();
     if (ctx.telemetry.telemetry.active) for (const a of hitThisFrame) ctx.telemetry.telemetry.event('actor-wounds', {
       actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(ctx, a, w)),
       aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
     });
+    const sc = ctx.telemetry.telemetry.begin();
     ctx.world.soldierCorpses?.update(ctx.world.actors,0); // restore damaged snapshots before this draw
+    ctx.telemetry.telemetry.end('hit:corpses', sc);
     ctx.telemetry.telemetry.end('wound-flush', flushTiming);
     ctx.telemetry.telemetry.end('projectiles-and-hits', projectileTiming);
     ctx.telemetry.telemetry.lap('region', 'tick:post-hits');
@@ -1005,13 +1137,34 @@ export function tick(ctx: GameContext, dt: number) {
     // move); hand-rolling a second one would let the two drift apart.
     const soldierFrom = ctx.weapon.soldierPellets.map(p => [...p.pos] as Vec3);
     stepProjectiles(ctx.weapon.soldierPellets, dt);
+    // BARRELS (plan 3b Task 14): the drums' own boxes, left out of the collider test below — the drum test
+    // (segmentHit, the upright cylinder) is their collision for an enemy round, so a round meets a drum once.
+    const drumBoxes = ctx.world.barrels ? new Set(ctx.world.barrels.liveBoxes()) : null;
     for (let i = ctx.weapon.soldierPellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.soldierPellets[i]!;
-      if (expired(p) || ctx.world.colliders.some(box => segmentHitsBox(soldierFrom[i]!, p.pos, box))) {
+      // Sector levels: a wall, floor or ceiling cuts the segment; the player in front of it still
+      // takes the round, behind it is safe (null on room levels: the segment as before). The first
+      // step starts at the shooter's eye (launchFrom, set at the trigger on sector levels only), so a
+      // point-blank muzzle past a wall line cannot fly on beyond it.
+      const start = p.launchFrom ?? soldierFrom[i]!;
+      p.launchFrom = undefined;
+      const wall = sectorWorldHit(ctx, start, p.pos);
+      let end = wall ? wall.point : p.pos;
+      // BARRELS: the cut segment's first standing drum cuts it again, at the contact point on the drum; a level
+      // box or the player in front of the drum still takes the round (the tests below run on the cut segment).
+      const spent = expired(p, !!ctx.world.level.def?.sectors);
+      const drum = spent ? null : ctx.world.barrels?.segmentHit(start, end, 0.02) ?? null;
+      if (drum) end = drum.point;
+      if (spent || ctx.world.colliders.some(box => !drumBoxes?.has(box) && segmentHitsBox(start, end, box))) {
         ctx.weapon.soldierPellets.splice(i, 1);
-      } else if (segmentHitsCapsule(soldierFrom[i]!, p.pos, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
+      } else if (segmentHitsCapsule(start, end, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
         // The game loop: soldier pellets and cultist rounds hit the player (never actors).
         damagePlayer(ctx, VITALS.soldierPellet, 'pellet');
+        ctx.weapon.soldierPellets.splice(i, 1);
+      } else if (drum) {
+        ctx.world.barrels!.hit(drum.id, 'round', drum.point);
+        ctx.weapon.soldierPellets.splice(i, 1);
+      } else if (wall) {
         ctx.weapon.soldierPellets.splice(i, 1);
       }
     }
@@ -1023,7 +1176,8 @@ export function tick(ctx: GameContext, dt: number) {
     if (ctx.weapon.rockets.length) {
       const pp = ctx.player.player.pos;
       const stepped = stepRockets(ctx.weapon.rockets, dt, {
-        hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+        hitsWorld: (from, to) => (ctx.world.level.def?.sectors ? sectorWorldHit(ctx, from, to) !== null
+          : to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2]))
           || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
         hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius, PLAYER.height),
         hitsActor: (from, to, owner, armed) => ctx.world.actors.some(a =>
@@ -1033,17 +1187,23 @@ export function tick(ctx: GameContext, dt: number) {
       for (const d of stepped.detonations) {
         ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
         // The firer is spared its own blast (detonateAt's spareActorId): a point-blank shot no longer self-destructs.
-        detonateAt(ctx, d.at, false, d.owner);
+        detonateAt(ctx, d.at, false, undefined, d.owner);
+        const centre: Vec3 = [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]];
         const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
-        if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
+        // Sector levels (plan 3b review): the player behind sector geometry from the blast takes nothing, as a
+        // barrel's blast (blastShielded is always false on room levels: the old rule there).
+        if (hurt > 0 && !blastShielded(ctx, d.at, centre)) damagePlayer(ctx, hurt, 'blast');
       }
     }
+    // BARRELS (plan 3b, sector levels only): fuses burn, lit drums go up through the dynamite blast and chain.
+    ctx.world.barrels?.step(dt);
     // BILE (the gibbet's squirt, bile.ts): lobbed globs under gravity that
     // splash on the first thing they touch; only the player takes damage.
     if (ctx.weapon.bile.length) {
       const pp = ctx.player.player.pos;
       const stepped = stepBile(ctx.weapon.bile, dt, {
-        hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+        hitsWorld: (from, to) => (ctx.world.level.def?.sectors ? sectorWorldHit(ctx, from, to) !== null
+          : to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2]))
           || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
         hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius + BILE.radius, PLAYER.height),
       });
@@ -1171,7 +1331,14 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    ctx.gibs.kitRemains.step(cdt, ctx.gibs.kitRemains.moving ? kitRemainsGround(ctx) : null);
     ctx.boot.kitEye?.step(cdt);
+    ctx.boot.meatGib?.prewarm();
+    // Kit meshes, then level meshes (game-level-prewarm.ts): never two first builds in one frame.
+    const kitBuilt = ctx.boot.kitPrewarm?.step() ?? false;
+    // The pellet tracers' pipelines (game-weapon-rig.ts prewarmTracer), on a step the kit warm built nothing.
+    const tracerBuilt = !kitBuilt && shotFixEnabled() && prewarmTracer(ctx);
+    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite
@@ -1201,9 +1368,12 @@ export function tick(ctx: GameContext, dt: number) {
         const a = ctx.world.actors.find(q => q.id === e.bodyId);
         if (!a) { ctx.vfx.bleed.evictForBody(e.bodyId); continue; }
         const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw, a.posed().split);
+        // Sector levels (plan 3b): the wound's drops start inside the level and know the body's floor (one probe
+        // per emitter per frame). Room levels: the anchor itself, no floor field.
+        const seat = seatBloodSpawn(ctx, a, anchor);
         e.acc = spawnWoundDroplets(
-          ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
-          woundStreamId(ctx, e.wound),
+          ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, seat.pos, normal, cdt, e.acc, rngStreams.bleed,
+          woundStreamId(ctx, e.wound), undefined, seat.floorY,
         );
       }
       // EVERY FLYING PIECE IS AN EMITTER, IN EITHER RENDER MODE. The owner,
@@ -1249,11 +1419,15 @@ export function tick(ctx: GameContext, dt: number) {
         ],
         cdt, rngStreams.bleed,
       );
+      const sbT = ctx.telemetry.telemetry.begin();
       stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed, undefined,
-        ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined);
+        ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined, debrisGround(ctx) ?? undefined);
+      ctx.telemetry.telemetry.end('blood:step', sbT);
+      const bvT = ctx.telemetry.telemetry.begin();
       // Re-pose every instance from sim state (billboards track the camera
       // even frozen — same contract as the lab's always-sync).
       ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
+      ctx.telemetry.telemetry.end('blood:view-sync', bvT);
     }
     ctx.vfx.surfaceBlood?.sync();
     ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
@@ -1266,7 +1440,7 @@ export function tick(ctx: GameContext, dt: number) {
   // Melee hit feedback: the shake offsets the eye (and so the look target,
   // which is taken from `eye` below: the view shakes, it does not swivel);
   // the flash drives the overlay.
-  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, pdt);
+  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, aimDt);
   // Bullet time's looks: the projectiles' air wakes (after every projectile stepped), the gore boost, the vignette.
   stepBulletTimeFx(ctx);
   if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);
@@ -1350,6 +1524,9 @@ export function tick(ctx: GameContext, dt: number) {
   // posed and shaded later by the capture stage, exactly once. When off this
   // clears the selection, so the frame is the shipped fused goo.
   ctx.panels.shutterGame?.poseSharp();
+  // The blood shutter's targets need the goo density size, which boot's prewarm can run before: until it lands,
+  // this (outside post-aa's callback) allocates, primes and warms them (shutter-game-layer prewarm; a no-op after).
+  if (ctx.render.postAa) ctx.panels.shutterGame?.prewarm(ctx.render.postAa.captureTarget);
   ctx.goo.layer?.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
   // GIB SHUTTER PARTITION: lift this frame's moving pieces onto the blur
   // layer BEFORE the base scene renders (the draw callback follows this tick),
@@ -1366,4 +1543,14 @@ export function tick(ctx: GameContext, dt: number) {
   }
   ctx.telemetry.telemetry.end('goo-sync', gooTiming);
   ctx.telemetry.telemetry.lap('region', 'tick:tail');
+}
+
+/** Where segment a→b first meets a SECTOR level's walls, floors or ceilings (sector-ray.ts), or null
+ *  (always null on room levels). `a` must be inside the level: a start in the void or exactly on a
+ *  one-sided wall line is a hit at t 0. Every caller starts from the last frame's open end, or on a
+ *  round's first step from the shooter's eye (the player's eye; an enemy round's launchFrom). Rockets
+ *  and bile still start at their muzzle / mouth. */
+function sectorWorldHit(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
+  const map = ctx.world.level.def?.sectors;
+  return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;
 }
