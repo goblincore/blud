@@ -12,6 +12,10 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
   partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
   (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+- [ ] **Kit vanishes when a body gibs** (owner, 2026-10-29). `retireActor` calls `retireEquipment()`
+  (`webgpu/game-gib-spawn.ts:210`), which removes the kit outright. Idea: shed the pieces through the existing armor debris
+  path (`webgpu/kit-damage.ts`) with the blast's push, so it keeps working when the soldier's kit is remade in higher quality.
+  Check the held gun too. The owner likes the improved switch but expects more tweaking later.
 - [ ] **The blast distortion ignores depth** (owner, 2026-10-29). `postAaBlastWarp` in `webgpu/post-aa.ts` (numbers in
   `blast-refraction.ts`) warps the final colour in screen space, so walls, the viewmodel and anything in front of the
   blast bend too. Fix in the explosion-side pass: depth-gate it, or (preferred) an in-scene refracting shockwave shell,
