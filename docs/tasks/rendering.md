@@ -2,6 +2,20 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## three r187 — 2026-10-30
+
+- [x] **Upgraded from r186.** Cold boot, r186 → r187, three alternating runs each: the warm 4211 → 3155 ms, the first
+  draw 3036 → 2579 ms (`scripts/boot-time.mjs`; `compileAsync` compiles pipelines in parallel). Frame time did not
+  move beyond noise (`sdf-game-bench`, rooms 1 and 4, two runs each): room 1 51.5, 56.2 → 51.4, 56.2 ms; room 4 33.3,
+  36.0 → 31.1, 35.6 ms. Room 1's soldier stood further off on r187 (2.6 m → 3.9 m), so that room's load was not the same.
+- [x] **Two breaks only the GPU gates saw:** overlapping `compileAsync` calls throw (`serial-compile.ts` queues them),
+  and `renderer.compute(node, size)` throws on a node with its own count or dispatch size (`computeKernel` now).
+- [ ] **Gates red on r186 and r187 alike:** crowd ("zombies stayed alert with the player out of the room") and shorty
+  ("muzzle flash still visible past the envelope"). Each stops at that failure, so its later checks did not run.
+- [ ] **Try:** depth-only render targets for `deferred-shadows.ts` (it writes an R32F colour beside a real depth);
+  live `castShadow` toggling (`ShadowNode.updateShadow` no longer reads the map's `depthTexture`; the crash is untested
+  on r187); a look at kit and held-prop lighting (PMREM moved to cube render targets).
+
 ## The whole frame: attribution and ranking, toward a stable 30 fps in the heavy scenes — 2026-10-08
 
 Notes, tables and the ranking: [`docs/dev-notes/2026-10-08-frame-cost/NOTES.md`](../dev-notes/2026-10-08-frame-cost/NOTES.md).

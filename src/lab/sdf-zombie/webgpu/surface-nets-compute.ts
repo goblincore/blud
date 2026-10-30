@@ -7,7 +7,7 @@
 // `soupAttribute` (a StorageBufferAttribute used as the geometry's position,
 // itemSize 3) with `indirect` as the draw arguments.
 import * as THREE from 'three/webgpu';
-import { wgslFn, uniform, storage, instanceIndex, compute, workgroupId, localId, texture, texture3D } from 'three/tsl';
+import { wgslFn, uniform, storage, instanceIndex, compute, computeKernel, workgroupId, localId, texture, texture3D } from 'three/tsl';
 import { HELPERS } from './march.wgsl';
 import type { MarchUniforms } from './zombie-gpu';
 import { BLOCK, fitHullGrid, type HullGrid } from './surface-nets-cpu';
@@ -122,9 +122,9 @@ export function createSurfaceNetsCompute(
   // barrier as non-uniform control flow behind that guard. With an array,
   // count stays null, no guard is emitted, and the barrier is uniform. The
   // other two kernels have no barrier and keep the invocation-count form.
-  // (the .d.ts types count as number only — the array dispatchSize form is
-  // supported at runtime, ComputeNode.js `compute()` ~291; cast, don't build)
-  const netsNode = compute(netsCall, [cap.blocks, 1, 1] as unknown as number, [BLOCK, BLOCK, BLOCK]);
+  // (computeKernel: no count, and each dispatch passes its own workgroups. three
+  // r187 throws on a dispatch size for a node with a count or dispatch size.)
+  const netsNode = computeKernel(netsCall, [BLOCK, BLOCK, BLOCK]);
   const quadsNode = compute(quadsCall, cap.cells, [64]);
   const argsNode = compute(argsCall, 1, [1]);
 
@@ -149,7 +149,8 @@ export function createSurfaceNetsCompute(
       // kernel (one workgroup each), cells/64 for the quads kernel. The
       // capacity dispatch cost ~4M invocations a frame of pure early-outs.
       renderer.compute(netsNode, [g.blockCount, 1, 1] as never);
-      renderer.compute(quadsNode, [Math.ceil(g.cellCount / 64), 1, 1] as never);
+      quadsNode.count = Math.min(Math.ceil(g.cellCount / 64) * 64, cap.cells);
+      renderer.compute(quadsNode);
       renderer.compute(argsNode);
       last = { cellVerts: -1, soupVerts: -1, overflow: false, dropped: -1,
                blockCount: g.blockCount, cellCount: g.cellCount, grid };

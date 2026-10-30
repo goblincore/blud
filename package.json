@@ -44,7 +44,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",
     "postprocessing": "^6.39.1",
-    "three": "^0.186.0"
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",

@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 47 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 48 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -136,10 +136,10 @@ Early-Z depth prepass for the march.
 - `webgpu/earlyz/batch-split.ts` — EARLY-Z BATCH SPLIT (spec 2026-10-01 D5).
 - `webgpu/earlyz/box-exit.wgsl.ts` — EARLY-Z ANALYTIC EXIT (spec 2026-10-01 D4).
 - `webgpu/earlyz/conservative-depth-material.ts` — D3: a `frag_depth, greater` shader PROMISES the written depth is at or beyond the fragment's raster depth; breaking it is undefined behaviour.
-- `webgpu/earlyz/conservative-depth-patch.ts` — CONSERVATIVE DEPTH FOR THREE r186 (spec 2026-10-01 §4 A, D8).
+- `webgpu/earlyz/conservative-depth-patch.ts` — CONSERVATIVE DEPTH FOR THREE r187 (spec 2026-10-01 §4 A, D8).
 - `webgpu/earlyz/earlyz-boot.ts` — EARLY-Z boot + per-frame glue (spec 2026-10-01).
 - `webgpu/earlyz/flag.ts` — COMPILE-TIME switch for the early-Z march (spec 2026-10-01 D1), read ONCE at module load in the `march/limbs-flag.ts` pattern.
-- `webgpu/earlyz/pipeline-watch.ts` — FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r186).
+- `webgpu/earlyz/pipeline-watch.ts` — FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r187).
 - `webgpu/earlyz/seed-depth.wgsl.ts` — EARLY-Z LEVEL-DEPTH SEED (spec 2026-10-01 D6).
 - `webgpu/earlyz/seed-gate.ts` — WHEN MAY THE LEVEL-DEPTH SEED DRAW?
 - `webgpu/earlyz/type-order.ts` — EARLY-Z DRAW ORDER (spec 2026-10-01 D7, amended by the plan).
@@ -637,6 +637,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
 - `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
+- `webgpu/serial-compile.ts` — ONE compileAsync AT A TIME.
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
