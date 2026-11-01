@@ -678,7 +678,9 @@ describe('post-aa fisheye in the blit', () => {
     // this string containing "fisheyeWarp(" once for the call — this guards
     // against exactly that, which destroys the Jacobian-spread argument the
     // comment above makes.
-    const warpCalls = POST_AA_BLIT_WGSL.match(/fisheyeWarp\(/g) ?? [];
+    // (The adrenaline edge's two chromatic taps, fisheyeWarp(sr / sb, are their own single-point fetches, and the blast
+    // warp's depth lookups, fisheyeWarp(bp / uvIn / texCoord, map to the frustum: they fetch no colour.)
+    const warpCalls = POST_AA_BLIT_WGSL.match(/fisheyeWarp\((?!s[rb],|uvIn|texCoord)/g) ?? [];
     expect(warpCalls.length).toBe(2);
 
     // The per-tap offset must be added to st BEFORE the warp call, not
@@ -889,5 +891,29 @@ describe('blast refraction (bounded experiment)', () => {
     // The BROAD shell, not the old sin^4 hairline.
     expect(POST_AA_BLIT_WGSL).toContain('let ring = s * s;');
     expect(POST_AA_BLIT_WGSL).not.toContain('ring = ring * ring;');
+  });
+});
+
+describe('post-aa blast depth (?blastfx=depth)', () => {
+  it('mirrors the gate in blast-refraction.ts', () => {
+    expect(POST_AA_BLIT_WGSL).toContain('let front = max(shellZ.w, shellW[i] - sr * sqrt(max(0.0, 1.0 - rn * rn)));');
+    expect(POST_AA_BLIT_WGSL).toContain('gate = smoothstep(front, front + shellZ.z, surface);');
+    expect(POST_AA_BLIT_WGSL).toContain('return shellZ.y / (textureLoad(depthTex, px, 0) + shellZ.x);');
+  });
+
+  it('returns before the first depth tap with no live blast, and a burn slot (shellR 0) never taps it', () => {
+    const fn = POST_AA_BLIT_WGSL.slice(POST_AA_BLIT_WGSL.indexOf('fn postAaBlastWarp('));
+    expect(fn.indexOf('if (dist.w < 0.5 || dist.x < 0.5) { return uvIn; }'))
+      .toBeLessThan(fn.indexOf('postAaBlastSurface('));
+    expect(fn).toMatch(/if \(sr > 0\.0\) \{\s+if \(surface < 0\.0\) \{ surface = postAaBlastSurface/);
+  });
+
+  it('a burn band never takes the sphere, whatever the step says (source pin)', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/post-aa.ts', 'utf8');
+    expect(src).toContain("const shell = blastDepthOn && b.kind === 'blast'");
+  });
+
+  it('checks the depth where the warped lookup lands, through the same lens the colour takes', () => {
+    expect(POST_AA_BLIT_WGSL).toContain('postAaBlastLanded(depthTex, fisheyeWarp(uvIn - off, lens), flipY, shellZ)');
   });
 });

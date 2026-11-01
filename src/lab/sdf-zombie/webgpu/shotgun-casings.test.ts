@@ -56,6 +56,27 @@ describe('spent shell debris', () => {
     expect(ray.intersectObject(cases.object, true)).toEqual([]);
     cases.dispose();
   });
+  it('rests on the floor under the shell (sector levels)', () => {
+    const cases = createShotgunCasings(4);
+    const ground = { floorAt: (x: number) => (x < 2.3 ? 0.5 : -1), bounce: () => null };
+    cases.eject([2, 1.4, 3], [1, 0, 0]);
+    for (let i = 0; i < 360; i++) cases.step(1 / 60, ground);
+    const [s] = cases.debris();
+    expect(s!.resting).toBe(true);
+    expect(s!.pos[1]).toBeCloseTo(ground.floorAt(s!.pos[0]) + .012, 5);
+    cases.dispose();
+  });
+  it('stays under a low ceiling and starts where the spawn seat puts it (sector levels)', () => {
+    const cases = createShotgunCasings(4);
+    const ground = { floorAt: () => 0, ceilAt: () => 1.5, bounce: () => null };
+    cases.eject([2, 1.45, 3], [0, 1, 0], () => ({ pos: [1.9, 1.45, 3], floorY: 0 }));
+    expect(cases.debris()[0]!.pos[0]).toBe(1.9);
+    let top = -Infinity;
+    for (let i = 0; i < 360; i++) { cases.step(1 / 60, ground); top = Math.max(top, cases.debris()[0]!.pos[1]); }
+    expect(top).toBeLessThanOrEqual(1.5 - .012 + 1e-12);
+    expect(cases.debris()[0]!.resting).toBe(true);
+    cases.dispose();
+  });
   it('recycles the oldest shell within a fixed capacity and disposes scene objects', () => {
     const cases = createShotgunCasings(4);
     const scene = new THREE.Scene(); scene.add(cases.object);

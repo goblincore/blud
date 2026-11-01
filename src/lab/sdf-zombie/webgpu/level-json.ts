@@ -5,10 +5,11 @@
 // Written by scripts/levels/export_level.py. Collects EVERY problem and throws
 // once, so an author fixing a .blend sees the whole list.
 
+import { EMIT_PUSH_STEPS, keepPushedLight, PUSH_COMBOS, type EmitPushStep } from './emit-push';
 import type { Vec3 } from '../types';
 import type { Aabb, FurnitureDef } from './game-level';
 import {
-  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
+  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, SPAWN_KINDS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
   type WallSide, type WindowDef, type CueDef,
@@ -40,7 +41,7 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'shadow', 'gain', 'tint', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'shadow', 'gain', 'tint', 'states', 'push'],
   cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
@@ -53,7 +54,12 @@ const KEYS: Record<string, readonly string[]> = {
 export interface ParseOptions {
   /** State to filter to (spec §7). Default: the file's first state. */
   state?: string;
+  /** The emitter push steps on (emit-push.ts, ?emitpush=): a light tagged `push` is kept only in its combos.
+   *  Default: every step. */
+  emitPush?: ReadonlySet<EmitPushStep>;
 }
+
+const ALL_PUSH: ReadonlySet<EmitPushStep> = new Set(EMIT_PUSH_STEPS);
 
 export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef {
   const errors: string[] = [];
@@ -369,9 +375,16 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       tint = vec(o.tint, 3, `lights[${i}].tint`) as unknown as Vec3;
       if (tint.some(c => c < 0)) errors.push(`lights[${i}].tint: every component must be >= 0`);
     }
+    // The emitter push (emit-push.ts): the converter's per-combo lights, `push` = the combos this one is in.
+    let push: string[] | undefined;
+    if (o.push !== undefined) {
+      if (Array.isArray(o.push) && o.push.every(c => (PUSH_COMBOS as readonly unknown[]).includes(c))) push = o.push as string[];
+      else errors.push(`lights[${i}].push: must be a list of ${PUSH_COMBOS.join(', ')}`);
+    }
+    const pushed = keepPushedLight(push, opts.emitPush ?? ALL_PUSH);
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
-    else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
+    else if (keep && pushed) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
       ...(spin !== undefined ? { spin } : {}), ...(shadow === false ? { shadow } : {}), ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
   });
 
@@ -399,8 +412,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     keys(o, 'spawn', `spawn ${sid}`);
     const keep = present(o, `spawn ${sid}`);
     claim(sid);
-    const kind = o.kind === 'soldier' || o.kind === 'zombie' || o.kind === 'cultist' || o.kind === 'juggernaut' || o.kind === 'warbull' ? o.kind : null;
-    if (!kind) errors.push(`spawn ${sid}: kind must be zombie, soldier, cultist, juggernaut or warbull`);
+    const kind = SPAWN_KINDS.find(k => k === o.kind) ?? null;
+    if (!kind) errors.push(`spawn ${sid}: kind must be ${SPAWN_KINDS.slice(0, -1).join(', ')} or ${SPAWN_KINDS[SPAWN_KINDS.length - 1]}`);
     const pos = vec(o.pos, 3, `spawn ${sid}.pos`) as unknown as Vec3;
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`spawn ${sid}: must be inside a room (not a corridor)`);

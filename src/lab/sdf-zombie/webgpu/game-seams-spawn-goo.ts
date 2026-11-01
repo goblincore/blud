@@ -7,6 +7,7 @@ import type { GameContext } from './game-context';
 import { roomSpawnPoints } from './game-level-rooms';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { rngStreams } from './rng';
+import { standingFloor } from './level-ground';
 import { CHUNK_TUNING } from '../gib-chunks';
 import { EXPLOSION_PROFILE } from '../explosion-aoe';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
@@ -221,13 +222,14 @@ export function createSpawnGooSeams(ctx: GameContext, d: SpawnGooDeps) {
         const r = opts.region;
         const cxs = (r.minX + r.maxX) / 2;
         const czs = (r.minZ + r.maxZ) / 2;
-        p0 = [cxs, 0, czs];
+        p0 = [cxs, standingFloor(ctx.world.level.ground, cxs, czs), czs];
         floor = r;
         gridOpts = { centre: [cxs, czs], inset: REGION_INSET_M };
       } else {
         const starts = roomSpawnPoints(ctx, room);
         // Authored rooms carry no ring spawn slots: fall back to the room centre.
-        p0 = starts[0] ?? ([(room.minX + room.maxX) / 2, 0, (room.minZ + room.maxZ) / 2] as Vec3);
+        const rcx = (room.minX + room.maxX) / 2, rcz = (room.minZ + room.maxZ) / 2;
+        p0 = starts[0] ?? ([rcx, standingFloor(ctx.world.level.ground, rcx, rcz), rcz] as Vec3);
         floor = { minX: room.minX, maxX: room.maxX, minZ: room.minZ, maxZ: room.maxZ };
       }
       const points = crowdGridPoints(p0, n, spacing, floor, gridOpts);

@@ -1,0 +1,175 @@
+// src/lab/sdf-zombie/webgpu/sector-debris.ts
+//
+// THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level. floorAt is the
+// sector floor; bounce is ONE horizontal sectorSegmentHit probe from the step's start to its end at the START height
+// (a segment test, so a fast piece cannot tunnel a wall), run on past the end by the piece's radius so its leading
+// edge meets the wall, and the piece's CENTRE is put max(radius, WALL_SKIN_M) from the line hit.
+// Horizontal at the start height on purpose, and that height clamped into the start sector's open band
+// [floor, ceil] (no top under sky): the probe meets only walls — a riser it is lower than, a lip it is higher than, a
+// one-sided line — never the floor or ceiling of the sector it is in (those are the vertical clamp's business, read
+// at the end x/z), and a piece that ended last step above its ceiling or below its floor still meets this step's
+// walls. A centre already closer than its radius is pushed out along the normal, unless that push would leave the map
+// or cross a line (a gap narrower than the radius, an acute corner): then it stays on its path. Cached per SectorMap.
+//
+// Pure: no three.js, no DOM.
+import type { Vec3 } from '../types';
+import type { DebrisGround, WallBounce } from '../debris-ground';
+import { SKY_MATERIAL, type SectorMap } from './sector-def';
+import type { SectorGround } from './sector-ground';
+import { sectorSegmentHit, type SectorHit } from './sector-ray';
+
+/** How far short of a wall a stopped piece is put, metres (keeps the next step's start off the line). */
+export const WALL_SKIN_M = 0.01;
+
+const cache = new WeakMap<SectorMap, DebrisGround>();
+
+export function sectorDebrisGround(map: SectorMap, ground: SectorGround): DebrisGround {
+  const cached = cache.get(map);
+  if (cached) return cached;
+  const S = map.sectors;
+  const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
+  const guard: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
+  const a: [number, number, number] = [0, 0, 0];
+  const b: [number, number, number] = [0, 0, 0];
+  const g: DebrisGround = {
+    floorAt: (x, z) => ground.floorAt(x, z),
+    ceilAt(x, z) {
+      const s = ground.sectorAt(x, z);
+      if (s < 0) return NaN;
+      const sec = S[s]!;
+      return sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+    },
+    bounce(prev, next, vel, restitution, friction, radius = 0): WallBounce | null {
+      const dx = next[0] - prev[0], dz = next[2] - prev[2];
+      if (dx === 0 && dz === 0) return null;
+      const s = ground.sectorAt(prev[0], prev[2]);
+      if (s < 0) return null;
+      // Probe inside the start sector's open band: a piece above its ceiling (or below its floor) would
+      // otherwise read as a ceiling (floor) hit at t 0 and skip every wall this step.
+      const sec = S[s]!;
+      const top = sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+      const y = Math.min(top, Math.max(sec.floor, prev[1]));
+      const stop = Math.max(radius, WALL_SKIN_M);
+      // The probe runs on past next by the radius, so the piece's leading edge meets the wall, not its centre.
+      const ext = radius > 0 ? radius / Math.hypot(dx, dz) : 0;
+      a[0] = prev[0]; a[1] = y; a[2] = prev[2];
+      b[0] = next[0] + dx * ext; b[1] = y; b[2] = next[2] + dz * ext;
+      const h = sectorSegmentHit(map, ground, a, b, out, s);
+      if (!h || h.kind !== 'wall' || h.line < 0) return null;
+      const ln = map.lines[h.line]!;
+      const v0 = map.vertices[ln.v[0]]!, v1 = map.vertices[ln.v[1]]!;
+      // (−ez, ex) points into the line's front (left) side; flip it when the piece came from the back.
+      let nx = -(v1[1] - v0[1]), nz = v1[0] - v0[0];
+      const l = Math.hypot(nx, nz) || 1;
+      nx /= l; nz /= l;
+      if (ln.front !== h.sector) { nx = -nx; nz = -nz; }
+      const vn = vel[0] * nx + vel[2] * nz;
+      const tx = vel[0] - vn * nx, tz = vel[2] - vn * nz;
+      const rn = vn < 0 ? -vn * restitution : vn;
+      // Where the centre's own path is `stop` from the line (the line is straight, so the distance is linear in
+      // t), clamped to the step; a centre already closer than that is pushed out along the normal.
+      const dist0 = nx * (prev[0] - h.point[0]) + nz * (prev[2] - h.point[2]);
+      const dn = dx * nx + dz * nz;   // < 0: the step runs toward the wall
+      const tc = dn < 0 ? Math.min(1, Math.max(0, (stop - dist0) / dn)) : 0;
+      const push = stop - (dist0 + tc * dn);
+      // On the centre's own path, short of the first crossing (so inside the map and with nothing between it and
+      // prev); the push is not probed by the step's probe, so in a gap narrower than the radius (or an acute corner)
+      // it could cross another line or leave the map: then the piece stays at the path point instead.
+      const px = prev[0] + tc * dx, pz = prev[2] + tc * dz;
+      let ox = px + push * nx, oz = pz + push * nz;
+      if (push > 1e-9) {
+        a[0] = px; a[1] = y; a[2] = pz;
+        b[0] = ox; b[1] = y; b[2] = oz;
+        if (ground.sectorAt(ox, oz) < 0 || sectorSegmentHit(map, ground, a, b, guard)) { ox = px; oz = pz; }
+      }
+      return {
+        pos: [ox, next[1], oz] as Vec3,
+        vel: [tx * friction + rn * nx, vel[1], tz * friction + rn * nz] as Vec3,
+        normal: [nx, 0, nz] as Vec3,
+      };
+    },
+  };
+  cache.set(map, g);
+  return g;
+}
+
+/** SPAWNS START INSIDE THE LEVEL (plan 3b): a piece spawned at `to` from a body whose centre is `from` (inside the
+ *  map). If from → to meets sector geometry (a wall, a column, the floor, a ceiling), the piece goes at the hit point
+ *  pulled WALL_SKIN_M + radius back toward `from` (at `from` itself when the hit is closer than that); otherwise `to`
+ *  is returned as is (the same reference). A `from` off the map or outside its sector's band (a hit at t 0) has
+ *  nothing to judge against: `to` unchanged. */
+export function clampSpawnInsideMap(map: SectorMap, ground: SectorGround, from: Vec3, to: Vec3, radius = 0): Vec3 {
+  const h = sectorSegmentHit(map, ground, from, to);
+  if (!h || h.t <= 0) return to;
+  const dx = h.point[0] - from[0], dy = h.point[1] - from[1], dz = h.point[2] - from[2];
+  const d = Math.hypot(dx, dy, dz);
+  const pull = WALL_SKIN_M + radius;
+  if (d <= pull) return [from[0], from[1], from[2]];
+  const k = (d - pull) / d;
+  return [from[0] + dx * k, from[1] + dy * k, from[2] + dz * k];
+}
+
+/** A POINT spawn on a sector level (plan 3b: blood gouts and wound drops): `to` clamped inside from the body centre
+ *  `from` (clampSpawnInsideMap; unclamped with no body) and the floor to seed the spawn with — the BODY's floor (the
+ *  floor the drops fall toward from a limb poking over a riser or through a wall), else the floor under the point,
+ *  else undefined (off the map with no body: the stepper's own fallback). */
+export function seatSpawnInsideMap(
+  map: SectorMap, ground: SectorGround, from: Vec3 | null, to: Vec3, radius = 0,
+): { pos: Vec3; floorY: number | undefined } {
+  const pos = from ? clampSpawnInsideMap(map, ground, from, to, radius) : to;
+  const body = from ? ground.floorAt(from[0], from[2]) : NaN;
+  const own = ground.floorAt(pos[0], pos[2]);
+  return { pos, floorY: Number.isFinite(body) ? body : Number.isFinite(own) ? own : undefined };
+}
+
+/** A VOLUME burst on a sector level (plan 3b follow-up: the head pop, the brain stage): the burst centre seated as
+ *  `seatSpawnInsideMap`, plus the per-drop clamp blood-sim.ts burstVolume runs on every drawn start point — clamped
+ *  inside from the SEATED centre by `radius`, so a 0.25 m head volume beside a wall starts on this side of it. */
+export function seatBurstInsideMap(
+  map: SectorMap, ground: SectorGround, from: Vec3 | null, at: Vec3, radius = 0,
+): { pos: Vec3; floorY: number | undefined; clamp: (p: Vec3) => Vec3 } {
+  const seat = seatSpawnInsideMap(map, ground, from, at, radius);
+  const c = seat.pos;
+  return { ...seat, clamp: p => clampSpawnInsideMap(map, ground, c, p, radius) };
+}
+
+/** A blast's shield probes start this far over the blast, so a blast on the floor is not "under" it. */
+export const BLAST_LIFT_M = 0.05;
+/** A seated probe start keeps this far inside its sector's floor..ceiling band. */
+const BLAST_SEAT_SKIN_M = 0.02;
+/** How far round a start in the void (a column, past a wall) the nearest sector is looked for, and in what steps. */
+const BLAST_SEAT_REACH_M = 1.0, BLAST_SEAT_STEP_M = 0.05, BLAST_SEAT_ANGLES = 16;
+
+/** WHERE A BLAST'S SHIELD PROBES START (plan 3b review): the blast lifted BLAST_LIFT_M, then seated inside the map —
+ *  a probe from the void or from above/below its sector's band is a t = 0 hit, which would shield every body and
+ *  barrel. Inside a sector the start is clamped into that sector's floor..ceiling band (no top under sky); in the
+ *  void it moves to the nearest point in a sector within BLAST_SEAT_REACH_M (rings outward), then into that band.
+ *  `inside` (the review follow-up): a point known to be open on the blast's own side — the shooter's body centre, the
+ *  bundle's last open position, the player's eye. When it is in a sector the lifted blast is clamped in FROM it
+ *  (clampSpawnInsideMap), so a blast inside or past a thin wall seats on the hint's side, never the far room; the
+ *  ring search is the hint-less fallback. Null when nothing is in reach: the caller then shields nothing, rather
+ *  than everything. */
+export function seatBlastProbe(map: SectorMap, ground: SectorGround, at: Vec3, inside?: Vec3): Vec3 | null {
+  const y = at[1] + BLAST_LIFT_M;
+  const seat = (x: number, z: number, s: number, py = y): Vec3 => {
+    const sec = map.sectors[s]!;
+    const top = sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil - BLAST_SEAT_SKIN_M;
+    return [x, Math.min(Math.max(py, sec.floor + BLAST_SEAT_SKIN_M), top), z];
+  };
+  if (inside && ground.sectorAt(inside[0], inside[2]) >= 0) {
+    const p = clampSpawnInsideMap(map, ground, inside, [at[0], y, at[2]]);
+    const s = ground.sectorAt(p[0], p[2]);
+    if (s >= 0) return seat(p[0], p[2], s, p[1]);
+  }
+  const s0 = ground.sectorAt(at[0], at[2]);
+  if (s0 >= 0) return seat(at[0], at[2], s0);
+  for (let r = BLAST_SEAT_STEP_M; r <= BLAST_SEAT_REACH_M + 1e-9; r += BLAST_SEAT_STEP_M) {
+    for (let k = 0; k < BLAST_SEAT_ANGLES; k++) {
+      const a = (k / BLAST_SEAT_ANGLES) * Math.PI * 2;
+      const x = at[0] + Math.cos(a) * r, z = at[2] + Math.sin(a) * r;
+      const s = ground.sectorAt(x, z);
+      if (s >= 0) return seat(x, z, s);
+    }
+  }
+  return null;
+}

@@ -52,7 +52,11 @@ export interface Brain {
 }
 
 export interface BrainSelf { x: number; z: number; yaw: number; room: number }
-export interface BrainPlayer { x: number; z: number; room: number }
+export interface BrainPlayer {
+  x: number; z: number; room: number;
+  /** The player's feet height: set on SECTOR levels only (floor-relative sight); absent on room levels. */
+  y?: number;
+}
 
 export interface BrainInput {
   lineOfSight?: boolean;

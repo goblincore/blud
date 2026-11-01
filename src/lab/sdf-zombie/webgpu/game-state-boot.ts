@@ -39,6 +39,12 @@ export interface MeshGibOpts {
   restitution?: number;
   /** For the seams (`__sdfGame.head.brains()` lists the 'brain' ones). */
   tag?: string;
+  /** SECTOR levels (plan 3b): the body centre the gib came from — the spawn is clamped inside the level from it and
+   *  its floor seeds the gib's floorY. Absent: no clamp, the floor under the gib. Ignored on room levels. */
+  from?: Vec3 | null;
+  /** Called with the object once it has left the scene (the cap's eviction, a cast rebuild): the torn meat pool
+   *  (game-meat-gib.ts) takes its mesh back. */
+  onRemove?: (object: import('three/webgpu').Object3D) => void;
 }
 
 /** The handle `boot.attachPiece` returns. */
@@ -163,6 +169,10 @@ export interface BootState {
   meatGib?: import('./game-meat-gib').MeatGibLeaf;
   /** The popping kit eye (game-kit-eye.ts): characters whose profile declares `eye`. */
   kitEye?: import('./game-kit-eye').KitEyeLeaf;
+  /** Draws each cast kit mesh once before it is first seen (game-kit-prewarm.ts). */
+  kitPrewarm?: import('./game-kit-prewarm').KitPrewarm;
+  /** Draws each level mesh once, nearest first, before it is first seen (game-level-prewarm.ts). */
+  levelPrewarm?: import('./game-level-prewarm').LevelPrewarm;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */
