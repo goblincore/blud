@@ -74,6 +74,10 @@
   37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
   on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
 
+**Explosions: the blast reads in the room and reaches the body** — [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Explosion pass built; owner playtest pending.** `?blastfx=depth,front,timing` (`none` = old): the refraction is
+  gated on scene depth, fire licks reach the gib radius by the swap, the core lights on the hit frame.
+
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the
   wet red lip; flying flesh bits built but OFF by default. Queued: billboard flesh, red matter strings, an

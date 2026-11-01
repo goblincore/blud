@@ -12,6 +12,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
   partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
   (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+  Body side: "Blast-to-gib switch pass" below (owner: better). Explosion side: "Explosion pass" below (playtest pending).
 - [x] **Kit vanishes when a body gibs** (owner, 2026-10-29; done 2026-10-30). The kit now comes apart and is thrown with
   the gibs, and the held gun (it vanished too) lets go and lands. Toggle `?gibkit=0` restores vanishing. Each piece is a set
   of vertices re-weighted to one skeleton bone, so the kit's existing skinned draw carries it: no new pipelines, nothing
@@ -21,10 +22,61 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   `webgpu/kit-burst-mesh.ts`; owner after the view retires, capped at 16 bodies and 2.4M indices, oldest first:
   `webgpu/kit-remains.ts`. Seam: `__sdfGame.debris().kitRemains`. Sheets: `.lab-tmp/gib-kit/s-*.png`. Left: a body's casings
   still vanish with it; a kit piece shed BEFORE the gib still builds its unskinned pipelines on first shed.
-- [ ] **The blast distortion ignores depth** (owner, 2026-10-29). `postAaBlastWarp` in `webgpu/post-aa.ts` (numbers in
-  `blast-refraction.ts`) warps the final colour in screen space, so walls, the viewmodel and anything in front of the
-  blast bend too. Fix in the explosion-side pass: depth-gate it, or (preferred) an in-scene refracting shockwave shell,
-  depth-tested, which could also be the visible link that travels from the blast to the bodies.
+- [x] **The blast distortion ignores depth** (owner, 2026-10-29; done 2026-11-01). `postAaBlastWarp` warped the final
+  colour in screen space, so walls, the viewmodel and anything in front of the blast bent too. Now a sphere gated on scene
+  depth, in the blit, not a mesh; see the pass below.
+
+- [~] **Explosion pass (2026-11-01)**, the explosion side of "doesn't read as connected" above. Owner playtest pending.
+  Toggle `?blastfx=depth,front,timing` (no param = all three, the new default; `none` = the old look; `all`; any comma
+  list). Code: `blast-fx.ts` (the switch), `blast-refraction.ts` (the gate), `webgpu/post-aa.ts` (`postAaBlastWarp`),
+  `webgpu/explosion-vfx.ts` (`lickEnvelope`, `coreIgnition`). Live seams: `__sdfGame.setBlastFx(param)`,
+  `setBlastDepth(on)`, `setBlastDepthView(1|2)` (the warp's depth as grey / its displacement in red). Sheets and probes:
+  `.lab-tmp/explosion-pass/` (`ab-*.png` the same frozen frame with no warp / old / depth, `abframe.mjs`, `absheet.py`;
+  `s-*.png` none vs all strips, `strip.mjs`, `run.sh`, `full.py`, `nums.py`; `pin.mjs` the reproducible burst; `cost.mjs`).
+  - **depth**: each blast is a sphere, world radius R at view depth w; a pixel at normalised radius rn has its front at
+    `w - R*sqrt(1-rn^2)`, floored at 0.9 m; the warp opens over 0.35 m past the front. A wall, body or gun in front of the
+    shell stays straight, a floor crossing the sphere gets a curved front, what stands behind bends as before. The depth
+    around the warped lookup is checked too (five taps), or FXAA's spread of a silhouette's colour past its depth draws a
+    thin ghost outline one offset from the body. Uniforms only; burn bands keep their look (`shellR` 0).
+    **Depth holds what it needs to**: marched flesh, the kit and the viewmodel are all in `sceneTarget.depthTexture`
+    (depth view: soldier 3.2 m at 3.5 m from the camera, shorty 0.3-0.6 m, floor and sky right). Depth is forward 0..1.
+    Numbers, pixels changed by more than 8 of 255 on the foreground, same frozen frame, no warp vs (old → depth), at
+    100/200/333 ms: soldier + gun in front of a blast 3.4 m behind him 16767/23979/25065 → 1/0/19; E1M1 wall in front of a
+    blast with its edge in frame 13353/19480/23176 → 6/0/2; camera inside the sphere (blast 1.6 m away), gun 25838/25760/23911
+    → 0/0/0. What is behind still bends, a similar amount (arena 15861 → 14199 at 100 ms; E1M1 6086 → 9422).
+    Found on the way: **the old ring is not on the blast**. The band is measured in display space but its centre and radius
+    are frustum coordinates, so the 58/46 lens pulls it toward the screen centre and shrinks it by 1/1.31. A shell slot
+    measures through `fisheyeWarp`, so `depth` also moves and grows the ring onto the sphere; `none` and burn bands keep the
+    old mapping. Band timing checked and kept: R 1.97 m at 100 ms, 2.57 m at 200 ms.
+  - **front**: 6 fire licks in the fire layer's spare slots (14 of 20): no new draw, material or pipeline. 41 billboards for
+    a burst's first 0.24 s, 35 after. Head reach 2.5 half-heights with jitter 0.72-1.12: **1.5-2.3 m at the shipped
+    half-height (0.83 m)**, about 80% out by 50 ms, at full reach by 100 ms (the swap is k6, 100 ms), gone by about 220 ms. Own rng
+    stream, so the burst's own sequence is unchanged. Hugging the ground, 1-13 degrees up; the ring (1.4 half-heights) is
+    untouched. Two rejected first looks: wider licks merged into a low slab (the "wide and low" the ring cut removed), and tails
+    that tore loose hung six little fireballs in the air. Limit: six random azimuths, not aimed, so at 2 m the nearest lick
+    can pass up to about 40 degrees off a body, and one thin tongue at the wrong angle is less of a link than a front would be.
+  - **timing**: 6 of the neck's billboards ignite with no stagger and carry `coreIgnition` until 0.32 s (neutral after).
+    Bright-pixel peak (L > 200, new since the frame before, whole frame, 2.0 m): k7 (117 ms, after the swap) → k4 (67 ms,
+    before it); its size at k2 18500 → 32726. Those billboards give their delay to their span, so they end when they did
+    (fire centre of mass within 2 cm at 0.5 s, smoke, embers and ring identical). All three together peak at k5.
+    On a direct hit the core now covers the body's legs from k2, where before it grew over them by k6.
+  - **`none` is the old look**: a pinned burst (frozen actors, fixed pose) at `blastfx=none` against the commit before this
+    pass differs by no more than two identical boots of either do: mean per-channel max 0.2-0.4 of 255, and the body's
+    shade moves by about a level between boots of the same code either way.
+  - **Cost**: warm volleys (none/all/depth, 3 boots each, 33 frames a volley, GPU timestamps by completion order, machine
+    timer granularity about 0.07 ms): `post:blit` 0.46-0.52 ms in every mode, `effects` 0.39-0.52, step CPU 4.3-4.6.
+    **No measurable cost.** No blast live: the warp returns before its first depth tap. Pipelines: warm volleys 0 new in
+    all three; first-ever volley 8 new `MeshBasicNodeMaterial` in all three including `none`, so none are from this pass
+    (pre-existing cold work, not chased here). Depth binding is part of the blit's one pipeline, built with the first
+    frame. Boot census 128 in all three (one boot read 129, unrelated to the mode).
+  - Fixed on the way: **a second live burst overwrote the first** (each burst wrote fire and smoke from quad 0). This
+    changes a volley's look at every setting, `none` included; one burst at a time is unaffected.
+  - **Not verified**: `?renderer=deferred` (the deferred path's own depth presentation should serve the same depth; blocked
+    by the open deferred pipeline error above); the flail and axe swings' reach against the 0.9 m floor (only the shorty
+    measured); burn bands by capture (code path only: `shellR` 0 keeps the old lines).
+  - Limits: fire, smoke and blood write no depth, so they bend with what stands behind them. A silhouette in front of the
+    shell keeps a sliver of unwarped background beside it, up to the offset's width (about 20 px at the clamp, usually
+    far less), visible as a small step where the ground ring passes behind a leg.
 
 - [x] **Blast-to-gib switch pass (2026-10-29)** — the switch side of the item above. Toggle
   `?gibswitch=beat,blood,launch,timing` (no param = all four, the new default; `none` = the old switch; `all`; any

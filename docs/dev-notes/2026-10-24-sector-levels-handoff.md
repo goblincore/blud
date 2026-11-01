@@ -433,6 +433,22 @@ plus the upload): moving the stamp raster to the GPU (stamps as a storage buffer
 would remove both, at the price of bit-identity (f32 maths) and a lab A/B for the look. The pool could warm two meshes per
 key if the later-volley misses ever matter.
 
+## Explosion pass (2026-11-01)
+
+`?blastfx=depth,front,timing` (`blast-fx.ts`; no param = all, `none` = old). Numbers: `docs/tasks/combat-and-gore.md`
+"Explosion pass". Sheets: `.lab-tmp/explosion-pass/ab-wall.png`, `ab-body.png`, `s-*.png`.
+- **depth**: the refraction band is a sphere gated on `sceneTarget.depthTexture`, in the blit. Depth holds flesh, kit and
+  viewmodel (`__sdfGame.setBlastDepthView(1)`). No mesh, no new target, no blast-time pipeline. It is what the 2026-09-16
+  report called "a renderer change"; it is not one, because the blit renders to the canvas.
+- **front**: 6 fire licks in spare fire slots, 1.5-2.3 m by 100 ms, gone by about 220 ms. **timing**: 6 core billboards lit on the hit frame.
+- The old ring was never on the blast under the lens (display vs frustum space); a shell slot is now. Burn bands still
+  use the old mapping: same defect, left alone because the task was not to change their look.
+- A second live burst used to overwrite the first's fire and smoke; fixed. Volleys look different at every setting.
+- Capture trap: two boots are not comparable with `gib-switch/strip.mjs`, which aims from an actor that has already walked
+  (pre-blast frames differ by 55k pixels). For pixel diffs use `.lab-tmp/explosion-pass/pin.mjs` (`?frozen=1`, fixed pose)
+  or A/B one frozen frame by uniforms (`abframe.mjs`, `__sdfGame.step(6, 0)` to flush the smear).
+- setPose's yaw: forward is `(sin yaw, -cos yaw)`. `strip.mjs`'s comment has the x sign backwards.
+
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
 abstract test spaces (ring, arena). Theory: non-architectural, Doom-like layouts feel more alien.
