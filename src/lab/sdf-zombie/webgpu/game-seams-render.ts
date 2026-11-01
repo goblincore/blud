@@ -98,6 +98,11 @@ export function createRenderSeams(ctx: GameContext) {
     get blastDistort() { return ctx.render.postAa.blastDistort; },
     get blastDistortStrength() { return ctx.render.postAa.blastDistortStrength; },
     get blastDistortCount() { return ctx.render.postAa.blastDistortCount; },
+    /** `?blastfx=depth` as a live switch (uniforms only), so a rig can A/B one frozen frame. */
+    setBlastDepth: (on: boolean) => { ctx.render.postAa.setBlastDepth(on); return ctx.render.postAa.blastDepth; },
+    get blastDepth() { return ctx.render.postAa.blastDepth; },
+    /** The blast warp's depth view: 0 off, 1 linear depth as grey (metres / 16), 2 its displacement in red. */
+    setBlastDepthView: (mode: number) => { ctx.render.postAa.setBlastDepthView(mode); },
     /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
      *  capture rig reads to prove the band is centred on the blast (task-2). */
     blastDistortInfo: () => ctx.render.postAa.blastDistortSlots,

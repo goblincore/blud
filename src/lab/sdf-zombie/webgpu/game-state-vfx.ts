@@ -22,6 +22,7 @@
 // are always freshly constructed so no two calls share one.
 
 import type { GameBurning } from './game-burning';
+import type { BlastFxStep } from '../blast-fx';
 import type * as THREE from 'three/webgpu';
 import type { BleedRegistry } from '../bleed-registry';
 import type { BloodSim, Droplet } from '../blood-sim';
@@ -106,6 +107,8 @@ export interface VfxState {
   tearShape: TearShape;
   /** Optical blast-distort strength (`?bdstrength`). */
   blastDistortStrength: number;
+  /** The explosion pass's steps (`?blastfx`, blast-fx.ts). */
+  blastFx: ReadonlySet<BlastFxStep>;
   /** Explosion visual-size multiplier (`?fxsize`). */
   size: number;
   /** Blast area-of-effect radius scale (`?aoesize`). */
@@ -194,6 +197,7 @@ export function makeVfxState(): VfxState {
     sloughScale: 0,
     tearShape: null as unknown as TearShape,
     blastDistortStrength: 0,
+    blastFx: new Set<BlastFxStep>(),
     size: 0,
     aoeRadiusScale: 0,
     aoeLaunchFloor: 0,
@@ -248,6 +252,7 @@ export const VFX_BINDINGS = {
   sloughScale: 'vfx.sloughScale',
   tearShape: 'vfx.tearShape',
   blastDistortStrength: 'vfx.blastDistortStrength',
+  blastFx: 'vfx.blastFx',
   fxSize: 'vfx.size',
   aoeRadiusScale: 'vfx.aoeRadiusScale',
   aoeLaunchFloor: 'vfx.aoeLaunchFloor',

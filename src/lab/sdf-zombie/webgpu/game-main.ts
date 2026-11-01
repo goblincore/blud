@@ -194,6 +194,7 @@ import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { TEAR_TUNING } from '../gib-tear';
 import { GIB_SWITCH_TEAR_SEC, parseGibSwitch } from '../gib-switch';
+import { parseBlastFx } from '../blast-fx';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
@@ -296,7 +297,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Primitive } from '../types';
 import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
-import { CHUNK_DETAIL_GAIN, MAX_CHUNK_BUDGET, applyDynamiteTuning, dynamiteTuningValues } from './game-dynamite-tuning';
+import { CHUNK_DETAIL_GAIN, MAX_CHUNK_BUDGET, applyBlastFx, applyDynamiteTuning, dynamiteTuningValues } from './game-dynamite-tuning';
 import { createDebugProbeSeams } from './game-seams-debug-probe';
 import { createBenchSeams } from './game-seams-bench';
 import { createRenderDiagSeams } from './game-seams-render-diag';
@@ -5106,6 +5107,8 @@ async function main() {
       ctx.vfx.explosionVfx = null;
     }
   }
+  // THE EXPLOSION PASS (blast-fx.ts, `?blastfx=depth,front,timing`; `none` = the old look).
+  applyBlastFx(ctx, parseBlastFx(DYN_PARAMS.get('blastfx')));
 
   // -----------------------------------------------------------------------
   mark('bleed-start');

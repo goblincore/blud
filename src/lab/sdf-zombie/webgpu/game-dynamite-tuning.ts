@@ -8,8 +8,20 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import type { GameContext } from './game-context';
+import type { BlastFxStep } from '../blast-fx';
 import { GIB_BONES, GIB_MODES, defaultsFrom as dynamiteDefaults, type DynamiteTuningKey, type DynamiteTuningValues } from './dynamite-panel'
 
+
+/**
+ * THE EXPLOSION PASS's steps onto their two owners (`?blastfx`, blast-fx.ts): post-aa's blit for `depth` (uniforms, so it
+ * takes on the next frame), the burst for `front` and `timing` (the next spawn). Numbers here so the page's whole wiring
+ * of the switch is in one place: 6 licks is every spare slot of the fire layer's 14 of 20, and 6 core billboards is
+ * under half of the fire, so the rest still stagger and the ignition does not read as one pop.
+ */
+export function applyBlastFx(ctx: GameContext, steps: ReadonlySet<BlastFxStep>): void {
+  ctx.vfx.blastFx = steps;
+  ctx.render.postAa.setBlastDepth(steps.has('depth'));
+}
 
 /**
  * THE CHUNK-VIEW CEILING — what the shared record pool must be sized for.
