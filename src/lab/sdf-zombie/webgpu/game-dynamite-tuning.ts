@@ -21,6 +21,10 @@ import { GIB_BONES, GIB_MODES, defaultsFrom as dynamiteDefaults, type DynamiteTu
 export function applyBlastFx(ctx: GameContext, steps: ReadonlySet<BlastFxStep>): void {
   ctx.vfx.blastFx = steps;
   ctx.render.postAa.setBlastDepth(steps.has('depth'));
+  ctx.vfx.explosionVfx?.setTuning({
+    lickCount: steps.has('front') ? 6 : 0,
+    coreIgnite: steps.has('timing') ? 6 : 0,
+  });
 }
 
 /**
