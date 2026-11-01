@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "levels"))
 import doom_map  # noqa: E402
+import doom_route  # noqa: E402
+import doom_tables  # noqa: E402
 
 
 def name8(s: str) -> bytes:
@@ -489,3 +491,59 @@ def test_exit_push_dims_a_fluorescent_light_near_a_sign(tmp_path):
     [plain], [dim] = fl("none"), fl("exit")
     assert dim["power"] == round(plain["power"] * doom_map.EXIT_FLUORO_DIM, 2)
     assert dim["pos"] == plain["pos"]
+
+
+def test_map_names_of_doom_2_convert(tmp_path):
+    wad = tmp_path / "t.wad"
+    wad.write_bytes(build_wad().replace(name8("E1M1"), name8("MAP28")))
+    out, _ = doom_map.convert(wad, "map28", units_per_m=32)
+    assert out["id"] == "doom-map28"
+
+
+def test_only_slime_01_to_08_is_liquid():
+    assert doom_tables.material_for_flat("SLIME01") == "acid"
+    assert doom_tables.material_for_flat("SLIME08") == "acid"
+    assert doom_tables.material_for_flat("SLIME09") == "concrete"
+    assert doom_tables.material_for_flat("SLIME13") == "metal-plate"
+
+
+def test_doom_2_monsters_land_on_the_cast():
+    assert doom_tables.THING_SPAWNS[3002] == "butcher"
+    assert doom_tables.THING_SPAWNS[3005] == "teratoma"
+    assert 3006 not in doom_tables.THING_SPAWNS     # a lost soul has no stand-in
+
+
+def test_a_tagged_floor_raise_is_written_raised(tmp_path):
+    out, _ = convert_row(tmp_path, (-64, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 119)
+    assert out["sectors"][1]["floor"] == 0
+
+
+def test_the_zone_split_area_is_a_choice(tmp_path):
+    wide, _ = convert_stats(tmp_path)
+    fine, _ = convert_stats(tmp_path, zone_split_m2=1.0)
+    assert len({s["zone"] for s in fine["sectors"]}) >= len({s["zone"] for s in wide["sectors"]})
+
+
+def route_level(mid_floor, mid_ceil):
+    """Three 4 m squares in a row, A, M, B; the exit is in B."""
+    secs = [{"floor": 0, "ceil": 3}, {"floor": mid_floor, "ceil": mid_ceil}, {"floor": 0, "ceil": 3}]
+    vs = [[x, z] for z in (0, 4) for x in (0, 4, 8, 12)]
+    lines = [{"v": [k, k + 1], "front": k} for k in range(3)] + [{"v": [4 + k, 5 + k], "front": k} for k in range(3)]
+    lines += [{"v": [0, 4], "front": 0}, {"v": [1, 5], "front": 0, "back": 1}, {"v": [2, 6], "front": 1, "back": 2}, {"v": [3, 7], "front": 2}]
+    return {"vertices": vs, "sectors": secs, "lines": lines, "start": {"pos": [2, 0, 2]},
+            "triggers": [{"event": "level.end", "min": [9, 0, 1], "max": [11, 2, 3]}]}
+
+
+def test_route_walks_up_a_step_and_under_a_lintel():
+    assert doom_route.flood(route_level(0.7, 2.7))["exit_reached"]
+
+
+def test_route_stops_at_a_high_step_and_a_low_opening():
+    assert not doom_route.flood(route_level(0.8, 3))["exit_reached"]
+    assert not doom_route.flood(route_level(0, 1.8))["exit_reached"]
+
+
+def test_route_names_a_drop_with_no_way_back_as_a_soft_lock():
+    level = route_level(-2, 3)              # down into M, then the 2 m climb to B cannot be walked
+    r = doom_route.flood(level)
+    assert not r["exit_reached"] and r["reached"] == [0, 1]

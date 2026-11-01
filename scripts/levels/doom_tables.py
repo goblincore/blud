@@ -9,10 +9,12 @@ from __future__ import annotations
 # the order. Emitters (2026-10-26, hand-off item 2g): screen-bank (computer banks), viewscreen (the big
 # display wall), fluorescent (strip and ceiling lights; LITEBLU* stays a light panel), exit-sign. COMPSPAN / COMPTILE stay tech trim.
 FLAT_FAMILIES = [
-    ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("FWATER", "acid"),
+    # SLIME01..08 are Doom 2's liquid; SLIME09..16 are solid, rock and metal flats (MAP28 walks on them).
+    ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("SLIME09", "concrete"), ("SLIME1", "metal-plate"), ("FWATER", "acid"),
     ("BLOOD", "tile"),  # no blood glow material yet: plain tile, not a glow kind
     ("FLOOR", "metal-plate"), ("FLAT", "tile"), ("CEIL", "concrete"),
     ("TLITE", "fluorescent"), ("GRNLITE", "light-panel"), ("STEP", "metal-plate"), ("DEM", "tile"),
+    ("SFLR", "metal-plate"), ("CRATOP", "metal-plate"), ("GATE", "metal-plate"),
 ]
 TEXTURE_FAMILIES = [
     ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("COMPUTE", "screen-bank"), ("COMPTALL", "screen-bank"),
@@ -20,6 +22,12 @@ TEXTURE_FAMILIES = [
     ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "fluorescent"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
     ("LITEBLU", "light-panel"),  # blue-lit strips: the plain light panel, not a cold-white troffer
+    # Doom 2's hell set (MAP28). We own no rock, flesh, wood or fire look yet, so each takes the nearest of ours:
+    # rock and marble are concrete, flesh and wood the rusted brick, bronze metal, fire walls the lit panel.
+    ("ZIMMER", "concrete"), ("ROCK", "concrete"), ("ASHWALL", "concrete"), ("TANROCK", "concrete"), ("CRACKLE", "concrete"), ("MARB", "concrete"),
+    ("SK", "rust"), ("SP_FACE", "rust"), ("SP_HOT", "rust"), ("WOOD", "rust"), ("SW1WOOD", "rust"), ("SW2SKIN", "rust"),
+    ("BRONZE", "metal"), ("MIDBARS", "metal"),
+    ("FIRE", "light-panel"), ("BFALL", "light-panel"), ("SFALL", "light-panel"), ("SPCDOOR", "door"),
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
 
@@ -37,6 +45,8 @@ DOOR_KEY_SPECIALS = {26: "blue", 32: "blue", 27: "yellow", 34: "yellow", 28: "re
 REMOTE_DOOR_SPECIALS = {2, 4, 16, 29, 46, 61, 63, 86, 90, 103, 105, 106, 108, 109, 111, 112, 114, 115}
 # Floor lowers: written LOWERED to the lowest neighbouring floor (also for the "to highest / next" variants).
 FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
+# Floor raises: written RAISED to the next neighbouring floor up (Doom 2's "raise to next higher" family).
+FLOOR_RAISE_SPECIALS = {18, 20, 22, 47, 68, 69, 95, 119, 128, 129, 130, 131, 132}
 # Reserved: lifts are static until the doors/lifts plan (a lift at its top is a known gap).
 LIFT_SPECIALS = {10, 21, 62, 88, 120, 121, 122, 123}
 
@@ -71,7 +81,14 @@ def sector_special(kind: int) -> tuple[str, float]:
 
 # Doom thing types -> ours (spec 2026-10-24 §9). Zombiemen become a biomech variant (§9.1).
 ZOMBIEMAN = 3004
-THING_SPAWNS = {9: "soldier", 3001: "zombie"}            # shotgun guy, imp (for now)
+# shotgun guy, imp (for now). Doom 2's roster on today's cast, nearest role (the gaps: hand-off "MAP28 spike"):
+# chaingunner, mancubus, arachnotron, mastermind = juggernaut (chaingun); demon, spectre, hell knight, baron = butcher
+# (a melee; not the warbull, whose march costs twice a butcher's: 23 of them made MAP28's worst frames); revenant = flayer;
+# archvile = cultist; cyberdemon = warbull; cacodemon, pain elemental = teratoma (the floater). Lost souls (3006) stay out:
+# nothing small flies.
+THING_SPAWNS = {9: "soldier", 3001: "zombie", 65: "juggernaut", 67: "juggernaut", 3002: "butcher", 58: "butcher",
+                66: "flayer", 69: "butcher", 3003: "butcher", 64: "cultist", 68: "juggernaut", 7: "juggernaut", 16: "warbull",
+                3005: "teratoma", 71: "teratoma"}
 ZOMBIEMAN_VARIANTS = ("deadeye", "butcher", "flayer")
 THING_PICKUPS = {
     2001: "shotgun",

@@ -2,6 +2,7 @@
 """Convert a Doom map from a WAD into a Blud sector level.
 
     python3 scripts/levels/doom_map.py <wad> E1M1 [--units-per-m 35] [--out public/assets/levels] [--svg .lab-tmp/doom]
+    python3 scripts/levels/doom_map.py <doom2.wad> MAP28 --svg .lab-tmp/map28
 
 Spec: docs/superpowers/specs/2026-10-24-doom-sector-levels-design.md §5. Reads the vanilla map
 lumps (VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, THINGS; no BSP). Writes <out>/doom-<map>.level.json.
@@ -44,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
-    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
@@ -59,6 +60,9 @@ PLAYER1_START = 1
 # Steps get easier (the 24-unit stairs 0.69 m against SECTOR_STEP_M 0.75) but none newly climbable:
 # the next step up, 28 units (the start room's goo pit to its window sills), is 0.8 m.
 UNITS_PER_M = 35.0
+# A map whose route needs a lower opening than 35 allows gets its own scale. MAP28's corridors are 64 units: 1.83 m at
+# 35, under the headroom, and 86 of its 116 sectors are cut off. 33 makes them 1.94 m (E1M1's door clearance).
+MAP_UNITS_PER_M = {"MAP28": 33.0}
 REFERENCE_UNITS_PER_M = 32.0      # the scale the *_M2 / spacing constants below were tuned at
 DOOR_OPEN_GAP_UNITS = 4          # Doom: a door opens to 4 units below the lowest neighbouring ceiling
 DOOR_SPEED_M_S = 3.0             # leaf travel (game time, not world scale: the leaves are body-sized timing)
@@ -248,7 +252,7 @@ def _components(members: set[int], adj: dict[int, set[int]]) -> list[list[int]]:
     return out
 
 
-def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: list[float], bbox) -> list[int]:
+def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: list[float], bbox, split_m2: float = ZONE_SPLIT_M2) -> list[int]:
     """Spec §6.5: sectors joined by lines that touch no door; a door joins its first neighbour.
     A zone whose real area is over ZONE_SPLIT_M2 splits along its longer axis, keeping each part
     connected; a zone under ZONE_MIN_M2 merges into the neighbour it shares most lines with."""
@@ -272,7 +276,7 @@ def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: 
         return sum(area[s] for s in g)
 
     def split(group: list[int]) -> list[list[int]]:
-        if len(group) < 2 or total(group) <= ZONE_SPLIT_M2:
+        if len(group) < 2 or total(group) <= split_m2:
             return [group]
         members = set(group)
         x0 = min(bbox[s][0] for s in group); x1 = max(bbox[s][2] for s in group)
@@ -347,7 +351,7 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
 
 
 def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, skill: int = 4, zombieman: str = "mix",
-            overrides: dict | None = None) -> tuple[dict, dict]:
+            overrides: dict | None = None, zone_split_m2: float = ZONE_SPLIT_M2) -> tuple[dict, dict]:
     """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
     `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
     "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS. `overrides` is a
@@ -390,6 +394,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             door_by.setdefault(sides[ln["left"]]["sector"], set()).add(ln["special"])
     doors = set(door_by)
     lowered: set[int] = set()
+    raised: set[int] = set()
     for ln in lines:
         if ln["tag"] == 0:
             continue
@@ -400,11 +405,17 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                 door_by.setdefault(t, set()).add(ln["special"])
         elif ln["special"] in FLOOR_LOWER_SPECIALS:
             lowered.update(targets)
+        elif ln["special"] in FLOOR_RAISE_SPECIALS:
+            raised.update(targets)
     floor = {i: s["floor"] for i, s in enumerate(sectors)}
     ceil = {i: s["ceil"] for i, s in enumerate(sectors)}
     for i in sorted(lowered):
         if neighbours[i]:
             floor[i] = min(floor[i], min(sectors[n]["floor"] for n in neighbours[i]))
+    for i in sorted(raised):
+        higher = [sectors[n]["floor"] for n in neighbours[i] if sectors[n]["floor"] > sectors[i]["floor"]]
+        if higher:
+            floor[i] = min(higher)
     for d in sorted(doors):
         if neighbours[d]:
             ceil[d] = min(sectors[n]["ceil"] for n in neighbours[d]) - DOOR_OPEN_GAP_UNITS
@@ -451,7 +462,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     # Structural decisions (zones, which zones / pools / emitters earn a light) read the area at
     # REFERENCE_UNITS_PER_M, so the world scale does not change them; powers read the real area.
     area_ref = [a * (m / REFERENCE_UNITS_PER_M) ** 2 for a in area]
-    zone_of = _zones(n, pairs, doors, area_ref, bbox)
+    zone_of = _zones(n, pairs, doors, area_ref, bbox, zone_split_m2)
 
     out_sectors = []
     for i, s in enumerate(sectors):
@@ -929,21 +940,22 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("wad", type=Path)
     ap.add_argument("map")
-    ap.add_argument("--units-per-m", type=float, default=UNITS_PER_M,
-                    help=f"world scale, Doom units per metre (default {UNITS_PER_M:g}; the bodies are not scaled)")
+    ap.add_argument("--units-per-m", type=float, default=None,
+                    help=f"world scale, Doom units per metre (default {UNITS_PER_M:g}, or the map's own in MAP_UNITS_PER_M; the bodies are not scaled)")
     ap.add_argument("--out", type=Path, default=Path("public/assets/levels"))
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
     ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")
     ap.add_argument("--zombieman", choices=("mix",) + ZOMBIEMAN_VARIANTS, default="mix", help="what zombiemen become (default: a mix)")
     ap.add_argument("--overrides", type=Path, default=None, help="hand-written edits (default scripts/levels/overrides/<map>.json if it exists)")
     ap.add_argument("--no-overrides", action="store_true", help="convert the WAD only")
+    ap.add_argument("--zone-split", type=float, default=ZONE_SPLIT_M2, help=f"split a zone over this floor area, m^2 at the reference scale (default {ZONE_SPLIT_M2:g})")
     a = ap.parse_args()
     ov_path = None if a.no_overrides else a.overrides or doom_overrides.default_path(a.map)
     if a.overrides and not a.overrides.exists():
         ap.error(f"--overrides {a.overrides}: no such file")
     overrides = doom_overrides.load(ov_path) if ov_path is not None and ov_path.exists() else None
     try:
-        level, stats = convert(a.wad, a.map, a.units_per_m, skill=a.skill, zombieman=a.zombieman, overrides=overrides)
+        level, stats = convert(a.wad, a.map, a.units_per_m or MAP_UNITS_PER_M.get(a.map.upper(), UNITS_PER_M), skill=a.skill, zombieman=a.zombieman, overrides=overrides, zone_split_m2=a.zone_split)
     except doom_overrides.OverrideError as e:
         sys.exit(f"{ov_path}: {e}")
     a.out.mkdir(parents=True, exist_ok=True)
