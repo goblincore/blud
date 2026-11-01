@@ -543,7 +543,11 @@ def test_route_stops_at_a_high_step_and_a_low_opening():
     assert not doom_route.flood(route_level(0, 1.8))["exit_reached"]
 
 
-def test_route_names_a_drop_with_no_way_back_as_a_soft_lock():
-    level = route_level(-2, 3)              # down into M, then the 2 m climb to B cannot be walked
-    r = doom_route.flood(level)
+def test_route_goes_one_way_down_a_drop():
+    r = doom_route.flood(route_level(-2, 3))    # down into M, then the 2 m climb to B cannot be walked
     assert not r["exit_reached"] and r["reached"] == [0, 1]
+
+
+def test_a_floor_that_hurts_glows(tmp_path):
+    out, _ = convert_row(tmp_path, (0, 128, "RROCK01", "CEIL3_5", 160, 5), 0, 0)
+    assert out["sectors"][1]["glow"] == "lava" and out["sectors"][1]["hurtPerSec"] == 10

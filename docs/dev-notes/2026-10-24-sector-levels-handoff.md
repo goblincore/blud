@@ -449,6 +449,131 @@ key if the later-volley misses ever matter.
   or A/B one frozen frame by uniforms (`abframe.mjs`, `__sdfGame.step(6, 0)` to flush the smear).
 - setPose's yaw: forward is `(sin yaw, -cos yaw)`. `strip.mjs`'s comment has the x sign backwards.
 
+## MAP28 spike (2026-11-01)
+
+**Short answer.** Doom 2 MAP28 converts, boots, and can be walked from start to exit with its 111 enemies. Level geometry
+did not break the engine. What breaks first at this size is **SDF bodies**: their march cost when several crowd the view,
+then ~7 MB of heap per body, then the pre-warm time. Finer zones, the expected first fix, gained nothing, so they are not in.
+What the converter cannot do yet matters more than what the renderer cannot: only 4 of Doom 2's 32 maps can be finished
+this way, and MAP28 is one of them by luck.
+
+Regenerate: `python3 scripts/levels/doom_map.py ~/Downloads/doom2.wad MAP28 --svg .lab-tmp/map28`, check it with
+`python3 scripts/levels/doom_route.py public/assets/levels/doom-map28.level.json`, play `npm run dev:map28`. Add `&god=1` for no damage.
+
+**MAP28 is not a much bigger level.** It has 1.5× E1M1's lines and 1.3× its sectors, but 3.6× its enemies. So it tests crowds
+more than geometry. For size, the spike also ran MAP13 (2.5× lines), MAP10 (261 enemies) and four copies of MAP28 tiled
+into one level (6× lines, 444 enemies).
+
+| | E1M1 | MAP28 |
+|---|---|---|
+| vertices / lines / sectors | 470 / 486 / 88 | 749 / 745 / 116 |
+| footprint | 131 × 80 m (35 u/m) | 135 × 152 m (33 u/m) |
+| zones | 12 | 21 |
+| door entities + doors left as open holes | 5 + 1 | 11 + 8 |
+| enemies (skill 4) | 31 | 111 |
+| pickups / barrels / lights | 53 / 6 / 35 | 64 / 1 / 14 |
+| ready, warm, level pre-warm done | 8.0, 6.1, 6.1 s | 10.5, 6.9–7.5, 8.1–8.6 s |
+| JS heap | 0.65 GB | 1.1–1.4 GB |
+
+**Measured at spots** (`frameSplit` with the loop stopped, enemies idle, 2 boots agree within noise, load average 3.5–6):
+
+| | tick ms | draw CPU ms | GPU fence ms | draws | meshes shown / placed | bodies full / asleep |
+|---|---|---|---|---|---|---|
+| E1M1 start | 2.5 | 5.5 | 4–8 | 141 | 61 / 114 | 10 / 21 |
+| E1M1 s1 (big pool) | 4.0 | 6.1 | 15 | 172 | 66 / 114 | 25 / 6 |
+| E1M1 s15 | 4.5 | 6.1 | 6–10 | 180 | 74 / 114 | 22 / 9 |
+| MAP28 start | 3.0 | 6.3 | 6 | 105 | 27 / 150 | 8 / 103 |
+| MAP28 s33 (largest room) | 4.5 | 7.0 | 6–10 | 131 | 22 / 150 | 18 / 90 |
+| MAP28 s0 | 6.5 | 6.3 | 6 | 124 | 37 / 150 | 43 / 68 |
+| **MAP28 s80 (worst)** | **13.2** | 9–11 | 10–16 | 175–192 | 41 / 150 | 58 / 53 |
+| MAP28 s12 | 4.7 | 7.5 | 12 | 134–139 | 18 / 150 | 9–11 / 95 |
+
+s80 is the one view with a real tick cost: 58 idle bodies in view stay in the full LOD tier (`tick:ai-separation` 6.7, `body-step`
+6.3, inclusive). The zone cull holds at this size: 27 of 150 meshes at the start.
+
+**Live tours** (telemetry, autopilot along the enemies' routes, double barrel every 1.5 s, `?god=1`, 60–90 s; headless is capped at
+30 Hz, so frame p50 is always 33 ms). The roster row is the one fix that mattered:
+
+| | frame p95 / max ms | GPU busy p95 / max ms | tick p50 / p95 | draw p50 / p95 |
+|---|---|---|---|---|
+| E1M1 (2 runs) | 35 / 50–642 | 21–24 / 32–41 | 4.5 / 6–27 | 6 / 8 |
+| MAP28, demons as warbulls (3 runs) | **64–84 / 133–310** | **61–80 / 129–308** | 9 / 14–16 | 7–8 / 17–38 |
+| MAP28, demons as butchers (3 runs) | **35–43 / 49–97** | **24–26 / 46–93** | 9–10 / 12–24 | 7–9 / 16–21 |
+
+The worst warbull window: 9 warbulls and 3 zombies around the player at a junction, `sdf:march` 50–124 ms. The huge `draw` CPU in those
+frames was the page waiting on the GPU, not work. The 43 ms butcher run was on a busier machine and met the same crowd of 9; the two 35 ms
+runs may have met less of it, so read 35–43 as the range and not as a promise.
+
+**March cost by kind** (12 bodies 4–8 m ahead, frozen, GPU fence ms): zombie 14, soldier 16, juggernaut 16, flayer 18, deadeye 20, butcher 24,
+warbull 32, teratoma 36, cultist 41. Crowd size: zombie 3 / 12 / 24 = 15 / 14 / 22; warbull 3 / 6 / 12 / 24 = 20 / 29 / 32 / 51. Any
+roster for a level needs this table: a kind choice can double the worst frame.
+
+**Bigger than MAP28** (spots, enemies idle; the tile has only its first copy's lights):
+
+| | lines / sectors / enemies | worst spot tick / draw / fence ms | most draws | ready s | level pre-warm s | heap GB |
+|---|---|---|---|---|---|---|
+| MAP13 | 1196 / 247 / 110 | 14 / 13 / 11 (110 sectors in view, 179 of 219 meshes) | 313 | 11–19 | 10.7 | 1.1 |
+| MAP10 | 1054 / 186 / 261 | 23 / 13 / 28 (122 bodies full) | 264 | 16 | 20 | 2.1 |
+| MAP28 × 4 tile | 2980 / 464 / 444 | settled at the start 17 / 18 / 5; 25–58 / 37–60 while the pre-warm runs | 170 | 25–31 | **not done after 60 s** | 3.1–4.0 |
+
+Read: 300 objects a frame on MAP13 costs 13 ms of draw CPU, which is fine. Past ~250 bodies it is the bodies: `tick` grows with the bodies in view,
+GC reaches 50 ms a frame at 3+ GB, and the level pre-warm (one mesh a step) stops finishing in useful time. Geometry alone (the tile with `?nospawn`): tick 0.5, draw 13, fence 6, heap 0.34 GB.
+Heap per body comes out at 7–8 MB on every level. Cause not looked at.
+
+**What broke, in the order found:**
+1. **Headroom against the world scale (fixed).** At the standard 35 u/m MAP28's 64-unit corridors are 1.83 m, under `SECTOR_HEADROOM_M` 1.9. 86 of 116 sectors
+   were cut off. `MAP_UNITS_PER_M` gives MAP28 33 u/m (1.94 m, the clearance E1M1's doors have). So bodies read about 6 % smaller against this map than the owner's 35 would give. Still short of Doom:
+   a 56-unit opening (1.70 m) is walkable in Doom but not here, which is why sectors 85–97 stay out of reach (an optional wing).
+2. **Roster cost (fixed):** table above.
+3. **Doom 2 tables (fixed).** SLIME09..16 are solid flats, not acid: 6 pool lights and glowing floors were wrong. Hell textures fell to `tech`; they now take the nearest of our families (see gaps). Tagged floor raises were not written.
+4. **Hurt floors with no cue (fixed).** Sectors 7, 83, 100, 102 hurt 10/s on plain rock and blood flats. A floor that hurts now glows as lava.
+5. **Finer zones: tried, no gain, not on by default.** `--zone-split 120` gives 29 zones instead of 21: meshes 182 vs 150, draws +2–8, tick and draw flat, fence within noise. The cull and batching were already enough. The option stays for levels that need it.
+
+**Left as is (not blockers).** 8 door sectors are open holes because they are not rectangles (slanted or many-faced, including the red door s16, a yellow door s43 and the gun door s76), so some closets stand open. A body in a corner can catch the player; god mode hid damage in every run here. `game-arms.ts:136` keeps a node in `userData`, so the launcher's arm clone JSON-serialises their textures once at boot (68 console warnings).
+
+**Roster** (`THING_SPAWNS`): imp → zombie (24), zombieman → deadeye/butcher/flayer (3), shotgun guy → soldier (5), chaingunner + mancubus + arachnotron + mastermind → juggernaut (22), demon + spectre + hell knight + baron → butcher (31), revenant → flayer (17 + zombiemen), archvile → cultist (4), cacodemon + pain elemental → teratoma (6), cyberdemon → warbull (0 here). **Gaps:** lost souls (12, left out: nothing small flies), spectre's invisibility, the archvile's revive and fire, the revenant's homing rocket, the mancubus's fireballs, spider-legged bodies, pain elementals spawning. Bosses are stand-ins with stand-in health. The spawn cap: `MAX_CROWD_INSTANCES` is 64 per kind; past it spawn logs `[crowd] type full` and the body gets no crowd slot (MAP10 has 95 zombies; cost not separated).
+
+**Linedef specials MAP28 uses** (line counts; removing one kind at a time from a simulation of Doom's own rules, 56-unit player):
+
+| special | lines | what it does | Doom's route needs it? | here |
+|---|---|---|---|---|
+| 46 gun switch | 3 | shoot to open doors 18, 71, 76 | **yes** | written open |
+| keys, red + yellow doors (33, 34) | 3 | yellow key far north, red key by the start, red door before the exit | **yes** | no gate (keyed door opens or is a hole) |
+| 1, 31 manual door | 7 | | no (alternatives exist) | sliding door or hole |
+| 2 W1 remote door, 61 SR door | 9 | traps and closets | no | written open or door |
+| 62, 88 lift | 6 | | no | static at the WAD height |
+| 36, 70 floor lower | 3 | | no | written lowered |
+| 119 floor raise | 2 | | no | written raised |
+| 97 teleporter | 1 | a secret | no | not built; unreached |
+| 3 W1 close, 35, 138, 139 light | 5 | trap and mood | no | not built |
+| 48 scrolling wall | 33 | look | no | not built |
+| 52 exit | 7 | ends the level | yes | walk-in trigger, works |
+
+So **nothing new had to be built to walk MAP28**: the static level (doors open or sliding, floors in their final place) reaches the exit with no soft locks. **The price:** the level is not the level Doom's mapper made. With no keys or gun switches the exit is a 33 s walk from the start (about 120 m), so the yellow and red key loop is optional sightseeing. Unreached: 35 of 116 sectors (scenery ledges, the 56-unit wing, a secret behind a lift and the teleporter).
+
+**The whole of Doom 2 through this converter** (`doom_route.py` on the output): 17 of 32 stop in the converter (a closed sector an unmodelled special opens: crushers, stairs, ceiling raises), 6 fail the parser (`sector N: not closed`: Doom's unbalanced or self-referencing sector tricks, including MAP14), 9 boot-validate, and only **4 are finishable statically: MAP07, MAP13, MAP28, MAP31**. Most need lifts, at least.
+
+**Verified:** boot with no errors (many times). Real walks under real collision, enemies' `route`, `?nospawn`: start → yellow key (391 waypoints) → north wing → gun-door hall; start → red key → south room. With enemies: start → exit, `levelComplete()` true, no errors. E1M1's level JSON byte-identical after every converter change. Python tests, typecheck.
+
+**Not verified:** a person playing it. `?god=0`: no run took damage, so difficulty is unknown and probably brutal (22 juggernauts). Hazard damage and the glow look on the new lava floors on MAP28 (the mechanism is E1M1's). Real 60 Hz: headless caps at 30, so frame numbers are only a floor. The doom gate is paused and was not run. Full suite and CI read at the PR. MAP10 and MAP13 were measured but not walked or toured.
+
+**For the sector-level standard-format spec:**
+- World scale must be per level, and is bounded by the map's lowest needed opening. Or headroom becomes a level property.
+- The format needs "moves": lift, door, floor and ceiling states rather than one baked height. Static is why 28 of 32 maps fail.
+- Keyed doors and gun switches need events; `triggers` already fire events, and lines are the missing trigger source.
+- Non-rectangular doors need a story (8 of 19 here).
+- Validation should warn, not refuse, on unbalanced sectors, or the converter should repair them.
+- A level should budget bodies by kind, using the march table.
+
+**Next, in the order I would do them:**
+1. Owner plays MAP28 and says whether a mixed late level feels good. The rest depends on this.
+2. If yes, a small trigger system: gun switches and keys first (they restore MAP28's route with no moving geometry), then lifts and teleporters, which most other maps need. A separate decision, not started.
+3. Body scale, if levels want 200+ enemies: where the 7–8 MB a body goes, an LOD tier for idle bodies far off in view (s80's tick), and pre-warm that does not walk every mesh.
+4. Cheaper warbull, teratoma and cultist marches, or caps per kind.
+5. Rock, flesh and fire materials of our own: MAP28's hell set is wearing concrete, rusted brick and light panels.
+
+Probes are in the session scratchpad, not committed (`measure.mjs`, `tour.mjs`, `walk2.mjs`, `kinds.mjs`). `__sdfGame.navRoute(x, z)` is the new seam they lean on. Shots: `.lab-tmp/map28/shots/`, plan `.lab-tmp/map28/MAP28.svg`, numbers `.lab-tmp/map28/m/`.
+
 ## Why
 Owner: the representational levels (Night Train, the Wake's graveyard) felt less interesting than the
 abstract test spaces (ring, arena). Theory: non-architectural, Doom-like layouts feel more alien.
@@ -604,6 +729,8 @@ floor, line-order-dependent loop tracing on E1M1 sector 28, island-in-hole captu
 outside sectors, reversed WGSL smoothstep edges).
 
 ## Next spike (owner idea, 2026-10-28): Doom 2 MAP28 "The Spirit World"
+
+**Done 2026-11-01:** see "MAP28 spike (2026-11-01)" above. The brief, kept:
 
 After the E1M1 exploration wraps (perf, doors, culling), and after a spec that makes sector levels the standard format, convert Doom 2 MAP28. It's the owner's pick: a long late-game level with mixed areas, to test perf and feel at scale. It needs:
 - `doom2.wad` support in `doom_map.py` (MAP## names);

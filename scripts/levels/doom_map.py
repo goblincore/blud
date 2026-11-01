@@ -468,6 +468,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     for i, s in enumerate(sectors):
         special, hurt = sector_special(s["special"])
         floor_mat = material_for_flat(s["floor_tex"])
+        if hurt and floor_mat not in GLOW_MATERIALS:      # a floor that hurts must read as one (MAP28's rock and blood)
+            floor_mat = "lava"
         wall_tex = max(faces.get(i, {"-": 1}).items(), key=lambda kv: kv[1])[0]
         sec = {
             "floor": H(floor[i]), "ceil": H(ceil[i]), "light": round(max(0, min(255, s["light"])) / 255, 3),
