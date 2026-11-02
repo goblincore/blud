@@ -4,7 +4,7 @@
 // folds these lines into the body and bakes the difference into imp-body-n.png; nothing here is ever raymarched).
 //
 //   npx tsx scripts/imp-detail-gen.ts && npx tsx scripts/bake-body-normal.ts imp 512 256 \
-//     --torso-axis 0,1.56,0.19:0,0.90,-0.06 \
+//     --torso-axis 0,1.32,0.19:0,0.66,-0.06 \
 //     --limb upperArm.l:0:1:0.13:80 --limb foreArm.l:0:1:0.12:80 --limb upperArm.r:0:1:0.13:80 --limb foreArm.r:0:1:0.12:80 \
 //     --limb thigh.l:0:1:0.15:80 --limb shin.l:0:1:0.12:80 --limb foot.l:0:1:0.09:64 \
 //     --limb thigh.r:0:1:0.15:80 --limb shin.r:0:1:0.12:80 --limb foot.r:0:1:0.09:64
@@ -40,7 +40,10 @@ const norm = (a: V): V => mul(a, 1 / len(a));
 const f = (n: number) => (Math.abs(n) < 5e-5 ? '0' : n.toFixed(4).replace(/0+$/, '').replace(/\.$/, ''));
 const fv = (v: V) => `(${v.map(f).join(',')})`;
 // The torso's axis, leaning forward up the hunch: the same segment the bake takes (--torso-axis, head then tail).
-const AX0: V = [0, 1.56, 0.19], AX1: V = [0, 0.90, -0.06];
+const AX0: V = [0, 1.32, 0.19], AX1: V = [0, 0.66, -0.06];
+// The tables below keep the heights the torso was designed at; ridge() and lump() take it down to where it now stands
+// (imp.blob: the short legs lowered everything above the hips).
+const LOWER = 0.24;
 const axisZ = (y: number) => AX1[2] + (AX0[2] - AX1[2]) * (y - AX1[1]) / (AX0[1] - AX1[1]);
 
 /** The skin at height y, angle th (deg; 0 faces +z, +90 is the body's left, +x), and its outward normal. */
@@ -59,7 +62,7 @@ function skin(y: number, thDeg: number): { p: V; n: V } {
   const n = norm([sdBody(add(p, [e, 0, 0]), body) - d0, sdBody(add(p, [0, e, 0]), body) - d0, sdBody(add(p, [0, 0, e]), body) - d0]);
   return { p, n };
 }
-function boneFor(y: number) { return y < 1.14 ? 'pelvis' : 'spine'; }
+function boneFor(y: number) { return y < 0.90 ? 'pelvis' : 'spine'; }
 function boneAt(b: string, p: V): { t: number; at: V } {
   const { head, tail } = bones.get(b)!;
   const d = sub(tail, head);
@@ -72,7 +75,7 @@ const section = (s: string) => out.push('', `  # ---- ${s} ----`);
 
 /** A raised ridge along a chain of (y, deg) skin points: bars sunk so `proud` metres stand out. */
 function ridge(pts: [number, number][], r: number, proud: number, blend: number, r2?: number) {
-  const S = pts.map(([y, th]) => { const s = skin(y, th); return add(s.p, mul(s.n, proud - r)); });
+  const S = pts.map(([y, th]) => { const s = skin(y - LOWER, th); return add(s.p, mul(s.n, proud - r)); });
   for (let i = 0; i + 1 < S.length; i++) {
     const A = S[i]!, B = S[i + 1]!;
     const mid = mul(add(A, B), 0.5);
@@ -86,8 +89,8 @@ function ridge(pts: [number, number][], r: number, proud: number, blend: number,
 /** A swelling at a skin point: an ellipsoid sunk so `proud` metres stand out. `depth` is its semi-axis along
  *  the skin normal (r x deep for a flattened lump): sinking by r alone buried the flattened abs entirely. */
 function lump(y: number, th: number, r: number, proud: number, blend: number, scale = '', depth = r) {
-  const s = skin(y, th), c = add(s.p, mul(s.n, proud - depth));
-  const b = boneFor(y), { t, at } = boneAt(b, c);
+  const s = skin(y - LOWER, th), c = add(s.p, mul(s.n, proud - depth));
+  const b = boneFor(y - LOWER), { t, at } = boneAt(b, c);
   out.push(`  blob torso on ${b} at=${f(t)} offset=${fv(sub(c, at))} r=${f(r)}${scale} blend=${f(blend)}`);
 }
 

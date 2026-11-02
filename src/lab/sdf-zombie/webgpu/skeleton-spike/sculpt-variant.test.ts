@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, SCULPT_VARIANTS, SECOND_PAINT_CHARACTERS, SKULL_DEFAULT, SKULL_KINDS,
-  SKULL_FIT_DEFAULT, anatomicalFitOf, resolveSkull, sculptPaintOf, sculptRecipe, sculptVariantOf, type SculptVariant, type SkullChoice,
+  SKULL_FIT_DEFAULT, anatomicalFitOf, ownSkullFitOf, resolveSkull, sculptPaintOf, sculptRecipe, sculptVariantOf, type SculptVariant, type SkullChoice,
 } from './sculpt-variant';
-import { BALL_HEADS, HUMANOIDS } from './skull-cast';
+import { ANATOMICAL_SKULL_ASSET, BALL_HEADS, HUMANOIDS, OWN_SKULLS, ownSkullOf, skullAssetFits } from './skull-cast';
 import { SKULL_FIT_NAMES } from './skull-fit';
 
 /** A choice without its per-character part (who draws the anatomical skull has tests of its own, below). */
@@ -306,5 +306,35 @@ describe('resolveSkull: who draws the anatomical skull, and under which fit', ()
       // The page's skull is 'anatomical' exactly when every humanoid draws the plates.
       expect(choice.skull, search).toBe(who.length === HUMANOIDS.length ? 'anatomical' : 'sculpt');
     }
+  });
+});
+
+describe('resolveSkull: who draws a skull of their own (skull-cast.ts OWN_SKULLS)', () => {
+  it('the imp draws its own demon skull, under the envelope fit, wherever the plates may be drawn; never the human plates', () => {
+    expect(ownSkullOf('imp')).toBe(OWN_SKULLS.imp);
+    expect(OWN_SKULLS.imp!.asset).toEqual({ name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json' });
+    expect(OWN_SKULLS.imp!.spec).toEqual({ fit: 'envelope' });
+    for (const search of ['', '?level=night-train', '?spawn=imp', '?skull=anatomical', '?skullfit=snug', '?skull=anatomical&skullfit=tight', '?skull=nonsense']) {
+      const choice = resolveSkull(search);
+      expect(Object.keys(choice.own), search).toEqual(['imp']);
+      // Its own spec, whatever ?skullfit= says: that is the plates'.
+      expect(ownSkullFitOf(choice, 'imp'), search).toBe(OWN_SKULLS.imp);
+      expect(anatomicalFitOf(choice, 'imp'), search).toBeNull();
+      for (const name of [...HUMANOIDS, 'ogre', 'toString']) expect(ownSkullFitOf(choice, name), `${search} ${name}`).toBeNull();
+    }
+  });
+  it('?skull=sculpt and every ?sculpt= turn it off with the rest', () => {
+    for (const search of ['?skull=sculpt', '?skull=procedural', ...SCULPT_VARIANTS.map(v => `?sculpt=${v}`), '?skull=anatomical&sculpt=paint']) {
+      expect(resolveSkull(search).own, search).toEqual({});
+      expect(ownSkullFitOf(resolveSkull(search), 'imp'), search).toBeNull();
+    }
+  });
+  it('an own skull\'s asset is fitted to its owner alone, and the human asset to the humanoids alone', () => {
+    for (const name of Object.keys(OWN_SKULLS)) {
+      expect((HUMANOIDS as readonly string[]).includes(name), name).toBe(false);
+      expect(skullAssetFits(OWN_SKULLS[name]!.asset, name)).toBe(true);
+      expect(skullAssetFits(ANATOMICAL_SKULL_ASSET, name)).toBe(false);
+    }
+    for (const name of HUMANOIDS) { expect(skullAssetFits(ANATOMICAL_SKULL_ASSET, name)).toBe(true); expect(skullAssetFits(OWN_SKULLS.imp!.asset, name)).toBe(false); }
   });
 });

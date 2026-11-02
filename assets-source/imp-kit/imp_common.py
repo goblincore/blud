@@ -9,6 +9,8 @@ SKIN = json.load(open(os.path.join(KIT_DIR, 'skin.json')))
 BONE = {n: (bv(*b['head']), bv(*b['tail'])) for n, b in SKIN['bones'].items()}
 bell = lambda x, w=1.0: max(0.0, 1 - (x / w) ** 2)
 sn = lambda t: math.sin(math.pi * min(1.0, max(0.0, t)))
+# The torso tables keep the heights they were designed at: the short legs (imp.blob) lowered everything above the hips.
+LOWER = 0.24
 
 # Base colours (LINEAR; biomech-style.md: a fresh material exports white and renders as chrome). The look of each is
 # kit-overlay.ts LOOK by name; `impmetal` and `impclaw` also burn orange from their baked `_glow` (GLOW_FROM_ATTRIBUTE).

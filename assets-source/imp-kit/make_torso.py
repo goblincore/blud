@@ -21,7 +21,7 @@ except NameError:
     PARTS = {'heart', 'ember', 'ribs', 'spines', 'spikes'}
 
 UP = Vector((0, 0, 1)); BACK = Vector((0, 1, 0))
-WY = 1.33                                   # the wound's centre height (imp.blob: spine at=0.62): the heart sits IN it, meat showing all round
+WY = 1.33 - LOWER                                   # the wound's centre height (imp.blob: spine at=0.62): the heart sits IN it, meat showing all round
 W, WN = skin('front', 'torso', 0.0, WY)
 # The heart's frame: fw out of the wound, hu up the chest, hs across it (toward the body's left, blender +x).
 fw = WN.normalized(); hu = (UP - fw * UP.dot(fw)).normalized(); hs = hu.cross(fw).normalized()
@@ -85,7 +85,7 @@ if 'ribs' in PARTS:
             for i_ in range(N_ + 1):
                 u = i_ / N_
                 x = x0 + (0.033 - x0) * u; yy = y + (y1 - y) * u
-                sp, sn_ = skin('front', 'torso', sx * x, yy)
+                sp, sn_ = skin('front', 'torso', sx * x, yy - LOWER)
                 # Under the skin at the root only, then held clear all the way onto the housing. Shallow at the root showed a rounded
                 # sausage end; an arch that dived again at the tip left detached worms that never reached the heart.
                 e = min(1.0, u / 0.35); off = -0.012 + 0.026 * e * e * (3 - 2 * e)
@@ -108,7 +108,7 @@ if 'spines' in PARTS:
     for x, y, L, r0 in ((0, 1.30, 0.06, 0.013), (0, 1.36, 0.08, 0.016), (0, 1.42, 0.09, 0.017), (0, 1.48, 0.07, 0.014),
                         (0.05, 1.38, 0.045, 0.011), (-0.05, 1.38, 0.045, 0.011),
                         (0.055, 1.45, 0.05, 0.012), (-0.055, 1.45, 0.05, 0.012)):
-        p, n = skin('back', 'torso', x, y)
+        p, n = skin('back', 'torso', x, y - LOWER)
         base = p - n * 0.008
         d0 = (n + UP * 0.9).normalized()
         horn(f'sp{x}{y}', base, d0, Vector((-1, 0, 0)), L + 0.008, r0, curl=0.7)
@@ -126,7 +126,7 @@ if 'spikes' in PARTS:
     # Off the top of the deltoid (imp.blob: clavicle at=0.95, r 0.070), raked up, out and back.
     for base_b, dir_b, L, r0 in (((0.195, 1.495, 0.130), (0.45, 1.0, -0.65), 0.085, 0.015),
                                  ((0.165, 1.505, 0.105), (0.25, 1.0, -0.85), 0.060, 0.012)):
-        base = bv(*base_b); d0 = bv(*dir_b).normalized()
+        base = bv(base_b[0], base_b[1] - LOWER, base_b[2]); d0 = bv(*dir_b).normalized()
         horn(f'spk{L}', base, d0, d0.cross(BACK).normalized(), L, r0, curl=0.7)
         roots.append(base)
     o = fuse('spikes', voxel=0.0016, smooth=(0.5, 3), noise=0.0010, noise_scale=0.02)

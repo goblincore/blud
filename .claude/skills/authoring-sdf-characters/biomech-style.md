@@ -674,3 +674,25 @@ throws fireballs. What it taught:
   imp throws often from a quick body, so `fireball.ts` is its own straight-ish ball (11 m/s, a slight droop it aims
   for, 14 on a hit and 5 on a near miss, a 0.55 m fire burst through the dynamite's burst visual and light), and it
   hurts only the player.
+
+### The imp's second pass: proportions, claw feet, its own skull (2026-11-02)
+
+- **Shorter legs move everything above the hip.** Dropping the pelvis (0.94 → 0.76) is one number in the blob but every
+  height in the kit, the skin probes, the detail generator and the bake's torso axis. Keep one offset (`LOWER = 0.24`
+  in `imp_common.py`, the same constant in `scripts/imp-detail-gen.ts`) and subtract it at every above-hip height
+  rather than retuning each part; a bigger head is likewise one scale (`HS = 1.25` in `make_head.py`, the head prims
+  scaled to match). The torso axis in `bake-args.json` moves with it.
+- **Big claw feet: flesh toes, kit claws.** Splayed toes are blob pads plus tapering `bar` digits on the foot bone (the
+  foot tip is pinned to the ankle's rest offset, so the toes stay level through the walk); the kit only caps each digit
+  with a cuff ring and a curled horn claw in a darker keratin tint. A reference image for the idea stays out of the
+  repo.
+- **An exposed skull can be its own mesh.** The sculpted `bones` block (ratio/blob/bar only, nothing subtractive) made
+  a blobby demon skull. The anatomical skull path now takes a skull per character (`OWN_SKULLS` in `skull-cast.ts`):
+  the imp's is the twinhead's demon skull, horns cut, ~9.9k tris, split into the 14 `SKULL_PIECES` with openings in a
+  manifest, built reproducibly by `scripts/build_imp_skull.py` (Blender headless, `--publish`). Size it with its own
+  fit fractions (`IMP_FIT` in `anatomical-skull.ts`): at the human ones the crown came through the intact head. Leave
+  eyes out of a skull like this (`PLAIN_SKULL_CHARACTERS`), and keep the sculpted bone as the fallback and the sizing
+  target.
+- **The validator's "bone inside flesh" is optimistic in thin overlaps.** The flesh SDF underestimates depth where thin
+  prims overlap, so a bone that passes can still breach. Filler prims fix it but change the skin; shrinking the bone
+  about a pivot (and dropping the flesh brows and jaw from the bone copy, re-cut as thin bars) does not.

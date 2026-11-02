@@ -53,15 +53,15 @@ for (const [k, b] of built.bones as unknown as Map<string, { head: V; tail: V }>
 const out = {
   bones,
   front: {
-    head: frontGrid('head', -0.10, 0.10, 1.50, 1.80),
-    torso: frontGrid('torso', -0.16, 0.16, 1.10, 1.50),
+    head: frontGrid('head', -0.13, 0.13, 1.17, 1.56),
+    torso: frontGrid('torso', -0.16, 0.16, 0.86, 1.26),
     // The head with its mouth slot left out (docNoSlot above): where the teeth root.
-    flesh: frontGrid('head', -0.05, 0.05, 1.52, 1.61, 0.0025, -1, builtNoSlot),
+    flesh: frontGrid('head', -0.0625, 0.0625, 1.24, 1.39, 0.0025, -1, builtNoSlot),
   },
   // The same from BEHIND (rays travelling +z from z -1): the dorsal spines' seats.
   back: {
-    torso: frontGrid('torso', -0.20, 0.20, 1.10, 1.55, 0.005, 1),
-    head: frontGrid('head', -0.10, 0.10, 1.50, 1.80, 0.005, 1),
+    torso: frontGrid('torso', -0.20, 0.20, 0.86, 1.31, 0.005, 1),
+    head: frontGrid('head', -0.13, 0.13, 1.17, 1.56, 0.005, 1),
   },
 };
 writeFileSync(resolve(ROOT, 'assets-source/imp-kit/skin.json'), JSON.stringify(out));

@@ -19,7 +19,11 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Attacks**: `IMP_PROFILE` (PROWL_QUICK at 1.6 m/s, quick turn). Up close the zombie mind's swing as a claw
   rake; at range `makeImpMind` winds up and throws overhand (`attack.ts` `throw`): `fireball.ts` flies from the right
   socket (`spit` from `handTipR`) at 11 m/s, 14 on a hit, 5 on a near miss, a small fire burst. Seen in the arena.
-- [ ] Owner review. Open: a charging fireball visible in the socket through the wind-up; the in-flight look of the
+- [x] **Second pass 2026-11-02** (owner): bigger head (x1.25), shorter legs (pelvis 0.94 -> 0.76) and arms, big
+  splayed claw feet (flesh toes, kit claws), and an exposed skull of its own: the twinhead's demon skull mesh
+  (`public/assets/lab/imp-skull.glb`, built by `scripts/build_imp_skull.py`, loaded through `OWN_SKULLS`).
+- [ ] Owner review. Open: no eyes in the exposed skull's sockets; the cut horn knob on each temple; metal skull parts
+  on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
   ball (a tinted tracer, like the bile); kit optimisation.
 
 ## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22

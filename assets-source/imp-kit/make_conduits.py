@@ -77,7 +77,7 @@ def hose(name, pts, kit, port_end=True, port_start=False):
 
 if 'chest' in PARTS:
     drop(['spine|conduitL', 'spine|conduitR']); clear_work()
-    on = lambda x, y, off: (lambda pn: pn[0] + pn[1] * off)(skin('front', 'torso', x, y))
+    on = lambda x, y, off: (lambda pn: pn[0] + pn[1] * off)(skin('front', 'torso', x, y - LOWER))
     # From the heart's left flank (its semi-axis across is 0.042: make_torso.py) out over the ribs and up to the armpit's
     # front, sunk part-way into the skin.
     ctrl = [on(0.038, 1.326, 0.002), on(0.075, 1.330, 0.003), on(0.110, 1.368, 0.003), on(0.138, 1.405, 0.004),

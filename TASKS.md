@@ -26,7 +26,7 @@
   Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
-- [~] **Imp built 2026-10-24; owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
+- [~] **Imp built 2026-10-24, second pass 2026-11-02 (proportions, claw feet, demon skull when shot); owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
 - [~] **Built 2026-10-13/14, owner look pending.** A jaw bone with its own hinge (`hinge=0.06` at the lip line), the mouth opening at the

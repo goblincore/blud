@@ -7,10 +7,12 @@
 // ANATOMICAL one (the modelled skull of 14 plates, anatomical-skull.ts), each fitted to its own flesh
 // (skull-cast.ts BALL_HEADS). `?skull=anatomical` draws the plates on every humanoid, `?skull=sculpt` the sculpted
 // bone on every one, `?sculpt=<name>` another variant of the sculpted skull, `?skullfit=<name>` another fit of the
-// plates. resolveSkull is the one place that decides; the bone cache (sculpt-cache.ts), the renderer and the
-// diagnostics all read its answer. Pure.
+// plates. A character with a skull of its OWN (skull-cast.ts OWN_SKULLS: the imp's demon skull) draws it wherever
+// the plates may be drawn at all, under its own fit; `?skull=sculpt` and `?sculpt=` turn it off with the rest.
+// resolveSkull is the one place that decides; the bone cache (sculpt-cache.ts), the renderer and the diagnostics all
+// read its answer. Pure.
 import { SKULL_FIT_NAMES, type SkullFitName, type SkullFitSpec } from './skull-fit';
-import { BALL_HEADS, HUMANOIDS } from './skull-cast';
+import { BALL_HEADS, HUMANOIDS, OWN_SKULLS, type OwnSkull } from './skull-cast';
 
 /** The sculpted skull's variants, by what each changes from `classic`:
  *   `classic`     the first sculpt at the bone cache's own cell under the first paint: the sculpted skull as it was
@@ -80,6 +82,12 @@ export function sculptRecipe(variant: SculptVariant): Readonly<SculptRecipe> {
  *  bone. One that is not listed, a new character among them, is drawn under the first paint. */
 export const SECOND_PAINT_CHARACTERS: ReadonlySet<string> = new Set(['zombie', 'soldier', 'juggernaut', 'clown', 'clown-alt']);
 
+/** THE CHARACTERS WHOSE HEAD BONE IS ITS OWN SKULL, not a human one: the imp's is a demon skull, drawn from its own
+ *  asset (skull-cast.ts OWN_SKULLS), with its sculpted bone (the `.blob`'s `bones` block, authored in the same shape)
+ *  under it when the asset is off. No eyes are seated in it: the seats are the human sockets' places, and on its
+ *  muzzle two pink eyeballs read as "the simplified humanoid skull" (owner, 2026-11-02). */
+export const PLAIN_SKULL_CHARACTERS: ReadonlySet<string> = new Set(['imp']);
+
 /** The paint `character`'s bones are drawn with under `recipe`: the recipe's for a character the second paint is
  *  fitted to (or for every character, when the recipe says every head), else the first. */
 export function sculptPaintOf(recipe: Readonly<SculptRecipe>, character: string): SculptPaint {
@@ -112,9 +120,18 @@ export interface SkullChoice {
   /** WHO DRAWS THE ANATOMICAL SKULL, and how it is fitted to each: character to fit. A character it does not name
    *  draws its sculpted bone. Empty: nobody does, and the page has no use for the plates' asset. */
   anatomical: Readonly<Record<string, Readonly<SkullFitSpec>>>;
+  /** WHO DRAWS A SKULL OF ITS OWN (skull-cast.ts OWN_SKULLS): character to its asset and fit. Never a character
+   *  `anatomical` names. Empty under the sculpted skull on every character. */
+  own: Readonly<Record<string, Readonly<OwnSkull>>>;
   /** One line for each thing the query asked for that was not understood, or was overruled. Empty for a query that
    *  names nothing, or only what it gets. */
   notes: readonly string[];
+}
+
+/** `character`'s own skull under `choice` (its asset and fit); null: it draws the anatomical skull or its sculpted
+ *  bone. */
+export function ownSkullFitOf(choice: Pick<SkullChoice, 'own'>, character: string): Readonly<OwnSkull> | null {
+  return Object.hasOwn(choice.own, character) ? choice.own[character]! : null;
 }
 
 /** The skull `character` draws under `choice`: the anatomical one under a fit, or its sculpted bone (null). */
@@ -123,6 +140,7 @@ export function anatomicalFitOf(choice: Pick<SkullChoice, 'anatomical'>, charact
 }
 
 const NOBODY: SkullChoice['anatomical'] = Object.freeze({});
+const NOBODY_OWN: SkullChoice['own'] = Object.freeze({});
 /** The eight, each under its own fit (skull-cast.ts). */
 const BALL_HEAD_FITS: SkullChoice['anatomical'] = Object.freeze(Object.fromEntries(Object.entries(BALL_HEADS).map(([name, head]) => [name, head.spec])));
 /** `who`, each under the plain named fit. */
@@ -141,6 +159,8 @@ const everyOne = (who: readonly string[], fit: SkullFitName): SkullChoice['anato
  *   `?skullfit=<name>`                 that fit, plain, for every character that draws the anatomical skull (the
  *                                      eight by default, every humanoid under `?skull=anatomical`). Nothing where
  *                                      nobody draws it;
+ *   (always, but where every character draws its sculpted bone) a character with a skull of its own (skull-cast.ts
+ *                                      OWN_SKULLS) draws it, under its own fit: `?skullfit=` is the plates' alone;
  *   `?sculptheads=all`                 that variant's paint on every character's bones (the recipe's `everyHead`),
  *                                      for looking at a head the second paint is not fitted to. Nothing under the
  *                                      anatomical skull.
@@ -173,12 +193,13 @@ export function resolveSkull(search: string): SkullChoice {
   }
   const headsParam = params.get('sculptheads') || null;
   if (headsParam !== null && headsParam !== 'all') notes.push(`?sculptheads=${headsParam} is not understood (all): passed over`);
-  if (skull === 'anatomical') return { skull, variant: 'classic', recipe: SCULPT_CLASSIC, anatomical: everyOne(HUMANOIDS, fit ?? SKULL_FIT_DEFAULT), notes };
+  if (skull === 'anatomical') return { skull, variant: 'classic', recipe: SCULPT_CLASSIC, anatomical: everyOne(HUMANOIDS, fit ?? SKULL_FIT_DEFAULT), own: OWN_SKULLS, notes };
   if (fit !== null && everySculpt) notes.push(`?skullfit=${fit} has no skull to fit: every character draws its sculpted bone. Passed over`);
   variant ??= SCULPT_DEFAULT_VARIANT;
   const recipe = RECIPES[variant];
   return {
     skull, variant, recipe: headsParam === 'all' && recipe.paint === 2 ? Object.freeze({ ...recipe, everyHead: true }) : recipe,
-    anatomical: everySculpt ? NOBODY : fit !== null ? everyOne(Object.keys(BALL_HEADS), fit) : BALL_HEAD_FITS, notes,
+    anatomical: everySculpt ? NOBODY : fit !== null ? everyOne(Object.keys(BALL_HEADS), fit) : BALL_HEAD_FITS,
+    own: everySculpt ? NOBODY_OWN : OWN_SKULLS, notes,
   };
 }

@@ -1,8 +1,8 @@
-# Imp: the FEET. The legs are the butcher's digitigrade chain in flesh (imp.blob), so the hock is the read and the
-# foot is a long metatarsal ending in a splayed claw on the floor (biomech-style.md, "Reverse-knee legs"; "feet are
-# silhouette").
-#   claws  foot.l|claws  three bony toes splayed forward along the floor, each tipped by a talon hooking down into
-#                        it, and a dewclaw behind the metatarsal (keratin, near-black at the root)
+# Imp: the FEET. The legs are the butcher's digitigrade chain in flesh (imp.blob), so the hock is the read, and the foot
+# is a big splayed claw (owner, 2026-11-02): the toes are flesh prims fanned wide along the floor, and the kit is only
+# what breaks the hide (biomech-style.md, "Reverse-knee legs"; "feet are silhouette").
+#   claws  foot.l|claws  a short thick claw hooking down off each toe's tip, three forward and one behind, with a bony
+#                        cuff at its root (keratin, near-black at the root)
 #   hock   foot.l|hock   the strogg graft: a bony collar round the hock with a crest, and a curled spur raking back and
 #                        up off it (skullmetal)
 import bpy, math
@@ -15,31 +15,28 @@ except NameError:
 
 FO0, FO1 = BONE['foot.l']
 F = BoneFrame(FO0, FO1)
-TOE = FO1                                  # the toe joint, on the floor (blob y 0.032)
+TOE = FO1                                  # the toe joint (blob y 0.031)
+# imp.blob's toes: (root + tip offsets from the toe joint, blob axes) and the claw's length and root radius. The first
+# pass (thin talons a third the shin's length on a small pad) read as a bird's foot.
+TOES = (((0.000, 0.000, 0.260), 0.118, 0.030), ((0.150, 0.000, 0.200), 0.108, 0.028),
+        ((-0.080, 0.000, 0.190), 0.102, 0.027), ((0.000, 0.000, -0.105), 0.085, 0.024))
 FWD = Vector((0, -1, 0)); DOWN = Vector((0, 0, -1)); UP = -DOWN; BACK = -FWD
 
 if 'claws' in PARTS:
     drop(['foot.l|claws', 'foot.r|claws']); clear_work()
     roots = []
-    # The pad (imp.blob) runs 8 cm forward of the toe joint; the toes splay from it, the outer ones swept out. Each
-    # toe is a short bony tube from the pad to its knuckle, and the talon leaves the knuckle forward and hooks down.
-    for k, (dx, L, r0) in enumerate(((-0.032, 0.085, 0.012), (0.0, 0.105, 0.014), (0.034, 0.090, 0.012))):
-        d = (FWD + Vector((dx * 6, 0, 0))).normalized()
-        a = TOE + Vector((dx * 0.4, 0, 0.012)) + FWD * 0.02
-        b = a + d * 0.07 + Vector((0, 0, 0.012))
-        tube(f'toe{k}', [a.lerp(b, i / 10) for i in range(11)], [0.016 - 0.003 * i / 10 for i in range(11)], segs=12)
-        ball(f'kn{k}', b, 0.016)
-        horn(f'talon{k}', b, d + UP * 0.25, d.cross(DOWN).normalized(), L, r0, curl=1.45)
-        roots.append(b)
-    # The dewclaw: off the back of the metatarsal low down, raking back and hooking down.
-    dw = F.at(0.78, math.pi, 0.026, 0.026)
-    horn('dew', dw, BACK + DOWN * 0.4, (BACK + DOWN * 0.4).normalized().cross(DOWN).normalized(), 0.065, 0.010, curl=1.1)
-    roots.append(dw)
+    for k, (off, L, r0) in enumerate(TOES):
+        tip = TOE + bv(*off)
+        d = bv(off[0], 0, off[2]).normalized()
+        root = tip - d * 0.012
+        ring(f'cuff{k}', root + UP * 0.006, d, r0 * 1.05, 0.0035, segs=24)
+        horn(f'claw{k}', root + UP * 0.006, d + UP * 0.10, d.cross(DOWN).normalized(), L, r0, curl=1.25)
+        roots.append(root)
     o = fuse('claws', voxel=0.0015, smooth=(0.5, 3), noise=0.0010, noise_scale=0.02)
     decimate(o, 5000)
     bake_ao(o, material='horn', gain=1.0, gamma=1.2, tint=(1.0, 1.0, 1.0))
-    tint_ao(o, lambda co: (lambda u: (0.06 + 0.40 * u, 0.05 + 0.34 * u, 0.045 + 0.27 * u))(
-        min(1.0, min((co - r).length for r in roots) / 0.10)))
+    tint_ao(o, lambda co: (lambda u: (0.05 + 0.20 * u, 0.03 + 0.09 * u, 0.025 + 0.05 * u))(
+        min(1.0, min((co - r).length for r in roots) / 0.09)))
     install(o, 'foot.l|claws'); mirror_to_r(o, 'foot.r|claws'); clear_work()
 
 if 'hock' in PARTS:

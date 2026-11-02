@@ -13,6 +13,8 @@
 // measures on the shipped asset and that character's flesh; skull-cast.test.ts makes the fit again and holds the
 // numbers.
 //
+// A FEW CHARACTERS HAVE A SKULL ASSET OF THEIR OWN (OWN_SKULLS: the imp's demon skull), drawn through the same kit.
+//
 // Pure: names and numbers. The fit itself is skull-fit.ts; the kit that runs it is anatomical-skull.ts.
 import type { SkullFitSpec } from './skull-fit';
 
@@ -133,4 +135,38 @@ export const BALL_HEADS: Readonly<Record<string, Readonly<BallHead>>> = deepFree
 /** How `character`'s default skull is fitted; null for a character that draws its sculpted bone. */
 export function ballHeadFit(character: string): Readonly<SkullFitSpec> | null {
   return Object.hasOwn(BALL_HEADS, character) ? BALL_HEADS[character]!.spec : null;
+}
+
+/** A SKULL ASSET: fourteen plates in one glTF, under the contract of anatomical-skull.ts loadAnatomicalSkull (the
+ *  pieces of SKULL_PIECES, each a mesh named by its id, +Y up, the face toward +Z, metres, one material with a baked
+ *  normal map). `manifest`: the asset's JSON, whose `openings` (orbitLeft, orbitRight, nasal: points in the asset's
+ *  assembled frame, as anatomical-skull.ts SKULL_OPENINGS) a fit to the flesh holds the skull by; null for the
+ *  anatomical skull, whose openings are SKULL_OPENINGS. */
+export interface SkullAsset { readonly name: string; readonly url: string; readonly manifest: string | null }
+/** The human skull, the asset every humanoid can draw. */
+export const ANATOMICAL_SKULL_ASSET: SkullAsset = Object.freeze({ name: 'anatomical', url: '/assets/lab/anatomical-skull.glb', manifest: null });
+
+/** A character's OWN skull: an asset modelled for it alone, drawn on its head in place of the sculpted bone. */
+export interface OwnSkull {
+  asset: SkullAsset;
+  /** How it is fitted to the head (`envelope`: the head bone's envelope, which the skull's shape was authored for). */
+  spec: Readonly<SkullFitSpec>;
+}
+
+/** THE CHARACTERS WITH A SKULL OF THEIR OWN. The imp's head bone (imp.blob `bones`) is authored in its demon skull's
+ *  shape, so the skull is fitted to that bone's envelope, and reads none of the flesh. Its eyes are none either way
+ *  (sculpt-variant.ts PLAIN_SKULL_CHARACTERS). A character listed here is never one of HUMANOIDS: the human asset is
+ *  never fitted to it. */
+export const OWN_SKULLS: Readonly<Record<string, Readonly<OwnSkull>>> = deepFreeze({
+  imp: { asset: { name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json' }, spec: { fit: 'envelope' } },
+});
+
+/** `character`'s own skull; null for a character with none (it draws the anatomical skull or its sculpted bone). */
+export function ownSkullOf(character: string): Readonly<OwnSkull> | null {
+  return Object.hasOwn(OWN_SKULLS, character) ? OWN_SKULLS[character]! : null;
+}
+
+/** Whether `asset` may be fitted to `character`: the anatomical skull to a humanoid, an own skull to its owner. */
+export function skullAssetFits(asset: SkullAsset, character: string): boolean {
+  return asset.name === ANATOMICAL_SKULL_ASSET.name ? (HUMANOIDS as readonly string[]).includes(character) : ownSkullOf(character)?.asset.name === asset.name;
 }

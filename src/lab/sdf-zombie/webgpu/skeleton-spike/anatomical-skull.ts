@@ -11,6 +11,10 @@
 // (game-skeleton-actors.ts buildSkeletonSources: at spawn, and again for a body a sever re-derived), not when the
 // bone first shows. Every later ask for the same source object is one lookup and allocates nothing: the bone
 // renderer asks twice for each head in each frame.
+//
+// ONE KIT PER ASSET (skull-cast.ts SkullAsset): the human skull's, and one for each character's own skull (the
+// imp's). A kit only ever fits its own asset's cast (skull-cast.ts skullAssetFits), so a page's kits never claim the
+// same head; the bone cache asks for the kit of a head's character (mesh.ts SegmentMeshCache.skullKitOf).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -20,12 +24,12 @@ import type { SkullPieceSurface } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
 import { fitSkull, skullFitParams, SKULL_FIT_NAMES, type SkullFitName, type SkullFitResult, type SkullFitSpec } from './skull-fit';
 import type { MeshEyePlacement } from './mesh-eyes';
-import { HUMANOIDS } from './skull-cast';
+import { ANATOMICAL_SKULL_ASSET, HUMANOIDS, skullAssetFits, type SkullAsset } from './skull-cast';
 import { frontDepth, orbitEyePlacements, orbitEyeRadius, skullOrbits, type SkullOrbit } from './skull-orbits';
 
-export { SKULL_FIT_NAMES, type SkullFitName, type SkullFitSpec };
+export { SKULL_FIT_NAMES, type SkullFitName, type SkullFitSpec, type SkullAsset };
 
-export const ANATOMICAL_SKULL_URL = '/assets/lab/anatomical-skull.glb';
+export const ANATOMICAL_SKULL_URL = ANATOMICAL_SKULL_ASSET.url;
 /** The humanoids the skull can be fitted to (skull-cast.ts HUMANOIDS). */
 export const HUMANOID_SKULLS: ReadonlySet<string> = new Set(HUMANOIDS);
 export const SKULL_PIECES = ['frontal','parietal-left','parietal-right','occipital','temporal-left','temporal-right','zygomatic-left','zygomatic-right','maxilla-left','maxilla-right','upper-teeth','mandible','cranial-base','nasal-core'] as const;
@@ -37,11 +41,13 @@ export const SKULL_FACE_PIECES: ReadonlySet<string> = new Set(['zygomatic-left',
 export const SKULL_OPENINGS = {
   orbitLeft: [0.0227, 0.0008, 0.046], orbitRight: [-0.0293, 0.0022, 0.045], nasal: [-0.0039, -0.0274, 0.044],
 } as const satisfies Record<string, Vec3>;
-/** The point midway between the asset's orbits: a fit to the flesh holds the skull by it (skull-fit.ts SkullFitHold).
- *  The middle of the asset's box is 3.4 mm to one side of it (the face sits off the cranium's middle in this asset). */
-export const SKULL_EYE_POINT = {
-  x: (SKULL_OPENINGS.orbitLeft[0] + SKULL_OPENINGS.orbitRight[0]) / 2, y: (SKULL_OPENINGS.orbitLeft[1] + SKULL_OPENINGS.orbitRight[1]) / 2,
-} as const;
+/** An asset's openings, as SKULL_OPENINGS are the human asset's (another asset's are read from its manifest). */
+export type SkullOpenings = Readonly<Record<keyof typeof SKULL_OPENINGS, Readonly<Vec3>>>;
+/** The point midway between an asset's orbits: a fit to the flesh holds the skull by it (skull-fit.ts SkullFitHold). */
+export const skullEyePoint = (o: SkullOpenings): { x: number; y: number } => ({ x: (o.orbitLeft[0] + o.orbitRight[0]) / 2, y: (o.orbitLeft[1] + o.orbitRight[1]) / 2 });
+/** The human asset's eye point. The middle of the asset's box is 3.4 mm to one side of it (the face sits off the
+ *  cranium's middle in this asset). */
+export const SKULL_EYE_POINT = Object.freeze(skullEyePoint(SKULL_OPENINGS));
 /** The height of a head's eyes in its bone envelope: where mesh-eyes.ts seats them (its 0.22, on -1..1). */
 export const skullEyeLine = (bounds: BoneFieldSource['bounds']): number => bounds.min[1] + (0.22 + 1) * 0.5 * (bounds.max[1] - bounds.min[1]);
 /** A KIT'S PLAN: the fit of each character that draws the anatomical skull (skull-fit.ts SkullFitSpec: 'envelope' is
@@ -76,19 +82,25 @@ export interface FittedSkull {
 /** Shape-preserving affine fit within the authored bone envelope. The narrower
  * face and full cavities come from the source, not a field projection that
  * would erase them. Intact-flesh containment is verified against real bodies. */
+/** The imp's envelope fractions (skullFitMatrix): its share of the bone's box in width, height and depth, the height
+ *  of its centre, and how far forward of the box's middle it sits (a share of the depth). */
+export const IMP_FIT = { width: 0.66, height: 0.64, depth: 0.66, centre: 0.52, forward: 0.0 } as const;
 export function skullFitMatrix(bounds: BoneFieldSource['bounds'], raw: THREE.Box3, character = ''): THREE.Matrix4 {
   const size = raw.getSize(new THREE.Vector3());
   const centre = raw.getCenter(new THREE.Vector3());
   const span = bounds.max.map((v,i) => v-bounds.min[i]!);
   // The zombie's narrow crown and female's short crown need their own
   // envelope fractions; real flesh-clearance tests pin these exceptions.
-  const width = character === 'zombie' ? .70 : .78;
-  const height = character === 'female' ? .65 : .78;
-  const scale = new THREE.Vector3(span[0]!*width/size.x,span[1]!*height/size.y,span[2]!*.75/size.z);
+  // The imp's demon skull (its own asset) fills its demon-shaped bone: at the human fractions its crown broke the
+  // top of the intact hide.
+  const imp = character === 'imp';
+  const width = character === 'zombie' ? .70 : imp ? IMP_FIT.width : .78;
+  const height = character === 'female' ? .65 : imp ? IMP_FIT.height : .78;
+  const scale = new THREE.Vector3(span[0]!*width/size.x,span[1]!*height/size.y,span[2]!*(imp ? IMP_FIT.depth : .75)/size.z);
   const target = new THREE.Vector3(
     (bounds.min[0]+bounds.max[0])*.5,
-    bounds.min[1]+span[1]!*(character === 'female' ? .53 : .58),
-    (bounds.min[2]+bounds.max[2])*.5,
+    bounds.min[1]+span[1]!*(character === 'female' ? .53 : imp ? IMP_FIT.centre : .58),
+    (bounds.min[2]+bounds.max[2])*.5 + span[2]!*(imp ? IMP_FIT.forward : 0),
   );
   return new THREE.Matrix4().makeScale(scale.x,scale.y,scale.z).setPosition(target.sub(centre.multiply(scale)));
 }
@@ -112,16 +124,22 @@ export class AnatomicalSkullKit {
   /** One fit's name when the kit fits every humanoid alike; null for a kit with a plan of its own. */
   readonly fit: SkullFitName | null;
   readonly #plan: SkullFitPlan;
-  /** `fit`: a fit's name (every humanoid of HUMANOID_SKULLS draws the skull, fitted that way), or a plan. */
+  /** Where a fit to the flesh holds this asset (skullEyePoint of its openings). */
+  readonly #eyePoint: { x: number; y: number };
+  /** `fit`: a fit's name (every character of the asset's cast draws the skull, fitted that way: for the human asset
+   *  every humanoid of HUMANOID_SKULLS), or a plan. `asset`: whose plates these are, which decides who they may be
+   *  fitted to (skull-cast.ts skullAssetFits) and tags each fitted geometry (`userData.skullAsset`, its name) so the
+   *  renderer draws it under this kit's own normal map. `openings`: the asset's (its manifest's). */
   constructor(
     readonly source: readonly { id: string; geometry: THREE.BufferGeometry }[], readonly normalMap: THREE.Texture, readonly normalScale: THREE.Vector2,
-    fit: SkullFitName | SkullFitPlan = 'envelope',
+    fit: SkullFitName | SkullFitPlan = 'envelope', readonly asset: SkullAsset = ANATOMICAL_SKULL_ASSET, readonly openings: SkullOpenings = SKULL_OPENINGS,
   ) {
     if (typeof fit === 'function') { this.fit = null; this.#plan = fit; }
     else { const spec = Object.freeze({ fit }); this.fit = fit; this.#plan = () => spec; }
+    this.#eyePoint = skullEyePoint(openings);
   }
-  /** How `character`'s skull is fitted; null for a character that does not draw the anatomical skull. */
-  fitOf(character: string): Readonly<SkullFitSpec> | null { return HUMANOID_SKULLS.has(character) ? this.#plan(character) : null; }
+  /** How `character`'s skull is fitted; null for a character that does not draw this kit's skull. */
+  fitOf(character: string): Readonly<SkullFitSpec> | null { return skullAssetFits(this.asset, character) ? this.#plan(character) : null; }
   get size(): number { return this.#fitted.size; }
   get totals(): { verts: number; tris: number } {
     let verts=0,tris=0;
@@ -151,7 +169,7 @@ export class AnatomicalSkullKit {
     const pieces = this.source.map(({id,geometry:raw}):FittedSkullPiece => {
       const geometry = raw.clone().applyMatrix4(fit);
       geometry.computeBoundingBox(); geometry.computeBoundingSphere();
-      geometry.userData.anatomicalSkull = true;
+      geometry.userData.anatomicalSkull = true; geometry.userData.skullAsset = this.asset.name;
       const box = geometry.boundingBox!, pivot = box.getCenter(new THREE.Vector3());
       const debrisGeometry = geometry.clone().translate(-pivot.x,-pivot.y,-pivot.z);
       return { id, geometry, debrisGeometry, pivot:pivot.toArray() as Vec3,
@@ -159,7 +177,7 @@ export class AnatomicalSkullKit {
         positions:geometry.getAttribute('position').array, indices:geometry.getIndex()!.array };
     });
     const geometry = mergeGeometries(pieces.map(p=>p.geometry),false)!;
-    geometry.userData.anatomicalSkull = true;
+    geometry.userData.anatomicalSkull = true; geometry.userData.skullAsset = this.asset.name;
     geometry.computeBoundingSphere();
     head = { pieces, fit:null, orbits:[], eyes:null, mesh: { key:`${source.revision}:anatomical-skull-1`, geometry, mesher:'asset',
       verts:geometry.getAttribute('position').count, tris:geometry.getIndex()!.count/3,
@@ -200,14 +218,14 @@ export class AnatomicalSkullKit {
     const began = performance.now();
     const result = fitSkull(this.source.map(p => ({
       positions: p.geometry.getAttribute('position').array, normals: p.geometry.getAttribute('normal').array, face: SKULL_FACE_PIECES.has(p.id),
-    })), p => flesh.distance(p), source.bounds, flesh.centre, params, params.eyes ? { ...SKULL_EYE_POINT, at: eyeLine } : SKULL_EYE_POINT);
+    })), p => flesh.distance(p), source.bounds, flesh.centre, params, params.eyes ? { ...this.#eyePoint, at: eyeLine } : this.#eyePoint);
     const whole = new THREE.Box3();
     const pieces = this.source.map(({id,geometry:raw},index):FittedSkullPiece => {
       const geometry = raw.clone();
       geometry.setAttribute('position',new THREE.BufferAttribute(result.positions[index]!,3));
       geometry.setAttribute('normal',new THREE.BufferAttribute(result.normals[index]!,3));
       geometry.computeBoundingBox(); geometry.computeBoundingSphere();
-      geometry.userData.anatomicalSkull = true;
+      geometry.userData.anatomicalSkull = true; geometry.userData.skullAsset = this.asset.name;
       const box = geometry.boundingBox!, pivot = box.getCenter(new THREE.Vector3());
       whole.union(box);
       const debrisGeometry = geometry.clone().translate(-pivot.x,-pivot.y,-pivot.z);
@@ -216,7 +234,7 @@ export class AnatomicalSkullKit {
         positions:geometry.getAttribute('position').array, indices:geometry.getIndex()!.array };
     });
     const geometry = mergeGeometries(pieces.map(p=>p.geometry),false)!;
-    geometry.userData.anatomicalSkull = true;
+    geometry.userData.anatomicalSkull = true; geometry.userData.skullAsset = this.asset.name;
     geometry.computeBoundingSphere();
     // The eyes sit in the orbits of the plates as fitted, and are sized from them: they follow whatever the fit did.
     const front = frontDepth(pieces), orbits = skullOrbits(front);
@@ -241,14 +259,53 @@ export class AnatomicalSkullKit {
   }
 }
 
-export async function loadAnatomicalSkull(url = ANATOMICAL_SKULL_URL, fit: SkullFitName | SkullFitPlan = 'envelope'): Promise<AnatomicalSkullKit> {
+/** An asset manifest's `openings`, checked: three points, each three finite numbers. Throws on anything else. */
+export function readSkullOpenings(manifest: unknown, from = 'the manifest'): SkullOpenings {
+  const openings = (manifest as { openings?: Record<string, unknown> } | null)?.openings;
+  const point = (name: keyof SkullOpenings): Vec3 => {
+    const p = openings?.[name];
+    if (!Array.isArray(p) || p.length !== 3 || !p.every(v => typeof v === 'number' && Number.isFinite(v))) throw new Error(`${from}: openings.${name} is not a point`);
+    return [p[0], p[1], p[2]];
+  };
+  return Object.freeze({ orbitLeft: point('orbitLeft'), orbitRight: point('orbitRight'), nasal: point('nasal') });
+}
+
+/** `asset`'s kit: its plates (loadAnatomicalSkull) and, where it has a manifest, the openings read from it. */
+export async function loadSkullAsset(asset: SkullAsset, fit: SkullFitName | SkullFitPlan = 'envelope'): Promise<AnatomicalSkullKit> {
+  const openings = asset.manifest === null ? SKULL_OPENINGS : fetch(asset.manifest).then(async r => {
+    if (!r.ok) throw new Error(`${asset.manifest}: ${r.status}`);
+    return readSkullOpenings(await r.json(), asset.manifest!);
+  });
+  // Both requests at once; a manifest that fails fails the kit (the plates are not kept).
+  const [read, plates] = await Promise.allSettled([openings, loadSkullPlates(asset.url, asset.name)]);
+  if (read.status === 'rejected') {
+    if (plates.status === 'fulfilled') { for (const p of plates.value.source) p.geometry.dispose(); plates.value.normalMap.dispose(); }
+    throw read.reason;
+  }
+  if (plates.status === 'rejected') throw plates.reason;
+  const { source, normalMap, normalScale } = plates.value;
+  return new AnatomicalSkullKit(source, normalMap, normalScale, fit, asset, read.value);
+}
+
+/** Loads the plates at `url` into a kit (`asset`, `openings`: see AnatomicalSkullKit). Throws on an asset that breaks
+ *  the contract: not exactly the fourteen meshes of SKULL_PIECES by name, no normal map on the first piece's
+ *  material, a piece without index, normal or uv, or over 10,000 triangles. */
+export async function loadAnatomicalSkull(
+  url = ANATOMICAL_SKULL_URL, fit: SkullFitName | SkullFitPlan = 'envelope', asset: SkullAsset = ANATOMICAL_SKULL_ASSET, openings: SkullOpenings = SKULL_OPENINGS,
+): Promise<AnatomicalSkullKit> {
+  const { source, normalMap, normalScale } = await loadSkullPlates(url, asset.name);
+  return new AnatomicalSkullKit(source, normalMap, normalScale, fit, asset, openings);
+}
+
+/** The plates at `url`, checked against the contract (loadAnatomicalSkull). `label` names the asset in an error. */
+async function loadSkullPlates(url: string, label: string): Promise<{ source: { id: string; geometry: THREE.BufferGeometry }[]; normalMap: THREE.Texture; normalScale: THREE.Vector2 }> {
   const gltf = await new GLTFLoader().loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   const found = new Map<string,THREE.Mesh>();
   gltf.scene.traverse(o=> { if ((o as THREE.Mesh).isMesh) found.set(o.name,o as THREE.Mesh); });
-  if (found.size !== SKULL_PIECES.length || SKULL_PIECES.some(id=>!found.has(id))) throw new Error('anatomical skull piece contract mismatch');
+  if (found.size !== SKULL_PIECES.length || SKULL_PIECES.some(id=>!found.has(id))) throw new Error(`${label} skull piece contract mismatch`);
   const first = found.get(SKULL_PIECES[0])!.material as THREE.MeshStandardMaterial;
-  if (!first.normalMap) throw new Error('anatomical skull has no baked normal atlas');
+  if (!first.normalMap) throw new Error(`${label} skull has no baked normal atlas`);
   const source = SKULL_PIECES.map(id=> {
     const mesh = found.get(id)!;
     const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
@@ -261,5 +318,5 @@ export async function loadAnatomicalSkull(url = ANATOMICAL_SKULL_URL, fit: Skull
   if (triangles > 10000) throw new Error(`skull triangle budget exceeded: ${triangles}`);
   for (const mesh of found.values()) mesh.geometry.dispose();
   for (const m of new Set([...found.values()].flatMap(m=>Array.isArray(m.material)?m.material:[m.material]))) m.dispose();
-  return new AnatomicalSkullKit(source,first.normalMap,first.normalScale.clone(),fit);
+  return { source, normalMap: first.normalMap, normalScale: first.normalScale.clone() };
 }
