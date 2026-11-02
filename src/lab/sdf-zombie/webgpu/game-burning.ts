@@ -33,6 +33,7 @@ import {
 import { resolveFireVolumeTuning, type FireVolumeTuning } from './fire-volume-tuning';
 import type { FireVolumeFrame } from './fire-volume.wgsl';
 import { isSoldierFamily } from '../motion-profile';
+import { standingFloor } from './level-ground';
 
 /** How a burning body's flame is drawn in the game. 'volume' (the owner's
  *  pick, 2026-09-19) is the volumetric fire + smoke pass with a few flame cards
@@ -409,6 +410,9 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       burning.forEachActive((a, s) => {
         const p = a.pose();
         const pos: Vec3 = [p.pos[0], 0, p.pos[2]];
+        // The burn-down pile settles on the floor under the body (sector levels: that sector's
+        // floor; room levels: exactly 0, the old value).
+        const floorY = standingFloor(ctx.world.level.ground, p.pos[0], p.pos[2]);
         const last = cardLastPos.get(a) ?? pos;
         // Accents ride the volume's weight, the LOD set the rest. Both pools
         // list EVERY body in the same order (burn 0 draws nothing), because a
@@ -421,7 +425,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
             vel: [(pos[0] - last[0]) * inv, 0, (pos[2] - last[2]) * inv],
             kitRadius: isSoldierFamily(a.character?.entry.profile) ? SOLDIER_LEG_KIT_RADIUS : 0,
             settle: s.dying ? Math.min(1, s.corpseSec / Math.max(1e-3, tuning.corpseBurnSec)) : 0,
-            groundY: 0,
+            groundY: floorY,
           });
         }
         cardFrames.push({
@@ -435,7 +439,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
           settle: s.dying
             ? Math.min(1, s.corpseSec / Math.max(1e-3, tuning.corpseBurnSec))
             : 0,
-          groundY: 0,
+          groundY: floorY,
         });
         cardLastPos.set(a, pos);
       });

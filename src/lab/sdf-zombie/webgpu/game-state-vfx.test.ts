@@ -62,6 +62,6 @@ describe('VFX_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(VFX_BINDINGS)).toHaveLength(49);
+    expect(Object.keys(VFX_BINDINGS)).toHaveLength(50);
   });
 });

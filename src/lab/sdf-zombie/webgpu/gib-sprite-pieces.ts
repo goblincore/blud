@@ -26,7 +26,7 @@
 // the gore pile accumulates exactly as it does today without a bake queue, a
 // worker round trip, or a swap stall.
 import * as THREE from 'three/webgpu';
-import { chunkSettled, stepChunk, type Chunk, type ChunkColliders } from '../gib-chunks';
+import { chunkSettled, chunkSupportOffset, stepChunk, type Chunk, type ChunkColliders } from '../gib-chunks';
 import { makeGibSprite, type GibSpriteFrame } from './gib-sprites';
 
 /**
@@ -442,10 +442,33 @@ export function clearSpritePieces(set: SpritePieceSet): number {
 export function spritePieceStates(set: SpritePieceSet): {
   id: number; limb: string; kind: string; rest: boolean;
   pos: Chunk['pos']; vel: Chunk['vel']; quat: Chunk['quat']; radius: number; settled: boolean;
+  /** The floor the piece stands over (plan 3b: the sector floor under it; 0 on room levels). */
+  floorY: number;
+  /** How far the origin sits above the piece's lowest world point (chunkSupportOffset): a resting piece has
+   *  pos.y - support = its floor (plan 3b gate). */
+  support: number;
+  /** How it is drawn, and the DRAWN mesh's lowest world y (its lowest vertex; null with no geometry) — the
+   *  independent twin of pos.y - support: the physics' support spheres and the mesh it draws can disagree (plan
+   *  3b gate). A billboard's quad faces the camera, so its lowest vertex follows the view. */
+  render: SpritePiece['render'];
+  drawnLowY: number | null;
 }[] {
   return [...set.live, ...set.rest].map(p => ({
     id: p.id, limb: p.state.limb as unknown as string, kind: p.state.kind,
     rest: p.resting, pos: p.state.pos, vel: p.state.vel, quat: p.state.quat, radius: p.state.radius,
-    settled: chunkSettled(p.state),
+    settled: chunkSettled(p.state), floorY: p.state.floorY ?? 0, support: chunkSupportOffset(p.state),
+    render: p.render, drawnLowY: drawnLowY(p.mesh),
   }));
+}
+
+const _v = new THREE.Vector3();
+/** The lowest drawn vertex in world space (every vertex through matrixWorld: a box's corners would read low on a
+ *  rotated piece). Null with no position attribute. */
+function drawnLowY(mesh: THREE.Mesh): number | null {
+  const p = mesh.geometry?.getAttribute('position');
+  if (!p || p.count === 0) return null;
+  mesh.updateMatrixWorld(true);
+  let lo = Infinity;
+  for (let i = 0; i < p.count; i++) lo = Math.min(lo, _v.fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld).y);
+  return Number.isFinite(lo) ? lo : null;
 }

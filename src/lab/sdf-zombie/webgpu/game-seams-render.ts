@@ -19,6 +19,7 @@ import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { woundWorldPos } from '../damage';
 import { applyBoneCullMode } from './game-render-controls';
 import { applyBoneCull } from './game-bone-cull';
+import { setZoneCullOn, zoneCullReport } from './game-zone-cull';
 import { type RefineTail } from './zombie-gpu';
 
 export function createRenderSeams(ctx: GameContext) {
@@ -97,6 +98,11 @@ export function createRenderSeams(ctx: GameContext) {
     get blastDistort() { return ctx.render.postAa.blastDistort; },
     get blastDistortStrength() { return ctx.render.postAa.blastDistortStrength; },
     get blastDistortCount() { return ctx.render.postAa.blastDistortCount; },
+    /** `?blastfx=depth` as a live switch (uniforms only), so a rig can A/B one frozen frame. */
+    setBlastDepth: (on: boolean) => { ctx.render.postAa.setBlastDepth(on); return ctx.render.postAa.blastDepth; },
+    get blastDepth() { return ctx.render.postAa.blastDepth; },
+    /** The blast warp's depth view: 0 off, 1 linear depth as grey (metres / 16), 2 its displacement in red. */
+    setBlastDepthView: (mode: number) => { ctx.render.postAa.setBlastDepthView(mode); },
     /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
      *  capture rig reads to prove the band is centred on the blast (task-2). */
     blastDistortInfo: () => ctx.render.postAa.blastDistortSlots,
@@ -125,7 +131,18 @@ export function createRenderSeams(ctx: GameContext) {
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
     get boneMesh() { return ctx.render.boneMesh; },
-    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
+    /** Cast kit meshes not drawn yet by the kit pre-warm (game-kit-prewarm.ts), -1 before it exists. 0 = all warm. */
+    kitPrewarmPending: () => ctx.boot.kitPrewarm?.pending ?? -1,
+    /** ZONE CULL + UPDATE LOD (game-zone-cull.ts): this frame's visible zones / sectors, culled level meshes, flood
+     *  cost, and per-actor LOD tiers (full / quarter / sleep). null on a room level. */
+    zoneCull: () => zoneCullReport(ctx),
+    /** A/B: false = every level mesh drawn and every actor stepped every frame (the ?cull=0 behaviour). */
+    setZoneCull: (on: boolean) => setZoneCullOn(ctx, on),
+    /** Level meshes not drawn yet by the level pre-warm (game-level-prewarm.ts), -1 before it exists. 0 = all warm. */
+    levelPrewarmPending: () => ctx.boot.levelPrewarm?.pending ?? -1,
+    /** Milliseconds from the level pre-warm's first step to the step that left nothing pending, null until then. */
+    levelPrewarmDoneMs: () => ctx.boot.levelPrewarm?.doneMs ?? null,
+    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, prewarmPending: ctx.render.segMeshRenderer.prewarmPending, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Perf round 2, task 5: the front-to-back per-body passes and their
      *  accumulated-depth gate. OFF restores the single-pass march. Refused under
      *  ?earlyz=1 (stage 1): its per-body pass list holds only each type's back batch. */

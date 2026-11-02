@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/extent.test.ts
 import { describe, it, expect } from 'vitest';
-import { boxReach, chunkExtent, tornEndRadius, chunkSupportSpheres } from './extent';
+import { boxReach, chunkExtent, tornEndRadius, chunkSupportSpheres, supportSpheresFromPoints } from './extent';
+import { qFromAxisAngle, qRotate } from './vec';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { severLimb } from './sever';
@@ -134,5 +135,41 @@ describe('chunkSupportSpheres (orientation-aware floor support)', () => {
     expect(s).toHaveLength(1);
     expect(s[0]!.c).toEqual([0, 0, 0]);
     expect(s[0]!.r).toBeCloseTo(chunkExtent(prims, [0, 0, 0]), 9);
+  });
+});
+
+describe('supportSpheresFromPoints', () => {
+  // An off-centre elongated cloud: a 0.6 x 0.12 x 0.2 m box of points whose centre sits 0.9 m below the origin
+  // (the torso bone asset piece: its mesh is far from what the prims claimed).
+  const pts: number[] = [];
+  for (let i = 0; i <= 6; i++) for (let j = 0; j <= 2; j++) for (let k = 0; k <= 2; k++)
+    pts.push(-0.3 + i * 0.1, -0.96 + j * 0.06, -0.1 + k * 0.1);
+  const lowest = (q: [number, number, number, number], cs: Vec3[]) => Math.min(...cs.map(c => qRotate(q, c)[1]));
+  const all: Vec3[] = [];
+  for (let i = 0; i < pts.length; i += 3) all.push([pts[i]!, pts[i + 1]!, pts[i + 2]!]);
+
+  it('is empty for no points and zero-radius spheres on drawn vertices otherwise', () => {
+    expect(supportSpheresFromPoints([])).toEqual([]);
+    const s = supportSpheresFromPoints(pts);
+    expect(s.length).toBeGreaterThan(6);
+    expect(s.length).toBeLessThanOrEqual(70);
+    for (const sp of s) {
+      expect(sp.r).toBe(0);
+      expect(all.some(v => v[0] === sp.c[0] && v[1] === sp.c[1] && v[2] === sp.c[2])).toBe(true);
+    }
+  });
+
+  it('finds the lowest drawn vertex exactly at rest and within 1 cm under any orientation', () => {
+    const s = supportSpheresFromPoints(pts).map(sp => sp.c);
+    expect(lowest([0, 0, 0, 1], s)).toBeCloseTo(-0.96, 9);
+    let worst = 0;
+    for (let k = 0; k < 200; k++) {
+      const ax: Vec3 = [Math.sin(k * 1.7), Math.cos(k * 2.3), Math.sin(k * 0.7 + 1)];
+      const h = Math.hypot(...ax);
+      const q = qFromAxisAngle([ax[0] / h, ax[1] / h, ax[2] / h], k * 0.37);
+      worst = Math.max(worst, lowest(q, s) - lowest(q, all));
+    }
+    expect(worst).toBeGreaterThanOrEqual(0);
+    expect(worst).toBeLessThan(0.01);
   });
 });

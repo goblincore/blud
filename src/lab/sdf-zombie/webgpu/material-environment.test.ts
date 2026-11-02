@@ -6,7 +6,7 @@ import { loadHeldProp } from './held-prop';
 
 afterEach(() => vi.restoreAllMocks());
 
-it.each(['kit', 'prop'] as const)('%s retirement leaves the survivor with independent environment bindings', async kind => {
+function stubLoads(): { targets: THREE.RenderTarget[]; materials: THREE.MeshStandardMaterial[] } {
   const targets: THREE.RenderTarget[] = [];
   vi.spyOn(THREE.PMREMGenerator.prototype, 'fromScene').mockImplementation(() => {
     const target = new THREE.RenderTarget(16, 16);
@@ -22,18 +22,42 @@ it.each(['kit', 'prop'] as const)('%s retirement leaves the survivor with indepe
     scene.add(new THREE.Mesh(new THREE.BoxGeometry(), material));
     return { scene } as never;
   });
+  return { targets, materials };
+}
+
+// Held props share the kits' ONE environment per renderer (E1M1 soldier guns built per instance, 2026-10-28): never
+// disposed, so retiring a prop cannot pull it from under a survivor, and instances share their node builds.
+it('props share the never-disposed kit environment per renderer', async () => {
+  const { targets, materials } = stubLoads();
   const renderer = {} as THREE.WebGPURenderer;
-  const load = () => kind === 'kit' ? loadKit('/stub.gltf', renderer) : loadHeldProp('/stub.gltf', renderer);
-  const first = await load(), survivor = await load();
-  const disposeFirst = vi.spyOn(targets[0]!, 'dispose');
-  const disposeSurvivor = vi.spyOn(targets[1]!, 'dispose');
+  const first = await loadHeldProp('/stub.gltf', renderer), survivor = await loadHeldProp('/stub.gltf', renderer);
+  const kit = await loadKit('/stub.gltf', renderer);
+  expect(targets).toHaveLength(1);
+  const dispose = vi.spyOn(targets[0]!, 'dispose');
   expect(materials[0]!.envMap).toBe(targets[0]!.texture);
-  expect(materials[1]!.envMap).toBe(targets[1]!.texture);
-  expect(materials[0]!.customProgramCacheKey()).not.toBe(materials[1]!.customProgramCacheKey());
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[2]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[0]!.customProgramCacheKey()).toBe(materials[1]!.customProgramCacheKey());
   first.dispose();
-  expect(disposeFirst).toHaveBeenCalledOnce();
-  expect(disposeSurvivor).not.toHaveBeenCalled();
-  expect(materials[1]!.envMap).toBe(targets[1]!.texture);
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
   survivor.dispose();
-  expect(disposeSurvivor).toHaveBeenCalledOnce();
+  kit.dispose();
+  expect(dispose).not.toHaveBeenCalled();
+});
+
+// Kits share ONE environment per renderer so instances of a character share node builds (teratoma first-sight hitch,
+// db14ad19); it is never disposed, so retiring a kit cannot pull it from under a survivor.
+it('kits share one never-disposed environment per renderer', async () => {
+  const { targets, materials } = stubLoads();
+  const renderer = {} as THREE.WebGPURenderer;
+  const first = await loadKit('/stub.gltf', renderer), survivor = await loadKit('/stub.gltf', renderer);
+  expect(targets).toHaveLength(1);
+  const dispose = vi.spyOn(targets[0]!, 'dispose');
+  expect(materials[0]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
+  expect(materials[0]!.customProgramCacheKey()).toBe(materials[1]!.customProgramCacheKey());
+  first.dispose();
+  expect(materials[1]!.envMap).toBe(targets[0]!.texture);
+  survivor.dispose();
+  expect(dispose).not.toHaveBeenCalled();
 });

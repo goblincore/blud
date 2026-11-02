@@ -24,8 +24,10 @@ import type { Vec3 } from '../types';
 // aliased to keep the two apart.
 import type { PlayerState as PlayerMotionState } from './game-player';
 import type { DemoFrame } from './demo-recorder';
+import type { WeaponSlot } from './game-weapon-slots';
 import { makeHitFeedback, type HitFeedback } from '../player-hit-feedback';
 import { makeBulletTime, type BulletTimeState } from '../bullet-time';
+import { makeAdrenaline, type AdrenalineState } from '../adrenaline';
 
 export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
@@ -52,6 +54,11 @@ export interface PlayerState {
   /** Realms-of-the-Haunting free aim: the mouse drives the reticle, not the
    *  camera; turning is a consequence of shoving the reticle past the dead zone. */
   freeAimOn: boolean;
+  /** The session override of the per-weapon aim style (aim-style.ts): null = each weapon's own, true/false = free
+   *  aim on/off for every weapon (G, __sdfGame.setFreeAim). */
+  freeAimOverride: boolean | null;
+  /** The slot the aim style was last resolved for; a switch to another re-resolves it (game-player-input.ts). */
+  aimStyleSlot: WeaponSlot | null;
   /** Metres walked, driving head bob by DISTANCE so it stays locked to
    *  footfalls at any speed. */
   bobDistance: number;
@@ -93,6 +100,8 @@ export interface PlayerState {
   bulletTime: BulletTimeState;
   /** Its vignette overlay, created lazily by the tick (game-bullet-time.ts). */
   bulletTimeEl: HTMLDivElement | null;
+  /** ADRENALINE (adrenaline.ts): the automatic rush a hit on an enemy sets off (its look: game-bullet-time.ts). */
+  adrenaline: AdrenalineState;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -108,6 +117,8 @@ export function makePlayerState(): PlayerState {
     prevInputKeys: new Set<string>(),
     parked: 0,
     freeAimOn: true,
+    freeAimOverride: null,
+    aimStyleSlot: null,
     bobDistance: 0,
     bobAmount: 0,
     strafeAmount: 0,
@@ -126,6 +137,7 @@ export function makePlayerState(): PlayerState {
     hitFlashEl: null,
     bulletTime: makeBulletTime(),
     bulletTimeEl: null,
+    adrenaline: makeAdrenaline(),
   };
 }
 

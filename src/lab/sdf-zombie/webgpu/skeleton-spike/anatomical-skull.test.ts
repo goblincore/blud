@@ -13,6 +13,7 @@ import { createSkeletonSources } from './contract';
 import { skullRayHit, intactSkull } from '../../skull-fracture';
 import { SegmentMeshCache } from './mesh';
 import { createSegmentMeshRenderer } from './mesh-renderer';
+import { batchInstances, batchMatrixAt, isSegmentBatch } from './segment-instance';
 
 const gltf = anatomicalSkullGltf;
 const source = anatomicalSkullSource();
@@ -56,8 +57,8 @@ describe('offline anatomical skull asset',()=> {
     expect(renderer.drawn.filter(d=>d.owner===a&&d.eye)).toHaveLength(0);
     expect(bones(b)).toHaveLength(1);
     expect(renderer.drawn.filter(d=>d.owner===b&&d.eye).length).toBeGreaterThan(0);
-    const live = (renderer.object.children.filter(c=>(c as THREE.InstancedMesh).isInstancedMesh) as THREE.InstancedMesh[])
-      .flatMap(mesh=>Array.from({length:mesh.count},(_,i)=>{const m=new THREE.Matrix4();mesh.getMatrixAt(i,m);return m.getMaxScaleOnAxis();}))
+    const live = renderer.object.children.filter(isSegmentBatch)
+      .flatMap(mesh=>Array.from({length:batchInstances(mesh)},(_,i)=>batchMatrixAt(mesh,i,new THREE.Matrix4()).getMaxScaleOnAxis()))
       .filter(scale=>scale>0);
     // What is left drawn is b's: one skull and its eyes.
     expect(live).toHaveLength(1+renderer.drawn.filter(d=>d.owner===b&&d.eye).length);

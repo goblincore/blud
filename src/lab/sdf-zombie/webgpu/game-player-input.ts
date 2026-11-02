@@ -23,6 +23,7 @@ import { requestSlot, slotForKey } from './game-weapon-slots';
 import { type DemoFrame } from './demo-recorder';
 import { arenaRespawn } from './game-arena';
 import { toggleBulletTime } from '../bullet-time';
+import { freeAimFor, mouselookTurn, pinLook } from './aim-style';
 
 /** The mouse delta's effect, extracted so the live handler and the replay
  *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
@@ -33,10 +34,31 @@ export function applyMouseDelta(ctx: GameContext, dx: number, dy: number): void 
     // of shoving the reticle past the dead zone, handled in the tick.
     ctx.weapon.aim = moveAim(ctx.weapon.aim, dx, dy);
   } else {
-    ctx.player.player.yaw += dx * 0.0022;
-    ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch - dy * 0.0022));
+    const t = mouselookTurn(ctx.player.player.yaw, ctx.player.player.pitch, dx, dy, PLAYER.pitchLimit);
+    ctx.player.player.yaw = t.yaw;
+    ctx.player.player.pitch = t.pitch;
   }
+}
+
+/** PER-WEAPON AIM STYLE (aim-style.ts): when the selected slot changes, free aim follows that weapon's style (the
+ *  shotgun is mouselook, the rest free aim) unless the session override (G / setFreeAim) is set. Only on a CHANGE,
+ *  so a replay or bench run that set freeAimOn from its recording keeps it. A reticle left off-centre by a switch
+ *  into mouselook eases home in the tick (easeAimToCentre); the camera does not move. */
+export function syncAimStyle(ctx: GameContext): void {
+  const slot = ctx.weapon.slotState.target;
+  if (slot === ctx.player.aimStyleSlot) return;
+  ctx.player.aimStyleSlot = slot;
+  const on = freeAimFor(slot, ctx.player.freeAimOverride);
+  if (on !== ctx.player.freeAimOn) { ctx.player.freeAimOn = on; updateHud(ctx); }
+}
+
+/** Set (true/false) or clear (null) the session free-aim override, and apply it now. */
+export function setFreeAimOverride(ctx: GameContext, on: boolean | null): boolean {
+  ctx.player.freeAimOverride = on;
+  ctx.player.freeAimOn = freeAimFor(ctx.weapon.slotState.target, on);
+  ctx.player.aimStyleSlot = ctx.weapon.slotState.target;
+  updateHud(ctx);
+  return ctx.player.freeAimOn;
 }
 
 /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
@@ -89,12 +111,10 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
   // H hides/shows EVERY tuning panel together. They cover most of the
   // viewport, and until now the only way to dismiss them was to know the
   // console API -- which is no use to someone doing a look pass.
-  // G toggles free aim, so the two schemes can be A/B'd back to back.
-  if (pressed('KeyG')) {
-    ctx.player.freeAimOn = !ctx.player.freeAimOn;
-    ctx.weapon.aim = { x: 0, y: 0 };
-    updateHud(ctx);
-  }
+  // G toggles free aim, so the two schemes can be A/B'd back to back. It is a SESSION override of the per-weapon
+  // style (aim-style.ts): after a press every weapon uses the toggled scheme until the page reloads (or
+  // __sdfGame.setFreeAim(null) hands it back to the weapons). The reticle eases home rather than snapping.
+  if (pressed('KeyG')) setFreeAimOverride(ctx, !ctx.player.freeAimOn);
   // C hides/shows the crosshair and the strafe steering cursor (aiming is
   // unchanged; only the markers go).
   if (pressed('KeyC')) ctx.player.reticleHidden = !ctx.player.reticleHidden;
@@ -106,6 +126,7 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.panels.lightLayersPanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
+    ctx.panels.bulletTimePanel?.setVisible(!ctx.panels.hidden);
   }
   // Launcher R demonstrates a live-round reload; its reserve is unlimited.
   // Shotgun R still requires a partial finite magazine.
@@ -138,12 +159,20 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
 export function applyInputFrame(ctx: GameContext, f: DemoFrame): void {
   const next = new Set(f.keys);
   applyInputEdges(ctx, next);
+  if (!ctx.demo.replayActive) syncAimStyle(ctx);
   if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(ctx, f.dx, f.dy);
   // Anti-drift absolute pin. Skipped in free aim, where the pose is a
   // consequence of the reticle rather than a thing the mouse set directly.
+  // LIVE, the frame's look was snapshotted (readInputFrame) BEFORE this
+  // frame's delta, so pinning to it undid every mouselook turn — the G bug
+  // ("turned off free aim but also normal aiming"). Live, the pose the delta
+  // produced IS the frame's look (written back, so the recorder logs it);
+  // replaying, the recorded look wins (pinLook).
   if (!ctx.player.freeAimOn) {
-    ctx.player.player.yaw = f.look[0];
-    ctx.player.player.pitch = f.look[1];
+    const look = pinLook(ctx.demo.replayActive, f.look, ctx.player.player);
+    ctx.player.player.yaw = look[0];
+    ctx.player.player.pitch = look[1];
+    f.look = look;
   }
   if (f.fire === 1) fire(ctx, 1);
   else if (f.fire === 2) fire(ctx, 2);
