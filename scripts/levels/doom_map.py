@@ -77,7 +77,8 @@ LIGHT_MIN_ZONE_M2 = 150.0        # a zone gets a fill light from this area up
 MAX_LIGHTS = 10
 MAX_POOL_LIGHTS = 8             # pool lights do not count toward MAX_LIGHTS
 POOL_MIN_M2 = 4.0
-POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.45, 0.12], "acid": [0.75, 1.0, 0.25]}
+POOL_LAVA_POWER = 1.3           # lava lights the room from below (owner playtest 2026-11-01)
+POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.3, 0.06], "acid": [0.75, 1.0, 0.25]}
 # Emitter lights (hand-off item 2g, part B1): the strongest self-lit surfaces get a real coloured light
 # in the zone of the sector they face into, so bodies are lit by them. Cheap tier (mood "glow",
 # level-tier.ts isLevelCheap): the list node shades it for the level, ~free next to a full-tier light.
@@ -556,7 +557,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             if pt is None:
                 continue
             lights.append({"pos": [round(pt[0], 3), round(out_sectors[i]["floor"] + 0.6, 3), round(pt[1], 3)],
-                           "color": list(POOL_COLOURS[glow[i]]), "power": round(min(14, 4 + 0.15 * total_area), 2),
+                           "color": list(POOL_COLOURS[glow[i]]), "power": round(min(14, 4 + 0.15 * total_area) * (POOL_LAVA_POWER if glow[i] == "lava" else 1), 2),
                            "mood": "fire", "fixture": "none"})
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")

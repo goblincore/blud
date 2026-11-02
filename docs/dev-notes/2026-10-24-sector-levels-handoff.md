@@ -449,11 +449,28 @@ key if the later-volley misses ever matter.
   or A/B one frozen frame by uniforms (`abframe.mjs`, `__sdfGame.step(6, 0)` to flush the smear).
 - setPose's yaw: forward is `(sin yaw, -cos yaw)`. `strip.mjs`'s comment has the x sign backwards.
 
+## MAP28 look pass (2026-11-01)
+
+Owner playtest of the keys build: played through most of the level and reached the end using the keys. Notes: the lava doesn't
+read as lava and isn't intense enough; spaces are dull and feel the same; the original has a room made of flesh; enemies are a
+separate pass, with nothing yet to replace the Spider Mastermind.
+
+**Lava** (`sector-glow.wgsl.ts` SECTOR_LAVA; `?lava=0` is the old flow). The old one was the nukage flow in orange at glowGain
+0.35: a flat tan sheet. Now dark basalt plates over seams in HDR (red to orange to white, feeding the bloom), a slow noise
+widening seams into molten stretches, thin red veins in the crust. Its colour no longer takes glowGain. The baked bounce is
+LAVA_BOUNCE (1.5) times the other kinds' and the pool light is deeper and POOL_LAVA_POWER (1.3) stronger. A first try at bounce
+3.2 and power 2 washed the whole room in flat orange; light from below needs falloff, so keep these low. Frame cost not measured;
+two cell-noise layers per lava pixel. Judged from headless shots only so far.
+
+**Why spaces feel the same (measured from the MAP28 file):** all 10 fill lights are the same warm white, there is no per-level or
+per-zone palette, and the walls are concrete (50 of 116 sectors), metal or rust. Doom's rooms differ by texture set and light
+level; only the level survives the conversion.
+
 ## Keys, gun switches and lifts (2026-11-01)
 
 MAP28 is now played the way Doom plays it: yellow key, back up the lift, yellow door, red key, down through the gun-switch
 hall, red door, exit. Headless, on foot with all 111 enemies under god mode, that took 232 s against the old 33 s walk.
-No person has played it yet. `?locks=0` is the old open level; `?lifts=0` leaves each lift at its top.
+The owner has since played it through to the end. `?locks=0` is the old open level; `?lifts=0` leaves each lift at its top.
 
 **Correction to the spike below.** It said Doom's route strictly needs only gun switches and keys. It also needs a lift: the
 drop from s80 to s0 is one way and the lift at s82 is the only way back up, so with locks on, a player taking the yellow
@@ -501,7 +518,7 @@ reached, and `dead_ends` lists where a player can get stuck for good. MAP28: exi
 exit is not reached. With locks on, Doom 2's 32 maps: 15 fail the converter, 3 finish (MAP07, MAP28, MAP31), and **MAP13 no
 longer does**: it finishes only with `?locks=0` until its other specials exist.
 
-**Not verified:** a person playing; damage on (`?god=0`); real 60 Hz (headless caps at 30); enemies riding a lift; lift-28 in
+**Not verified:** damage on, as far as the headless runs go (`?god=0`); real 60 Hz (headless caps at 30); enemies riding a lift; lift-28 in
 play (only lift-82 was walked); the doom gate (paused). The lift's frame cost was not measured separately; the full walk showed no errors.
 
 ## MAP28 spike (2026-11-01)

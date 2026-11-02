@@ -54,7 +54,7 @@ import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
 import { BOUNCE_CUTOFF_M, createGlowBounce, glowSources, nearAny, refineFaces, refineNear, wallRows, wallStrip, type GlowBounce, type Reach, type RGB } from './sector-bounce';
 import { sectorPolygons, wallQuads } from './sector-geometry';
-import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
+import { GLOW_KIND_INDEX, LAVA_BOUNCE, lavaOn, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_LAVA, SECTOR_LAVA_CELLS } from './sector-glow.wgsl';
 
 /** Flats get interior vertices (refineFaces) this close to an emitter's box, at most this far apart:
  *  where the bake changes fastest (E1M1: 4855 triangles plain, ~ +40 % with these). */
@@ -318,7 +318,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   ctx.world.sectorFx = fx;
   // The bounce rays test the real lines; the mesh uses the refined copy (same sectors, more vertices).
   const sources = glowSources(map);
-  const bounce = sources.length > 0 ? createGlowBounce(map, sources) : null;
+  const bounce = sources.length > 0 ? createGlowBounce(map, sources, lavaOn(search) ? LAVA_BOUNCE : 1) : null;
   const matsOn = sectorMaterialsOn(search);
   const emitOn = emittersOn(search);
   // The emitters as light sources (none with ?emitters=0 or ?sectormat=0: the old kinds do not glow).
@@ -453,12 +453,19 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   if (glowBatches.size > 0) {
     // WGSL has no nested fn: the noise helpers ride along as includes (game-void.ts's pattern).
     const include = (fn: ReturnType<typeof wgslFn>) => fn as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
-    const glowFn = wgslFn(SECTOR_GLOW, [include(wgslFn(SECTOR_GLOW_NOISE, [include(wgslFn(SECTOR_GLOW_HASH))]))]);
+    const hashFn = wgslFn(SECTOR_GLOW_HASH);
+    const noiseFn = wgslFn(SECTOR_GLOW_NOISE, [include(hashFn)]);
+    const glowFn = wgslFn(SECTOR_GLOW, [include(noiseFn)]);
+    const lavaFn = wgslFn(SECTOR_LAVA, [include(noiseFn), include(wgslFn(SECTOR_LAVA_CELLS, [include(hashFn)]))]);
+    const newLava = lavaOn(search);
     const group = new THREE.Group();
     group.name = 'sector-glow';
     for (const [kind, b] of glowBatches) {
       const mat = new MeshBasicNodeMaterial();
-      mat.colorNode = vec4((glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>).mul(fx.glowGain), 1);
+      // Lava is its own surface in HDR, not scaled by glowGain (0.35 was picked for nukage's flat colour).
+      mat.colorNode = kind === 'lava' && newLava
+        ? vec4(lavaFn({ wpos: positionWorld, t: fx.glowTime }) as unknown as ReturnType<typeof vec3>, 1)
+        : vec4((glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>).mul(fx.glowGain), 1);
       mat.fog = false;
       const mesh = new THREE.Mesh(b.geometry(), mat);
       mesh.name = `sector-glow-${kind}`;
