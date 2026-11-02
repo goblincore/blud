@@ -466,6 +466,28 @@ two cell-noise layers per lava pixel. Judged from headless shots only so far.
 per-zone palette, and the walls are concrete (50 of 116 sectors), metal or rust. Doom's rooms differ by texture set and light
 level; only the level survives the conversion.
 
+**Room moods** (`doom_tables.py` MOODS, TEXTURE_MOODS; `sector-moods.ts`; `?moods=0`). Each zone's wall textures vote for a mood:
+ember (red rock), cold (grey stone, marble), dust (tan, brown), sepia (wood), flesh, fire, blue fire. The mood sets a new sector
+`tint`, which multiplies the ambient level (colour and how dark), and the colour of the zone's fill light. A sector whose own walls
+are flesh stays flesh in any zone. The level now runs cold stone, red rock, blue fire, then flesh toward the exit. Doom 2 maps
+only: E1M1 keeps its tech-base look and is byte-identical. The tint is an extra uniform array, only on levels that have one.
+
+**New materials** (`sector-materials.ts` HELL_KINDS; `?hellmat=0` draws the old kinds): `redRock` and `fleshWall` are new panel
+kinds; `fireWall` and `fireBlue` wear red rock's maps under the lava seams, rising, at FIRE_WALL_GAIN 0.32. BFALL (blood falls) is
+flesh.
+
+**Flesh** (`sector-flesh.wgsl.ts`): wet folds with sinew and a little fat in the panel, thin veins with a slow pulse travelling up
+them in the shader, and walls that BREATHE: up to 6 cm along the normal on a slow beat, varied by world noise (`?breathe=0`).
+Collision does not move. A flesh wall is cut into a 0.6 m grid so it has vertices to move, pinned at its edges so corners and floors
+stay shut. The pin rides in `emitFS.x` because the batch is at WebGPU's 8 vertex buffers, so flesh walls lose the fluorescent and
+sign bake (MAP28 has none). First tries: veins at 0.9x scale and 0.62 red read as neon tentacles, and speckled fat as mould.
+
+**Open:** fire walls read more electric than flame. Red rock, grey stone and wood floors and ceilings still use the old families.
+Set pieces (ribs, sphincter doors) are not started. Judged from headless shots; the breathing was only confirmed by frame difference.
+Frame cost NOT measured: the machine was too busy for clean numbers (one boot took 178 s, fence readings swung from 5 to 130 ms on
+the same spot in the same build). Measure with `frameSplit` before calling it cheap: extra cost is cell noise per lava, fire and
+vein pixel, the tint lookup per sector pixel, and flesh's extra vertices.
+
 ## Keys, gun switches and lifts (2026-11-01)
 
 MAP28 is now played the way Doom plays it: yellow key, back up the lift, yellow door, red key, down through the gun-switch

@@ -20,14 +20,30 @@ TEXTURE_FAMILIES = [
     ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("COMPUTE", "screen-bank"), ("COMPTALL", "screen-bank"),
     ("PLANET", "viewscreen"), ("EXITSIGN", "exit-sign"), ("BROWN", "rust"), ("BRN", "rust"),
     ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "fluorescent"),
+    ("ROCKRED", "redrock"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
     ("LITEBLU", "light-panel"),  # blue-lit strips: the plain light panel, not a cold-white troffer
-    # Doom 2's hell set (MAP28). We own no rock, flesh, wood or fire look yet, so each takes the nearest of ours:
-    # rock and marble are concrete, flesh and wood the rusted brick, bronze metal, fire walls the lit panel.
+    # Doom 2's hell set (MAP28). Red rock, flesh and fire have their own looks (owner playtest 2026-11-01); we own no
+    # wood or grey rock look yet, so those take the nearest of ours: rock and marble are concrete, wood the rusted brick.
     ("ZIMMER", "concrete"), ("ROCK", "concrete"), ("ASHWALL", "concrete"), ("TANROCK", "concrete"), ("CRACKLE", "concrete"), ("MARB", "concrete"),
-    ("SK", "rust"), ("SP_FACE", "rust"), ("SP_HOT", "rust"), ("WOOD", "rust"), ("SW1WOOD", "rust"), ("SW2SKIN", "rust"),
+    ("SK", "flesh"), ("SP_FACE", "flesh"), ("SW2SKIN", "flesh"), ("SP_HOT", "firewall"), ("WOOD", "rust"), ("SW1WOOD", "rust"),
     ("BRONZE", "metal"), ("MIDBARS", "metal"),
-    ("FIRE", "light-panel"), ("BFALL", "light-panel"), ("SFALL", "light-panel"), ("SPCDOOR", "door"),
+    ("FIRE", "firewall"), ("FIREBLU", "fireblue"), ("BFALL", "flesh"), ("SFALL", "light-panel"), ("SPCDOOR", "door"),
+]
+# ROOM MOODS (owner playtest 2026-11-01: "everything feels the same"). Doom's rooms differ by texture set: the mood a zone's
+# wall textures vote for sets its ambient tint (`tint`, how dark included) and its fill light's colour.
+MOODS = {
+    "ember": {"tint": [1.15, 0.5, 0.3], "light": [1.0, 0.36, 0.18]},   # red rock: hot and dim
+    "cold": {"tint": [0.62, 0.72, 1.0], "light": [0.55, 0.7, 1.0]},      # grey stone and marble
+    "dust": {"tint": [0.85, 0.68, 0.44], "light": [1.0, 0.8, 0.52]},     # tan rock, brown
+    "sepia": {"tint": [0.82, 0.54, 0.28], "light": [1.0, 0.62, 0.3]},    # wood
+    "flesh": {"tint": [0.95, 0.42, 0.42], "light": [1.0, 0.22, 0.28]},    # meat
+    "fire": {"tint": [1.0, 0.46, 0.14], "light": [1.0, 0.42, 0.1]},
+    "bluefire": {"tint": [0.26, 0.4, 1.0], "light": [0.25, 0.45, 1.0]},
+}
+TEXTURE_MOODS = [
+    ("ROCKRED", "ember"), ("ZIMMER", "cold"), ("ASHWALL", "cold"), ("MARB", "cold"), ("CRACKLE", "ember"), ("TANROCK", "dust"), ("BROWN", "dust"),
+    ("WOOD", "sepia"), ("SK", "flesh"), ("SP_FACE", "flesh"), ("BFALL", "flesh"), ("FIRE", "fire"), ("SP_HOT", "fire"), ("FIREBLU", "bluefire"),
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
 
@@ -79,6 +95,10 @@ def material_for_flat(name: str) -> str:
 
 def material_for_texture(name: str) -> str:
     return _family(name.upper(), TEXTURE_FAMILIES, "tech")
+
+
+def mood_for_texture(name: str) -> str | None:
+    return _family(name.upper(), TEXTURE_MOODS, None)
 
 
 def sector_special(kind: int) -> tuple[str, float]:

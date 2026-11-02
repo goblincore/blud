@@ -21,6 +21,8 @@ export interface SectorMaterials { floor: string; ceil: string; wall: string }
 export interface SectorDef {
   floor: number;
   ceil: number;
+  /** The room's mood: what its ambient level is multiplied by (colour and how dark). Absent: white. */
+  tint?: readonly [number, number, number];
   /** 0..1, Doom's 0..255 light level. */
   light: number;
   special: SectorSpecial;

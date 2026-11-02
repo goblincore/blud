@@ -47,7 +47,7 @@ import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
     BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, GUN_DOOR_SPECIALS, MOVING_LIFT_SPECIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
-    material_for_flat, material_for_texture, sector_special,
+    MOODS, material_for_flat, material_for_texture, mood_for_texture, sector_special,
 )
 
 MAP_LUMPS = ("THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SECTORS")
@@ -483,6 +483,16 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     area_ref = [a * (m / REFERENCE_UNITS_PER_M) ** 2 for a in area]
     zone_of = _zones(n, pairs, doors, area_ref, bbox, zone_split_m2)
 
+    # Each zone's mood: what its wall faces vote for (a sector whose own walls are flesh keeps flesh: it should shock).
+    zone_votes: dict[int, dict[str, int]] = {}
+    for i, counts in faces.items():
+        for tex, k in counts.items():
+            mood = mood_for_texture(tex) if map_name.upper().startswith("MAP") else None   # Doom 2 only: E1M1 stays as it is
+            if mood:
+                votes = zone_votes.setdefault(zone_of[i], {})
+                votes[mood] = votes.get(mood, 0) + k
+    zone_mood = {z: min(v, key=lambda m: (-v[m], m)) for z, v in zone_votes.items()}
+
     out_sectors = []
     for i, s in enumerate(sectors):
         special, hurt = sector_special(s["special"])
@@ -495,6 +505,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             "zone": zone_of[i],
             "materials": {"floor": floor_mat, "ceil": material_for_flat(s["ceil_tex"]), "wall": material_for_texture(wall_tex)},
         }
+        mood = "flesh" if zone_of[i] in zone_mood and mood_for_texture(wall_tex) == "flesh" else zone_mood.get(zone_of[i])
+        if mood:
+            sec["tint"] = MOODS[mood]["tint"]
         if special != "none":
             sec["special"] = special
         if hurt:
@@ -536,7 +549,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                 continue
             f, c = out_sectors[i]["floor"], out_sectors[i]["ceil"]
             lights.append({"pos": [round(pt[0], 3), round(min(c - 0.4, f + 0.75 * (c - f)), 3), round(pt[1], 3)],
-                           "color": [1.0, 0.92, 0.82], "power": round(3 + 9 * mean, 2), "fixture": "none"})
+                           "color": MOODS[zone_mood[zone]]["light"] if zone in zone_mood else [1.0, 0.92, 0.82], "power": round(3 + 9 * mean, 2), "fixture": "none"})
             break
 
     # Pool lights: connected glow sectors of one kind form a pool; each of at least POOL_MIN_M2 gets a

@@ -109,6 +109,7 @@ import { createGameDoors } from './game-doors';
 import { createGameSwitches } from './game-switches';
 import { createGameLifts } from './game-lifts';
 import { withLiftsLow } from './sector-lifts';
+import { stripMoods } from './sector-moods';
 import { createZoneCull, updateZoneCull } from './game-zone-cull';
 import { freezeLevelMatrices } from './game-level-batch';
 import { doorTravel } from './sector-doors';
@@ -634,6 +635,7 @@ async function main() {
       const res = await fetch(`/assets/levels/${levelParam}.level.json`);
       if (!res.ok) throw new Error(`level ${levelParam}: HTTP ${res.status}`);
       const def = parseLevel(await res.json(), { state: q.get('state') ?? undefined, emitPush: EMIT_PUSH });
+      if (q.get('moods') === '0') stripMoods(def);
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
       ctx.world.level = def.sectors ? sectorActiveLevel(def) : authoredLevel(def);

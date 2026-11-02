@@ -27,7 +27,7 @@ const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
-const SECTOR_KEYS = ['floor', 'ceil', 'light', 'special', 'hurtPerSec', 'glow', 'materials', 'zone'];
+const SECTOR_KEYS = ['floor', 'ceil', 'tint', 'light', 'special', 'hurtPerSec', 'glow', 'materials', 'zone'];
 const LINE_KEYS = ['v', 'front', 'back', 'door', 'exit', 'walls'];
 const WALL_SIDES = ['front', 'back'];
 const WALL_PARTS = ['upper', 'mid', 'lower'];
@@ -126,7 +126,9 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       return 'default';
     };
     const zone = isInt(o.zone) && o.zone >= 0 ? o.zone : (errors.push(`${where}.zone: an integer >= 0`), 0);
-    return { floor, ceil, light, special, hurtPerSec, glow,
+    const okTint = Array.isArray(o.tint) && o.tint.length === 3 && o.tint.every(v => isNum(v) && v >= 0);
+    if (o.tint !== undefined && !okTint) errors.push(`${where}.tint: three numbers >= 0`);
+    return { floor, ceil, ...(okTint ? { tint: o.tint as [number, number, number] } : {}), light, special, hurtPerSec, glow,
       materials: { floor: mat('floor'), ceil: mat('ceil'), wall: mat('wall') }, zone };
   });
   if (sectors.length === 0) errors.push('sectors: a sector level needs at least one sector');
