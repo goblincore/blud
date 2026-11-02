@@ -21,7 +21,7 @@ const make = (dispatch: 'boxes' | 'quad', earlyz?: { front: boolean }) => {
 
 describe('front-face crowd material (spec D2-D4)', () => {
   it('runs against the three revision the patch was written for', () => {
-    expect(THREE.REVISION, 'patch written for r186: re-verify getFragDepth before upgrading').toBe('186');
+    expect(THREE.REVISION, 'patch written for r187: re-verify getFragDepth before upgrading').toBe('187');
   });
   it('the shipped call is unchanged: BackSide, no opt-in property', () => {
     const m = make('boxes');
@@ -45,11 +45,11 @@ describe('front-face crowd material (spec D2-D4)', () => {
 // ---------------------------------------------------------------------------
 // The GENERATED WGSL. The structural checks above cannot tell a front material that hands the march
 // the ENTRY point (worldPos: positionWorld, every front body would vanish) or a wrong startT from
-// the real thing; the emitted fragment text can. Built through three r186's real WGSLNodeBuilder,
+// the real thing; the emitted fragment text can. Built through three r187's real WGSLNodeBuilder,
 // no GPU.
 // ---------------------------------------------------------------------------
 
-/** Build one material's vertex and fragment WGSL through three r186's real node builder. */
+/** Build one material's vertex and fragment WGSL through three r187's real node builder. */
 function buildWgsl(material: THREE.Material): { vs: string; fs: string } {
   // The crowd's instanced box: iCentre / iHalf / iSlot interleaved, as crowd-type.ts lays it out.
   const geo = new THREE.InstancedBufferGeometry().copy(new THREE.BoxGeometry(2, 2, 2) as never);
@@ -63,6 +63,7 @@ function buildWgsl(material: THREE.Material): { vs: string; fs: string } {
   // The march material samples textures and storage: the builder wants a backend that never initialised.
   (stubRenderer as unknown as { hasFeature: () => boolean }).hasFeature = () => false;
   (stubRenderer as unknown as { backend: { renderer: unknown } }).backend.renderer = stubRenderer;
+  (stubRenderer as unknown as { _bindings: unknown })._bindings = { getSharedBindGroup: (g: unknown) => g };
   const builder = new WGSLNodeBuilder(mesh, stubRenderer) as unknown as {
     scene: unknown; material: unknown; camera: unknown; context: { material: unknown };
     build(): unknown; fragmentShader: string; vertexShader: string;

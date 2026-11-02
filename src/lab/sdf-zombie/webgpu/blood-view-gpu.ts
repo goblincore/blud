@@ -384,7 +384,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
     for (let i = 0; i < MAX_SPLATS; i++) {
       const sp = sim.splats[i];
       if (!sp) { m.makeScale(0, 0, 0); splats.setMatrixAt(i, m); continue; }
-      p.set(sp.pos[0], 0.005 + i * 0.0001, sp.pos[2]); // tiny y-ladder beats z-fight
+      p.set(sp.pos[0], sp.pos[1] + 0.005 + i * 0.0001, sp.pos[2]); // tiny y-ladder beats z-fight
       q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
       roll.setFromAxisAngle(zAxis, sp.yaw);
       q.multiply(roll);

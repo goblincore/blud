@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/earlyz/pipeline-watch.ts
 //
-// FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r186).
+// FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r187).
 //
 // `renderer.compileAsync` RESOLVES when a pipeline fails to build: WebGPUPipelineUtils catches the
 // creation error (or reads the validation scope), logs it, sets `backend.get(pipeline).error = true`
@@ -16,7 +16,7 @@
 // cache hit) it leaves `renderObject.pipeline` set. Pipelines are shared by program text + render
 // state, so a second material with identical generated code reuses the first one's (possibly errored)
 // pipeline WITHOUT any creation call: hooking creation (`backend.createRenderPipeline`) would miss it.
-// For each render object whose material opted into conservative depth (the OWN property the r186
+// For each render object whose material opted into conservative depth (the OWN property the r187
 // builder patch keys on) we remember the pipeline per material, and read the same `error` flag three's
 // draw path reads. The async path sets the flag before its promise resolves, so after `await compile`
 // the answer is final; the synchronous path (a first draw with no precompile, ?warm=0) sets it a
@@ -36,7 +36,7 @@ interface PipelinesLike {
   __earlyzPipelineWatch?: PipelineWatch;
 }
 
-/** The slice of a three WebGPURenderer the watch needs (both are private/internal in r186). */
+/** The slice of a three WebGPURenderer the watch needs (both are private/internal in r187). */
 export interface WatchableRenderer {
   _pipelines?: PipelinesLike | null;
   /** three's Backend.get: the per-object data bag (`.error` is set on a failed pipeline). */
@@ -59,7 +59,7 @@ export function currentPipelineWatch(): PipelineWatch | null {
 }
 
 /**
- * Wraps `renderer._pipelines.getForRender`. Returns null when the renderer does not have the r186
+ * Wraps `renderer._pipelines.getForRender`. Returns null when the renderer does not have the r187
  * shape (so the caller must not run early-Z blind). Idempotent per Pipelines object.
  */
 export function installPipelineWatch(renderer: WatchableRenderer | null | undefined): PipelineWatch | null {

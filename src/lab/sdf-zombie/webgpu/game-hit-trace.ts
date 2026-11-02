@@ -15,8 +15,13 @@ import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
 import { levelCeilingM } from './game-level-rooms';
 import { roomCeilingM } from './level-def';
-import { type ChunkBox } from '../gib-chunks';
+import { type Chunk, type ChunkColliders } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
+import type { DebrisGround } from '../debris-ground';
+import { clampSpawnInsideMap, seatBlastProbe, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
+import { WOUND_SPAWN_OFFSET } from '../blood-sim';
+import { sectorSegmentHit, type SectorHit } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 
 /** The room's level cfg: weight, and the gain that puts the probe level at
  *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
@@ -41,6 +46,19 @@ export function bodiesOnScreen(ctx: GameContext): number { return ctx.world.cull
 // builds on this: zombies are addressable by id, the player pose is
 // settable, frames are steppable, wanderers freezable.
 // -----------------------------------------------------------------------
+/** A VOLUME blood burst's spawn on a SECTOR level (plan 3b follow-up): `seatBloodSpawn`'s centre and body floor plus
+ *  the per-drop clamp, as the `seat` blood-sim.ts burstVolume takes. Room levels: `{ pos: at, seat: undefined }`
+ *  without reading the actor — the shipped burst. */
+export function seatBurstSpawn(
+  ctx: GameContext, a: { pose(): { pos: Vec3 } } | null, at: Vec3,
+): { pos: Vec3; floorY: number | undefined; seat: { floorY?: number; clamp: (p: Vec3) => Vec3 } | undefined } {
+  const map = sectorsOf(ctx);
+  if (!map) return { pos: at, floorY: undefined, seat: undefined };
+  const s = seatBurstInsideMap(map, ctx.world.level.ground as SectorGround, a ? actorSpawnCentre(ctx, a) : null, at,
+    WOUND_SPAWN_OFFSET);
+  return { pos: s.pos, floorY: s.floorY, seat: { ...(s.floorY === undefined ? {} : { floorY: s.floorY }), clamp: s.clamp } };
+}
+
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.
  *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
  *  with the same code the placement gate uses, rather than trusting a
@@ -151,6 +169,12 @@ export function traceMeleeHitFrom(
  *  or through a door frame mid-flight), which is the generous case and the one
  *  the collider boxes are there to catch. */
 export function ceilingAt(ctx: GameContext, x: number, z: number): number {
+  // Sector levels: the sector's ceiling over the point; sky (Infinity) or off the map (NaN) falls back
+  // to the level's tallest ceiling, like a point inside no room.
+  if (ctx.world.level.def?.sectors) {
+    const c = ctx.world.level.ground.ceilAt(x, z);
+    return Number.isFinite(c) ? c : levelCeilingM(ctx);
+  }
   for (const t of ctx.world.level.tunnels) {
     if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
   }
@@ -181,8 +205,95 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
  * lookup the bundle's flight already uses, which is why a piece cannot sail
  * out through the arena's 6 m roof while the 3 m rooms keep theirs.
  */
-export function chunkCollidersAt(ctx: GameContext, pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
-  return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
+export function chunkCollidersAt(ctx: GameContext, pos: Vec3): ChunkColliders {
+  // Sector levels (plan 3b) add the debris ground: the floor under the chunk now and the sector walls. Room levels
+  // get the same two fields as before, so stepChunk runs its y = 0 path unchanged.
+  const ground = debrisGround(ctx);
+  const boxes = ctx.world.colliders, ceilingY = ceilingAt(ctx, pos[0], pos[2]);
+  return ground ? { boxes, ceilingY, ground } : { boxes, ceilingY };
+}
+
+/** The debris ground on a SECTOR level (plan 3b), or null on a room level — where every debris stepper keeps its
+ *  y = 0 plane exactly. Cached per map inside sector-debris.ts, so this is a WeakMap lookup per call. */
+export function debrisGround(ctx: GameContext): DebrisGround | null {
+  const map = ctx.world.level.def?.sectors;
+  return map ? sectorDebrisGround(map, ctx.world.level.ground as SectorGround) : null;
+}
+
+/** Where a → b first meets sector geometry, or null (always null on room levels). */
+export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
+  const map = ctx.world.level.def?.sectors;
+  return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;
+}
+
+/** BLAST SHIELDING (plan 3b; Doom's radius-damage sight check): is `to` behind sector geometry from the blast at
+ *  `at`? The probe starts at seatBlastProbe's seated point (lifted, inside the map), so a blast in the void or at a
+ *  ceiling never shields everything; a blast that cannot be seated shields nothing. `inside`: an open point on the
+ *  blast's own side (seatBlastProbe's hint — the shooter's body, the bundle's last open spot, the player's eye), so a
+ *  blast at a thin wall seats on that side. Always false on room levels. */
+export function blastShielded(ctx: GameContext, at: Vec3, to: Vec3, inside?: Vec3): boolean {
+  const map = sectorsOf(ctx);
+  if (!map) return false;
+  const ground = ctx.world.level.ground as SectorGround;
+  const from = seatBlastProbe(map, ground, at, inside);
+  return from !== null && sectorSegmentHit(map, ground, from, to) !== null;
+}
+
+/** The level's sector map, or undefined on a room level — optional all the way down, because the spawn helpers below
+ *  run inside spawners that tests drive with a bare stub context. */
+function sectorsOf(ctx: GameContext) {
+  return ctx.world?.level?.def?.sectors;
+}
+
+/** SPAWNS START INSIDE THE LEVEL (plan 3b): `to` pulled back toward the body centre `from` if from → to meets sector
+ *  geometry (sector-debris.ts clampSpawnInsideMap). Room levels: `to` itself, untouched. */
+export function clampSpawnInside(ctx: GameContext, from: Vec3, to: Vec3, radius = 0): Vec3 {
+  const map = sectorsOf(ctx);
+  return map ? clampSpawnInsideMap(map, ctx.world.level.ground as SectorGround, from, to, radius) : to;
+}
+
+/** How high over an actor's feet its spawn-clamp centre sits, metres (mid torso; under every E1M1 ceiling). */
+export const SPAWN_CENTRE_M = 0.9;
+/** The body centre debris spawns are clamped from: `SPAWN_CENTRE_M` over the actor's feet, kept 5 cm under the
+ *  sector's ceiling. Null on room levels (nothing to clamp against). */
+export function spawnCentreOf(ctx: GameContext, feet: Vec3): Vec3 | null {
+  if (!sectorsOf(ctx)) return null;
+  const ceil = ctx.world.level.ground.ceilAt(feet[0], feet[2]);
+  const y = feet[1] + SPAWN_CENTRE_M;
+  return [feet[0], Number.isFinite(ceil) ? Math.max(feet[1], Math.min(y, ceil - 0.05)) : y, feet[2]];
+}
+
+/** `spawnCentreOf` an actor's feet; null on room levels without reading the actor. */
+export function actorSpawnCentre(ctx: GameContext, a: { pose(): { pos: Vec3 } }): Vec3 | null {
+  return sectorsOf(ctx) ? spawnCentreOf(ctx, a.pose().pos) : null;
+}
+
+/** A new chunk on a SECTOR level: its position clamped inside the level from the body centre `from` (when the caller
+ *  knows the body) and its `floorY` seeded with the body's floor (else the floor under the piece), so it never starts
+ *  inside a wall or a column and keeps a floor if it spawns over a hole. Returns a NEW chunk (a view that recentred
+ *  its prims on the old object keeps it); room levels return `c` itself, untouched. */
+export function seatChunkSpawn(ctx: GameContext, c: Chunk, from?: Vec3 | null): Chunk {
+  const map = sectorsOf(ctx);
+  if (!map) return c;
+  const ground = ctx.world.level.ground;
+  const pos = from ? clampSpawnInside(ctx, from, c.pos, c.radius) : c.pos;
+  const bodyFloor = from ? ground.floorAt(from[0], from[2]) : NaN;
+  const ownFloor = ground.floorAt(pos[0], pos[2]);
+  const floorY = Number.isFinite(bodyFloor) ? bodyFloor : Number.isFinite(ownFloor) ? ownFloor : c.floorY;
+  return { ...c, pos: [pos[0], pos[1], pos[2]], ...(floorY === undefined ? {} : { floorY }) };
+}
+
+/** A BLOOD spawn point on a SECTOR level (plan 3b): `at` (a wound anchor, a gout centre) clamped inside the level from
+ *  the body's spawn centre (`actorSpawnCentre`; a limb poking through a wall bleeds on this side of it) by the drops'
+ *  spawn offset, and the body's floor to seed the drops' `floorY` with (blood-sim.ts spawnImpactGout /
+ *  spawnWoundDroplets). Room levels: `{ pos: at, floorY: undefined }` without reading the actor — the shipped spawn. */
+export function seatBloodSpawn(
+  ctx: GameContext, a: { pose(): { pos: Vec3 } } | null, at: Vec3,
+): { pos: Vec3; floorY: number | undefined } {
+  const map = sectorsOf(ctx);
+  if (!map) return { pos: at, floorY: undefined };
+  return seatSpawnInsideMap(map, ctx.world.level.ground as SectorGround, a ? actorSpawnCentre(ctx, a) : null, at,
+    WOUND_SPAWN_OFFSET);
 }
 
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.

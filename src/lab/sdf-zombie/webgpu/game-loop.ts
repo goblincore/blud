@@ -19,7 +19,12 @@ import { switchOnFlashlight, runLightCommand } from './game-dynamic-light';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
 import { characterEntry, hasCharacter } from '../character-registry';
+import { newHazard, stepHazard, type HazardState } from './hazard-floor';
+import type { SectorGround } from './sector-ground';
 import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
+import { simTimeMs } from './sim-clock';
+import { levelBatchOn } from './level-batch';
+import { createPickupBatches, type PickupBatches } from './game-level-batch';
 
 export interface LoopRuntime {
   god: boolean;
@@ -34,7 +39,15 @@ export interface LoopRuntime {
   done: boolean;
   /** Actors that fight with a weapon (the bride's sword) and so never bite. */
   biteExempt: Set<number>;
+  /** The hurt-floor damage clock (hazard-floor.ts). */
+  hazard: HazardState;
+  /** The last 64 hits that took health, by kind and sim time (gate readback: a barrel's 'blast' share apart from
+   *  bites and rounds). */
+  hurts: { amount: number; kind: DamageKind; health: number; t: number }[];
   meshes: Map<string, THREE.Mesh>;
+  /** One instanced draw per item type (game-level-batch.ts); null with `?batch=0`, where every pickup mesh is in the
+   *  scene. With batches the meshes in `meshes` are logical only (never in the scene). */
+  batches: PickupBatches | null;
   el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
 }
 
@@ -87,23 +100,30 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     pending: [],
     done: false,
     biteExempt: new Set(),
+    hazard: newHazard(),
+    hurts: [],
     meshes: new Map(),
+    batches: null,
     el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
   };
   if (authored) {
+    const batched = levelBatchOn(location.search);
     for (const p of def.pickups) {
       const l = LOOK[p.item];
       if (!l) continue;
       const mesh = new THREE.Mesh(l.geo(), new THREE.MeshStandardMaterial({
         color: l.color, emissive: l.color, emissiveIntensity: 0.35, metalness: 0.3, roughness: 0.4,
       }));
-      mesh.position.set(p.pos[0], Math.max(0.25, p.pos[1]), p.pos[2]);
+      // Sector levels: a pickup's y is the floor under it (the converter writes it), so it sits 0.25 m
+      // over that floor, which may be below 0 (a pit).
+      mesh.position.set(p.pos[0], def.sectors ? p.pos[1] + 0.25 : Math.max(0.25, p.pos[1]), p.pos[2]);
       if (p.item === 'cd') mesh.rotation.x = Math.PI / 2;
       if (STILL.has(p.item)) mesh.userData.still = true;
       mesh.name = `pickup:${p.id}`;
-      ctx.boot.handle.scene.add(mesh);
+      if (!batched) ctx.boot.handle.scene.add(mesh);
       rt.meshes.set(p.id, mesh);
     }
+    if (batched) rt.batches = createPickupBatches(ctx, def.pickups, rt.meshes, item => LOOK[item]);
   }
   ctx.world.loop = rt;
   updateStatus(ctx);
@@ -126,6 +146,8 @@ export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind)
   rt.vitals = applyDamage(rt.vitals, amount, kind);
   if (rt.vitals === before) return;
   ctx.telemetry.telemetry.event('player-hurt', { amount, kind, health: rt.vitals.health });
+  rt.hurts.push({ amount: before.health - rt.vitals.health, kind, health: rt.vitals.health, t: simTimeMs() / 1000 });
+  if (rt.hurts.length > 64) rt.hurts.shift();
   if (rt.vitals.dead) {
     rt.el.death.style.display = 'grid';
     document.exitPointerLock?.();
@@ -190,7 +212,10 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   // The gun hides while the live slot is a weapon the player doesn't own yet.
   if (ctx.weapon.gunGroup) ctx.weapon.gunGroup.visible = ownsSlot(ctx, ctx.weapon.slotState.live);
   for (const m of rt.meshes.values()) if (!m.userData.still) m.rotation.y += dt * 1.6;
-  if (rt.vitals.dead || rt.done || ctx.world.sequence?.active) return;
+  if (rt.vitals.dead || rt.done || ctx.world.sequence?.active) {
+    stepHazard(rt.hazard, 0, dt);   // off the floor's clock: the first hurt after this waits 0.5 s again
+    return;
+  }
   const feet = ctx.player.player.pos;
   // ZOMBIE BITES. The zombie mind never reports melee contact; a live zombie in reach
   // bites, rate-limited by the melee invulnerability window. Frozen AI never bites.
@@ -206,6 +231,15 @@ export function stepLoop(ctx: GameContext, dt: number): void {
       }));
       damagePlayer(ctx, hit, 'melee');
     }
+  }
+  // HURT FLOORS (spec 2026-10-24 §8): feet on a hurt sector's floor (not jumping over it).
+  const sectors = ctx.world.level.def?.sectors;
+  if (sectors) {
+    const g = ctx.world.level.ground as SectorGround;
+    const s = ctx.player.player.grounded ? g.sectorAt(feet[0], feet[2]) : -1;
+    const sec = s >= 0 ? sectors.sectors[s]! : null;
+    const dmg = stepHazard(rt.hazard, sec && sec.special === 'hurt' ? sec.hurtPerSec : 0, dt);
+    if (dmg > 0) damagePlayer(ctx, dmg, 'pellet');
   }
   const def = ctx.world.level.def;
   if (!def) return;
@@ -264,6 +298,15 @@ export function createLoopSeams(ctx: GameContext) {
       damagePlayer(ctx, amount, kind);
       return ctx.world.loop ? { ...ctx.world.loop.vitals } : null;
     },
+    /** Set the player's health outright (clamped to 1..maxHealth, alive; works under god mode): probes of
+     *  health-dependent tuning such as adrenaline.ts's low-health deepening. Returns the vitals, null before the loop. */
+    setHealth: (hp: number) => {
+      const rt = ctx.world.loop;
+      if (!rt || !Number.isFinite(hp)) return null;
+      rt.vitals = { ...rt.vitals, health: Math.max(1, Math.min(VITALS.maxHealth, Math.round(hp))), dead: false };
+      updateStatus(ctx);
+      return { ...rt.vitals };
+    },
     inventory: () => {
       const inv = ctx.world.loop?.inventory;
       return inv ? { ...inv, weapons: [...inv.weapons], cds: [...inv.cds], shells: ctx.weapon.shells } : null;
@@ -273,6 +316,12 @@ export function createLoopSeams(ctx: GameContext) {
       return rt && def ? def.pickups.filter(p => !rt.taken.has(p.id)).map(p => p.id) : [];
     },
     emitLevelEvent: (event: string) => { emitLevelEvent(ctx, event); },
+    /** Captures: set every spinning pickup's spin angle (radians) so two boots draw them alike. Returns how many. */
+    setPickupSpin: (yaw: number) => {
+      let n = 0;
+      for (const m of ctx.world.loop?.meshes.values() ?? []) if (!m.userData.still) { m.rotation.y = yaw; n++; }
+      return n;
+    },
     levelComplete: () => !!ctx.world.loop?.done,
   };
 }

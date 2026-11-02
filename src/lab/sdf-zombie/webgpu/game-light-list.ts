@@ -24,6 +24,8 @@ import { PROFILE_ID, type ProfileName } from './light-profiles';
 import { layerOn } from './light-layers';
 import { BEACON } from './beacon';
 import { pickLights, unpackPick, type Pick, type PickBody } from './light-pick';
+import { keyPowerRef, keyRankScale } from './emit-push';
+import { EMIT_PUSH } from './game-sector-light';
 
 type RVec3 = readonly [number, number, number];
 
@@ -48,6 +50,8 @@ export interface LampInput {
   gain?: number; tint?: RVec3;
   /** The cheap level tier shades this lamp's light for the level (level-tier.ts isLevelCheap). */
   levelCheap?: boolean;
+  /** Rank-only multiplier (LightSource.rankScale): the emitter push's key step, power over the level's reference. */
+  rankScale?: number;
   mood: LampMood;
 }
 /** The storm's one window light. `rooms`: every carriage that has a window light (lightning
@@ -87,6 +91,7 @@ export function collectLightSources(input: SourceInput): LightSource[] {
     if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
     if (l.gain !== undefined) s.levelGain = l.gain;
     if (l.levelCheap) s.levelCheap = true;
+    if (l.rankScale !== undefined && l.rankScale !== 1 && !fire) s.rankScale = l.rankScale;
     // Not for fire: the fire profile's gain converts RAW intensity (bodyNorm 1, as for the
     // burning-body flashes it also serves); a reference would normalise it twice (Task 10 review).
     if (l.ref !== undefined && !fire) s.refIntensity = l.ref;
@@ -154,12 +159,25 @@ function makeInput(): SourceInput { return { lamps: [], window: null, flashlight
 const scratchWindow: WindowInput = { dir: [0, 1, 0], color: [1, 1, 1], intensity: 0, rooms: [] };
 const scratchTorch: FlashlightInput = { pos: [0, 0, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 0, range: 0, cosOuter: 1, cosInner: 1 };
 
+/** The key step's reference power per lamp set (keyPowerRef over the non-fire lamps' base power), computed once
+ *  per lamp array: a later live gain change (setEmitterLightGain) moves a lamp's rank against a fixed reference. */
+const keyRefs = new WeakMap<readonly unknown[], number>();
+function levelKeyRef(lamps: readonly { base: number; mood: string }[]): number {
+  let r = keyRefs.get(lamps);
+  if (r === undefined) {
+    r = keyPowerRef(lamps.filter(l => l.mood !== 'fire').map(l => l.base));
+    keyRefs.set(lamps, r);
+  }
+  return r;
+}
+
 /** Fill the plain source data from the live lights. `into` is rewritten in place. */
 export function readSourceInput(
   ctx: GameContext, directFlashes: readonly FlashInput[], into: SourceInput = makeInput(),
 ): SourceInput {
   const rt = ctx.world.light;
   const lamps = rt?.lamps ?? [];
+  const keyRef = ctx.world.sectorFx && EMIT_PUSH.has('key') ? levelKeyRef(lamps) : 0;
   into.lamps.length = lamps.length;
   for (let i = 0; i < lamps.length; i++) {
     const l = lamps[i]!;
@@ -170,6 +188,8 @@ export function readSourceInput(
     // Fire-mood lamps carry no reference (bodyNorm 1): see collectLightSources.
     rec.ref = l.mood === 'fire' ? undefined : l.base * (l.beacon ? BEACON.spotGain : l.tube?.spot ? TUBE_SPOT_GAIN : 1);
     rec.beacon = !!l.beacon;
+    // ?emitpush key (sector levels): rank the lamp by its power over the level's median lamp power.
+    rec.rankScale = keyRef > 0 ? keyRankScale(l.base, keyRef) : undefined;
     // A beacon's light is its swept spot (its omni stays at 0), read like a tube's.
     const spot = l.beacon?.spot ?? l.tube?.spot;
     if (spot) {
@@ -288,7 +308,7 @@ export function maskRooms(mask: number): number[] {
 
 /** The seam's plain view of the list (`rooms: []` = any room). */
 export function lightListView(g: LightListGpu | undefined | null) {
-  return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], intensity: l.intensity, rooms: maskRooms(l.roomMask) }));
+  return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], color: [...l.color], intensity: l.intensity, rooms: maskRooms(l.roomMask), ...(l.rankScale !== undefined ? { rankScale: l.rankScale } : {}) }));
 }
 
 // ---------------------------------------------------------------------------------------------

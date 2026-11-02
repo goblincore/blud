@@ -23,7 +23,7 @@
 import type { BuildResult } from './build-body';
 import { bindRig, impulseAt, pinTips, type BoundRig } from './rig-bind';
 import {
-  applyFloorContact, corpseFloor, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  applyFloorContact, corpseLift, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
@@ -237,10 +237,10 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       ? new Set([fistTip]) : undefined;
     points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
-      points = applyFloorContact(points, corpseFloor(f));
+      points = applyFloorContact(points, f.floorY, undefined, undefined, undefined, corpseLift(f));
       // One more brace pass after the floor moved points, then the floor again
       // so the last word keeps the corpse out of the ground.
-      if (f.braces.length) points = applyFloorContact(relaxBraces(points, f.braces, f.integrity, 1), corpseFloor(f));
+      if (f.braces.length) points = applyFloorContact(relaxBraces(points, f.braces, f.integrity, 1), f.floorY, undefined, undefined, undefined, corpseLift(f));
     }
     m.bound = {
       ...m.bound,

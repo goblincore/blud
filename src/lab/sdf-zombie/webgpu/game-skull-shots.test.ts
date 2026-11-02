@@ -65,7 +65,7 @@ describe('skullPasses: a projectile\'s step at the open skulls it did not stop i
   });
 
   it('the projectile loop calls it after the flesh trace, and hands the impact the step\'s start and the projectile', () => {
-    const trace = tickSrc.indexOf('const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));');
+    const trace = tickSrc.indexOf('const hp = traceProjectile(from, p.pos, field);');
     const pass = tickSrc.indexOf('skullPasses(ctx, p, from, hitActor, hitPoint);');
     const impact = tickSrc.indexOf('ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });');
     expect(trace).toBeGreaterThan(0);

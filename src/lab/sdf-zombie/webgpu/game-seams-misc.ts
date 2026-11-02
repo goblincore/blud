@@ -7,6 +7,7 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { setSeedUpload } from '../seed-band';
 import { layerState, setLayer, type LightLayerKey } from './light-layers';
 import { setListLook, type ListLook } from './light-list';
 import type { GameContext } from './game-context';
@@ -96,6 +97,10 @@ export function createMiscSeams(ctx: GameContext) {
         ? ctx.panels.shutterGame.diagnostics()
         : { enabled: false, unavailable: true, route: 'capture-stage' as const };
     },
+    /** DEBUG (seed upload pass): the blood seed's GPU copy vs its CPU buffer (texels that differ). */
+    verifyBloodSeed: () => ctx.panels.shutterGame?.verifySeed() ?? Promise.resolve(null),
+    /** `?seedupload=0` at run time: the shutter seeds uploaded whole (false) or by dirty rows (true). */
+    setSeedUpload: (on: boolean) => { setSeedUpload(on); return on; },
     /** Show/hide the focused shutter controls. */
     shutterPanel: (on?: boolean) => {
       if (on !== undefined) ctx.panels.shutterPanel?.setVisible(on);
@@ -149,6 +154,10 @@ export function createMiscSeams(ctx: GameContext) {
     lightLayersPanel(on: boolean) {
       ctx.panels.lightLayersPanel?.setVisible(on);
       return ctx.panels.lightLayersPanel?.shell.visible ?? false;
+    },
+    bulletTimePanel(on: boolean) {
+      ctx.panels.bulletTimePanel?.setVisible(on);
+      return ctx.panels.bulletTimePanel?.visible ?? false;
     },
     vhsPanel(on: boolean) {
       ctx.panels.vhsPanel?.setVisible(on);

@@ -115,6 +115,7 @@ export function createBenchSeams(ctx: GameContext, d: BenchDeps) {
         ctx.player.player.vel = [0, 0, 0];
         ctx.player.player.yaw = held.yaw;
         ctx.player.player.pitch = held.pitch;
+        ctx.player.player.stepLag = 0;
       };
       const hadHoldPlayer = ctx.player.holdPlayerPose;
       ctx.player.holdPlayerPose = o.holdPlayer === true;

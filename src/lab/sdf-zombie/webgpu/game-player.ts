@@ -13,9 +13,14 @@
 // A segment point INSIDE the box falls back to the box's min-penetration
 // axis, which is the only degenerate case a vertical capsule in a box world
 // can hit (spawned overlapping, or a dt so large it tunneled).
+//
+// On a sector level (spec 2026-10-24-doom-sector-levels-design.md §6.2) the floor and ceiling
+// come from a LevelGround and its blocking wall lines push the body's circle in x/z. Room levels
+// pass FLAT_GROUND (floor 0, no lines), which is exactly the old y = 0 floor.
 
 import type { Vec3 } from '../types';
 import type { Aabb } from './game-level';
+import { FLAT_GROUND, type LevelGround, type WallSeg } from './level-ground';
 
 /** Mutable triple — Vec3 is readonly; the capsule resolve pushes in place. */
 export type Mut3 = [number, number, number];
@@ -27,20 +32,33 @@ export interface PlayerState {
   yaw: number;   // rad; forward = [sin yaw, 0, -cos yaw] (lab FPV convention)
   pitch: number; // rad, clamped
   grounded: boolean;
+  /** Metres the eye trails the feet after a step up; eases back to 0 (eyeOf). Absent = 0. */
+  stepLag?: number;
 }
 
 export const PLAYER = {
   radius: 0.32,
   height: 1.75,
   eye: 1.62,
-  walkSpeed: 3.4,
-  accel: 40,
-  airAccel: 8,
+  /** m/s (owner 2026-10-27: "make default player movement faster": 3.4 -> 4.4, +29%). */
+  walkSpeed: 4.4,
+  /** Ground and air acceleration, m/s^2, raised WITH walkSpeed (40 -> 52, 8 -> 10.4) so the time to reach full
+   *  speed (0.085 s on the ground) and the air control's share of it feel the same. Friction is a rate (1/s), so
+   *  the stop takes as long as before and only covers more ground. */
+  accel: 52,
+  airAccel: 10.4,
   friction: 10,
   gravity: -18,
   jumpSpeed: 6.0,
   pitchLimit: 1.45,
 } as const;
+
+/** How fast the eye catches up after a step up, m/s (0.75 m in about 0.12 s). */
+const STEP_EASE_MPS = 6;
+/** Rises smaller than this are settling, not steps (no eye lag). */
+const STEP_MIN_M = 0.01;
+/** Extra reach when asking for nearby wall lines, beyond the radius. */
+const SEG_QUERY_PAD_M = 0.25;
 
 export interface MoveInput {
   /** -1..1 strafe (x) and forward (z) intent in VIEW space. */
@@ -125,10 +143,58 @@ export function resolveCapsule(pos: Mut3, colliders: readonly Aabb[]): boolean {
   return touched;
 }
 
+/** Push a circle of radius r at pos (x, z) off every segment, in place. Returns the total push in
+ *  x/z, or null when nothing touched. Two passes, as resolveCapsule. With `from` (where the body was
+ *  before the move) a body that ended on the far side of a line is put back on the side it came
+ *  FROM, at radius distance, so a fast step cannot complete a crossing. */
+export function resolveSegments(
+  pos: Mut3, segs: readonly WallSeg[], r: number, from?: readonly [number, number],
+): [number, number] | null {
+  let px = 0, pz = 0;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const g of segs) {
+      const ex = g.bx - g.ax, ez = g.bz - g.az;
+      const len2 = ex * ex + ez * ez;
+      if (len2 < 1e-12) continue;
+      const t = clamp(((pos[0] - g.ax) * ex + (pos[2] - g.az) * ez) / len2, 0, 1);
+      const cx = g.ax + ex * t, cz = g.az + ez * t;
+      let dx = pos[0] - cx, dz = pos[2] - cz;
+      const d = Math.hypot(dx, dz);
+      // Unit normal on the side the body came from (the (-ez, ex) side when no `from`).
+      const ln = Math.sqrt(len2);
+      let nx = -ez / ln, nz = ex / ln;
+      const cross = from ? ex * (from[1] - g.az) - ez * (from[0] - g.ax) : 0;
+      const sided = from !== undefined && Math.abs(cross) >= 1e-12;   // `from` on the line's extension: no side
+      if (sided && cross < 0) { nx = -nx; nz = -nz; }
+      if (sided && t > 0 && t < 1 && dx * nx + dz * nz < 0) {
+        // Crossed: put the body back on its own side.
+        const mx = cx + nx * r - pos[0], mz = cz + nz * r - pos[2];
+        pos[0] += mx; pos[2] += mz;
+        px += mx; pz += mz;
+        continue;
+      }
+      if (d >= r) continue;
+      if (d < 1e-9) { dx = nx; dz = nz; } else { dx /= d; dz /= d; }
+      const k = r - d;
+      pos[0] += dx * k; pos[2] += dz * k;
+      px += dx * k; pz += dz * k;
+    }
+  }
+  return px !== 0 || pz !== 0 ? [px, pz] : null;
+}
+
+/** Remove the velocity component going INTO a push, so walls don't pump speed. */
+function killInto(vel: Mut3, push: Mut3): void {
+  const len = Math.hypot(push[0], push[1], push[2]);
+  if (len <= 1e-9) return;
+  const n: Mut3 = [push[0] / len, push[1] / len, push[2] / len];
+  const into = vel[0] * n[0] + vel[1] * n[1] + vel[2] * n[2];
+  if (into < 0) { vel[0] -= n[0] * into; vel[1] -= n[1] * into; vel[2] -= n[2] * into; }
+}
+
 /**
  * One movement step: intent -> horizontal velocity (ground friction /
- * acceleration), gravity, integrate, collide with colliders and the y=0
- * floor. Mutates and returns `s`. dt is clamped like the lab's frame clamp.
+ * acceleration), gravity, integrate, collide with the ground's walls and floor, then the colliders. Mutates and returns `s`. dt is clamped like the lab's frame clamp.
  *
  * `airScale` slows the VERTICAL motion alone (bullet time's shootdodge hang,
  * bullet-time.ts airScale): gravity and the rise/fall both run on dt x
@@ -140,6 +206,7 @@ export function stepPlayer(
   input: MoveInput,
   dt: number,
   colliders: readonly Aabb[],
+  ground: LevelGround = FLAT_GROUND,
   airScale = 1,
 ): PlayerState {
   const dtc = Math.min(Math.max(dt, 0), 1 / 30);
@@ -156,6 +223,8 @@ export function stepPlayer(
   const target = PLAYER.walkSpeed * Math.min(wishLen, 1);
 
   const accel = s.grounded ? PLAYER.accel : PLAYER.airAccel;
+  // The sided wall push (resolveSegments) is only reliable while one step stays well under
+  // PLAYER.radius (walk speed gives 0.147 m at the 1/30 s clamp); faster horizontal motion (knockback) needs sub-stepping.
   s.vel[0] = clamp(s.vel[0] + clamp(nx * target - s.vel[0], -accel * dtc, accel * dtc), -60, 60);
   s.vel[2] = clamp(s.vel[2] + clamp(nz * target - s.vel[2], -accel * dtc, accel * dtc), -60, 60);
   if (s.grounded && wishLen < 1e-6) {
@@ -171,18 +240,49 @@ export function stepPlayer(
   }
   s.vel[1] += PLAYER.gravity * dty;
 
+  const fromX = s.pos[0], fromY = s.pos[1], fromZ = s.pos[2];
+  const wasGrounded = s.grounded;
   s.pos[0] += s.vel[0] * dtc;
   s.pos[1] += s.vel[1] * dty;
   s.pos[2] += s.vel[2] * dtc;
 
-  // The floor plane.
-  if (s.pos[1] <= 0) {
-    s.pos[1] = 0;
+  // Wall lines that block at these feet (none on flat ground). A grounded body is asked at its
+  // standing height: gravity just sank it a hair below the floor, which must not make a step of
+  // exactly SECTOR_STEP_M block at some frame rates.
+  const feet = wasGrounded ? Math.max(s.pos[1], fromY) : s.pos[1];
+  const segPush = resolveSegments(
+    s.pos, ground.blockingNear(s.pos[0], s.pos[2], PLAYER.radius + SEG_QUERY_PAD_M, feet), PLAYER.radius,
+    [fromX, fromZ]);
+  if (segPush) killInto(s.vel, [segPush[0], 0, segPush[1]]);
+
+  // The floor under the feet: y = 0 on flat ground, the sector's floor on a sector level. Off every
+  // sector (a corner squeeze past a line end) undo the move in x/z.
+  let floor = ground.floorAt(s.pos[0], s.pos[2]);
+  if (Number.isNaN(floor)) {
+    s.pos[0] = fromX; s.pos[2] = fromZ;
+    s.vel[0] = 0; s.vel[2] = 0;   // else the same move is retried every frame
+    floor = ground.floorAt(fromX, fromZ);
+    if (Number.isNaN(floor)) floor = fromY;
+  }
+  if (s.pos[1] <= floor) {
+    // The eye lags only when the FLOOR itself rose under the body, never because an AABB push left
+    // the feet below it, so flat ground (floor 0 everywhere) never sets a lag.
+    const prevFloor = ground.floorAt(fromX, fromZ);
+    if (wasGrounded && !Number.isNaN(prevFloor) && floor - prevFloor > STEP_MIN_M) {
+      s.stepLag = (s.stepLag ?? 0) - (floor - prevFloor);
+    }
+    s.pos[1] = floor;
     if (s.vel[1] < 0) s.vel[1] = 0;
     s.grounded = true;
   } else {
     s.grounded = false;
   }
+  const ceil = ground.ceilAt(s.pos[0], s.pos[2]);
+  if (s.pos[1] + PLAYER.height > ceil) {
+    s.pos[1] = Math.max(floor, ceil - PLAYER.height);
+    if (s.vel[1] > 0) s.vel[1] = 0;
+  }
+  if (s.stepLag) s.stepLag = Math.min(0, s.stepLag + STEP_EASE_MPS * dtc);
 
   const before: Mut3 = [s.pos[0], s.pos[1], s.pos[2]];
   if (resolveCapsule(s.pos, colliders)) {
@@ -203,7 +303,7 @@ export function stepPlayer(
   return s;
 }
 
-/** Eye position for the camera. */
+/** Eye position for the camera; trails the feet briefly after a step up. */
 export function eyeOf(s: PlayerState): Vec3 {
-  return [s.pos[0], s.pos[1] + PLAYER.eye, s.pos[2]];
+  return [s.pos[0], s.pos[1] + PLAYER.eye + (s.stepLag ?? 0), s.pos[2]];
 }

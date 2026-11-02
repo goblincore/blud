@@ -40,6 +40,21 @@ describe('parseLevelJson: two-rooms fixture', () => {
   it('rejects an unknown state', () => {
     expect(() => parseLevelJson(fixture('two-rooms'), { state: 'party' })).toThrow('state party');
   });
+
+  it.each(['deadeye', 'butcher', 'flayer', 'teratoma'])('accepts a %s spawn (the zombieman variants, the floater) without counting a soldier', kind => {
+    const f = fixture('two-rooms');
+    f.spawns[0].kind = kind;
+    const L = parseLevelJson(f);
+    expect(L.spawns.map(s => s.kind)).toEqual([kind]);
+    expect(L.rooms[1]).toMatchObject({ zombies: 1, soldiers: 0 });
+  });
+
+  it('refuses an unknown spawn kind, listing every kind', () => {
+    const f = fixture('two-rooms');
+    f.spawns[0].kind = 'imp';
+    expect(() => parseLevelJson(f))
+      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher, flayer or teratoma');
+  });
 });
 
 describe('parseLevelJson: two-floors fixture', () => {
@@ -240,5 +255,25 @@ describe('parseLevelJson: none fixture (a light whose lamp the level art draws)'
     g.lights[0].fixture = 'none';
     g.lights[0].shadow = false;
     expect(() => parseLevelJson(g)).toThrow('lights[0].shadow: only a tube fixture takes it');
+  });
+});
+
+describe('parseLevelJson: emitter push combos (emit-push.ts)', () => {
+  const tagged = () => {
+    const f = fixture('two-rooms');
+    f.lights.push({ ...f.lights[0], power: 4, push: ['spill', 'spill+exit'] });
+    f.lights[0].push = ['none', 'exit'];
+    return f;
+  };
+  it('keeps a tagged light only in its combos (default: every step on)', () => {
+    expect(parseLevelJson(tagged()).rooms[0]!.accents.map(a => a.power)).toEqual([4]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set() }).rooms[0]!.accents.map(a => a.power)).toEqual([9]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set(['exit']) }).rooms[0]!.accents.map(a => a.power)).toEqual([9]);
+    expect(parseLevelJson(tagged(), { emitPush: new Set(['spill', 'key']) }).rooms[0]!.accents.map(a => a.power)).toEqual([4]);
+  });
+  it('rejects an unknown combo', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].push = ['spill', 'loud'];
+    expect(() => parseLevelJson(f)).toThrow('lights[0].push');
   });
 });

@@ -25,6 +25,7 @@ import * as THREE from 'three/webgpu';
 import { WebGPURenderer } from 'three/webgpu';
 import type { FrameTiming } from './game-telemetry';
 import { installPipelineLog, noteFrameEnd } from './pipeline-log';
+import { serializeCompileAsync } from './serial-compile';
 
 /**
  * WebGPU device health, captured where the device is created (startup-freeze
@@ -303,6 +304,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // both create some — so this sits immediately after init produced the
   // device. Recording itself is gated by ?pipelinelog=1 / setPipelineLog.
   installPipelineLog(renderer);
+  serializeCompileAsync(renderer as never);
 
   // DEVICE HEALTH (startup-freeze attribution). `device.lost` is a promise that
   // never rejects, so a `.then` never firing means the device survived the run —
