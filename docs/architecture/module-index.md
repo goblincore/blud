@@ -53,7 +53,7 @@ Each line is the first sentence of the module's header comment.
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 53 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
-| [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
+| [Actors and crowd (render)](#actors-and-crowd-render) | 20 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
@@ -591,6 +591,7 @@ Per-actor GPU records, crowd atlas, character views, wounds on screen.
 - `webgpu/character-effects.ts` — Character effect scene drawn after the SDF composite, plus the muzzle flash object posed from shot age.
 - `webgpu/character-view.ts` — THE BODY: how a character looks, how it animates, and (from task 4) what happens to it when it is hit.
 - `webgpu/crowd-atlas.ts` — The shared prim texture of a crowd type: `stride` prims wide (validate.ts primStride — BASE_PRIM_STRIDE for every body up to 128 prims), DATA_ROWS…
+- `webgpu/crowd-capacity.ts` — HOW MANY BODIES A CROWD TYPE HOLDS (2026-11-01).
 - `webgpu/crowd-records.ts` — One record per march instance, read by the kernel through a read-only storage buffer (`inst` param).
 - `webgpu/crowd-rect.ts` — Stage a-2 (3): the conservative screen rectangle one crowd type's quad must rasterise.
 - `webgpu/crowd-spawn.ts` — Pure spawn-placement math for the crowd bench seam (perf task 7f).

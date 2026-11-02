@@ -529,16 +529,20 @@ buffers traced by allocation stack, JS by the sampling heap profiler. MAP28 with
 | --- | --- | --- |
 | Kit glTF parsed per body (butcher 5.7, flayer 5.6, teratoma 9.4 MB a body; zombie 0.1) | 320 | **fixed:** one parse, a clone per body (`kit-template.ts`), `?kitshare=0` for the A/B |
 | `precompileInBackground`'s recursive `camera.clone()` copied the viewmodel, 6 MB per compile, kept by three | 200 | **fixed:** a camera copy without children |
-| 30 crowd types for 7 characters (`name@room`), each sized for 64 bodies: tile entries 167, prim atlas 97 | 265 | open |
+| 30 crowd types for 7 characters (`name@room`), each sized for 64 bodies: prim atlas and records | 92 | **fixed:** each built for the bodies the level gives it (`crowd-capacity.ts`), `?crowdsize=0` for the A/B |
+| The same 30 types' tile entry streams, 5.6 MB each at 960x720 and growing with resolution | 156 | **fixed:** one stream, two worst cases, the types binning in turn (`createTileStream`), `?tilestream=0` for the A/B |
 | Array buffers allocated under `sdfLayer.render`, not identified | 76 | open |
 | Each body's own JS objects, 0.7 MB | 70 | fine |
 
-After the two fixes: **571 MB** (JS 131, buffers 440; E1M1 402 MB). Frame cost did not change within this machine's noise (quiet round, s80:
+After the kit and camera fixes: 571 MB. After the crowd fixes: **323 MB** (JS 130, buffers 191; E1M1 274 MB). Frame cost did not change within this machine's noise (quiet round, s80:
 tick 15 / draw 11 ms in both arms). Boot time showed no clear gain either: 20-30 s in both arms under load, so the kit cache's boot saving is unmeasured. GPU memory is not measured, though kit attributes now upload once.
 
 Rules this sets: a shared kit geometry is never written or disposed (`isSharedKitGeometry`). `kit-damage` and a burst that re-weights
 clone it first; a sculpted kit split by bone writes nothing. The crowd types are per room for a reason (the pale zombie, 2026-09-14,
-`game-crowd-types.ts`): do not merge them across rooms; size each to the bodies it has, with an answer for a late spawn.
+`game-crowd-types.ts`): do not merge them across rooms. A body past a type's count (a dev spawn) opens `name@room#2`, built for 8.
+A test arena stays at the full 64, since it respawns at will. The tile stream's size is from measurement, not a bound: a frame wrote at most 16 k entries,
+with five bodies against the camera, of 243 k. Past the end a tile lists nothing, so that type's bodies have a hole there for the frame;
+no level has been seen to reach it and that path has not run in the browser. Check `__sdfGame.crowdTileUsage()` (`frameTotal`) if bodies ever show holes.
 Seen in both arms, so not this change: gib pieces hanging in the air against a wall after a rocket.
 
 **What broke, in the order found:**

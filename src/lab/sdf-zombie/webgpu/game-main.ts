@@ -2355,6 +2355,7 @@ async function main() {
       // that type's bodies through the back batch.
       if (ctx.crowd.earlyz.on) degradeFailedEarlyzFronts(ctx.crowd.types, ctx.crowd.earlyz);
       const crowdTiming = ctx.telemetry.telemetry.begin();
+      ctx.crowd.tileStream?.beginFrame();
       // The level-shadow depth texture the type rebinds (same expression the
       // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
       // unchanged between there and here — nothing renders in between).
