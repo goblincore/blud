@@ -23,12 +23,12 @@
 import type { BuildResult } from './build-body';
 import { bindRig, impulseAt, pinTips, type BoundRig } from './rig-bind';
 import {
-  applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  applyFloorContact, corpseFloor, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
 import { constrainRigBends, stepRig } from './rig';
-import { relaxRopeConstraints, type MissingLimbs } from './collapse';
+import { relaxBraces, relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
@@ -226,6 +226,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       },
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+    // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+    if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
     // A fist closed on its prop's grip (profile.prop.fistOnGrip) points along
     // the motion target motion.ts laid on the grip line, not the rest hang.
@@ -235,11 +237,14 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       ? new Set([fistTip]) : undefined;
     points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
-      points = applyFloorContact(points, f.floorY);
+      points = applyFloorContact(points, corpseFloor(f));
+      // One more brace pass after the floor moved points, then the floor again
+      // so the last word keeps the corpse out of the ground.
+      if (f.braces.length) points = applyFloorContact(relaxBraces(points, f.braces, f.integrity, 1), corpseFloor(f));
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
         // This frame's weights, or none: a caller that stops passing them must not leave last frame's face behind.
         ...(morphs || m.bound.rig.morphs ? { morphs } : {}) },
         f.collapsed ? f.floorY : undefined),

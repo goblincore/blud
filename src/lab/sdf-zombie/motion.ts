@@ -50,7 +50,7 @@ import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
+import { add, dot, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -69,9 +69,9 @@ import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
 import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
 import type { SoldierStaggerLevel } from './soldier-stagger';
-import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
+import type { BraceLimit, CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
-  COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
+  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBraces, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
@@ -145,6 +145,10 @@ export const MOTION_TUNING = {
    *  the chunk stepper's |vy| < 0.35 m/s cutoff, in per-frame units. */
   restCutoff: 0.35 / 60,
 } as const;
+
+/** The topple's chest shove at integrity 1 (m, one frame's displacement:
+ *  0.02 m at 60 Hz is a 1.2 m/s lean). Scaled by integrity. */
+const TOPPLE_SHOVE = 0.02;
 
 /** Hip-fire knobs. */
 export const FIRE = {
@@ -248,6 +252,12 @@ export interface MotionJoints {
   pelvis: Vec3;
   /** One-sided collapse joint limits, constant for the body. */
   ropes: readonly RopeLimit[];
+  /** Two-sided corpse-integrity braces (collapse.ts), constant for the body. */
+  braces: readonly BraceLimit[];
+  /** Per rig point: how much higher than the foot joint it rests on the
+   *  floor (m) — its flesh depth over the foot's. A corpse lies ON its torso,
+   *  not with every joint at ankle height. */
+  floorLift: readonly number[];
 }
 
 /**
@@ -287,7 +297,37 @@ export function makeMotionJoints(
     groundY: index.footL === undefined || index.footR === undefined ? 0 : Math.min(baseRest[index.footL]![1], baseRest[index.footR]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
+    braces: collapseBraces(names, baseRest),
+    floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
+}
+
+/** The tallest a joint's flesh may lift it off the floor (m): one big
+ *  ellipsoid (a bloated belly) must not prop the corpse up on a point. */
+const FLOOR_LIFT_CAP = 0.14;
+
+/**
+ * The flesh a joint lies on: the THINNEST-axis half-thickness of the thickest
+ * live add prim whose bulk reaches the joint (a torso ellipsoid is flattest
+ * front to back, which is how a corpse lies), less the foot joint's own, so
+ * the foot keeps resting exactly where it did. Clamped to [0, FLOOR_LIFT_CAP].
+ * (Depth of the joint INSIDE the flesh does not work: joints sit at bone ends,
+ * at the surface — the zombie's chest joint is 1 cm deep in a 12 cm chest.)
+ */
+function floorLiftFor(body: BuildResult, rest: readonly Vec3[], foot: number | undefined): number[] {
+  const girth = (q: Vec3): number => {
+    let best = 0;
+    for (const p of body.prims) {
+      if (p.op === 'sub' || p.dead) continue;
+      const ab = sub(p.b, p.a), L2 = dot(ab, ab);
+      const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
+      if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
+      best = Math.max(best, p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]));
+    }
+    return Math.min(best, FLOOR_LIFT_CAP);
+  };
+  const footGirth = foot === undefined ? 0 : girth(rest[foot]!);
+  return rest.map(q => Math.max(0, girth(q) - footGirth));
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +537,18 @@ export interface MotionFrame {
   gravity: Vec3;
   /** One-sided joint limits to relax after stepRig. Empty while standing. */
   ropes: RopeLimit[];
+  /** Corpse-integrity braces to relax after the ropes (collapse.ts
+   *  relaxBraces). Empty while standing and for the soldier's structural fall. */
+  braces: readonly BraceLimit[];
+  /** The integrity to relax them at: the profile's corpseIntegrity, else the
+   *  live CORPSE_INTEGRITY knob. */
+  integrity: number;
+  /** Per rig point floor lift over floorY (MotionJoints.floorLift); the
+   *  wiring passes it to applyFloorContact while collapsed. */
+  floorLift: readonly number[];
+  /** 0..1: how far the skull has let go of its standing look cone and lies
+   *  with the neck (rig.headFollow). Ramps in over the fall's release. */
+  headFollow: number;
   phase: CollapsePhase;
   /** True while falling/settled. */
   collapsed: boolean;
@@ -1483,6 +1535,19 @@ export function stepMotion(
     });
   }
 
+  // THE TOPPLE (corpse integrity, spec 2026-11-02 §4): a braced torso no
+  // longer folds as it lands, so with nothing to tip it, it can come straight
+  // down and balance on its pelvis. The fall's first frame leans the chest
+  // along the shot that killed it, else a direction drawn from the seed.
+  const integrity = profile.corpseIntegrity ?? CORPSE_INTEGRITY.value;
+  if (collapsed && state.collapse.phase === 'standing' && !structural && integrity > 0 && idx.chest !== undefined) {
+    const shot = sig.shot?.dirWorld;
+    const a = ((state.gait.seed * 2654435761) >>> 0) / 4294967296 * Math.PI * 2;
+    let dir: Vec3 = shot && Math.hypot(shot[0], shot[2]) > 1e-3 ? [shot[0], 0, shot[2]] : [Math.cos(a), 0, Math.sin(a)];
+    dir = normalize(dir);
+    kicks.push({ joint: 'chest', delta: scale(dir, TOPPLE_SHOVE * integrity) });
+  }
+
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state,
@@ -1546,6 +1611,10 @@ export function stepMotion(
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
+      braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
+      integrity,
+      floorLift: joints.floorLift,
+      headFollow: collapsed && !structural ? Math.min(1, collapse.state.fallAge / COLLAPSE_TUNING.fallReleaseTime) : 0,
       phase: collapse.phase,
       collapsed,
       meter: collapse.state.meter,
@@ -1578,15 +1647,24 @@ const HEM_IDLE = 0.4;
  * bounce below MOTION_TUNING.restCutoff dies outright (the chunk stepper's
  * |vy| < 0.35 kill). `groundY` should be joints.groundY - floorPad. Pure.
  */
+/** The per-point floor for a collapsed frame: floorY plus each joint's
+ *  flesh lift (MotionFrame.floorLift). Integrity 0 keeps the single plane. */
+export function corpseFloor(f: Pick<MotionFrame, 'floorY' | 'floorLift' | 'integrity'>): number | readonly number[] {
+  return f.integrity > 0 && f.floorLift.length ? f.floorLift.map(l => f.floorY + l) : f.floorY;
+}
+
 export function applyFloorContact(
   points: readonly RigPoint[],
-  groundY: number,
+  /** One plane for every point, or one height per point (a corpse's joints
+   *  rest at their flesh depth: corpseFloor). */
+  groundY: number | readonly number[],
   restitution: number = COLLAPSE_TUNING.groundRestitution,
   friction: number = COLLAPSE_TUNING.groundFriction,
 ): RigPoint[] {
-  return points.map(p => {
+  return points.map((p, i) => {
     if (p.pinned) return p;
-    if (p.pos[1] >= groundY) return p;
+    const floor = typeof groundY === 'number' ? groundY : groundY[i] ?? groundY[0]!;
+    if (p.pos[1] >= floor) return p;
     const vy = p.pos[1] - p.prev[1]; // per-frame fall displacement
     const bounce = vy < 0 ? -vy * restitution : 0;
     const still = bounce < MOTION_TUNING.restCutoff;
@@ -1594,8 +1672,8 @@ export function applyFloorContact(
     const vz = (p.pos[2] - p.prev[2]) * friction;
     return {
       pinned: false,
-      pos: [p.pos[0], groundY, p.pos[2]],
-      prev: [p.pos[0] - vx, groundY - (still ? 0 : bounce), p.pos[2] - vz],
+      pos: [p.pos[0], floor, p.pos[2]],
+      prev: [p.pos[0] - vx, floor - (still ? 0 : bounce), p.pos[2] - vz],
     };
   });
 }

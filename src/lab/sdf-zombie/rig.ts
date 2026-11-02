@@ -61,6 +61,9 @@ export interface RigState {
   bodyYaw?: number;
   /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
   headFollowsRig?: boolean;
+  /** A corpse's skull letting go of its look cone (0..1, MotionFrame.headFollow):
+   *  0 clamps it as standing, 1 lies it with the neck. headFollowsRig wins. */
+  headFollow?: number;
   /** THE JAW's gape (rad, jaw.ts), from MotionFrame.jawGape: rig-bind opens
    *  the `on jaw` prims by it. Absent = shut. An explicit scalar rather than
    *  a read of the jaw point: the pivot moves ~2.5 cm a step at a walk, and

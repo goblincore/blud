@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
-import { relaxRopeConstraints } from '../collapse';
+import { relaxBraces, relaxRopeConstraints } from '../collapse';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
@@ -50,7 +50,7 @@ import {
 } from './game-weapon';
 import {
   makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
-  applyFloorContact, MOTION_TUNING, STANDING_RIG,
+  applyFloorContact, corpseFloor, MOTION_TUNING, STANDING_RIG,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
@@ -1048,7 +1048,7 @@ export function createZombieActor(opts: {
         ...next,
         // jawGape carries over so a limb severed mid-swing does not shut the
         // bride's jaw for a frame (absent on every other body).
-        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, headFollow: bound.rig.headFollow, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -1605,6 +1605,8 @@ export function createZombieActor(opts: {
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+      // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+      if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
       // hand tip reached its grip-line target only through the soft rest pull:
@@ -1615,11 +1617,14 @@ export function createZombieActor(opts: {
         points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
       }
       if (f.collapsed) {
-        points = applyFloorContact(points, f.floorY);
+        points = applyFloorContact(points, corpseFloor(f));
+        // One more brace pass after the floor moved points, then the floor again
+        // so the last word keeps the corpse out of the ground.
+        if (f.braces.length) points = applyFloorContact(relaxBraces(points, f.braces, f.integrity, 1), corpseFloor(f));
       }
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined),
       };
       for (const kick of f.kicks) {

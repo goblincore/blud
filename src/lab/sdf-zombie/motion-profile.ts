@@ -111,6 +111,9 @@ export interface MotionProfile {
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
+  /** CORPSE INTEGRITY for this character (0..1, collapse.ts braces): how much
+   *  the falling body keeps its shape. Absent follows the live global knob. */
+  corpseIntegrity?: number;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */

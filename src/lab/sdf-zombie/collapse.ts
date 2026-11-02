@@ -268,6 +268,115 @@ const ROPE_SPEC: ReadonlyArray<{ a: GaitJointName; b: GaitJointName; factor: num
   { a: 'shoulderL', b: 'shoulderR', factor: COLLAPSE_TUNING.splay },
 ];
 
+// ---------------------------------------------------------------------------
+// CORPSE INTEGRITY (spec 2026-11-02 §4, owner: "ragdoll is good but it should
+// maintain the body integrity to some tweakable degree"). The rig has bone
+// lengths and elbow/knee stops and nothing else, so a released spine and neck
+// are free hinges: measured on the zombie, head->pelvis fell from 0.71 m to
+// 0.11 m (the head lands in the pelvis) and chest->pelvis 0.48 -> 0.20 m.
+// BRACES are two-sided distance limits between joints with no bone between
+// them, relaxed only while collapsed: the TRUNK group keeps the torso's length
+// and stops it shearing flat; the HEAD group keeps the head out of the torso
+// with room to loll. One integrity value (0..1) sets every brace's tolerance
+// around its rest distance; 0 adds nothing (the fall before braces, exactly).
+// ---------------------------------------------------------------------------
+
+export type BraceGroup = 'trunk' | 'head';
+
+/** A two-sided distance limit, in rig-point indices; `rest` from the bind pose. */
+export interface BraceLimit {
+  a: number;
+  b: number;
+  rest: number;
+  group: BraceGroup;
+}
+
+/** The live integrity knob (debug panel / seam) and the solve's pass count. */
+export const CORPSE_INTEGRITY = { value: 0.7, iterations: 4 };
+export function setCorpseIntegrity(v: number): void {
+  CORPSE_INTEGRITY.value = clamp01(v);
+}
+
+/** Fractional give either side of rest, at integrity 0 (loose) and 1 (tight).
+ *  The head's is wider: a lolled head reads dead, a folded spine reads broken. */
+export const BRACE_TOLERANCE: Readonly<Record<BraceGroup, { loose: number; tight: number }>> = {
+  trunk: { loose: 0.6, tight: 0.04 },
+  head: { loose: 0.75, tight: 0.15 },
+};
+
+export function braceTolerance(group: BraceGroup, integrity: number): number {
+  const t = BRACE_TOLERANCE[group], k = clamp01(integrity);
+  return t.loose + (t.tight - t.loose) * k;
+}
+
+const BRACE_SPEC: ReadonlyArray<{ a: GaitJointName; b: GaitJointName; group: BraceGroup }> = [
+  { a: 'chest', b: 'pelvis', group: 'trunk' },
+  { a: 'chest', b: 'hips', group: 'trunk' },
+  { a: 'shoulderL', b: 'hipL', group: 'trunk' },
+  { a: 'shoulderR', b: 'hipR', group: 'trunk' },
+  { a: 'shoulderL', b: 'hipR', group: 'trunk' },
+  { a: 'shoulderR', b: 'hipL', group: 'trunk' },
+  { a: 'shoulderL', b: 'shoulderR', group: 'trunk' },
+  { a: 'hipL', b: 'hipR', group: 'trunk' },
+  { a: 'head', b: 'chest', group: 'head' },
+  { a: 'head', b: 'pelvis', group: 'head' },
+  { a: 'head', b: 'shoulderL', group: 'head' },
+  { a: 'head', b: 'shoulderR', group: 'head' },
+];
+
+/** The body's brace set, built once at bind time beside collapseRopes. Pairs
+ *  whose joints the body lacks, or that sit on one point, are skipped. */
+export function collapseBraces(names: readonly GaitJointName[], restPose: readonly Vec3[]): BraceLimit[] {
+  const out: BraceLimit[] = [];
+  for (const spec of BRACE_SPEC) {
+    const a = names.indexOf(spec.a);
+    const b = names.indexOf(spec.b);
+    const pa = a >= 0 ? restPose[a] : undefined;
+    const pb = b >= 0 ? restPose[b] : undefined;
+    if (!pa || !pb) continue;
+    const rest = len(sub(pa, pb));
+    if (rest < 1e-4) continue;
+    out.push({ a, b, rest, group: spec.group });
+  }
+  return out;
+}
+
+/**
+ * Relax the braces: `iterations` Gauss-Seidel passes, each pulling a pair back
+ * inside [rest(1-tol), rest(1+tol)], split half/half between free ends as
+ * stepRig's constraints are. Position-only: verlet reads the correction as
+ * velocity, which is what makes a braced torso swing as one piece. Integrity
+ * <= 0 returns the input untouched (the pre-brace fall, bit for bit).
+ */
+export function relaxBraces(
+  points: readonly RigPoint[],
+  braces: readonly BraceLimit[],
+  integrity: number,
+  iterations: number = CORPSE_INTEGRITY.iterations,
+): readonly RigPoint[] {
+  if (integrity <= 0 || braces.length === 0) return points;
+  const out: RigPoint[] = points.map(p => ({ pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, prev: p.prev, pinned: p.pinned }));
+  const tol = { trunk: braceTolerance('trunk', integrity), head: braceTolerance('head', integrity) };
+  for (let it = 0; it < iterations; it++) {
+    for (const br of braces) {
+      const pa = out[br.a], pb = out[br.b];
+      if (!pa || !pb) continue;
+      const dx = pb.pos[0] - pa.pos[0], dy = pb.pos[1] - pa.pos[1], dz = pb.pos[2] - pa.pos[2];
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist < 1e-9) continue;
+      const lo = br.rest * (1 - tol[br.group]), hi = br.rest * (1 + tol[br.group]);
+      const target = dist < lo ? lo : dist > hi ? hi : dist;
+      if (target === dist) continue;
+      const wa = pa.pinned ? 0 : 1, wb = pb.pinned ? 0 : 1;
+      if (wa + wb === 0) continue;
+      const k = (dist - target) / dist / (wa + wb);
+      if (wa) pa.pos = [pa.pos[0] + dx * k, pa.pos[1] + dy * k, pa.pos[2] + dz * k];
+      if (wb) pb.pos = [pb.pos[0] - dx * k, pb.pos[1] - dy * k, pb.pos[2] - dz * k];
+    }
+  }
+  return out;
+}
+
 /**
  * Builds the body's rope set from its joint names (gait's jointNamesForBody
  * output) and the rig's rest pose. Called once at bind time; the result is

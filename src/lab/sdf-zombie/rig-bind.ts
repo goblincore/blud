@@ -665,7 +665,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // head centre, after its morph and before the gape and the head's turn. Null (no weight, weight 0) leaves the old path exactly.
   const squash = bound.head ? squashAxes(weights?.squash) : null;
   const rigid = bound.head
-    ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape, morphed, squash) : null;
+    ? headTransform(bound.head, pos, bodyYaw, headFollowOf(bound.rig), bound.rig.jawGape, morphed, squash) : null;
   // Every rib/vertebra on an axial segment uses the same rotation. Derive it
   // once per applyRig call; a cache lasting across calls would retain a stale
   // pose after Verlet, yaw changes, or a collapse. Check restDir too because
@@ -853,8 +853,26 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  * rest direction to the clamped solve — the residual only ever expresses the
  * in-cone look-at tilt it can see.
  */
+/** How far the skull follows the rig rather than its standing look cone:
+ *  1 for a fallen soldier (headFollowsRig), else the corpse's ramp. */
+function headFollowOf(rig: RigState): number {
+  return rig.headFollowsRig ? 1 : Math.min(1, Math.max(0, rig.headFollow ?? 0));
+}
+
+/** The skull direction: clamped to the look cone at 0, the rig's own at 1,
+ *  blended between (a corpse's head lets go of the cone as it falls instead
+ *  of snapping, and the painted face rides the same blend). */
+function followDir(dir: Vec3, rest: Vec3, follow: number): Vec3 {
+  if (follow >= 1) return dir;
+  const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  if (follow <= 0) return clamped;
+  const m = add(scale3(clamped, 1 - follow), scale3(dir, follow));
+  return len(m) < 1e-9 ? dir : normalize(m);
+}
+const scale3 = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
+
 function headTransform(
-  h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false, jawGape = 0,
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = 0, jawGape = 0,
   morphed: ReadonlyMap<number, MorphResult> | null = null, squash: Vec3 | null = null,
 ): {
   origin: Vec3;
@@ -900,14 +918,14 @@ const EMPTY_SET: ReadonlySet<number> = new Set();
 /** The rigid head's pose this frame: the unit's origin, its clamped rotation and the clamped gape (headTransform's first half;
  *  kitFrames poses the kit's jaw bone from the SAME numbers). */
 function headPose(
-  h: HeadRigid, pos: readonly RigPoint[], bodyYaw: number, followRig: boolean, jawGape: number,
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw: number, followRig: number, jawGape: number,
 ): { origin: Vec3; q: Quat; gape: number } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
   const dir = normalize(sub(tip, pivot));
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = followRig ? dir : clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const clamped = followDir(dir, rest, followRig);
   // qMul(a, b) applies b first: the body turn, then the in-cone residual.
   const q = segmentQuat(h.restDir, clamped, bodyYaw);
 
@@ -951,7 +969,7 @@ export function kitFrames(body: BuildResult, bound: BoundRig, bodyYaw: number): 
   const frames = boneFrames(body, bound, bodyYaw);
   const h = bound.head, jawBone = body.bones.get('jaw'), skull = body.bones.get('skull');
   if (!h?.jaw || !jawBone || !skull || !frames.has('jaw')) return frames;
-  const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, bound.rig.headFollowsRig ?? false, bound.rig.jawGape ?? 0);
+  const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, headFollowOf(bound.rig), bound.rig.jawGape ?? 0);
   const s = squashAxes(bound.rig.morphs?.squash);
   let hinge = h.jaw.rest;
   let shift: Vec3 = [0, 0, 0];
@@ -988,8 +1006,7 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   // rotation the skull masses were posed with): explicit body yaw first,
   // then the in-cone residual off the TURNED rest direction.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = bound.rig.headFollowsRig ? normalize(sub(tip, pivot)) : clampDir(
-    normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const clamped = followDir(normalize(sub(tip, pivot)), rest, headFollowOf(bound.rig));
   return segmentQuat(h.restDir, clamped, bodyYaw);
 }
 
