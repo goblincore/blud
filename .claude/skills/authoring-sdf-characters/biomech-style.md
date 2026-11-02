@@ -711,3 +711,15 @@ throws fireballs. What it taught:
   `reachSwing` against the legs, scaled by the walk's blend so standing still holds them; the throw's and claw's arcs
   add on top unchanged. The throw has its own beats (`THROW_TUNING`: a 42% cock, a 10% whip, a follow-through down and
   across to 70%, `SWING_ARCS.throw.followPitch/Yaw`).
+- **Kit teeth need bone under them.** The kit's teeth root in the hide's open mouth, so a skull with a shut jaw leaves
+  them floating once the face is shot off (owner: "the skull and the teeth dont really connect"). Measure, don't eyeball:
+  fit the skull, read the kit's tooth roots out of the glTF, and take the distance from each root to the nearest bone,
+  and from each bone vertex to the intact hide (`sdBody`), together. A forward pull that seats the teeth can push the
+  snout's bridge through the hide, so pull only the tooth row. The demon skull's jaw is short and set back: it is cut
+  free along its border (shared vertices stretched into streaks across the gape), swung open, thrust forward and
+  narrowed in `build_imp_skull.py` (`JAW_OPEN`, `JAW_THRUST`, `JAW_WIDTH`, `SNOUT_ROW`). Anything that grows the
+  asset's box moves the whole fit, so solve `IMP_FIT` for the old matrix and the cranium stays put.
+- **A hose sheds by the bone it rides.** Kit pieces leave with the limb their island is skinned to (kit-damage.ts
+  `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
+  the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds
+  with the upper arm), the inner one stays on the chest. Pinned by `characters/imp-kit.test.ts`.

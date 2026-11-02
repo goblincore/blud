@@ -76,13 +76,19 @@ def hose(name, pts, kit, port_end=True, port_start=False):
 
 
 if 'chest' in PARTS:
-    drop(['spine|conduitL', 'spine|conduitR']); clear_work()
+    drop(['spine|conduitL', 'spine|conduitR', 'clavicle.l|conduit', 'clavicle.r|conduit']); clear_work()
     on = lambda x, y, off: (lambda pn: pn[0] + pn[1] * off)(skin('front', 'torso', x, y - LOWER))
     # From the heart's left flank (its semi-axis across is 0.042: make_torso.py) out over the ribs and up to the armpit's
     # front, sunk part-way into the skin.
     ctrl = [on(0.038, 1.326, 0.002), on(0.075, 1.330, 0.003), on(0.110, 1.368, 0.003), on(0.138, 1.405, 0.004),
             on(0.156, 1.445, 0.006)]
-    hose('conduitL', catmull(ctrl, 10), 'spine|conduitL')
+    pts = catmull(ctrl, 10)
+    # In two at a coupling over the ribs (2026-11-02, owner: a shot-off arm left this hose behind, running to a port on
+    # nothing). The outer run rides the clavicle, so it sheds with the arm (kit-damage.ts: the clavicle's pieces go with
+    # the upper arm); the inner one stays on the chest, a torn stub at its coupling. The whole hose on the clavicle
+    # would slide over the ribs as the shoulder bobs.
+    hose('conduitL', pts[:21], 'spine|conduitL')
+    hose('conduit', pts[20:], 'clavicle.l|conduit', port_end=True, port_start=False)
 
 if 'upper' in PARTS:
     drop(['upperArm.l|conduit', 'upperArm.r|conduit'])
