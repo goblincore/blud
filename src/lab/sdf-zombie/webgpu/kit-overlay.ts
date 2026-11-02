@@ -474,7 +474,7 @@ export async function loadKit(
     if (opts.only) keepKitMaterials(parsed, opts.only);
     return parsed;
   };
-  const kitScene = kitShareOn(location.search)
+  const kitScene = kitShareOn(typeof location === 'undefined' ? '' : location.search)
     ? cloneKitScene(await kitTemplate(kitTemplateKey(url, opts.only), parse))
     : await parse();
   const kitScale = opts.scale ?? 1;
