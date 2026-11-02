@@ -130,7 +130,7 @@ def test_a_file_written_at_one_scale_lands_on_the_same_spots_at_another(tmp_path
     ({"id": "o-v", "kind": "teratoma", "at": [40, 0], "yaw": 0}, "(40.0, 0.0) is in no sector (the void)"),
     ({"id": "o-w", "kind": "teratoma", "at": [-1.9, 0], "yaw": 0}, "0.10 m from a wall of sector 0"),
     ({"id": "s1", "kind": "zombie", "at": [0, 0], "yaw": 0}, "id 's1' is already used"),
-    ({"id": "o-k", "kind": "imp", "at": [0, 0], "yaw": 0}, "kind 'imp' is not one of"),
+    ({"id": "o-k", "kind": "cacodemon", "at": [0, 0], "yaw": 0}, "kind 'cacodemon' is not one of"),
     ({"id": "o-y", "kind": "zombie", "at": [0, 0]}, "exactly one of \"yaw\" (radians) or \"face\""),
     ({"id": "o-s", "kind": "zombie", "at": [0, 0], "yaw": 0, "sector": 1}, "is in sector(s) [0], not sector 1"),
     ({"id": "o-a", "kind": "zombie", "at": [0], "yaw": 0}, ".at: must be [x, z]"),

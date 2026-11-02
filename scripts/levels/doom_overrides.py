@@ -41,7 +41,7 @@ from pathlib import Path
 # Mirrors of src/lab/sdf-zombie/webgpu/level-def.ts SPAWN_KINDS and sector-def.ts SECTOR_SPECIALS /
 # GLOW_KINDS / SECTOR_BODY_RADIUS_M / SECTOR_STEP_M / SECTOR_HEADROOM_M (test_doom_overrides.py
 # checks the TypeScript still says the same).
-SPAWN_KINDS = ("zombie", "soldier", "cultist", "juggernaut", "warbull", "deadeye", "butcher", "flayer", "teratoma")
+SPAWN_KINDS = ("zombie", "soldier", "cultist", "juggernaut", "warbull", "deadeye", "butcher", "flayer", "teratoma", "imp")
 SECTOR_SPECIALS = ("none", "hurt", "flicker", "pulse", "strobe")
 GLOW_KINDS = ("nukage", "lava", "acid")
 BODY_RADIUS_M = 0.34

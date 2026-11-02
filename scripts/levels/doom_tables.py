@@ -71,8 +71,10 @@ def sector_special(kind: int) -> tuple[str, float]:
 
 # Doom thing types -> ours (spec 2026-10-24 §9). Zombiemen become a biomech variant (§9.1).
 ZOMBIEMAN = 3004
-THING_SPAWNS = {9: "soldier", 3001: "zombie"}            # shotgun guy, imp (for now)
+THING_SPAWNS = {9: "soldier"}                            # shotgun guy
 ZOMBIEMAN_VARIANTS = ("deadeye", "butcher", "flayer")
+IMP = 3001                                               # imps become an imp or a zombie
+IMP_VARIANTS = ("imp", "zombie")
 THING_PICKUPS = {
     2001: "shotgun",
     2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets
