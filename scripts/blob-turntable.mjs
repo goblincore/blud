@@ -328,6 +328,9 @@ const PITCH = Number(process.env.BLOB_PITCH ?? 0.12);
 const DIST = Number(process.env.BLOB_DIST ?? 2.4);
 // BLOB_TARGET_Y orbits at a given height (e.g. the head's, for a face close-up).
 const TARGET_Y = process.env.BLOB_TARGET_Y === undefined ? 'undefined' : Number(process.env.BLOB_TARGET_Y);
+// BLOB_TARGET_X / BLOB_TARGET_Z move the orbit centre on the floor (rest metres), to frame a part far from the origin.
+const TARGET_X = process.env.BLOB_TARGET_X === undefined ? 'undefined' : Number(process.env.BLOB_TARGET_X);
+const TARGET_Z = process.env.BLOB_TARGET_Z === undefined ? 'undefined' : Number(process.env.BLOB_TARGET_Z);
 const MIN_STD = 5; // "a rendered scene, not a flat surface" (verify-clip-smoke.mjs precedent)
 const frameStats = [];
 
@@ -443,6 +446,9 @@ const EXPR_YAW = Number(process.env.BLOB_YAW ?? 0);
 // pose after firstFrame + i*step steps at 1/60 (holdPose('walk', n), deterministic per frame). For gaits whose read is
 // motion rather than a pose: the gibbet's swinging sac (2026-10-22), e.g. BLOB_WALK_SWEEP=120:4 with 12 frames.
 const WALK_SWEEP = process.env.BLOB_WALK_SWEEP ? process.env.BLOB_WALK_SWEEP.split(':').map(Number) : null;
+// BLOB_WALK_TRAVEL=1 walks the sweep straight ahead instead of on the treadmill, the camera following: a gait that
+// PLANTS its paws (the 'foreleg' style) only shows the haul when the root actually travels past them.
+const WALK_TRAVEL = process.env.BLOB_WALK_TRAVEL === '1';
 // BLOB_SWING_SWEEP=<variant>:<p0>:<p1> shoots a melee SWING as an animation at a fixed yaw (BLOB_YAW): frame i holds
 // the variant at phase p0..p1 on a standing body (holdPose('aim', 40, swing)), e.g. BLOB_SWING_SWEEP=stab:0:1.
 const SWING_SWEEP = process.env.BLOB_SWING_SWEEP
@@ -456,7 +462,7 @@ for (let i = 0; i < FRAMES; i++) {
     await sleep(300);
   }
   if (WALK_SWEEP) {
-    await evaluate(`window.__sdfLab.holdPose('walk', ${WALK_SWEEP[0] + i * WALK_SWEEP[1]})`);
+    await evaluate(`window.__sdfLab.holdPose('walk', ${WALK_SWEEP[0] + i * WALK_SWEEP[1]}, undefined, ${WALK_TRAVEL})`);
     await sleep(300);
   }
   if (EXPR_SWEEP) {
@@ -465,7 +471,7 @@ for (let i = 0; i < FRAMES; i++) {
     const [exprName] = process.env.BLOB_EXPR.split(':');
     await evaluate(`window.__sdfLab.holdExpression(${JSON.stringify(exprName)}, ${t}, 0)`);
   }
-  await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
+  await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}, ${TARGET_Y}, ${TARGET_X}, ${TARGET_Z}); return true; })()`);
   if (WIND_SWEEP) {
     await evaluate(`(() => { window.__sdfLab.setWindOffset(${WIND[0] * i}, ${WIND[1] * i}, ${WIND[2] * i}); return true; })()`);
   }

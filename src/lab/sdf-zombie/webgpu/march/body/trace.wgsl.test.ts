@@ -52,7 +52,7 @@ describe('ported features reach the entry point', () => {
     // carries anything: y/z/w were the parked melt spike's lanes and are
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(max(gloss, metal), cloth)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
     // The hit's anchor is taken at pS, the hit piece's un-warped point (the head split): p itself off a turned half.
     expect(MARCH_BODY).toContain('let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);');
     expect(MARCH_BODY).not.toContain('restPoint(p, data, hitBest');

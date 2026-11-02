@@ -221,6 +221,23 @@ export const FIELD_MESH_LAYER = 8;
  */
 export const REFINE_LAYER = 9;
 
+/**
+ * The layer the KIT OCCLUDER twins live on (kit-occluder.ts): a distance-writing,
+ * skinned twin of every opaque cloth/boot/leather kit mesh, rasterised by pass 1c
+ * into the same occT target as the inner hull.
+ *
+ * Cloth sits OUTSIDE the flesh, the opposite of the hull, and the bound is still
+ * sound for the march's purpose: a ray that reaches the cloth would be hidden by
+ * the real cloth's depth anyway, and flesh standing out in front of the cloth is hit
+ * before tMax and still shows (all but the last KIT_OCCLUDER_INSET of it: the twin
+ * writes its distance that far in front of the cloth, kit-occluder.ts says why). That holds across bodies too (body B behind body
+ * A's trousers is hidden by them; B in front of them is hit first).
+ *
+ * Its own bit rather than OCCLUDER_LAYER so the two halves switch separately:
+ * the hull ships off (its CPU rebuild is gated by occluderEnabled), the cloth on.
+ */
+export const KIT_OCCLUDER_LAYER = 11;
+
 /** Per-pass ceiling for precompilePasses (see the bounded race there). */
 const PRECOMPILE_PASS_TIMEOUT_MS = 8000;
 
@@ -1253,8 +1270,13 @@ export interface SdfLayer {
   readonly shellExit: OccluderSource;
   setShellEnabled(on: boolean): void;
   readonly shellEnabled: boolean;
+  /** The INNER-HULL half of pass 1c (and, in game-tick, its CPU rebuild). */
   setOccluderEnabled(on: boolean): void;
   readonly occluderEnabled: boolean;
+  /** The KIT CLOTH half of pass 1c (KIT_OCCLUDER_LAYER). Either half on runs the
+   *  pass and the march's occT bound; both off is bit-identical to no pre-pass. */
+  setKitOccluderEnabled(on: boolean): void;
+  readonly kitOccluderEnabled: boolean;
   /** C2 half-rate: march every OTHER frame, composite the held march in
    *  between (mode 0 = raw hold, 1 = per-pixel depth reproject). Default
    *  OFF; off is the ship behaviour and must stay bit-identical to it. */
@@ -2024,6 +2046,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     magFilter: THREE.NearestFilter,
   });
   const occluderUniforms = { enabled: uniform(0) };
+  // Pass 1c's two halves. The uniform the march reads is their OR; each half is
+  // a camera layer, so turning one off drops its draws without a pipeline swap.
+  let hullOccluderOn = false;
+  let kitOccluderOn = false;
+  const syncOccluderUniform = () => { occluderUniforms.enabled.value = hullOccluderOn || kitOccluderOn ? 1 : 0; };
+  const setOccluderLayers = (layers: THREE.Layers) => {
+    layers.disableAll();
+    if (hullOccluderOn) layers.enable(OCCLUDER_LAYER);
+    if (kitOccluderOn) layers.enable(KIT_OCCLUDER_LAYER);
+  };
 
   // Outer-hull entry/exit. Same float-distance encoding as the occluder, and
   // the same "cleared to zero means nothing here" contract.
@@ -2479,7 +2511,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
           await compile('cone', scene, camera, coneCoarse);
         }
         if (occluderUniforms.enabled.value > 0.5) {
-          camera.layers.set(OCCLUDER_LAYER);
+          setOccluderLayers(camera.layers);
           await compile('occluder', scene, camera, occluder);
         }
         if (shellUniforms.enabled.value > 0.5) {
@@ -2716,7 +2748,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // zero-length ray.
       if (occluderUniforms.enabled.value > 0.5) {
         setPassLabel('sdf:occluder');
-        camera.layers.set(OCCLUDER_LAYER);
+        setOccluderLayers(camera.layers);
         renderer.setRenderTarget(occluder);
         // BLACK, explicitly, and restored afterwards. The renderer's clear
         // colour is the scene background (0x1a1116), so without this the
@@ -3386,8 +3418,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get halfRate() { return halfRate; },
     setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },
     get halfRateMode() { return halfRateMode; },
-    setOccluderEnabled(on) { occluderUniforms.enabled.value = on ? 1 : 0; },
-    get occluderEnabled() { return occluderUniforms.enabled.value > 0.5; },
+    setOccluderEnabled(on) { hullOccluderOn = on; syncOccluderUniform(); },
+    get occluderEnabled() { return hullOccluderOn; },
+    setKitOccluderEnabled(on) { kitOccluderOn = on; syncOccluderUniform(); },
+    get kitOccluderEnabled() { return kitOccluderOn; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },

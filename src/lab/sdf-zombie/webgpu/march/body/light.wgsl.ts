@@ -54,6 +54,8 @@ ${LIGHT_LIST_BLOCK}
   // The dominant list light wraps its view-biased Lk by its profile floor; off, the old expression.
   var diff = max(dot(n, L), 0.0);
   if (lightListCfg.x > 0.0) { diff = max((dot(n, Lk) + listDomFloor) / (1.0 + listDomFloor), 0.0); }
+  // CLOTH: a soft, wrapped terminator (fabric scatters light round the fold) instead of skin's hard one.
+  if (cloth > 0.0) { diff = mix(diff, max((select(dot(n, L), dot(n, Lk), lightListCfg.x > 0.0) + 0.25) / 1.25, 0.0), cloth); }
 
   // wet, specPow and glow now live ABOVE the flashlight in
   // MARCH_BODY_SURFACE_PREP (the task-2 section split — see its header).

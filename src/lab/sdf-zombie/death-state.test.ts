@@ -22,8 +22,12 @@ describe('when= life-state prims', () => {
       const b = build(src);
       const alive = b.prims.filter(p => p.when === 'alive');
       const dead = b.prims.filter(p => p.when === 'dead');
-      expect(alive.length).toBe(2);
-      expect(alive.every(p => p.limb === 'head' && !p.dead)).toBe(true);
+      // The hood sheet and its peak on the head, and the drape from the hood's back onto the shoulders (a torso
+      // prim, so it stretches as the head turns): all three drop with the hood.
+      expect(alive.length).toBe(3);
+      expect(alive.every(p => !p.dead)).toBe(true);
+      expect(alive.filter(p => p.limb === 'head').length).toBe(2);
+      expect(alive.filter(p => p.limb === 'torso' && p.shell).length).toBe(1);
       expect(dead.length).toBe(2);
       expect(dead.every(p => p.limb === 'torso' && p.dead)).toBe(true);
       expect(b.errors).toEqual([]);

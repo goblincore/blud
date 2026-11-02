@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { qFromAxisAngle, qRotate } from '../vec';
+import { bendCtrl, qFromAxisAngle, qRotate } from '../vec';
 import type { Primitive } from '../types';
-import { sdPrimitive, smax, smin } from '../validate';
+import { sdPrimitive, sdShellWrap, sminChamfer, smax, smin } from '../validate';
 import {
   capsuleGradient,
+  chamferMinGradient,
+  bentConeGradient,
+  boxGradient,
+  roundConeGradient,
+  type BentInput,
+  type BoxInput,
+  shellGradient,
+  type ConeInput,
+  type ShellInput,
   detailGradient,
   finiteGradient,
   smoothMaxGradient,
@@ -293,5 +302,189 @@ describe('the reason codes a coverage reader meets', () => {
     expect(ngCoverageClass(NaN, 0)).toBe('skip');
     expect(ngCoverageClass(0, -1)).toBe('skip');
     expect(ngCoverageClass(NG_REASON_SPLIT, -1)).toBe('skip');
+  });
+});
+
+describe('roundConeGradient', () => {
+  const coneScalar = (p: V3, c: ConeInput): number => sdPrimitive(p, {
+    a: c.a, b: c.b, radius: c.r, radiusB: c.r2, scale: c.scale, blendK: 0, limb: 'torso', cluster: 0,
+  });
+  // The zombie's foot bar (r 0.052 -> 0.046, wide 1.15), and a sharper anisotropic horn down to a point.
+  const cones: readonly ConeInput[] = [
+    { a: [0.1, 0.08, 0.02], b: [0.12, 0.05, 0.2], r: 0.052, r2: 0.046, scale: [1.15, 1, 1] },
+    { a: [-0.2, 0.3, 0.1], b: [0.15, 0.55, -0.05], r: 0.07, r2: 0, scale: [1.3, 0.8, 1.1] },
+  ];
+  // Points in all three of coneCap's regions: past b, behind a, and beside the axis.
+  const offsets: readonly V3[] = [[0.02, 0.01, 0.31], [0.05, -0.04, -0.12], [0.11, 0.02, 0.09], [-0.09, 0.07, 0.05]];
+
+  it('matches the production scalar and its central derivative in every region', () => {
+    for (const c of cones) {
+      for (const o of offsets) {
+        const p: V3 = [c.a[0] + o[0], c.a[1] + o[1], c.a[2] + o[2]];
+        const x = roundConeGradient(p, c);
+        expect(x.reason).toBe('ok');
+        expect(x.d).toBeCloseTo(coneScalar(p, c), 12);
+        expectV3Close(x.g, finiteGradient(q => coneScalar(q, c), p, 1e-6), 6);
+      }
+    }
+  });
+
+  it('reports a point on the axis as degenerate', () => {
+    const c = cones[0]!;
+    const mid: V3 = [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2, (c.a[2] + c.b[2]) / 2];
+    expect(roundConeGradient(mid, { ...c, scale: [1, 1, 1] }).reason).toBe('degenerate');
+  });
+});
+
+describe('shellGradient', () => {
+  const tube = { a: [0, 0, 0], b: [0, -0.4, 0.02], r: 0.07, scale: [1, 1, 1] } as const;
+  const skirt: ShellInput = {
+    thickness: 0.006, clipNormal: [0, -1, 0], clipOffset: 0.38, rim: 0.004,
+    warpAmp: 0.008, warpFreq: [40, 0, 40], warpDrift: [0.03, 0, -0.01], bodyAnchor: [0.2, 0.7, -0.1],
+  };
+  const scalar = (p: V3, s: ShellInput): number => sdShellWrap(
+    capsuleGradient(p, tube).d, p, s.thickness, s.clipNormal, s.clipOffset, s.rim,
+    s.warpAmp, s.warpFreq, s.warpDrift, s.bodyAnchor, s.ruffle);
+
+  it.each([
+    ['outside the sheet', [0.081, -0.2, 0.01]],
+    ['inside the body, under the sheet', [0.055, -0.15, -0.02]],
+    ['across the wrap', [-0.02, -0.1, 0.09]],
+  ] as const)('matches sdShellWrap and its derivative %s', (_name, p) => {
+    for (const s of [skirt, { ...skirt, warpAmp: 0 }]) {
+      const x = shellGradient(capsuleGradient(p, tube), p, s);
+      expect(x.reason).toBe('ok');
+      expect(x.d).toBeCloseTo(scalar(p, s), 12);
+      expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+    }
+  });
+
+  it('differentiates the rounded rim at the hem', () => {
+    // Both the sheet and the plane are 10 mm inside, within the 20 mm rim: the rounded corner's quarter circle.
+    const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02 };
+    const p: V3 = [0.074, -0.37, 0.0185];
+    const x = shellGradient(capsuleGradient(p, tube), p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(scalar(p, s), 12);
+    expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it('the rounded corner meets each face smoothly, and rounds the edge rather than grooving it', () => {
+    // Just past the corner region on the sheet's side (plane + rim slightly negative): the face, with no kink flagged.
+    const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02 };
+    const p: V3 = [0.074, -0.355, 0.0185];
+    const x = shellGradient(capsuleGradient(p, tube), p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(scalar(p, s), 12);
+    expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it.each([
+    ['past the ragged edge', [0.074, -0.40, 0.0185]],
+    ['in its rounded corner', [0.074, -0.37, 0.0185]],
+  ] as const)('differentiates the ruffled cut %s', (_name, p) => {
+    // ruffle= (the cultist's hood): the clip plane wanders 0..ruffle into the sheet on the warp lattice.
+    const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02, ruffle: 0.03 };
+    const x = shellGradient(capsuleGradient(p, tube), p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(scalar(p, s), 12);
+    expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it('a ruffle only cuts: nothing outside the plain sheet is inside the ruffled one', () => {
+    let seed = 7;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 2000; i++) {
+      const p: V3 = [rnd() * 0.2 - 0.1, -rnd() * 0.5, rnd() * 0.2 - 0.1];
+      if (scalar(p, skirt) > 0) expect(scalar(p, { ...skirt, ruffle: 0.04 })).toBeGreaterThan(0);
+    }
+  });
+
+  it('refuses to certify a stencil that straddles the crease or the clip edge', () => {
+    const mid: V3 = [0.07, -0.2, 0];
+    expect(shellGradient(capsuleGradient(mid, tube), mid, { ...skirt, warpAmp: 0 }).reason).toBe('hard-boundary');
+    const edge: V3 = [0.076, -0.38, 0];
+    expect(shellGradient(capsuleGradient(edge, tube), edge, { ...skirt, warpAmp: 0, rim: 0 }).reason).toBe('hard-boundary');
+  });
+});
+
+describe('chamferMinGradient', () => {
+  const plane = (n: V3, o: number): ((p: V3) => Dg) => p => ({ d: n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - o, g: n, reason: 'ok' });
+  const fa = plane([1, 0, 0], 0);
+  const fb = plane([0, Math.SQRT1_2, Math.SQRT1_2], 0.01);
+  const k = 0.02;
+
+  it.each([
+    ['the bevel', [0.03, 0.04, 0.0]],
+    ['face a', [-0.2, 0.3, 0.1]],
+    ['face b', [0.4, -0.3, 0.05]],
+  ] as const)('matches sminChamfer and its derivative on %s', (_name, p) => {
+    const x = chamferMinGradient(fa(p), fb(p), k);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(sminChamfer(fa(p).d, fb(p).d, k), 12);
+    expectV3Close(x.g, finiteGradient(q => sminChamfer(fa(q).d, fb(q).d, k), p, 1e-6), 6);
+  });
+
+  it('refuses to certify a stencil on the bevel edge', () => {
+    // On the bevel's edge with face a: a = (a - K + b) / sqrt 2.
+    const b = 0.05;
+    const a = (b - 4 * k) / (Math.SQRT2 - 1);
+    const x = chamferMinGradient({ d: a, g: [1, 0, 0], reason: 'ok' }, { d: b, g: [0, 1, 0], reason: 'ok' }, k);
+    expect(x.reason).toBe('hard-boundary');
+  });
+});
+
+describe('bentConeGradient', () => {
+  const bent = (a: V3, b: V3, bend: V3, r: number, r2: number, scale: V3): { s: BentInput; prim: Primitive } => ({
+    s: { a, b, c: bendCtrl(a, b, bend) as V3, r, r2, scale },
+    prim: { a, b, bend, radius: r, radiusB: r2, scale, blendK: 0, limb: 'torso', cluster: 0 },
+  });
+  // A soldier-ish bent forearm (tapered, anisotropic) and a strong untapered arc.
+  const arm = bent([0, 0, 0], [0.02, -0.4, 0.05], [0.08, 0, 0.03], 0.05, 0.04, [1.1, 1, 0.95]);
+  const arc = bent([-0.2, 0, 0], [0.2, 0, 0], [0, 0.3, 0], 0.03, 0.03, [1, 1, 1]);
+
+  it.each([
+    ['the outer side', arm, [0.14, -0.2, 0.06]],
+    ['the inner side', arm, [0.0, -0.2, 0.0]],
+    ['past b', arm, [0.03, -0.48, 0.07]],
+    ['behind a', arm, [-0.01, 0.07, 0.0]],
+    ['above the arc', arc, [0.05, 0.22, 0.02]],
+  ] as const)('matches the production scalar and its central derivative on %s', (_name, c, p) => {
+    const x = bentConeGradient(p, c.s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(sdPrimitive(p, c.prim), 9);
+    expectV3Close(x.g, finiteGradient(q => sdPrimitive(q, c.prim), p, 1e-5), 5);
+  });
+
+  it('refuses to certify the medial crease inside a bend', () => {
+    // Below the arc's centre of curvature on its symmetry plane, two arms of the curve are equally near.
+    expect(bentConeGradient([0, -0.01, 0], arc.s).reason).toBe('hard-boundary');
+  });
+});
+
+describe('boxGradient', () => {
+  // A machined plate swept along a diagonal (so the projector matters), anisotropic.
+  const s: BoxInput = { a: [0, 0, 0], b: [0.05, 0.3, 0.02], r: 0.06, round: 0.2, scale: [1.1, 1, 0.9] };
+  const prim: Primitive = { a: s.a, b: s.b, radius: s.r, scale: s.scale, box: { round: s.round }, blendK: 0, limb: 'torso', cluster: 0 };
+
+  it.each([
+    ['a face mid-sweep', [0.1, 0.15, 0.01]],
+    ['a rounded edge', [0.095, 0.12, 0.07]],
+    ['past b', [0.06, 0.4, 0.03]],
+    ['behind a', [0.01, -0.09, -0.01]],
+    ['inside, near a face', [0.075, 0.16, 0.0]],
+  ] as const)('matches the production scalar and its central derivative on %s', (_name, p) => {
+    const x = boxGradient(p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(sdPrimitive(p, prim), 12);
+    expectV3Close(x.g, finiteGradient(q => sdPrimitive(q, prim), p, 1e-6), 6);
+  });
+
+  it('refuses to certify two tied faces and the plane at either end', () => {
+    const straight: BoxInput = { ...s, b: [0, 0.3, 0], scale: [1, 1, 1] };
+    expect(boxGradient([0.03, 0.15, 0.03], straight).reason).toBe('hard-boundary');
+    // On the swept box's end plane at b, beside it: the box's x face has an axial part along the diagonal.
+    const atB: V3 = [0.05 + 0.069, 0.3 - 0.0115, 0.02];
+    expect(boxGradient(atB, { ...s, scale: [1, 1, 1] }).reason).toBe('hard-boundary');
   });
 });

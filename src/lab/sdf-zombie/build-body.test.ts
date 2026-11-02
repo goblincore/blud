@@ -7,6 +7,7 @@ import { CLUSTER_ORDER } from './types';
 import { MAX_PRIMS } from './validate';
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
+import { withDetail } from './body-normal-bake/regions';
 
 describe('buildBody with the shipped zombie', () => {
   const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -159,4 +160,28 @@ describe('bone derivation (wound pass r2)', () => {
       expect(bone.radius).toBeLessThan(src!.radius);
     }
   });
+});
+
+// BUILD COST WITH A .detail FILE (2026-10-26). A body-normal bake folds a
+// `.detail` file's hundreds to thousands of relief prims into the body, and
+// buildBody's bone containment once ran the full field fold per sample: zombie
+// plus 1,258 detail prims took minutes, 200 took 13 s. validate.ts's fleshAbove
+// settles inside samples from an upper bound instead. Locally (darwin/arm64,
+// vitest) every shipped detail body, up to 3,836 prims, builds in 30-110 ms;
+// the bound leaves CI headroom and still fails the old cost by orders.
+describe('buildBody with a .detail file folded in', () => {
+  const BLOBS = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+  const DETAILS = import.meta.glob('./characters/*.detail', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+  for (const [path, detail] of Object.entries(DETAILS)) {
+    const name = path.split('/').pop()!.replace('.detail', '');
+    it(`${name} builds in well under a second`, () => {
+      const doc = parseBlob(withDetail(BLOBS[`./characters/${name}.blob`]!, detail, name));
+      const def = compileBlob(doc, compileFace(doc));
+      const t0 = performance.now();
+      const built = buildBody(def);
+      const ms = performance.now() - t0;
+      expect(built.prims.length).toBeGreaterThan(900);
+      expect(ms).toBeLessThan(1000);
+    });
+  }
 });

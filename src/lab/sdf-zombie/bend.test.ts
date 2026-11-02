@@ -33,17 +33,27 @@ function bruteForce(p: Vec3, pr: Primitive, steps = 8192): number {
   const c = pr.bend === undefined ? undefined
     : [(a[0] + b[0]) / 2 + pr.bend[0], (a[1] + b[1]) / 2 + pr.bend[1], (a[2] + b[2]) / 2 + pr.bend[2]];
   if (c === undefined) throw new Error('bruteForce needs a bent prim');
-  let best = Infinity;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
+  const g = (t: number): number => {
     const q: Vec3 = [
       (1 - t) * (1 - t) * a[0]! + 2 * (1 - t) * t * c[0]! + t * t * b[0]!,
       (1 - t) * (1 - t) * a[1]! + 2 * (1 - t) * t * c[1]! + t * t * b[1]!,
       (1 - t) * (1 - t) * a[2]! + 2 * (1 - t) * t * c[2]! + t * t * b[2]!,
     ];
-    best = Math.min(best, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) - (r1 + (r2 - r1) * t));
+    return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) - (r1 + (r2 - r1) * t);
+  };
+  let best = Infinity, bestT = 0;
+  for (let i = 0; i <= steps; i++) {
+    const v = g(i / steps);
+    if (v < best) { best = v; bestT = i / steps; }
   }
-  return best;
+  // Golden-section polish within one sample of the best: the sweep alone sits ABOVE the continuous minimum by up to
+  // a sample's worth, and sdBentCone's Newton pass now finds the continuous one (2026-10-24).
+  let lo = Math.max(0, bestT - 1 / steps), hi = Math.min(1, bestT + 1 / steps);
+  for (let i = 0; i < 80; i++) {
+    const m1 = lo + (hi - lo) * 0.381966, m2 = hi - (hi - lo) * 0.381966;
+    if (g(m1) < g(m2)) hi = m2; else lo = m1;
+  }
+  return Math.min(best, g((lo + hi) / 2));
 }
 
 describe('bent primitive', () => {
@@ -333,6 +343,24 @@ function sdBentWgsl(p: Vec3, i: number, tex: Float32Array): number {
       if (v < best) { best = v; bestT = t; }
     }
   }
+  // NEWTON POLISH: a step on the squared distance, then one on G, each kept only if it lowers G.
+  const P = (t: number): Vec3 => [a[0] + e1[0] * t + cb[0] * t * t, a[1] + e1[1] * t + cb[1] * t * t, a[2] + e1[2] * t + cb[2] * t * t];
+  const dPAt = (t: number): Vec3 => [e1[0] + 2 * cb[0] * t, e1[1] + 2 * cb[1] * t, e1[2] + 2 * cb[2] * t];
+  const G = (t: number): number => { const pn = P(t); return Math.hypot(q[0] - pn[0], q[1] - pn[1], q[2] - pn[2]) - (A[3]! + (r2 - A[3]!) * t); };
+  {
+    const D = sub(q, P(bestT)), dP = dPAt(bestT);
+    const f2 = dot(dP, dP) - 2 * dot(D, cb);
+    const t = f2 > 0 ? Math.max(0, Math.min(1, bestT + dot(D, dP) / f2)) : bestT;
+    const v = G(t);
+    if (v < best) { best = v; bestT = t; }
+  }
+  {
+    const D = sub(q, P(bestT)), dP = dPAt(bestT);
+    const L = Math.max(Math.hypot(...D), 1e-9), dDp = dot(D, dP);
+    const g2 = (dot(dP, dP) - 2 * dot(D, cb)) / L - dDp * dDp / (L * L * L);
+    const t = g2 > 0 ? Math.max(0, Math.min(1, bestT - (-dDp / L - (r2 - A[3]!)) / g2)) : bestT;
+    best = Math.min(best, G(t));
+  }
   return best * minScale;
 }
 const addv = (x: Vec3, y: Vec3): Vec3 => [x[0] + y[0], x[1] + y[1], x[2] + y[2]];
@@ -371,14 +399,13 @@ describe('PARITY: CPU sdPrimitive matches the WGSL bezier math on packed data', 
           centre[1] + (rnd() - 0.5) * 1.2,
           centre[2] + (rnd() - 0.5) * 1.2,
         ];
-        // f32 packing rounds the inputs, so tolerance is f32-scale — but
-        // COARSER here than the capsule parity test's 1e-4, and on purpose:
-        // near h ~= 0 the two mirrors' differing fp op order can flip which
-        // side of Cardano's discriminant (and thus which candidate set) the
-        // solve lands on, moving the refined minimum by up to ~a refinement
-        // step. The construction itself is pinned against brute force above;
-        // this pin only catches structural divergence.
-        expect(sdPrimitive(p, primDef)).toBeCloseTo(sdBentWgsl(p, 0, tex), 3);
+        // f32 packing rounds the inputs, so tolerance is f32-scale. It was 1e-3
+        // until the Newton polish (2026-10-24): near h ~= 0 the two mirrors'
+        // differing fp op order can flip which side of Cardano's discriminant
+        // (and thus which candidate set) the solve lands on, and the grid
+        // refine stopped up to a step short. The polish converges both to the
+        // same minimum; 5e-6 passes with margin (5e-7 passes too).
+        expect(sdPrimitive(p, primDef)).toBeCloseTo(sdBentWgsl(p, 0, tex), 5);
       }
     }
   });

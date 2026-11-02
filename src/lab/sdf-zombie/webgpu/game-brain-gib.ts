@@ -49,7 +49,8 @@ export interface BrainGibDeps {
 
 export interface BrainGibLeaf {
   /** Throw one brain from `pos` (the mesh origin) with `vel` and `angVel`. False: the GLB is not ready. */
-  throw(pos: Vec3, vel: Vec3, angVel: Vec3): boolean;
+  /** `from`: SECTOR levels (plan 3b), the body centre the spawn is clamped inside the level from. */
+  throw(pos: Vec3, vel: Vec3, angVel: Vec3, from?: Vec3 | null): boolean;
   /** True once the GLB has loaded. */
   ready(): boolean;
 }
@@ -107,14 +108,14 @@ export function createBrainGib(ctx: GameContext, deps: BrainGibDeps): BrainGibLe
 
   return {
     ready: () => source !== null,
-    throw(pos, vel, angVel) {
+    throw(pos, vel, angVel, from) {
       if (!source || !ctx.boot.spawnMeshGib) return false;
       const mesh = new THREE.Mesh(source.geometry, materialFor(pos));
       mesh.name = 'brain-gib';
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       ctx.boot.spawnMeshGib(mesh, pos, vel, angVel, BRAIN_MESH.radius,
-        { support: BRAIN_MESH.support, longAxis: BRAIN_MESH.longAxis, restitution: BRAIN_MESH.restitution, tag: 'brain' });
+        { support: BRAIN_MESH.support, longAxis: BRAIN_MESH.longAxis, restitution: BRAIN_MESH.restitution, tag: 'brain', from });
       return true;
     },
   };

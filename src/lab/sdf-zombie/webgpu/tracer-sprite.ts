@@ -48,6 +48,10 @@ export const TRACER = {
   lengthSec: 0.040,
   /** Floor on that length, m, so a slowed/arcing pellet keeps a streak. */
   minLength: 0.45,
+  /** Ceiling on it, m. The player's 80 m/s pellets (game-weapon.ts PLAYER_GRAPESHOT) would draw 3.2 m at
+   *  lengthSec — a laser; 2 m keeps a streak over a 60 Hz frame's 1.3 m step without becoming a beam. The
+   *  35 m/s enemy band (1.4 m) is under it. */
+  maxLength: 2.0,
   /** Quad width = projectile radius * this. The sprite's halo occupies the
    *  outer half, so the BRIGHT core reads at roughly the real calibre while
    *  the glow spills past it. Kept narrow on purpose: a streak flying AWAY
@@ -269,7 +273,7 @@ export function tracerHeadOn(dir: Vec3Tuple, toEye: Vec3Tuple): number {
 
 /** Streak length in metres for a projectile travelling at `speed` m/s. */
 export function tracerLength(speed: number): number {
-  return Math.max(TRACER.minLength, speed * TRACER.lengthSec);
+  return Math.min(TRACER.maxLength, Math.max(TRACER.minLength, speed * TRACER.lengthSec));
 }
 
 /**

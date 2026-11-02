@@ -2,6 +2,7 @@
 //
 // The hanging gut rope: a pure verlet chain anchored at a wound, with make, pin, detach and step functions.
 
+import { landingFloor, type DebrisGround } from './debris-ground';
 import type { Vec3 } from './types';
 
 /**
@@ -46,7 +47,12 @@ export const GUT_TUNING = {
   springiness: 0.5,
 };
 
-export interface GutNode { pos: Vec3; prev: Vec3 }
+export interface GutNode {
+  pos: Vec3; prev: Vec3;
+  /** Sector levels only (plan 3b): the floor this node last lay over, kept when it is over no floor (a column hole,
+   *  the void). Seeded with the body's floor at spawn; absent on room levels (y = 0 there). */
+  floorY?: number;
+}
 export interface GutChain {
   nodes: GutNode[];
   /** Segment rest length — restLength / (nodes - 1). */
@@ -58,7 +64,7 @@ export interface GutChain {
 }
 
 export function makeGutChain(
-  anchor: Vec3, opts: { coilTightness?: number; springiness?: number } = {},
+  anchor: Vec3, opts: { coilTightness?: number; springiness?: number; floorY?: number } = {},
 ): GutChain {
   const nodes: GutNode[] = [];
   for (let i = 0; i < GUT_TUNING.nodes; i++) {
@@ -76,6 +82,7 @@ export function makeGutChain(
       pos: [...anchor] as Vec3,
       prev: [anchor[0] - Math.cos(ang) * 0.004, anchor[1] + i * GUT_TUNING.restLength / (GUT_TUNING.nodes - 1),
         anchor[2] - Math.sin(ang) * 0.004] as Vec3,
+      ...(opts.floorY === undefined ? {} : { floorY: opts.floorY }),
     });
   }
   return {
@@ -93,7 +100,25 @@ export function makeGutChain(
 export function pinGutChain(c: GutChain, anchor: Vec3): GutChain {
   if (!c.attached) return c;
   const nodes = c.nodes.slice();
-  nodes[0] = { pos: [...anchor] as Vec3, prev: [...nodes[0]!.prev] as Vec3 };
+  nodes[0] = { ...nodes[0]!, pos: [...anchor] as Vec3, prev: [...nodes[0]!.prev] as Vec3 };
+  return { ...c, nodes };
+}
+
+/** Move a whole chain so node 0 sits at `start` (every node and its verlet `prev` shifted alike, so its motion is
+ *  kept) and, when given, give every node `floorY` as its last floor. The spawn seat on sector levels (plan 3b):
+ *  the rope starts inside the level with the body's floor. */
+export function seatGutChain(c: GutChain, start: Vec3, floorY?: number): GutChain {
+  const p0 = c.nodes[0]!.pos;
+  const dx = start[0] - p0[0], dy = start[1] - p0[1], dz = start[2] - p0[2];
+  const nodes = c.nodes.map((n): GutNode => {
+    const m: GutNode = {
+      ...n,
+      pos: [n.pos[0] + dx, n.pos[1] + dy, n.pos[2] + dz],
+      prev: [n.prev[0] + dx, n.prev[1] + dy, n.prev[2] + dz],
+    };
+    if (floorY !== undefined) m.floorY = floorY;
+    return m;
+  });
   return { ...c, nodes };
 }
 
@@ -104,10 +129,20 @@ export function detachGutChain(c: GutChain): GutChain {
   return { ...c, attached: false, settled: false };
 }
 
-export function stepGutChain(c: GutChain, dt: number): GutChain {
+/** How a gut node meets a sector wall (plan 3b): wet and heavy, it does not bounce off; it slides along. */
+const GUT_WALL_RESTITUTION = 0;
+const GUT_WALL_FRICTION = 0.6;
+
+/** One verlet step. `ground` (sector levels, plan 3b): each node lies on the floor under it (its last floor off the
+ *  map) and no node passes a sector wall — its move this step (integration and constraints) is probed against the
+ *  walls with `radius` (the rope's thickness) and stopped on the near side. Without a ground the floor is the y = 0
+ *  plane, byte for byte as before. */
+export function stepGutChain(c: GutChain, dt: number, ground?: DebrisGround, radius = 0): GutChain {
   if (c.settled) return c;
   const t = GUT_TUNING;
-  const nodes = c.nodes.map(n => ({ pos: [...n.pos] as Vec3, prev: [...n.prev] as Vec3 }));
+  const nodes: GutNode[] = c.nodes.map(n => (n.floorY === undefined
+    ? { pos: [...n.pos] as Vec3, prev: [...n.prev] as Vec3 }
+    : { pos: [...n.pos] as Vec3, prev: [...n.prev] as Vec3, floorY: n.floorY }));
 
   const first = c.attached ? 1 : 0;
   for (let i = first; i < nodes.length; i++) {
@@ -117,6 +152,15 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
     const vz = (n.pos[2] - n.prev[2]) * t.damping;
     n.prev = [...n.pos] as Vec3;
     n.pos = [n.pos[0] + vx, n.pos[1] + vy - t.gravity * dt * dt, n.pos[2] + vz];
+  }
+
+  // Sector levels: stop the integrated move at the walls, then read each node's floor once per step (nodes move
+  // millimetres inside the iterations).
+  let floors: number[] | null = null;
+  if (ground) {
+    stopAtWalls(ground, c.nodes, nodes, first, radius);
+    const base = landingFloor(ground, nodes[0]!.pos[0], nodes[0]!.pos[2], nodes[0]!.floorY ?? 0);
+    floors = nodes.map(n => landingFloor(ground, n.pos[0], n.pos[2], n.floorY ?? base));
   }
 
   for (let k = 0; k < t.iterations; k++) {
@@ -173,8 +217,21 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
       }
       b.pos = [b.pos[0] - dx * corr, b.pos[1] - dy * corr, b.pos[2] - dz * corr];
     }
-    // Floor, inside the constraint loop so a resting chain does not jitter.
-    for (const n of nodes) if (n.pos[1] < 0) n.pos = [n.pos[0], 0, n.pos[2]];
+    // Floor, inside the constraint loop so a resting chain does not jitter. Sector levels: the floor under each node.
+    if (floors) { for (let i = 0; i < nodes.length; i++) { const n = nodes[i]!, f = floors[i]!; if (n.pos[1] < f) n.pos = [n.pos[0], f, n.pos[2]]; } }
+    else for (const n of nodes) if (n.pos[1] < 0) n.pos = [n.pos[0], 0, n.pos[2]];
+  }
+
+  // Sector levels: the constraints can drag a node across a wall too, so judge the whole step's move once more (from
+  // where the node entered the step) and re-seat a stopped node on the floor where it now is.
+  if (ground && floors) {
+    stopAtWalls(ground, c.nodes, nodes, first, radius);
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]!;
+      const f = landingFloor(ground, n.pos[0], n.pos[2], floors[i]!);
+      if (n.pos[1] < f) n.pos = [n.pos[0], f, n.pos[2]];
+      n.floorY = f;
+    }
   }
 
   // Settle metric: the ACTUAL displacement this step produced, measured after
@@ -192,4 +249,18 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
   }
   const settled = !c.attached && moved < t.settleEps;
   return { ...c, nodes, settled };
+}
+
+/** Each free node's move from `from[i].pos` to `nodes[i].pos` checked against the sector walls: a crossing puts the
+ *  node on the near side (ground.bounce) and rewrites its verlet velocity (pos - prev) to the bounced one, so it
+ *  slides along the wall instead of pressing into it. Mutates `nodes`. */
+function stopAtWalls(ground: DebrisGround, from: readonly GutNode[], nodes: GutNode[], first: number, radius: number): void {
+  for (let i = first; i < nodes.length; i++) {
+    const n = nodes[i]!, p0 = from[i]!.pos;
+    const vel: Vec3 = [n.pos[0] - n.prev[0], n.pos[1] - n.prev[1], n.pos[2] - n.prev[2]];
+    const b = ground.bounce(p0, n.pos, vel, GUT_WALL_RESTITUTION, GUT_WALL_FRICTION, radius);
+    if (!b) continue;
+    n.pos = [b.pos[0], n.pos[1], b.pos[2]];
+    n.prev = [n.pos[0] - b.vel[0], n.prev[1], n.pos[2] - b.vel[2]];
+  }
 }

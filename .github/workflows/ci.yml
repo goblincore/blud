@@ -3,7 +3,9 @@
 # This is where the FULL suite runs. Locally, run the tests for what you
 # changed (`npm run test:changed`, or `npx vitest run <path>`); see AGENTS.md.
 # The GPU gates (march-hash, head-split, axe, ...) need a real GPU and a
-# browser, so they stay local and are not run here.
+# browser, so they stay local and are not run here. The one GPU job here,
+# gpu-parity, needs neither: WebGPU compute from Node through Dawn on Mesa's
+# software Vulkan (llvmpipe).
 name: ci
 
 on:
@@ -47,3 +49,23 @@ jobs:
       - run: npx vitest run --shard=${{ matrix.shard }}/4
         env:
           VITEST_ALL: 1
+
+  # The bake field (src/lab/sdf-zombie/body-normal-bake/bake.wgsl.ts) held to
+  # sdBody: the *.gpu.test.ts suites, through Dawn (the `webgpu` package) on
+  # llvmpipe. BLUD_REQUIRE_GPU=1 turns a missing adapter into a failure, so a
+  # broken driver install cannot read as a green skip. Spec:
+  # docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md.
+  gpu-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - run: npm ci
+      - run: npm run test:gpu
+        env:
+          BLUD_REQUIRE_GPU: 1

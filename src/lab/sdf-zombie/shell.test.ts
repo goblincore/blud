@@ -48,12 +48,34 @@ describe('sdShellWrap — the thin clipped sheet', () => {
     // of the curve. The SHARP max keeps it material (negative); the ROUNDED rim
     // must cut that corner (positive) — that is what turns a razor edge into a
     // folded hem.
-    const dShell = -0.005;          // abs(0.005) - 0.01
-    const dPlane = -0.005;          // p.z = 0.045 - 0.05
+    const dShell = -0.001;          // abs(0.009) - 0.01
+    const dPlane = -0.001;          // p.z = 0.049 - 0.05
     const sharp = Math.max(dShell, dPlane);
-    const rounded = sdShellWrap(0.005, [0, 0, 0.045], T, N, O, 0.01);
+    const rounded = sdShellWrap(0.009, [0, 0, 0.049], T, N, O, 0.01);
     expect(sharp).toBeLessThan(0);          // razor: material is present
     expect(rounded).toBeGreaterThan(0);     // rounded: the corner is cut away
+  });
+
+  it('the rim is CONVEX: no groove along the edge (the hood\'s layered opening, 2026-10-27)', () => {
+    // Walk out across the corner along the (sheet, plane) diagonal. A rounded edge's field only rises; the old
+    // `max(max, rim - length(...))` rose to `rim` AT the corner and fell back outside it — a concave channel cut
+    // along every shell edge, which shaded as stacked bands.
+    let prev = -Infinity;
+    for (let s = -T; s <= 0.01; s += 0.0005) { // from the sheet's mid-surface (base 0) outward
+      const v = sdShellWrap(T + s, [0, 0, O + s], T, N, O, 0.01);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+  });
+
+  it('the rim leaves both flat faces where they were, and never sits below the hard cut', () => {
+    // On the outer face (sheet 0) more than `rim` back from the plane, the value is exactly 0: no recess.
+    expect(sdShellWrap(T, [0, 0, O - 0.02], T, N, O, 0.004)).toBeCloseTo(0, 9);
+    // The rounded field is >= the hard max everywhere, so a bound fitted to the hard cut still contains it.
+    for (const [b, z] of [[0, 0.04], [0.012, 0.048], [-0.009, 0.052], [0.02, 0.06], [0.009, 0.049]] as const) {
+      const sharp = sdShellWrap(b, [0, 0, z], T, N, O, 0);
+      expect(sdShellWrap(b, [0, 0, z], T, N, O, 0.008)).toBeGreaterThanOrEqual(sharp - 1e-12);
+    }
   });
 
   it('far from the clip plane the field is just the thinned sheet', () => {

@@ -24,7 +24,10 @@ import type { Vec3 } from '../types';
 // aliased to keep the two apart.
 import type { PlayerState as PlayerMotionState } from './game-player';
 import type { DemoFrame } from './demo-recorder';
+import type { WeaponSlot } from './game-weapon-slots';
 import { makeHitFeedback, type HitFeedback } from '../player-hit-feedback';
+import { makeBulletTime, type BulletTimeState } from '../bullet-time';
+import { makeAdrenaline, type AdrenalineState } from '../adrenaline';
 
 export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
@@ -51,15 +54,28 @@ export interface PlayerState {
   /** Realms-of-the-Haunting free aim: the mouse drives the reticle, not the
    *  camera; turning is a consequence of shoving the reticle past the dead zone. */
   freeAimOn: boolean;
+  /** The session override of the per-weapon aim style (aim-style.ts): null = each weapon's own, true/false = free
+   *  aim on/off for every weapon (G, __sdfGame.setFreeAim). */
+  freeAimOverride: boolean | null;
+  /** The slot the aim style was last resolved for; a switch to another re-resolves it (game-player-input.ts). */
+  aimStyleSlot: WeaponSlot | null;
   /** Metres walked, driving head bob by DISTANCE so it stays locked to
    *  footfalls at any speed. */
   bobDistance: number;
   /** Smoothed 0..1 bob amount. */
   bobAmount: number;
+  /** Smoothed 0..1 sideways speed; shrinks the free-aim dead zone. */
+  strafeAmount: number;
   /** Previous frame's feet position, the bob-distance sample. */
   prevPlayerPos: Vec3;
   /** Overlay element the free-aim reticle is drawn into, once created. */
   reticleEl: HTMLDivElement | null;
+  /** Faint steering cursor, shown while strafing pulls the crosshair to
+   *  centre and the reticle is only steering the camera. */
+  steerEl: HTMLDivElement | null;
+  /** C / `__sdfGame.setReticleVisible(false)`: hide the crosshair and the
+   *  steering cursor entirely. Aiming is unchanged, only the markers go. */
+  reticleHidden: boolean;
   /** Bench: pin the player pose for the whole leg (forced zero input). */
   holdPlayerPose: boolean;
   /** The `__sdfGame.placeMarker` debug sphere. */
@@ -80,6 +96,12 @@ export interface PlayerState {
   hitFeedback: HitFeedback;
   /** The full-screen red flash overlay, created once at boot. */
   hitFlashEl: HTMLDivElement | null;
+  /** BULLET TIME (bullet-time.ts): Q toggles it; the tick runs the world on its eased scale. */
+  bulletTime: BulletTimeState;
+  /** Its vignette overlay, created lazily by the tick (game-bullet-time.ts). */
+  bulletTimeEl: HTMLDivElement | null;
+  /** ADRENALINE (adrenaline.ts): the automatic rush a hit on an enemy sets off (its look: game-bullet-time.ts). */
+  adrenaline: AdrenalineState;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -95,10 +117,15 @@ export function makePlayerState(): PlayerState {
     prevInputKeys: new Set<string>(),
     parked: 0,
     freeAimOn: true,
+    freeAimOverride: null,
+    aimStyleSlot: null,
     bobDistance: 0,
     bobAmount: 0,
+    strafeAmount: 0,
     prevPlayerPos: [0, 0, 0],
     reticleEl: null,
+    steerEl: null,
+    reticleHidden: false,
     holdPlayerPose: false,
     marker: null,
     autopilot: null,
@@ -108,6 +135,9 @@ export function makePlayerState(): PlayerState {
     lastWalkPos: null,
     hitFeedback: makeHitFeedback(),
     hitFlashEl: null,
+    bulletTime: makeBulletTime(),
+    bulletTimeEl: null,
+    adrenaline: makeAdrenaline(),
   };
 }
 

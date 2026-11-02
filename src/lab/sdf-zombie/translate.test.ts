@@ -20,8 +20,9 @@ describe('translateBody', () => {
       if (!body.prims[i]!.shell) continue;
       // Folds OFF on both sides: the CPU field's fold warp is world-anchored,
       // so wrinkles legitimately differ after a move (1 cm on the skirt). With
-      // them off the only thing left to differ is the plane — exactly.
-      const flat = (q: typeof body.prims[number]) => ({ ...q, shell: { ...q.shell!, warpAmp: 0 } });
+      // them off the only thing left to differ is the plane — exactly. The
+      // hood's ruffled edge rides the same lattice, so it goes off too.
+      const flat = (q: typeof body.prims[number]) => ({ ...q, shell: { ...q.shell!, warpAmp: 0, ruffle: 0 } });
       const p = flat(body.prims[i]!), m = flat(moved.prims[i]!);
       for (const d of [[0, 0, 0.2], [0, 0.1, 0.25], [0.1, -0.1, -0.2], [0, 0.3, 0]] as const) {
         const q: Vec3 = [p.a[0] + d[0], p.a[1] + d[1], p.a[2] + d[2]];

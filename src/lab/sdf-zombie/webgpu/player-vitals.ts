@@ -29,6 +29,8 @@ export const VITALS = {
   houndPounce: 20,
   /** The gibbet's two spiked front legs driven home (hound-attack.ts 'stab'). Its bile is BILE.playerDamage (bile.ts). */
   gibbetStab: 18,
+  /** The gutcrawler's whole front half slammed down on you, snout first (hound-attack.ts 'slam'). */
+  crawlerSlam: 16,
   /** One soldier pellet or cultist SMG round (they share a projectile list). */
   soldierPellet: 3,
   /** After a melee hit, further melee is ignored for this long. */

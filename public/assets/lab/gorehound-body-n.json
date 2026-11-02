@@ -94,5 +94,7 @@
       "row0": 609,
       "rows": 96
     }
-  ]
+  ],
+  "backend": "gpu",
+  "adapter": "apple metal-3 apple-m3 (Metal driver on macOS Version 27.0.1 (Build 26A434))"
 }

@@ -50,7 +50,10 @@ function volley(c: C, n = 6) {
   for (let i = 0; i < n; i++) c.actor.hit([mid(p)[0] + (i - n / 2) * 0.02, mid(p)[1], 1], [0, 0, -1], { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
   c.actor.endHits();
 }
-const skull = (c: C) => c.actor.posed().prims.find(p => p.bone === 'skull' && !p.shell && (p.glow ?? 0) === 0)!;
+// The hood sheet, centred on the head: aiming 0.4 m in front of it is a shot in the face. (It used to pick the first
+// unpainted skull blob, which was the hood's peak until the peak became a shell: then it found the brow, and a shot
+// 0.4 m in front of that lands on the flail arm.)
+const skull = (c: C) => c.actor.posed().prims.find(p => p.bone === 'skull' && p.shell && p.when === 'alive' && p.radiusB === undefined)!;
 const hood = (c: C) => c.actor.posed().prims.filter(p => p.when === 'alive');
 
 describe('cultist: soft target, two hits', () => {

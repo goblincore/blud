@@ -79,7 +79,9 @@ export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 
   // The quadrupeds' (hound-attack.ts: the gorehound's, the gibbet's): motion.ts routes these to houndPose.
   | 'bite' | 'pounce' | 'stab' | 'squirt'
   // The imp's overhand fireball throw (fireball.ts): the right arm only, never a contact.
-  | 'throw';
+  | 'throw'
+  // The gutcrawler's rear-and-slam (hound-attack.ts 'slam').
+  | 'slam';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
  *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
@@ -126,6 +128,7 @@ export const SWING_ARCS: Record<SwingVariant, {
   // read as a lob (side-on sweep, BLOB_SWING_SWEEP=throw:0:0.6). The ball leaves from the hand on the way through
   // (IMP_TUNING.fireAt).
   throw: { windupPitch: 2.4, strikePitch: 0.45, windupYaw: -0.35, strikeYaw: 0.18 },
+  slam: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
 export type AttackTuning = typeof ATTACK_TUNING;

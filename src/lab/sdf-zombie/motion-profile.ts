@@ -13,6 +13,7 @@ import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 import type { GoreTuning } from './gore-tuning';
 import type { KitEyeSpec } from './kit-eye';
+import type { CollapseToughness } from './collapse';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -81,7 +82,7 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' | 'bite' | 'stab' };
+  melee?: { kind: 'sword' | 'bite' | 'stab' | 'slam' };
   /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
    *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
   joystick?: JoystickSpec;
@@ -99,6 +100,9 @@ export interface MotionProfile {
    *  and soldier soak hits and exist to show off the gore. Burns do not count
    *  (owner playtest 2026-09-24). */
   soft?: boolean;
+  /** TOUGHNESS: divides what each kind of hit adds to the collapse meter (collapse.ts CollapseToughness), so a big
+   *  body soaks more hits before it goes down. Absent: the shared rule (a zombie drops to one point-blank double). */
+  toughness?: CollapseToughness;
   /** Hit reactions: 'soldier' = the soldier's stagger (arms thrown open,
    *  full flail, the hunch; soldier-stagger.ts) instead of the zombie's
    *  lurch/shudder. The soldier always has it. */
@@ -455,9 +459,10 @@ export const GOREHOUND_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
-/** The gutcrawler (characters/gutcrawler.blob), the gorehound's legless
- *  variant: it hauls itself on two arms (CRAWL_DRAG) and bites like the hound
- *  (hound-attack.ts), lunging off its arms from the band beyond. Slow. */
+/** The gutcrawler (characters/gutcrawler.blob): a giant naked grub with a man's chest, arms and staring head on the
+ *  front, hauling itself on its two arms (CRAWL_DRAG, the body wave writhing the rear rings). It cannot bite or leap:
+ *  it REARS its front half off the floor and SLAMS it down on you, star snout first (hound-attack.ts 'slam',
+ *  GUTCRAWLER_TUNING). Slow and heavy. */
 export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'gutcrawler',
@@ -466,7 +471,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
   cruise: 0.75,
   turnRate: 1.8,
   armStyle: 'foreleg',
-  melee: { kind: 'bite' },
+  melee: { kind: 'slam' },
 };
 
 /** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
@@ -552,6 +557,14 @@ export const TERATOMA_PROFILE: MotionProfile = {
   // SDF eyeball in its yellow hangs out on a stalk drawn 1.4x the zombie's (EYE_STALK: 0.20 m, a thick nerve) from the eye's front: it
   // dangles in front of the mouth. At 2x it hung below the chin, hidden behind the gun (arena look).
   eye: { offset: [0, 0.175, 0.40], radius: 0.135, material: 'cacoeye', iris: [1.0, 0.55, 0.02], popRadius: 0.10, stalkScale: 1.4 },
+  // BEEFIER (owner 2026-10-27: "the teratomas are too easy to kill — they should be beefier and take more hits"; Doom's
+  // cacodemon soaks several shotgun blasts). On the shared meter (collapse.ts: pellet 0.055, slug 0.13, threshold 0.8)
+  // one point-blank double (20 pellets, all on the ball at 3 m and at 8 m) dropped it, a single barrel took 2 and a
+  // slug 7 (arena, measured). /4.5 on pellets: a full double adds 1.1/4.5 = 0.244, so 3 leave it at 0.73 and the
+  // 4th drops it (7 single barrels). /1.75 on slugs (and on non-gibbing blast credit): 0.074 each, 11 slugs; the slug
+  // stays the weaker round per trigger pull, as it is on every body. A shot-off arm counts /4.5 like the pellets
+  // that took it. Dynamite still gibs it: the gib rule is damage vs GIB_THRESHOLD, which never reads the meter.
+  toughness: { pellet: 4.5, blast: 1.75, sever: 4.5 },
   gore: {
     craterScale: 2.2,
     blood: {

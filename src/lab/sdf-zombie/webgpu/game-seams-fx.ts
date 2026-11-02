@@ -18,6 +18,8 @@ import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
 import { spillVerdict, woundTuningNow } from './game-wound-vfx';
 import { clearSpritePieces, setSpritePiecesVisible, spritePieceStates } from './gib-sprite-pieces';
 import { type GooReconstruction } from './goo-layer';
+import { parseBlastFx } from '../blast-fx';
+import { applyBlastFx } from './game-dynamite-tuning';
 import type { StainLook } from '../blood-surface';
 
 export function createFxSeams(ctx: GameContext) {
@@ -301,6 +303,8 @@ export function createFxSeams(ctx: GameContext) {
       sharedLiveMaterial: ctx.bake.liveChunks.every(c => (c.view.object as THREE.Mesh).material === ctx.bake.material.material),
       baked: ctx.bake.chunks.length,
       views: ctx.bake.views.length,
+      /** The view budget (`?maxchunks`): views, and so baked pieces, stay <= it. */
+      cap: ctx.bake.maxChunks,
       totalBakes: ctx.bake.totalBakes,
       lastBakeMs: ctx.bake.lastBakeMs, // worker CPU time, NOT a main-thread span
       lastBakeSwapMs: ctx.bake.lastSwapMs,
@@ -339,6 +343,7 @@ export function createFxSeams(ctx: GameContext) {
       mode: ctx.vfx.explosionVfx ? 'procedural' : ctx.vfx.burstLayer ? 'atlas' : 'standin',
       usingAtlas: ctx.vfx.burstLayer?.usingAtlas ?? null,
       size: ctx.vfx.size, smoke: ctx.vfx.smoke, life: ctx.vfx.life, gain: ctx.vfx.gain, plume: ctx.vfx.plume,
+      blastFx: [...ctx.vfx.blastFx],
       liveBursts: ctx.vfx.explosionVfx?.activeBursts ?? 0,
       lightIntensity: ctx.vfx.explosionVfx?.lightIntensity ?? 0,
       tuning: ctx.vfx.explosionVfx?.tuning ?? null,
@@ -349,6 +354,8 @@ export function createFxSeams(ctx: GameContext) {
       layerExtents: ctx.vfx.explosionVfx?.layerExtents ?? null,
       burstHalfHeightM: ctx.vfx.explosionVfx?.burstHalfHeightM ?? null,
     }),
+    /** `?blastfx=` on a live page (blast-fx.ts): depth from the next frame, front and timing from the next burst. */
+    setBlastFx: (param: string | null) => { applyBlastFx(ctx, parseBlastFx(param)); return [...ctx.vfx.blastFx]; },
     /** Live tuning for the procedural burst (see ExplosionVfxTuning). */
     setExplosionFxTuning: (t: Record<string, number>) => {
       ctx.vfx.explosionVfx?.setTuning(t as never);
@@ -469,6 +476,8 @@ export function createFxSeams(ctx: GameContext) {
         // way it is facing to photograph the face, not just its back.
         quat: c.state.quat,
         settled: chunkSettled(c.state),
+        // The floor the piece stands over (plan 3b: the sector floor under it; 0 on room levels).
+        floorY: c.state.floorY ?? 0,
         render: 'march' as const,
       })),
       // SPRITE PIECES ARE PIECES. A rig that asks "where is every piece and is

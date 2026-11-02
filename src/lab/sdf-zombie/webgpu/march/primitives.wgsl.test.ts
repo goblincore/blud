@@ -207,8 +207,9 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
   it('sdShell is in HELPERS and implements abs(dBase)-thick with the rounded-rim clip', () => {
     expect(HELPERS).toContain(SD_SHELL);
     expect(SD_SHELL).toContain('let d = abs(base) - thick;');
-    // The rim: distance to the sheet/plane intersection curve + rounding.
-    expect(SD_SHELL).toContain('rim - length(vec2(d, dPlane))');
+    // The rim: the rounded intersection (a quarter circle in place of the corner), not the old groove.
+    expect(SD_SHELL).toContain('min(-rim, max(d, dPlane)) + length(max(vec2(d + rim, dPlane + rim), vec2(0.0)))');
+    expect(SD_SHELL).not.toContain('rim - length(');
   });
 
   it('the fold reads the shell rows and wraps the field when profile marks a shell', () => {

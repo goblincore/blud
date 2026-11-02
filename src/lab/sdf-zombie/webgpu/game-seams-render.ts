@@ -12,12 +12,14 @@ import { applySdfScale } from './game-render-controls';
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
+import { setKitOccluderInset } from './kit-occluder';
 import { SCALE_LADDER, initialAdaptiveState, scaleForRung } from '../adaptive-scale';
 import { type SscsTerms } from './post-sscs';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { woundWorldPos } from '../damage';
 import { applyBoneCullMode } from './game-render-controls';
 import { applyBoneCull } from './game-bone-cull';
+import { setZoneCullOn, zoneCullReport } from './game-zone-cull';
 import { type RefineTail } from './zombie-gpu';
 
 export function createRenderSeams(ctx: GameContext) {
@@ -37,6 +39,47 @@ export function createRenderSeams(ctx: GameContext) {
       ctx.render.sdfLayer.setOccluderEnabled(on);
     },
     get occluder() { return ctx.render.sdfLayer.occluderEnabled && ctx.render.occluderDesired; },
+    /** Kit occlusion A/B (2026-10-26): opaque kit cloth bounds the march's tMax (kit-occluder.ts). Ships ON. */
+    setKitOccluder: (on: boolean) => ctx.render.sdfLayer.setKitOccluderEnabled(on),
+    get kitOccluder() { return ctx.render.sdfLayer.kitOccluderEnabled; },
+    /** How far in front of the cloth the bound sits (metres; kit-occluder.ts KIT_OCCLUDER_INSET). */
+    setKitOccluderInset: (m: number) => setKitOccluderInset(m),
+    /** X-RAY: hide the real cloth the twins stand in for, leaving the twins drawing into occT. With the kit
+     *  occluder on, the flesh under the cloth must then be MISSING (background shows) exactly in the cloth's
+     *  shape — an alignment check of twin against kit. Returns how many meshes it toggled. */
+    kitOccluderXray(on: boolean) {
+      let n = 0;
+      ctx.boot.handle.scene.traverse(o => {
+        if (!o.userData['kitOccluderTwin'] || !o.parent) return;
+        ((o.parent as THREE.Mesh).material as THREE.Material).visible = !on;
+        n++;
+      });
+      return n;
+    },
+    /** Reads the occT target back after one drawn frame: how much of the SDF target the occluders cover, and
+     *  (image: true) a grey PNG data URL of it (black = nothing, white = 0 m, fading to grey at 8 m). */
+    async kitOccluderCoverage(image = false) {
+      ctx.boot.handle.drawOnce();
+      await ctx.boot.handle.resolveGpu();
+      const t = ctx.render.sdfLayer.occluderTarget;
+      const buf = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height));
+      const stride = Math.ceil((t.width * 16) / 256) * 256 / 4; // WebGPU pads rows to 256 bytes
+      let covered = 0;
+      const px = image ? new Uint8ClampedArray(t.width * t.height * 4) : null;
+      for (let y = 0; y < t.height; y++) for (let x = 0; x < t.width; x++) {
+        const v = buf[y * stride + x * 4]!;
+        if (v > 0) covered++;
+        if (px) { const o = ((t.height - 1 - y) * t.width + x) * 4; const g = v > 0 ? 255 - Math.min(200, v * 25) : 0; px[o] = px[o + 1] = px[o + 2] = g; px[o + 3] = 255; }
+      }
+      let url: string | null = null;
+      if (px) {
+        const c = document.createElement('canvas'); c.width = t.width; c.height = t.height;
+        c.getContext('2d')!.putImageData(new ImageData(px, t.width, t.height), 0, 0);
+        url = c.toDataURL('image/png');
+      }
+      const m = ctx.render.sdfLayer.marchTarget;
+      return { w: t.width, h: t.height, marchW: m.width, marchH: m.height, covered, fraction: covered / (t.width * t.height), image: url };
+    },
     setHullExclusions: (on: boolean) => { ctx.render.hullExclusionsEnabled = on; },
     get hullExclusions() { return ctx.render.hullExclusionsEnabled; },
     // setAdaptive / setSdfScale already exist further down this object and
@@ -55,6 +98,11 @@ export function createRenderSeams(ctx: GameContext) {
     get blastDistort() { return ctx.render.postAa.blastDistort; },
     get blastDistortStrength() { return ctx.render.postAa.blastDistortStrength; },
     get blastDistortCount() { return ctx.render.postAa.blastDistortCount; },
+    /** `?blastfx=depth` as a live switch (uniforms only), so a rig can A/B one frozen frame. */
+    setBlastDepth: (on: boolean) => { ctx.render.postAa.setBlastDepth(on); return ctx.render.postAa.blastDepth; },
+    get blastDepth() { return ctx.render.postAa.blastDepth; },
+    /** The blast warp's depth view: 0 off, 1 linear depth as grey (metres / 16), 2 its displacement in red. */
+    setBlastDepthView: (mode: number) => { ctx.render.postAa.setBlastDepthView(mode); },
     /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
      *  capture rig reads to prove the band is centred on the blast (task-2). */
     blastDistortInfo: () => ctx.render.postAa.blastDistortSlots,
@@ -83,7 +131,18 @@ export function createRenderSeams(ctx: GameContext) {
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
     get boneMesh() { return ctx.render.boneMesh; },
-    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
+    /** Cast kit meshes not drawn yet by the kit pre-warm (game-kit-prewarm.ts), -1 before it exists. 0 = all warm. */
+    kitPrewarmPending: () => ctx.boot.kitPrewarm?.pending ?? -1,
+    /** ZONE CULL + UPDATE LOD (game-zone-cull.ts): this frame's visible zones / sectors, culled level meshes, flood
+     *  cost, and per-actor LOD tiers (full / quarter / sleep). null on a room level. */
+    zoneCull: () => zoneCullReport(ctx),
+    /** A/B: false = every level mesh drawn and every actor stepped every frame (the ?cull=0 behaviour). */
+    setZoneCull: (on: boolean) => setZoneCullOn(ctx, on),
+    /** Level meshes not drawn yet by the level pre-warm (game-level-prewarm.ts), -1 before it exists. 0 = all warm. */
+    levelPrewarmPending: () => ctx.boot.levelPrewarm?.pending ?? -1,
+    /** Milliseconds from the level pre-warm's first step to the step that left nothing pending, null until then. */
+    levelPrewarmDoneMs: () => ctx.boot.levelPrewarm?.doneMs ?? null,
+    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, prewarmPending: ctx.render.segMeshRenderer.prewarmPending, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Perf round 2, task 5: the front-to-back per-body passes and their
      *  accumulated-depth gate. OFF restores the single-pass march. Refused under
      *  ?earlyz=1 (stage 1): its per-body pass list holds only each type's back batch. */

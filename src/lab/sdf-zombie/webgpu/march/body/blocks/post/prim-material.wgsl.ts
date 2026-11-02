@@ -22,7 +22,13 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
   var gloss = 0.0;
   var painted = 0.0;
   var metal = 0.0;
+  // CLOTH (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): a painted SHELL prim (profile bit 2, value 4)
+  // is fabric, not skin — matte, no scatter, no pores, a grazing sheen and a dye mottle (the uses below). Read off
+  // the shape texel this branch already loads, so it costs nothing; 0 everywhere else, and every use is written so
+  // cloth 0 computes exactly what it did before.
+  var cloth = 0.0;
   var primGlow = 0.0;
+  var primClipT = vec4<f32>(0.0);
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
     let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0);
@@ -32,11 +38,14 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
       painted = 1.0;
       let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
+      if ((i32(PS.y) & 4) != 0) { cloth = 1.0; }
       // GLOW (hard-surface task 3): primClip.w, the lane that was documented
       // spare until now. Loaded ONLY inside the painted branch — glow is
       // parse-gated on color=, so an unpainted pixel can never author one,
       // and this is the third texel a painted hit pixel pays for (colour,
       // shape, clip) and the last.
-      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0).w, 0.0, 1.0);
+      // Kept whole (primClipT): the cloth folds read its xyz, the shell's posed clip normal (shading-normal).
+      primClipT = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0);
+      primGlow = clamp(primClipT.w, 0.0, 1.0);
     }
   }`;

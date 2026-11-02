@@ -10,6 +10,20 @@
 
 ## In flight / next
 
+- [~] **Sector levels (Doom E1M1 experiment):** sectors, pools + light, enemies, materials, (2026-10-25, plan 3b) debris on sector floors + exploding barrels, barrel grime pass, emissive screens/light panels part A and B1 (they light the room: baked coloured bounce, cheap coloured lights), two Doom-style teratoma floaters, a start-room goo pit and (2026-10-28) sci-fi split doors that open on approach for the player and enemies, the zone/portal cull + update LOD, level batching (pickups/barrels/casings, `?batch=0`) and (2026-10-29) the shot-frame pass (pellet trace + wound probes fold less, tracer pipelines pre-warmed; E1M1 hit path ~31 → ~12 ms CPU, 2 → 0 shot pipelines; `?shotfix=0`) and the gore-spread pass (first-blood warm at boot, gun gore one tick after the hit; E1M1 first-volley worst frame 30 → 23 ms CPU; `?gorespread=0`) and the meat-pool / seed-band-upload pass (torn meat verified intact after gore spread; `?meatpool=0`, `?seedupload=0`) built; next emitters part B2 (light shafts, dust). Play `npm run dev:doom`. Detail: [levels](docs/tasks/levels.md) "Sector levels" items 5b, 5c.
+- [~] **Kit occlusion: flesh under opaque kit cloth is not marched or shaded** (owner, 2026-10-26; branch `claude/intelligent-bose-856348`). Skinned distance twins of cloth/boot/leather kit meshes (`kit-occluder.ts`, `KIT_OCCLUDER_LAYER`) feed pass 1c's occT; the march's tMax clamp is back (the 09-01 "decay" was fog). Bound sits 2 cm in front of the cloth (`KIT_OCCLUDER_INSET`), so flesh clipping through trousers now shows cloth. Arena, 12 zombies: flesh hits −16% (3 m) / −23% (7 m), paired frame delta −2..−4 ms median on a loaded machine. `?kitocc=0` / `__sdfGame.setKitOccluder`, `setKitOccluderInset`, `kitOccluderXray`. Owner look pending.
+- [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
+  The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
+  by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
+  `pack.ts` exports `writePrimRows`; gibbet re-bakes byte-identical. Next: step 2 (kernel, field-parity tests, `gpu-parity` CI job).
+  Owner question open: a chamfered BENT prim folds round on the GPU but chamfered in `sdBody` (10 shipped blobs; spec open question 1).
+  Step 2 done (2026-10-24): GPU bake field + parity tests + `gpu-parity` CI job. They found the shipped `coneBend` losing f32
+  precision on nearly straight bends (up to 0.66 mm); fixed with a Newton polish in both fields, parity 38/38, march-hash
+  unchanged; the march source-text golden re-pinned on the owner's OK (CONE_BEND + the joined helpers only)
+  ([notes](docs/dev-notes/2026-10-24-gpu-bake-parity/notes.md)).
+  Step 3 done (2026-10-25): the bake runs on the GPU by default (gibbet 568 s -> 3.4 s; `--cpu` forces the reference),
+  bake parity in CI, all ten maps re-baked on the GPU and committed (gamer's and teratoma's were stale: torso axis moved).
+  Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 - [~] **Imp built 2026-10-24; owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
@@ -61,6 +75,10 @@
   scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
   37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
   on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
+
+**Explosions: the blast reads in the room and reaches the body** — [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Explosion pass built; owner playtest pending.** `?blastfx=depth,front,timing` (`none` = old): the refraction is
+  gated on scene depth, fire licks reach the gib radius by the swap, the core lights on the hit frame.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the

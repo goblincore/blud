@@ -10,35 +10,17 @@ import { MARCH_BODY } from '../../../../march.wgsl';
 
 describe('ported features reach the entry point', () => {
 
-  it('does NOT bound tMax by the occluder — the bound under-reports at range', () => {
-    // 2026-09-01, the owner's "zombies are full of holes until you get fairly
-    // close". The inner hull is sound GEOMETRY (every emitted sphere sits at
-    // least its own radius inside the posed flesh — __sdfGame.hullInsideness
-    // reports 0 of 300 outside), but the DISTANCE the pre-pass rasterises for
-    // it is accurate only in the near field. Measured with one synthetic
-    // sphere of known centre and radius, and the error tracks distance alone,
-    // not the sphere's radius or its screen size:
-    //
-    //   true 2.4 -> 2.405 (exact)    true 4.9 -> 4.252
-    //   true 7.9 -> 3.782            true 11.9 -> 0.367
-    //
-    // An under-reported occT puts tMax IN FRONT of the surface, so the ray
-    // gives up before reaching skin and the fragment discards — per pixel,
-    // wherever the hull covers, and worse the further away the body is. On a
-    // single isolated zombie at 4.9 m that destroyed 1369 of 1375 lost
-    // pixels, worst case 0.68 m short.
-    //
-    // Re-adding the term reintroduces the bug, so this test pins its absence
-    // rather than its shape. Revive it only once the pre-pass writes a
-    // distance that survives syntheticSphereCheck at range; the full
-    // measurement is in march.wgsl.ts above tMax.
-    // tMaxBox is the raw proxy-box far plane; the hull-exit fold (perfCfg.x)
-    // never references occT, so an occluder bound cannot sneak back in here.
+  it('bounds tMax by the occluder target on the un-relaxed path only (kit occlusion, 2026-10-26)', () => {
+    // Removed 2026-09-01 because the pre-pass distance under-reported at range
+    // ("bodies full of holes until you get fairly close"). That decay was SCENE
+    // FOG mixed into the written distance (root-caused 2026-09-04; fog = false on
+    // every distance material), so the bound is exact again. It came back for
+    // opaque kit cloth: flesh behind cloth loses the depth test to the cloth, so
+    // the ray may stop there. Relaxed path excluded: its clamped final sample at
+    // tMax would sit ON the cloth and the AA epsilon could accept it as a hit.
     expect(MARCH_BODY).toContain('let tMaxBox = length(worldPos - camPos);');
-    expect(MARCH_BODY).not.toContain('occT + woundCfg2.z');
-    // occT stays PLUMBED — debug mode 3 heats it, and reviving the bound
-    // should not need the parameter threaded back through.
-    expect(MARCH_BODY).toContain('occT: f32');
+    expect(MARCH_BODY).toContain('let tMaxOcc = select(tMaxSel, min(tMaxSel, occT + woundCfg2.z), !relax);');
+    expect(MARCH_BODY.indexOf('let tMaxOcc =')).toBeLessThan(MARCH_BODY.indexOf('let tMax = min('));
   });
 
   it('bounds the march by the outer hull, and is an identity when it is off', () => {

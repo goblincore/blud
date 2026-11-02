@@ -82,9 +82,10 @@ export interface BallHead {
  *  over broad parts of these crania. */
 export const BALL_HEADS: Readonly<Record<string, Readonly<BallHead>>> = deepFreeze({
   cultist: {
-    spec: { fit: 'snug', skin: true, eyeHs: -0.139 }, paintedHs: -0.139,
+    spec: { fit: 'snug', skin: true, eyeHs: 0.018 }, paintedHs: 0.018,
     eyes: 'the ember prims in the hood (cultist.blob: at=0.50 on the skull bone)',
-    fill: { wide: 0.85, deep: 0.81, cover: 6.1, eyesOff: -0.9, moved: 17.3 },
+    fill: { wide: 0.85, deep: 0.78, cover: 6.2, eyesOff: -0.7, moved: 17.0 },
+    short: 'under 0.8 front to back since the head was shortened under the fitted hood (2026-10-27): the embers now sit just over the head\'s centre, and held on them the skull is as deep as its 6 mm of cover at the brow and the back lets it be',
   },
   'cultist-cowled': {
     spec: { fit: 'snug', skin: true, eyeHs: -0.139 }, paintedHs: -0.139,

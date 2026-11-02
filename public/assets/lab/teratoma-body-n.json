@@ -6,25 +6,27 @@
   "version": 2,
   "yMin": 0.896,
   "yMax": 1.9988,
-  "axisX": 0.009,
-  "axisZ": -0.0344,
+  "axisX": 0.014,
+  "axisZ": 0.0062,
   "regions": [
     {
       "label": "torso",
       "kind": "torso",
       "head": [
-        0.009,
+        0.014,
         1.9988,
-        -0.0344
+        0.0062
       ],
       "tail": [
-        0.009,
+        0.014,
         0.896,
-        -0.0344
+        0.0062
       ],
       "rMax": 0,
       "row0": 1,
       "rows": 256
     }
-  ]
+  ],
+  "backend": "gpu",
+  "adapter": "apple metal-3 apple-m3 (Metal driver on macOS Version 27.0.1 (Build 26A434))"
 }

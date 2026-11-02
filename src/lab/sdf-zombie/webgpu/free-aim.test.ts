@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
-  BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  pivotOffset, recentre, turnFromAim, weaponAngles, weaponSlide,
+  BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush, deadzoneSize,
+  moveAim, pivotOffset, recentre, shotAim, strafeSpeed01, turnFromAim,
+  viewmodelFrustum, weaponAngles, weaponSlide,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -62,6 +63,89 @@ describe('turnFromAim', () => {
     const nearEdge = Math.abs(turnFromAim({ x: FREE_AIM.deadzoneX + 0.02, y: 0 }, 1 / 60).yaw);
     const atMax = Math.abs(turnFromAim({ x: 1, y: 0 }, 1 / 60).yaw);
     expect(nearEdge).toBeLessThan(atMax * 0.05);
+  });
+});
+
+describe('strafing: the dead zone fades out', () => {
+  it('is today\'s zone standing still', () => {
+    expect(deadzoneSize(0)).toEqual({ x: FREE_AIM.deadzoneX, y: FREE_AIM.deadzoneY });
+    expect(deadzoneSize()).toEqual(deadzoneSize(0));
+  });
+  it('is gone at full strafe by default, and blends linearly between', () => {
+    expect(deadzoneSize(1)).toEqual({ x: 0, y: 0 });
+    expect(deadzoneSize(0.5).x).toBeCloseTo(FREE_AIM.deadzoneX / 2, 9);
+    expect(deadzoneSize(5)).toEqual(deadzoneSize(1));
+    expect(deadzoneSize(-5)).toEqual(deadzoneSize(0));
+  });
+  it('turns the camera from the first step off-centre at full strafe', () => {
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 0).yaw).toBe(0);
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 1).yaw).toBeGreaterThan(0);
+    expect(turnFromAim({ x: -0.1, y: 0 }, 1 / 60, 1).yaw).toBeLessThan(0);
+  });
+  it('keeps the same peak turn rate at the edge', () => {
+    expect(turnFromAim({ x: 1, y: 0 }, 1, 1).yaw).toBeCloseTo(FREE_AIM.turnRateX, 6);
+  });
+  it('honours a tuned scale', () => {
+    FREE_AIM.strafeDeadzoneScaleX = 0.5;
+    expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX * 0.5, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0; });
+});
+
+describe('shotAim (the gun aims at centre while strafing)', () => {
+  it('is the reticle standing still', () => {
+    expect(shotAim({ x: 0.7, y: -0.4 }, 0)).toEqual({ x: 0.7, y: -0.4 });
+    expect(shotAim({ x: 0.7, y: -0.4 })).toEqual({ x: 0.7, y: -0.4 });
+  });
+  it('is screen centre at full strafe, whatever the steering reticle', () => {
+    const a = shotAim({ x: -0.95, y: 0.3 }, 1);
+    expect(a.x).toBeCloseTo(0, 9);
+    expect(a.y).toBeCloseTo(0, 9);
+  });
+  it('slides smoothly with the strafe envelope', () => {
+    expect(shotAim({ x: 0.8, y: 0 }, 0.5).x).toBeCloseTo(0.4, 9);
+    expect(shotAim({ x: 0.8, y: 0 }, 2).x).toBeCloseTo(0, 9);
+  });
+  it('strafeAimCentre below 1 keeps the aim partly on the reticle', () => {
+    FREE_AIM.strafeAimCentre = 0.5;
+    expect(shotAim({ x: 0.8, y: 0 }, 1).x).toBeCloseTo(0.4, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeAimCentre = 1; });
+});
+
+describe('strafeSpeed01', () => {
+  const dt = 1 / 60, v = 4;
+  it('reads pure sideways motion as full strafe (right = [cos yaw, 0, sin yaw])', () => {
+    expect(strafeSpeed01(v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    expect(strafeSpeed01(-v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    // Facing 90 deg, right is +Z.
+    expect(strafeSpeed01(0, v * dt, Math.PI / 2, dt, v)).toBeCloseTo(1, 9);
+  });
+  it('ignores forward/back motion', () => {
+    // Forward at yaw 0 is -Z.
+    expect(strafeSpeed01(0, -v * dt, 0, dt, v)).toBeCloseTo(0, 9);
+    expect(strafeSpeed01(v * dt, 0, Math.PI / 2, dt, v)).toBeCloseTo(0, 9);
+  });
+  it('takes the lateral share of a diagonal, and clamps at 1', () => {
+    const d = v * dt / Math.SQRT2;
+    expect(strafeSpeed01(d, -d, 0, dt, v)).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(strafeSpeed01(100, 0, 0, dt, v)).toBe(1);
+  });
+  it('is zero for a zero or negative dt', () => {
+    expect(strafeSpeed01(1, 0, 0, 0, v)).toBe(0);
+  });
+});
+
+describe('approachStrafe', () => {
+  it('eases toward the target instead of popping, and settles', () => {
+    const one = approachStrafe(0, 1, 1 / 60);
+    expect(one).toBeGreaterThan(0);
+    expect(one).toBeLessThan(0.2);
+    let s = 0;
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 1, 1 / 60);
+    expect(s).toBeGreaterThan(0.99);
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 0, 1 / 60);
+    expect(s).toBeLessThan(0.01);
   });
 });
 
@@ -169,15 +253,35 @@ describe('bobPose', () => {
   it('scales with the speed envelope', () => {
     expect(Math.abs(bobPose(0.3, 0.5).x)).toBeLessThan(Math.abs(bobPose(0.3, 1).x));
   });
-});
 
-describe('approachBob', () => {
-  it('ramps in and out rather than snapping', () => {
-    expect(approachBob(0, 1, 1 / 60)).toBeGreaterThan(0);
-    expect(approachBob(0, 1, 1 / 60)).toBeLessThan(1);
-    let v = 1;
-    for (let i = 0; i < 120; i++) v = approachBob(v, 0, 1 / 60);
-    expect(v).toBeLessThan(0.01);
+  it('has a long stride: a 1.4 m step, one lateral cycle per 2.8 m (owner 2026-10-27: "spastic")', () => {
+    expect(1 / BOB.cyclesPerMetre).toBeCloseTo(2.8, 9);
+    // A dip every 1.4 m: y returns to its rest at half the lateral period.
+    expect(bobPose(1.4, 1).y).toBeCloseTo(0, 9);
+    expect(bobPose(0.7, 1).y).toBeCloseTo(-BOB.amountY, 9);
+  });
+
+  it('has no cusp at the footfall: the vertical slope is continuous through the top of each dip', () => {
+    // Old -|sin| flipped its slope at every rest crossing; -sin^2 has zero slope there.
+    const h = 1e-4;
+    for (const d of [0, 1.4, 2.8]) {
+      const left = (bobPose(d, 1).y - bobPose(d - h, 1).y) / h;
+      const right = (bobPose(d + h, 1).y - bobPose(d, 1).y) / h;
+      expect(Math.abs(left - right)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('is gentle: a few mm of dip, under a degree of roll', () => {
+    expect(BOB.amountY).toBeLessThanOrEqual(0.008);
+    expect(BOB.amountX).toBeLessThanOrEqual(0.012);
+    expect(BOB.amountRollDeg).toBeLessThan(1);
+  });
+
+  it('fades in with zero slope: the envelope goes through a smoothstep', () => {
+    // At a 2% envelope the swing is far below 2% of full (smoothstep(0.02) = 0.0012).
+    const d = 0.7;   // lateral peak
+    expect(Math.abs(bobPose(d, 0.02).x)).toBeLessThan(Math.abs(bobPose(d, 1).x) * 0.002);
+    expect(bobPose(d, 0.5).x).toBeCloseTo(bobPose(d, 1).x * 0.5, 9);   // smoothstep(0.5) = 0.5
   });
 });
 
@@ -329,5 +433,33 @@ describe('the weapon actually crosses the frame (owner report)', () => {
     for (const x of [-1, -0.5, 0, 0.5, 1]) {
       expect(Math.abs(gripScreenX(x))).toBeLessThan(1);
     }
+  });
+});
+
+describe('viewmodelFrustum', () => {
+  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
+
+  it('aims the barrel at the reticle once the view model rig scales it by (s, s, 1)', () => {
+    // The live numbers from the owner's report: scale 0.735, reticle at -0.6.
+    // One axis at a time: yaw and pitch compose (pitch is applied last), and
+    // that coupling is weaponAngles' business, not this scale's.
+    const s = 0.735;
+    const screen = (aim: { x: number; y: number }) => {
+      const w = weaponAngles(aim, viewmodelFrustum(F, s));
+      const d = new THREE.Vector3(0, 0, -1).applyEuler(
+        new THREE.Euler(w.pitchDeg * Math.PI / 180, w.yawDeg * Math.PI / 180, 0));
+      // The rig's (s, s, 1) scale, then the projection.
+      return { x: (d.x * s) / -d.z / F.tanH, y: (d.y * s) / -d.z / F.tanV };
+    };
+    expect(screen({ x: -0.6, y: 0 }).x).toBeCloseTo(-0.6, 6);
+    expect(screen({ x: 0, y: 0.4 }).y).toBeCloseTo(0.4, 6);
+    // Unscaled, the barrel falls short by exactly s -- the bug.
+    const raw = weaponAngles({ x: -0.6, y: 0 }, F).yawDeg * Math.PI / 180;
+    expect(-Math.tan(raw) * s / F.tanH).toBeCloseTo(-0.6 * s, 6);
+  });
+  it('is the plain frustum at scale 1 and for a nonsense scale', () => {
+    expect(viewmodelFrustum(F, 1)).toEqual(F);
+    expect(viewmodelFrustum(F, 0)).toEqual(F);
+    expect(viewmodelFrustum(F, Number.NaN)).toEqual(F);
   });
 });

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/gore-tuning.test.ts
 import { describe, it, expect } from 'vitest';
-import { chunkCount, goutPack, scaleGunCrater, type GoreTuning } from './gore-tuning';
-import type { Wound } from './damage';
+import { chunkCount, goutPack, mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from './gore-tuning';
+import { MERGE, type Wound } from './damage';
 import { TERATOMA_PROFILE, ZOMBIE_PROFILE } from './motion-profile';
 
 const wound = (radius: number, carveDepth?: number): Wound =>
@@ -42,5 +42,12 @@ describe('gore-tuning', () => {
     expect(0.16 * g.craterScale).toBeGreaterThan(0.3);
     expect(g.blood?.slug?.countMul).toBeGreaterThan(1);
     expect(g.chunks?.slug?.count[0]).toBeGreaterThanOrEqual(4);
+  });
+
+  it('scales the ring merge cap with the craters, and leaves a body without gore on the shared cap', () => {
+    expect(mergeMaxRadiusFor(undefined)).toBe(MERGE.maxRadius);
+    expect(mergeMaxRadiusFor(null)).toBe(MERGE.maxRadius);
+    expect(mergeMaxRadiusFor({ craterScale: 0 })).toBe(MERGE.maxRadius);
+    expect(mergeMaxRadiusFor(TERATOMA_PROFILE.gore)).toBeCloseTo(MERGE.maxRadius * TERATOMA_PROFILE.gore!.craterScale, 12);
   });
 });

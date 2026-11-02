@@ -15,3 +15,9 @@ export function arenaStep(list: readonly string[], current: string, step: number
   if (i < 0) return list[0] ?? current;
   return list[((i + step) % list.length + list.length) % list.length]!;
 }
+
+/** Actor ids the arena is holding OUT OF THE DRAW while their character's pipelines compile in the background
+ *  (game-arena.ts). game-render-controls.ts updateVisibleActors skips them, so neither the per-body nor the crowd
+ *  draw reaches an uncompiled pipeline: drawing one builds it SYNCHRONOUSLY (tens of seconds cold), which froze the
+ *  game on every first visit to a character (owner: "when I press = to cycle to the next enemy it seems to freeze"). */
+export const arenaPending = new Set<number>();

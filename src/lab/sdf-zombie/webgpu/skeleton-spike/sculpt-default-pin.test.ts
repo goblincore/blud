@@ -20,6 +20,7 @@ import {
 import { createBoneMeshCache } from './sculpt-cache';
 import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, resolveSkull, sculptRecipe } from './sculpt-variant';
+import { batchDraws } from './segment-instance';
 
 // TWO LOOKS OF THE SCULPTED SKULL ARE PINNED, by the zombie's and the soldier's head mesh bytes and the paint's shader
 // text: a change to either is a change to what the game draws, and must be made on purpose (and the pin moved with
@@ -147,7 +148,7 @@ describe('the default skull is pinned: the sculpted skull, full', () => {
     const heads = BLOBS.map(([character, blob]) => headOf(character, blob));
     renderer.update(heads.map(h => [h]), heads.map((_, id) => ({ id })));
     const received = heads.map((head) => {
-      const batch = renderer.object.children.find(c => (c as THREE.InstancedMesh).geometry === cache.get(head).geometry) as THREE.InstancedMesh;
+      const batch = renderer.object.children.find(c => batchDraws(c, cache.get(head).geometry)) as THREE.Mesh;
       const material = batch.material as MeshBasicNodeMaterial;
       expect([material.name, material.userData.sculptPaint]).toEqual(['skeleton-bone', 2]);
       return { material, code: wgslReached(material.colorNode!) };
