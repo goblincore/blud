@@ -106,6 +106,9 @@ import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sec
 import { parseLevel } from './sector-json';
 import { addSectorMeshes } from './game-sector-mesh';
 import { createGameDoors } from './game-doors';
+import { createGameSwitches } from './game-switches';
+import { createGameLifts } from './game-lifts';
+import { withLiftsLow } from './sector-lifts';
 import { createZoneCull, updateZoneCull } from './game-zone-cull';
 import { freezeLevelMatrices } from './game-level-batch';
 import { doorTravel } from './sector-doors';
@@ -803,9 +806,11 @@ async function main() {
   // Mesh key §5: the art joins the group BEFORE the per-room light lists are
   // assigned (below), so it is lit exactly like the walls.
   // Sector levels (spec 2026-10-24 §6.4): floors, ceilings and walls from the sectors.
-  if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, ctx.world.level.def.sectors);
+  if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, withLiftsLow(ctx.world.level.def.sectors));
   // Doors (sector levels with `doors`): their leaves join the level group here, so the light-list loop lights them.
   if (ctx.world.level.def?.sectors) ctx.world.doors = createGameDoors(ctx);
+  if (ctx.world.level.def?.sectors) ctx.world.switches = createGameSwitches(ctx);
+  if (ctx.world.level.def?.sectors) ctx.world.lifts = createGameLifts(ctx);
   // Barrels (plan 3b): sector levels only. Their meshes join the level group here so the light-list loop below lights
   // them like the walls; their boxes join ctx.world.colliders (the same array) before anything moves.
   if (ctx.world.level.def?.barrels?.length) ctx.world.barrels = createBarrelRuntime(ctx, ctx.world.level.def.barrels);

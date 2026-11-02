@@ -38,6 +38,8 @@ EXIT_SPECIALS = {11, 51, 52, 124}
 # and which need a key (written as the door's `key`; the game has no keys yet).
 BLAZE_DOOR_SPECIALS = {105, 106, 108, 109, 111, 112, 114, 115, 117, 118}
 DOOR_KEY_SPECIALS = {26: "blue", 32: "blue", 27: "yellow", 34: "yellow", 28: "red", 33: "red"}
+# Gun switches: a one-sided line that opens the tagged door when a player's shot hits it (written as `switches`).
+GUN_DOOR_SPECIALS = {46}
 
 # Remotely triggered line specials (the line's tag names the target sectors). Step 1 is static, so each
 # class is applied once when converting; moving them is plan 2.
@@ -49,6 +51,9 @@ FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
 FLOOR_RAISE_SPECIALS = {18, 20, 22, 47, 68, 69, 95, 119, 128, 129, 130, 131, 132}
 # Reserved: lifts are static until the doors/lifts plan (a lift at its top is a known gap).
 LIFT_SPECIALS = {10, 21, 62, 88, 120, 121, 122, 123}
+# The lifts that move (written as `lifts`): Doom's repeatable switch lift, the one MAP28's way back up uses. Walk-over
+# lifts (E1M1's 88 among them) stay static at their top.
+MOVING_LIFT_SPECIALS = {62}
 
 # Sector types -> (special, hurtPerSec). Doom hurts every 32 tics (~0.91 s); we use per second.
 SECTOR_TYPES = {
@@ -94,6 +99,7 @@ THING_PICKUPS = {
     2001: "shotgun",
     2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets
     2011: "health", 2012: "health", 2014: "health", 2015: "health", 2018: "health", 2019: "health",
+    5: "key-blue", 40: "key-blue", 6: "key-yellow", 39: "key-yellow", 13: "key-red", 38: "key-red",  # cards and skulls alike
 }
 THING_BARRELS = {2035}  # Doom's exploding barrel -> our toxic drum (plan 3b)
 SKILL_BITS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 4}               # Doom skill -> THINGS flag bit

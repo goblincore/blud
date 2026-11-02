@@ -7,6 +7,17 @@ Floods the sector graph by the game's own rules (sector-def.ts: step, headroom, 
 as open, one way down a drop. Reads only the level file. Prints what is reached, what stops the flood and whether
 an exit trigger's sector is among the reached. Exits 1 if the exit is not reached. A coarse check: sector to sector,
 so a line wide enough over a sector the body cannot cross still counts.
+
+Locks count: a door with a `key` stays shut until a key pickup of that colour is reached, a `sealed` door until a
+reached sector holds a switch firing its `opensOn` (the switch's line borders the sector: a shot from that sector). So
+a key behind its own lock, or a switch behind the door it opens, reads as the exit not reached. Every door taken as
+open is the `open_doors` result, for what the locks cost.
+
+Lifts count: a lift sector stands at its `top`, and a body within a step of its low position can ride it up.
+
+The exit verdict is a play-through, not the flood: every (sector, things held) state a player can get to, so a key below
+a one-way drop with no way back to its door reads as not reached. `dead_ends` lists the places a player can get stuck for
+good: states with no way on to the exit from there.
 """
 from __future__ import annotations
 
@@ -31,8 +42,11 @@ def sector_of(p, segs_by_sector) -> int | None:
     return None
 
 
-def flood(level: dict) -> dict:
-    vs, secs, lines = level["vertices"], level["sectors"], level["lines"]
+def flood(level: dict, locks: bool = True) -> dict:
+    vs, lines = level["vertices"], level["lines"]
+    lifts = {x["sector"]: x for x in level.get("lifts", [])}
+    low = {s: level["sectors"][s]["floor"] for s in lifts}
+    secs = [dict(s, floor=lifts[i]["top"]) if i in lifts else s for i, s in enumerate(level["sectors"])]
     segs: list[list] = [[] for _ in secs]
     edges: dict[int, list] = {}
     for i, ln in enumerate(lines):
@@ -49,16 +63,49 @@ def flood(level: dict) -> dict:
         edges.setdefault(k, []).append((f, i, w))
     start = sector_of((level["start"]["pos"][0], level["start"]["pos"][2]), segs)
     seen, stack, blocked = {start}, [start], []
+    # The locks: door sector -> what it waits for; what each sector gives when reached.
+    waits = {}
+    for d in level.get("doors", []) if locks else []:
+        if d.get("key"):
+            waits[d["sector"]] = f"key-{d['key']}"
+        elif d.get("sealed"):
+            waits[d["sector"]] = d["opensOn"]
+    gives: dict[int, list[str]] = {}
+    for p in level.get("pickups", []):
+        if p["item"].startswith("key-"):
+            gives.setdefault(sector_of((p["pos"][0], p["pos"][2]), segs), []).append(p["item"])
+    for sw in level.get("switches", []):
+        gives.setdefault(lines[sw["line"]]["front"], []).append(sw["event"])
+    have: set[str] = set()
+    order: list[str] = []
+    waiting: list[int] = []
 
     def walkable(n: int, o: int, w: float) -> bool:
         opening = min(secs[n]["ceil"], secs[o]["ceil"]) - max(secs[n]["floor"], secs[o]["floor"])
-        return secs[o]["floor"] - secs[n]["floor"] <= SECTOR_STEP_M and opening >= SECTOR_HEADROOM_M and w >= BODY_WIDTH_M
+        rides = o in lifts and low[o] - secs[n]["floor"] <= SECTOR_STEP_M
+        return (rides or secs[o]["floor"] - secs[n]["floor"] <= SECTOR_STEP_M) and (rides or opening >= SECTOR_HEADROOM_M) and w >= BODY_WIDTH_M
 
+    def reach(n: int) -> None:
+        """What sector n gives; a door that was waiting for it joins the flood from the sectors beside it."""
+        for g in gives.get(n, []):
+            if g not in have:
+                have.add(g)
+                order.append(f"{g} in s{n}")
+        for d in [d for d in waiting if waits[d] in have]:
+            waiting.remove(d)
+            del waits[d]
+            stack.extend(s for s in seen if any(o == d for o, _, _ in edges.get(s, [])))
+    reach(start)
     while stack:
         n = stack.pop()
         for o, i, w in edges.get(n, []):
             if o in seen:
                 continue
+            if o in waits:
+                if waits[o] not in have:
+                    if o not in waiting:
+                        waiting.append(o)
+                    continue
             if not walkable(n, o, w):
                 up = secs[o]["floor"] - secs[n]["floor"]
                 opening = min(secs[n]["ceil"], secs[o]["ceil"]) - max(secs[n]["floor"], secs[o]["floor"])
@@ -66,6 +113,7 @@ def flood(level: dict) -> dict:
                 continue
             seen.add(o)
             stack.append(o)
+            reach(o)
     exits = []
     for t in level.get("triggers", []):
         if t.get("event") == "level.end":
@@ -79,9 +127,40 @@ def flood(level: dict) -> dict:
             if any(o in back and walkable(n, o, w) for o, _, w in edges.get(n, [])):
                 back.add(n)
                 grew = True
+    # The play-through: (sector, what is held) states. Locks are the file's, not the flood's running copy.
+    locked = {}
+    for d in level.get("doors", []) if locks else []:
+        if d.get("key"):
+            locked[d["sector"]] = f"key-{d['key']}"
+        elif d.get("sealed"):
+            locked[d["sector"]] = d["opensOn"]
+    first = (start, frozenset(gives.get(start, [])))
+    states, order_q = {first}, [first]
+    succ: dict = {}
+    while order_q:
+        st = order_q.pop()
+        n, held = st
+        succ[st] = []
+        for o, _, w in edges.get(n, []):
+            if (o in locked and locked[o] not in held) or not walkable(n, o, w):
+                continue
+            nxt = (o, held | frozenset(gives.get(o, [])))
+            succ[st].append(nxt)
+            if nxt not in states:
+                states.add(nxt)
+                order_q.append(nxt)
+    good = {st for st in states if st[0] in exits}
+    grew = True
+    while grew:
+        grew = False
+        for st in states - good:
+            if any(x in good for x in succ[st]):
+                good.add(st)
+                grew = True
+    dead = sorted({(n, tuple(sorted(h))) for n, h in states - good})
     place = lambda items: sum(1 for it in items if sector_of((it["pos"][0], it["pos"][2]), segs) in seen)  # noqa: E731
-    return {"start": start, "reached": sorted(seen), "blocked": [b for b in blocked if b[1] not in seen], "exits": exits,
-            "exit_reached": any(e in seen for e in exits), "soft_locks": sorted(seen - back), "spawns": (place(level.get("spawns", [])), len(level.get("spawns", []))),
+    return {"start": start, "reached": sorted(seen), "unlocked": order, "still_locked": sorted(d for d, w in waits.items() if w not in have), "blocked": [b for b in blocked if b[1] not in seen], "exits": exits,
+            "exit_reached": first in good, "dead_ends": dead, "soft_locks": sorted(seen - back), "spawns": (place(level.get("spawns", [])), len(level.get("spawns", []))),
             "pickups": (place(level.get("pickups", [])), len(level.get("pickups", [])))}
 
 
@@ -92,6 +171,9 @@ def main() -> None:
     print(f"unreached: {sorted(set(range(len(level['sectors']))) - set(r['reached']))}")
     for n, o, i, up, opening, w in sorted(r["blocked"], key=lambda b: (b[1], b[0])):
         print(f"  s{n} -> s{o} line {i}: up {up} m, opening {opening} m, width {w} m")
+    print(f"unlocked in order: {r['unlocked']}; doors still locked: {r['still_locked']}")
+    print(f"with every door open: reached {len(flood(level, locks=False)['reached'])} sectors")
+    print(f"dead ends (sector, held; no way on to the exit): {len(r['dead_ends'])} {r['dead_ends'][:8]}")
     print(f"soft locks (reached, no way on to the exit): {r['soft_locks']}")
     print(f"exit sectors {sorted(set(r['exits']))}: {'REACHED' if r['exit_reached'] else 'NOT reached'}")
     sys.exit(0 if r["exit_reached"] else 1)

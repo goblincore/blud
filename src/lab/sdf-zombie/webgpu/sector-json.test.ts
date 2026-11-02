@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseLevel, parseSectorLevel } from './sector-json';
+import { withLiftsLow } from './sector-lifts';
 
 const fixture = (): any => JSON.parse(readFileSync('public/assets/levels/fixtures/sectors.level.json', 'utf8'));
 
@@ -193,5 +194,64 @@ describe('parseSectorLevel: per-side wall families', () => {
     j.lines[0].walls = { back: { mid: 'tech' } };
     expect(() => parseSectorLevel(j)).toThrow(/lines\[1\]\.walls: unknown key left.*lines\[1\]\.walls\.front: unknown key side.*lines\[1\]\.walls\.front\.mid: expected a name/);
     expect(() => parseSectorLevel(j)).toThrow(/lines\[0\]\.walls\.back: a one-sided line has no back side/);
+  });
+});
+
+describe('parseSectorLevel: locks and gun switches', () => {
+  const doorway = (door: any, switches?: any): any => ({
+    version: 1, id: 'doorway', name: 'Doorway', geometry: 'sectors', ammo: 'infinite', loadout: ['melee'],
+    start: { pos: [-2, 0, 0], yaw: 0 },
+    vertices: [[-4, -1], [0, -1], [0.5, -1], [4.5, -1], [4.5, 1], [0.5, 1], [0, 1], [-4, 1]],
+    sectors: [{ floor: 0, ceil: 3, zone: 0 }, { floor: 0, ceil: 2.5, zone: 0 }, { floor: 0, ceil: 3, zone: 1 }],
+    lines: [
+      { v: [0, 1], front: 0 }, { v: [1, 6], front: 0, back: 1 }, { v: [6, 7], front: 0 }, { v: [7, 0], front: 0 },
+      { v: [1, 2], front: 1 }, { v: [2, 5], front: 1, back: 2 }, { v: [5, 6], front: 1 },
+      { v: [2, 3], front: 2 }, { v: [3, 4], front: 2 }, { v: [4, 5], front: 2 },
+    ],
+    doors: [{ id: 'd', sector: 1, faces: [1, 5], a: [0.25, -1], b: [0.25, 1], width: 2, depth: 0.5, height: 2.5, zones: [0, 1], ...door }],
+    ...(switches ? { switches } : {}),
+  });
+
+  it('reads a sealed door, its event and the switch', () => {
+    const map = parseSectorLevel(doorway({ opensOn: 'switch.a', sealed: true }, [{ id: 's', line: 2, event: 'switch.a' }])).sectors!;
+    expect(map.doors![0]).toMatchObject({ opensOn: 'switch.a', sealed: true });
+    expect(map.switches).toEqual([{ id: 's', line: 2, event: 'switch.a' }]);
+  });
+
+  it('a level without them reads as before', () => {
+    const map = parseSectorLevel(doorway({})).sectors!;
+    expect(map.switches).toBeUndefined();
+    expect(map.doors![0]!.sealed).toBeUndefined();
+  });
+
+  it('refuses a sealed door nothing names, a bad switch line and a duplicate id', () => {
+    expect(() => parseSectorLevel(doorway({ sealed: true }))).toThrow(/sealed needs opensOn/);
+    expect(() => parseSectorLevel(doorway({}, [{ id: 's', line: 99, event: 'e' }]))).toThrow(/switches\[0\]\.line/);
+    expect(() => parseSectorLevel(doorway({}, [{ id: 's', line: 2, event: 'e' }, { id: 's', line: 3, event: 'e' }]))).toThrow(/duplicate id/);
+    expect(() => parseSectorLevel(doorway({}, [{ id: 's', line: 2 }]))).toThrow(/switches\[0\]\.event/);
+  });
+
+  it('a lift keeps its low floor as `low` and rests at its top', () => {
+    const j = doorway({});
+    j.lifts = [{ id: 'l', sector: 2, top: 1 }];
+    const map = parseSectorLevel(j).sectors!;
+    expect(map.lifts![0]).toMatchObject({ id: 'l', sector: 2, low: 0, top: 1 });
+    expect(map.sectors[2]!.floor).toBe(1);
+    expect(withLiftsLow(map).sectors[2]!.floor).toBe(0);
+    expect(map.sectors[2]!.floor).toBe(1);
+  });
+
+  it('refuses a lift whose top is not above its floor and under its ceiling', () => {
+    const j = doorway({});
+    j.lifts = [{ id: 'l', sector: 2, top: 0 }];
+    expect(() => parseSectorLevel(j)).toThrow(/lifts\[0\]\.top/);
+    j.lifts = [{ id: 'l', sector: 2, top: 9 }];
+    expect(() => parseSectorLevel(j)).toThrow(/under the sector's ceiling/);
+  });
+
+  it('takes key pickups', () => {
+    const j = doorway({ key: 'red' });
+    j.pickups = [{ id: 'k', item: 'key-red', pos: [-2, 0, 0.5] }];
+    expect(parseSectorLevel(j).pickups[0]!.item).toBe('key-red');
   });
 });

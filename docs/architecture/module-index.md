@@ -46,13 +46,13 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 91 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 93 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 52 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 54 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
@@ -372,6 +372,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-level-prewarm.ts` — LEVEL PRE-WARM: every level mesh is drawn once, one material build a step, nearest the player first, before the player first sees it (E1M1…
 - `webgpu/game-level-rooms.ts` — Runtime helpers for the active level (Level Format v1 — spec docs/superpowers/specs/2026-09-23-level-format-design.md).
 - `webgpu/game-level.ts` — The grey-box ring for sdf-game.html: four rooms in quadrants, connected 1 -> 2 -> 3 -> 4 -> 1 by short tunnels through the dividing bands, with NO…
+- `webgpu/game-lifts.ts` — LIFTS IN PLAY (2026-11-01): the level's `lifts` on ctx.world.lifts.
 - `webgpu/game-light-list.ts` — THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6).
 - `webgpu/game-loader-status.ts` — Boot helper for the game page: updating the loader status text.
 - `webgpu/game-loop.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
@@ -393,6 +394,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-skeleton-actors.ts` — An actor's skeleton resources: bone field sources, the shared volume atlas (acquire, release), binding and release.
 - `webgpu/game-skull-shots.ts` — A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT.
 - `webgpu/game-spawn.ts` — Spawning the cast: spawnEnemy (body, view, march settings, skeleton, kit), spawnAll, rebuildCast, and the game's march constants.
+- `webgpu/game-switches.ts` — GUN SWITCHES IN PLAY (2026-11-01): the level's `switches` on ctx.world.switches.
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
 - `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
 - `webgpu/game-telemetry.ts` — Opt-in, bounded live-play recorder (GameTelemetry): frame timings, phase spans, events and snapshots, with no GPU waits.
@@ -567,11 +569,13 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/sector-glow.wgsl.ts` — GLOWING HAZARD FLOORS (spec 2026-10-24 §8): nukage, lava and acid as a self-lit, slowly flowing surface in world space (so a pool split across…
 - `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
 - `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
+- `webgpu/sector-lifts.ts` — SECTOR LIFTS (2026-11-01): a sector whose floor moves between `low` (the sector's floor in the file, so the static mesh draws the shaft's risers at…
 - `webgpu/sector-light.ts` — SECTOR LIGHT (spec 2026-10-24-doom-sector-levels-design.md §7).
 - `webgpu/sector-materials.ts` — SECTOR MATERIALS: the converter's family names (scripts/levels/doom_tables.py — tech, rust, metal, door, light-panel, concrete, metal-plate, tile) to…
 - `webgpu/sector-navigation.ts` — NAVIGATION OVER SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.3): the grid core of grid-navigation.ts, with standing and travel read…
 - `webgpu/sector-portals.ts` — SECTOR PORTAL VISIBILITY (occlusion pass, 2026-10-28): which sectors the camera can possibly see, from the sector graph alone.
 - `webgpu/sector-ray.ts` — SEGMENT VS SECTOR GEOMETRY (plan 2026-10-24-sector-levels-3a Task 3): where a 3D segment a→b first meets a sector level's walls, floors or ceilings —…
+- `webgpu/sector-switches.ts` — GUN SWITCHES (2026-11-01): a wall line (the level file's `switches`, sector-def.ts SectorSwitchDef) that fires a level event the first time a…
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).
 - `webgpu/sky.wgsl.ts` — The sky dome's colour, hand-written WGSL (Outdoor v1 §6).
 - `webgpu/train-motion.ts` — The train's motion (carriage kit spec §6), as pure functions of SIM time and speed: camera roll and bob, rail-joint jolts, lamp and curtain swing.

@@ -45,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
-    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, GUN_DOOR_SPECIALS, MOVING_LIFT_SPECIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
@@ -69,6 +69,7 @@ DOOR_SPEED_M_S = 3.0             # leaf travel (game time, not world scale: the 
 DOOR_BLAZE_SPEED_M_S = 6.0       # Doom's fast doors
 DOOR_WAIT_S = 4.0                # Doom waits 150 tics (4.3 s)
 DOOR_SHAPE_TOL_M = 0.01          # how far a door sector may be off a rectangle and still be a doorway
+DOOR_SKEW_TOL_M = 0.3            # parallel faces whose ends are this far out of square still make a doorway (MAP28's s76)
 # The *_M2 areas and the EMITTER_LIGHT_*_M spacings are map structure: metres at REFERENCE_UNITS_PER_M.
 ZONE_SPLIT_M2 = 600.0            # a zone whose floor area is over this splits (spec §6.5)
 ZONE_MIN_M2 = 50.0               # a smaller zone merges into a neighbour
@@ -395,6 +396,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     doors = set(door_by)
     lowered: set[int] = set()
     raised: set[int] = set()
+    gun_tag: dict[int, int] = {}     # door sector -> the tag of a gun switch that opens it
     for ln in lines:
         if ln["tag"] == 0:
             continue
@@ -403,6 +405,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             doors.update(targets)
             for t in targets:
                 door_by.setdefault(t, set()).add(ln["special"])
+            if ln["special"] in GUN_DOOR_SPECIALS:
+                for t in targets:
+                    gun_tag.setdefault(t, ln["tag"])
         elif ln["special"] in FLOOR_LOWER_SPECIALS:
             lowered.update(targets)
         elif ln["special"] in FLOOR_RAISE_SPECIALS:
@@ -419,6 +424,19 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     for d in sorted(doors):
         if neighbours[d]:
             ceil[d] = min(sectors[n]["ceil"] for n in neighbours[d]) - DOOR_OPEN_GAP_UNITS
+    # Moving lifts: the file's floor is the low position (the lowest neighbour's floor), `top` where it rests.
+    lift_top: dict[int, float] = {}
+    for ln in lines:
+        if ln["special"] in MOVING_LIFT_SPECIALS and ln["tag"] != 0:
+            for t in (i for i, s in enumerate(sectors) if s["tag"] == ln["tag"]):
+                if t not in lift_top and neighbours[t] and min(floor[n] for n in neighbours[t]) < floor[t]:
+                    lift_top[t] = floor[t]
+    for t in list(lift_top):
+        below = [floor[n] for n in neighbours[t] if n not in lift_top]
+        if below and min(below) < floor[t]:
+            floor[t] = min(below)
+        else:
+            del lift_top[t]                                  # only other lifts beside it: stays static
     for i in range(len(sectors)):
         if ceil[i] <= floor[i]:
             raise ValueError(f"{map_name}: sector {i} (tag {sectors[i]['tag']}) has ceiling {ceil[i]} <= floor {floor[i]} "
@@ -499,7 +517,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         out_lines.append(rec)
 
     verts_m = [[X(x), Z(y)] for x, y in verts]
-    door_entities, doors_left_open = _door_entities(doors, door_by, out_lines, verts_m, out_sectors)
+    door_entities, doors_left_open = _door_entities(doors, door_by, gun_tag, out_lines, verts_m, out_sectors)
 
     # Fill lights: one per zone of real area >= LIGHT_MIN_ZONE_M2 (the biggest MAX_LIGHTS), at a point
     # confirmed inside the zone's biggest sector, as far from its walls as the grid finds.
@@ -620,6 +638,14 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         level["completeOn"] = "level.end"
     if door_entities:
         level["doors"] = door_entities
+    # Gun switches: only those that open a door entity (a door left an open hole has nothing to open).
+    opens = {rec["opensOn"] for rec in door_entities if "opensOn" in rec}
+    switches = [{"id": f"sw-{k}", "line": k, "event": f"switch.tag-{ln['tag']}"} for k, ln in enumerate(kept)
+                if ln["special"] in GUN_DOOR_SPECIALS and f"switch.tag-{ln['tag']}" in opens]
+    if switches:
+        level["switches"] = switches
+    if lift_top:
+        level["lifts"] = [{"id": f"lift-{s}", "sector": s, "top": H(top)} for s, top in sorted(lift_top.items())]
     if barrels:
         level["barrels"] = barrels
 
@@ -639,16 +665,41 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     return level, stats
 
 
-def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, verts_m, out_sectors) -> tuple[list[dict], list[int]]:
+def _door_faces(d: int, out_lines, verts_m) -> list[int]:
+    """The two lines that are door sector d's faces. Usually its only two-sided lines. A rectangle set into a room
+    (MAP28's s16: its jambs open onto the room beyond one face) has more: the longest parallel pair of the same
+    length into two different rooms, when every other two-sided line opens onto one of those rooms."""
+    two_sided = [k for k, ln in enumerate(out_lines) if "back" in ln and ln["front"] != ln["back"] and d in (ln["front"], ln["back"])]
+    if len(two_sided) <= 2:
+        return two_sided
+    beyond = lambda k: out_lines[k]["back"] if out_lines[k]["front"] == d else out_lines[k]["front"]  # noqa: E731
+
+    def run(k):
+        (ax, az), (bx, bz) = verts_m[out_lines[k]["v"][0]], verts_m[out_lines[k]["v"][1]]
+        return bx - ax, bz - az
+    best, best_len = [], 0.0
+    for i, k in enumerate(two_sided):
+        for j in two_sided[i + 1:]:
+            (ux, uz), (vx, vz) = run(k), run(j)
+            lu, lv = math.hypot(ux, uz), math.hypot(vx, vz)
+            if abs(lu - lv) >= DOOR_SHAPE_TOL_M or abs(ux * vz - uz * vx) / max(lu, 1e-9) >= DOOR_SHAPE_TOL_M or lu <= best_len:
+                continue
+            rooms = {beyond(k), beyond(j)}
+            if len(rooms) == 2 and all(beyond(o) in rooms for o in two_sided):
+                best, best_len = [k, j], lu
+    return best
+
+
+def _door_entities(doors: set[int], door_by: dict[int, set[int]], gun_tag: dict[int, int], out_lines, verts_m, out_sectors) -> tuple[list[dict], list[int]]:
     """The door sectors shaped like a doorway as door entities (sector-def.ts SectorDoorDef), and the
-    others (left open holes). A doorway: exactly two two-sided lines between the sector and another
-    (its faces), the same length, parallel, their ends joined square (a rectangle, the jambs being
-    one-sided track walls). `a` -> `b` runs between the faces' matching ends; the leaves stand on the
-    sector floor up to its (open) ceiling."""
+    others (left open holes). A doorway: two two-sided lines between the sector and other rooms (its
+    faces, _door_faces), parallel, the same length with their ends joined square (a rectangle, the jambs
+    being track walls), or out of square by at most DOOR_SKEW_TOL_M. `a` -> `b` runs between the faces'
+    matching ends; the leaves stand on the sector floor up to its (open) ceiling. A gun switch's target
+    opens on its `opensOn` event; `sealed` when nothing else in the file opens it (no line of its own)."""
     out, left_open = [], []
     for d in sorted(doors):
-        faces = [k for k, ln in enumerate(out_lines)
-                 if "back" in ln and ln["front"] != ln["back"] and d in (ln["front"], ln["back"])]
+        faces = _door_faces(d, out_lines, verts_m)
         if len(faces) != 2:
             left_open.append(d)
             continue
@@ -663,10 +714,15 @@ def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, ver
         # Square: both faces as long as the doorway, and each jamb (p0 -> q0, p1 -> q1) across it.
         square = width > 0 and abs(dist(p0, p1) - width) < DOOR_SHAPE_TOL_M and abs(dist(q0, q1) - width) < DOOR_SHAPE_TOL_M \
             and all(abs((q[0] - p[0]) * tx + (q[1] - p[1]) * tz) < DOOR_SHAPE_TOL_M for p, q in ((p0, q0), (p1, q1)))
-        if not square:
-            left_open.append(d)
-            continue
         depth = dist(p0, q0)
+        if not square:
+            # Out of square: parallel faces (every end the same distance off a -> b), ends a little askew.
+            off = [abs((v[0] - a[0]) * -tz + (v[1] - a[1]) * tx) for v in (p0, p1, q0, q1)]
+            skew = max(abs((q[0] - p[0]) * tx + (q[1] - p[1]) * tz) for p, q in ((p0, q0), (p1, q1)))
+            if not (width > 0 and max(off) - min(off) < DOOR_SHAPE_TOL_M and skew <= DOOR_SKEW_TOL_M):
+                left_open.append(d)
+                continue
+            depth = off[0] * 2
         beyond = [out_lines[k]["back"] if out_lines[k]["front"] == d else out_lines[k]["front"] for k in faces]
         by = door_by.get(d, set())
         rec = {"id": f"door-{d}", "sector": d, "faces": faces, "a": a, "b": b,
@@ -677,6 +733,10 @@ def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, ver
         keys = sorted({DOOR_KEY_SPECIALS[sp] for sp in by if sp in DOOR_KEY_SPECIALS})
         if keys:
             rec["key"] = keys[0]
+        if d in gun_tag:
+            rec["opensOn"] = f"switch.tag-{gun_tag[d]}"
+            if not by & DOOR_SPECIALS:
+                rec["sealed"] = True
         out.append(rec)
     return out, left_open
 

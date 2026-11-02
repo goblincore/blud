@@ -205,3 +205,13 @@ export const LAMP_RGB: Readonly<Record<LampPhase, readonly [number, number, numb
   open: [0.12, 1, 0.28],
   closing: [1, 0.5, 0.04],
 };
+/** A locked door's lamp: the colour of its key, or violet for one that only a switch opens. */
+export const LOCK_RGB: Readonly<Record<string, readonly [number, number, number]>> = {
+  red: [1, 0.02, 0.02],
+  yellow: [1, 0.72, 0.03],
+  blue: [0.08, 0.28, 1],
+  sealed: [0.5, 0.12, 1],
+};
+export function lockRgb(def: Pick<SectorDoorDef, 'key' | 'sealed'>): readonly [number, number, number] {
+  return (def.sealed ? LOCK_RGB.sealed : LOCK_RGB[def.key ?? '']) ?? LOCK_RGB.red!;
+}
