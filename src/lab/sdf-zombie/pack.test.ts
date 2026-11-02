@@ -538,6 +538,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //   gibbet      3  three unequal eyes clustered off-centre on the dangling head
   //   chair       2  the sitter's eyes, dull embers deep in the sockets
   //   gamer       1  the fire button on his joystick (the headset's slit is kit `led`)
+  //   imp         2  two red embers deep in the sockets
   //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
   //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
   //                  has no glow prim any more; the base goblin never had one.)
@@ -560,6 +561,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'gibbet.blob': 3,
     'chair.blob': 2,
     'gamer.blob': 1,
+    'imp.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
