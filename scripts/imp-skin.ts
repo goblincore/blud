@@ -5,7 +5,8 @@
 // instead of on guessed numbers. Re-run after any edit to imp.blob's head or torso:
 //   npx tsx scripts/imp-skin.ts
 // `front.<limb>` is a grid over x and y (blob rest coords, 5 mm steps): the first surface of that limb's clusters met
-// by a ray travelling -z from z +1, with its normal; null where the ray misses. `back.<limb>` is the same from behind.
+// by a ray travelling -z from z +1, with its normal; null where the ray misses. `back.<limb>` is the same from behind;
+// `front.flesh` is the head without its mouth slot.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,11 +19,15 @@ type V = [number, number, number];
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const doc = parseBlob(readFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/imp.blob'), 'utf8'));
 const built = buildBody(compileBlob(doc, compileFace(doc)));
-const only = (limb: string) => ({ ...built, clusters: built.clusters.map(c => ({ ...c, alive: c.limb === limb })) }) as typeof built;
+// The face WITHOUT the dark mouth slot (the one prim painted 2a0a0c): the teeth root in the flesh round it, and the
+// slot stands proud of that flesh, so a probe of the whole head lands on the slot's face instead.
+const docNoSlot = parseBlob(readFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/imp.blob'), 'utf8')
+  .split('\n').filter(l => !/head on skull.*color=2a0a0c/.test(l)).join('\n'));
+const builtNoSlot = buildBody(compileBlob(docNoSlot, compileFace(docNoSlot)));
 const r5 = (v: number[]) => v.map(x => +x.toFixed(5));
 
-function frontGrid(limb: string, x0: number, x1: number, y0: number, y1: number, step = 0.005, dz = -1) {
-  const body = only(limb);
+function frontGrid(limb: string, x0: number, x1: number, y0: number, y1: number, step = 0.005, dz = -1, src = built) {
+  const body = { ...src, clusters: src.clusters.map(c => ({ ...c, alive: c.limb === limb })) } as typeof built;
   const xs: number[] = [], ys: number[] = [];
   for (let x = x0; x <= x1 + 1e-9; x += step) xs.push(+x.toFixed(4));
   for (let y = y0; y <= y1 + 1e-9; y += step) ys.push(+y.toFixed(4));
@@ -50,6 +55,8 @@ const out = {
   front: {
     head: frontGrid('head', -0.10, 0.10, 1.50, 1.80),
     torso: frontGrid('torso', -0.16, 0.16, 1.10, 1.50),
+    // The head with its mouth slot left out (docNoSlot above): where the teeth root.
+    flesh: frontGrid('head', -0.05, 0.05, 1.52, 1.61, 0.0025, -1, builtNoSlot),
   },
   // The same from BEHIND (rays travelling +z from z -1): the dorsal spines' seats.
   back: {

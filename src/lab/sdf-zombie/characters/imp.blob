@@ -90,7 +90,8 @@ body
   bar  head on skull from=0.30 to=0.30 offset=(0.008,0.026,0.136) tip=(0.011,0.008,-0.014) r=0.0026 deep=0.7 blend=0.0015 both color=1c0707 gloss=0.6
   # The jaw: two mandible bars from the angle to a hard chin point.
   bar  head on skull from=0.30 to=0.30 offset=(0.040,-0.010,0.004) tip=(-0.038,-0.032,0.106) r=0.018 r2=0.013 blend=0.010 both
-  blob head on skull at=0.30 offset=(0,-0.044,0.110) r=0.022 wide=1.10 tall=0.90 deep=1.00 blend=0.010
+  # Thrust forward to the mouth slot's front, so the lower teeth stand on it.
+  blob head on skull at=0.30 offset=(0,-0.046,0.120) r=0.022 wide=1.10 tall=0.90 deep=1.00 blend=0.010
   # Sockets: sunken dark hollows under the brow, slanted (outer end higher),
   # with a bridge of flesh between them (from 0.016 they met in the middle and
   # read as one goggle band), each with a small red ember sunk in it (the
@@ -99,7 +100,9 @@ body
   blob head on skull at=0.30 offset=(0.031,0.055,0.088) r=0.0055 blend=0.002 both color=ff2410 glow=0.9
   # The mouth: a dark slot between muzzle and jaw, the kit teeth set on its edges.
   # (At wide 1.55 it stood out past the jaw's sides and read as a black collar.)
-  blob head on skull at=0.30 offset=(0,-0.020,0.128) r=0.028 wide=1.15 tall=0.45 deep=0.60 blend=0.003 color=2a0a0c gloss=0.9
+  # A gape, not a line: tall enough that the teeth (kit, rooted in the flesh
+  # above and below it) stand against the dark.
+  blob head on skull at=0.30 offset=(0,-0.018,0.128) r=0.028 wide=1.15 tall=0.80 deep=0.50 blend=0.003 color=2a0a0c gloss=0.9
 
   # TORSO — the flayer's gaunt masses (flayer.blob), the chest narrower and
   # the waist pinched: starved, every rib in the normal map.

@@ -2,7 +2,7 @@
 # that skull that break the hide.
 #   teeth  skull|teeth  two rows of uneven, hooked teeth set on the edges of the dark mouth slot and standing PROUD of
 #                       it, so they read against the dark; yellowed, stained brown at the gum (tooth)
-#   horns  skull|horns  two horns from the temples over the brow ridge, swept out and back and hooking down,
+#   horns  skull|horns  two horns from the temples over the brow ridge, sweeping up and out and hooking FORWARD,
 #                       ringed keratin near-black at the root (the twinhead demon skull's horns, tighter to the head)
 # Everything sits on the probed face (skin.json front.head, scripts/imp-skin.ts).
 import bpy, math, random
@@ -14,8 +14,12 @@ except NameError:
     PARTS = {'teeth', 'horns'}
 
 R = random.Random(11)
-# The mouth slot (imp.blob) is centred at y 1.564; the rows root on its upper and lower edges.
-UPPER_Y, LOWER_Y, HALF_W = 1.574, 1.553, 0.038
+# THE MOUTH: imp.blob's dark slot (blob at skull 0.30, offset (0,-0.018,0.128); compiled centre y ~1.566, semi-axis y
+# 0.0224) stands a few mm proud of the muzzle and jaw. The teeth root in the FLESH just above and below it (probed
+# with the slot left out: skin.json front.flesh), stand proud, and rake out and over the dark so they read against
+# it. The first pass rooted them on the probed head (the slot's own face): they floated and crossed the muzzle; the
+# second sat them just inside the slot's front: hidden, and the mouth read as a black ring.
+UPPER_Y, LOWER_Y, HALF_W = 1.586, 1.546, 0.028
 
 
 def tooth(name, root, d, back, L, w, hook):
@@ -30,14 +34,13 @@ if 'teeth' in PARTS:
     drop(['skull|teeth']); clear_work()
     for row, y, sgn, n in (('u', UPPER_Y, -1, 9), ('l', LOWER_Y, 1, 8)):
         for k in range(n):
-            x = -HALF_W + 2 * HALF_W * (k + 0.5) / n + R.uniform(-0.002, 0.002)
-            p, nrm = skin('front', 'head', x, y)
-            canine = abs(abs(x) - 0.024) < 0.006
-            L = (0.036 if canine else R.uniform(0.018, 0.028)) * (1.0 if row == 'u' else 0.85)
-            w = 0.0062 if canine else R.uniform(0.0042, 0.0054)
-            root = p + nrm * 0.003
-            d = (Vector((0, 0, sgn)) + nrm * 0.10 + Vector((R.uniform(-0.12, 0.12), 0, 0))).normalized()
-            tooth(f't{row}{k}', root, d, -nrm, L, w, R.uniform(0.15, 0.35))
+            x = -HALF_W + 2 * HALF_W * (k + 0.5) / n + R.uniform(-0.0015, 0.0015)
+            p, nrm = skin('front', 'flesh', x, y)
+            canine = abs(abs(x) - 0.019) < 0.005
+            L = (0.030 if canine else R.uniform(0.017, 0.023)) * (1.0 if row == 'u' else 0.9)
+            w = 0.0058 if canine else R.uniform(0.0038, 0.0048)
+            d = (bv(R.uniform(-0.08, 0.08), sgn, 0.0) + nrm * 0.30).normalized()   # down (up) and out over the dark
+            tooth(f't{row}{k}', p - nrm * 0.002, d, -nrm, L, w, R.uniform(0.10, 0.25))
     o = fuse('teeth', voxel=0.0008, smooth=(0.5, 2), noise=0.0003, noise_scale=0.01)
     decimate(o, 6000)
     bake_ao(o, material='tooth', gain=1.0, gamma=1.0, tint=(1.0, 1.0, 1.0), ao_dist=0.02)
@@ -50,23 +53,24 @@ if 'horns' in PARTS:
     roots = []
     BACK = Vector((0, 1, 0)); UP = Vector((0, 0, 1))
     for sx in (1, -1):
-        # Rooted 1 cm inside the temple, behind the brow ridge's end; leaving up, out and back, curling down and back
-        # along the skull (round the outward axis), with growth rings over the lower half.
-        base = bv(sx * 0.046, 1.668, 0.335)   # over the outer end of the brow: further back they were lost behind the dome
-        # Mostly BACK along the skull, a little up and out (more up read as a unicorn spike). Curling DOWN: turning
-        # about d0 x down carries the direction toward down, the same on both sides.
-        # Out to the side as much as back, so from the front each is a hook off the temple: curled up and back they
-        # were seen end-on and read as round mouse ears.
-        d0 = (BACK * 0.85 + UP * 0.25 + Vector((sx * 0.80, 0, 0))).normalized()
-        axis = d0.cross(-UP).normalized()
-        pts, rad = [], []; p = base.copy(); d = d0.copy(); n = 28; L = 0.16; r0 = 0.021
+        # Rooted 1 cm inside the temple, behind the brow ridge's end, with growth rings over the lower half.
+        base = bv(sx * 0.044, 1.668, 0.325)   # over the outer end of the brow: further back they were lost behind the dome
+        # FORWARD-FACING (owner, 2026-10-24: "switched to facing forward rather than swept back"): leaving up and out
+        # off the temple, then hooking FORWARD over the brow so the tips point ahead, a bull's or a charging demon's.
+        # Turning about d0 x forward carries the direction toward forward, the same on both sides.
+        FWD = Vector((0, -1, 0))
+        # OUT first, a little up, then turning forward: up-first (the first forward pass) read as two antennae.
+        d0 = (Vector((sx * 0.85, 0, 0)) + UP * 0.40 + BACK * 0.10).normalized()
+        axis = d0.cross(FWD).normalized()
+        pts, rad = [], []; p = base.copy(); d = d0.copy(); n = 28; L = 0.15; r0 = 0.021
         for i in range(n + 1):
             u = i / n; pts.append(p.copy()); rad.append(r0 * (1 - u) ** 1.15)
-            d = (Matrix.Rotation(1.1 / n, 3, axis) @ d).normalized(); p = p + d * (L / n)
+            d = (Matrix.Rotation(2.1 / n, 3, axis) @ d).normalized(); p = p + d * (L / n)
+            if u > 0.35: d = (d + UP * 0.05).normalized()   # and rising as it comes forward
         tube(f'horn{sx}', pts, rad, segs=14)
         for k in range(6):
             i = 2 + k * 2; t = (pts[i + 1] - pts[i]).normalized()
-            ring(f'hr{sx}{k}', pts[i], t, rad[i], rad[i] * 0.13 + 0.0015)
+            ring(f'hr{sx}{k}', pts[i], t, rad[i] * 0.97, rad[i] * 0.07 + 0.0010)   # subtle: proud rings read as a corrugated pipe
         roots.append(base)
     o = fuse('horns', voxel=0.0014, smooth=(0.5, 3), noise=0.0008, noise_scale=0.02)
     decimate(o, 5000)
