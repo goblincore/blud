@@ -13,7 +13,7 @@
 // differs for the imp:
 //   - THE TORSO LEANS 26 deg (imp.blob's hunch), so the torso is probed and baked round a TILTED axis along the
 //     spine (--torso-axis above; AXIS below must match it) rather than the zombie's vertical one;
-//   - the ribs are a starved cage, but they start out at the chest wound's edges (the spreader holds the middle);
+//   - the ribs are a starved cage, but they start out at the chest wound's edges (the forge-heart holds the middle);
 //   - SINEW, not muscle mass: long cords down each forearm (the reference's ropy forearms), down the backs of the
 //     shins to the hock and along the metatarsals; veins by the recipe on the flanks, the upper arms and the thighs.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -103,7 +103,7 @@ for (const [y, w] of [[1.17, 0.028], [1.22, 0.029]] as const)
 
 section("ribs: a starved cage, six arcs a side from the wound's edge round to the back");
 for (const s of [1, -1]) for (const [i, y] of [1.44, 1.40, 1.36, 1.32, 1.28, 1.24].entries()) {
-  // The wound and its spreader take the middle (x within ~0.09, ~30 deg at this radius): start outside it.
+  // The wound and its forge-heart take the middle (x within ~0.09, ~30 deg at this radius): start outside it.
   const th0 = 34 + i * 2;
   ridge([[y + 0.010, s * th0], [y, s * 55], [y - 0.010, s * 78], [y - 0.022, s * 102], [y - 0.030, s * 126]], 0.0080, 0.0042, 0.003);
 }
@@ -144,7 +144,7 @@ for (const s of [1, -1]) {
   varicose(1.30, s * 130, 1.10, s * 6, 0.0052, 0.0036, 1);   // over the lats
 }
 
-section("agitated flesh: swellings round the wound's edges, where the spreader's blades bite");
+section("agitated flesh: swellings round the wound's edges, where the heart's ribs break out");
 const LUMPS: [number, number, number][] = [
   [1.40, 30, 0.010], [1.34, 31, 0.009], [1.29, 27, 0.009], [1.40, -30, 0.010], [1.34, -31, 0.009], [1.29, -27, 0.009],
 ];

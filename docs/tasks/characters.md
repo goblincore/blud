@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Imp (gaunt fireball-throwing demon: burning socket fists, chest furnace) — first pass 2026-10-24
+## Imp (gaunt fireball-throwing demon: burning socket fists, a forge-heart feeding them) — first pass 2026-10-24
 
 - [x] **Body** `characters/imp.blob`: a gaunt, hunched, pale-hide demon on the butcher's digitigrade legs (flesh, not
   machine), long arms with a `hand` bone, a deep hunch. The head is flesh over a simplified version of the twinhead's
@@ -10,8 +10,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   chin point. `?character=imp`, `?spawn=imp`.
 - [x] **Kit** `assets-source/imp-kit/` (headless `build.py`, skin probed by `scripts/imp-skin.ts`): socket fists
   (a knuckled skullmetal cup round a burning coal, caged by five curled talons, glowing from a baked `_glow`), fangs
-  and swept horns, a chest-wound spreader over a glowing furnace, dorsal and shoulder spines, splayed foot talons and
-  a hock spur. ~97k tris; optimisation is the later pass.
+  rooted in the flesh round a dark gape, forward-hooking horns, a forge-heart in the chest wound (a crested housing
+  with a burning slit, prised-open ribs round it), dark fuel conduits with burning seams from the heart down each arm
+  into the fists, back and shoulder spines, splayed foot talons and a hock spur. ~116k tris; optimisation is the
+  later pass.
 - [x] **Body normal map** from `characters/imp.detail` (`scripts/imp-detail-gen.ts`): a starved rib cage, spine
   knuckles, sinew cords down the forearms, shins and metatarsals, veins; torso baked round the hunched spine axis.
 - [x] **Attacks**: `IMP_PROFILE` (PROWL_QUICK at 1.6 m/s, quick turn). Up close the zombie mind's swing as a claw

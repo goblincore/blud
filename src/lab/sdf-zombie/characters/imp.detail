@@ -217,7 +217,7 @@
   bar  torso on pelvis from=0.3343 to=0.3343 offset=(-0.1128,0,-0.054) tip=(-0.0008,-0.0108,0.0047) bend=(-0.0006,0.0002,0) r=0.0034 blend=0.0016
   blob torso on pelvis at=0.4872 offset=(-0.1067,0,-0.06) r=0.0055 blend=0.002
 
-  # ---- agitated flesh: swellings round the wound's edges, where the spreader's blades bite ----
+  # ---- agitated flesh: swellings round the wound's edges, where the heart's ribs break out ----
   blob torso on spine at=0.9792 offset=(0.0581,-0.0394,0.0808) r=0.01 blend=0.004
   blob torso on spine at=0.8146 offset=(0.0694,-0.048,0.0983) r=0.009 blend=0.004
   blob torso on spine at=0.6637 offset=(0.0596,-0.0511,0.1048) r=0.009 blend=0.004

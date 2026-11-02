@@ -7,15 +7,16 @@
 # demon skull's, under the hide.
 #
 # THE CONVERSION (biomech-style.md: "treat every enemy as a strogg
-# conversion"). The fire has a source: the chest wound is held open by a
-# skullmetal rib-spreader round a glowing FURNACE, and the hands are no hands
-# at all but burning SOCKETS caged by fused talons. The fireball leaves the
-# socket at the throw (MotionProfile.spit from the hand tip). The head is
-# flesh over a simplified demon skull, its eyes burning red.
+# conversion"). The fire has a source: a skullmetal forge-heart set in the chest
+# wound, the fire showing through a slit in it, the broken ribs gripping it, and
+# burning fuel lines from it over the ribs and down the arms into the hands. The
+# hands are no hands at all but burning SOCKETS caged by fused talons, and the
+# fireball leaves from one at the throw (MotionProfile.spit from the hand tip).
+# The head is flesh over a simplified demon skull, its eyes burning red.
 #
 # THE SPLIT: flesh is prims (few: the silhouette); sinew, veins and the
 # starved ribs are the baked body normal map (imp.detail); the teeth, horns,
-# talons, sockets, the spreader, the spines and the foot claws are kit
+# talons, sockets, the heart, fuel lines, spines and foot claws are kit
 # (assets-source/imp-kit/), with thin cores under them.
 #
 # THE SKELETON is the butcher's (butcher.blob explains the reverse-knee legs
@@ -114,10 +115,11 @@ body
   # mannequin with arms on a coat hanger).
   blob torso on spine  at=0.98 offset=(0.09,-0.01,-0.02) r=0.075 wide=1.25 tall=0.80 deep=0.95 blend=0.022 both
   blob torso on pelvis at=0.40 r=0.125 wide=1.04 tall=0.9 deep=0.90 blend=0.02
-  # The CHEST WOUND: raw meat proud of the sternum where the spreader (kit)
-  # holds it open, and the furnace's dark socket inside it. Muted red (the
-  # teratoma's lesson: hex reds render hotter than they read).
-  blob torso on spine  at=0.62 offset=(0,0,0.095) r=0.062 wide=1.20 tall=1.25 deep=0.55 blend=0.006 color=7a3c3c gloss=0.85
+  # The CHEST WOUND: raw meat proud of the sternum where the forge-heart (kit)
+  # sits in it, and the dark socket inside it. Muted red (the
+  # teratoma's lesson: hex reds render hotter than they read). Blended wide and
+  # flat, so it melts into the hide: at blend 0.006 its hard rim read as a saucer.
+  blob torso on spine  at=0.62 offset=(0,0,0.088) r=0.062 wide=1.20 tall=1.25 deep=0.45 blend=0.018 color=7a3c3c gloss=0.85
   blob torso on spine  at=0.62 offset=(0,0,0.118) r=0.036 wide=1.10 tall=1.30 deep=0.50 blend=0.004 color=2a0a0c gloss=0.9
 
   # ARMS — long and stringy: thin upper arms, the forearm swelling below the

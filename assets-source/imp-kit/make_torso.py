@@ -3,9 +3,9 @@
 #                              and bottom, vent ribs on its flanks) split down the front in a burning almond slit, half
 #                              buried in the meat (impmetal, lit from inside)
 #   ember     spine|ember      the fire inside it, seen through the slit (ventglow)
-#   ribs      spine|ribs       the ribcage PRISED OPEN round it: four broken ribs a side bursting out of the wound's
-#                              edges and curling forward like fingers round the heart, bloody at the root, bone at the
-#                              tip (impclaw, lit by the heart)
+#   ribs      spine|ribs       the ribcage PRISED OPEN round it: four broken ribs a side breaking out of the wound's
+#                              edges and reaching in over the housing like fingers gripping the heart, bloody at the
+#                              root, bone at the tip (impclaw, lit by the heart)
 #   spines    spine|spines     a row of bony spines raking back and up along the upper back (keratin)
 #   spikes    clavicle.l|spikes  two spikes off each shoulder, raked back (keratin)
 # The heart is the SOURCE of the imp's fire: make_conduits.py runs glowing fuel lines from its flanks over the
@@ -21,7 +21,7 @@ except NameError:
     PARTS = {'heart', 'ember', 'ribs', 'spines', 'spikes'}
 
 UP = Vector((0, 0, 1)); BACK = Vector((0, 1, 0))
-WY = 1.35                                   # the wound's centre height (imp.blob: spine at=0.62)
+WY = 1.33                                   # the wound's centre height (imp.blob: spine at=0.62): the heart sits IN it, meat showing all round
 W, WN = skin('front', 'torso', 0.0, WY)
 # The heart's frame: fw out of the wound, hu up the chest, hs across it (toward the body's left, blender +x).
 fw = WN.normalized(); hu = (UP - fw * UP.dot(fw)).normalized(); hs = hu.cross(fw).normalized()
@@ -37,7 +37,7 @@ def heart_pt(phi, th, grow=0.0):
 
 
 # The slit: open widest at its top and bottom points, an almond standing up the chest.
-SLIT = lambda th: 0.26 + 0.34 * math.cos(th) ** 2
+SLIT = lambda th: 0.38 + 0.26 * math.cos(th) ** 2   # waist 0.26 here pinched it into a peanut (the axes are unequal)
 
 if 'heart' in PARTS:
     drop(['spine|spreader', 'spine|furnace', 'spine|heart']); clear_work()
@@ -61,7 +61,8 @@ if 'heart' in PARTS:
             R = [i / 16 for i in range(17)]
             tube(f'vent{sgn}{k}', [heart_pt(SLIT(math.radians(sgn * th0)) + 0.15 + 0.85 * u, math.radians(sgn * (th0 + 18 * u)), 0.003) for u in R],
                  [0.0015 + 0.0030 * sn(0.1 + 0.9 * u) for u in R], segs=8)
-    finish('heart', 'spine|heart', 6000, mirror=False, material='impmetal', glow=(LIGHT, 0.07, 1.6, 0.5), voxel=0.0013)
+    # A tight glow, at the slit's lips only: at reach 0.07 the whole housing burned orange and lost its metal.
+    finish('heart', 'spine|heart', 6000, mirror=False, material='impmetal', glow=(LIGHT, 0.032, 2.0, 0.3), voxel=0.0013)
 
 if 'ember' in PARTS:
     drop(['spine|ember']); clear_work()
@@ -75,22 +76,29 @@ if 'ribs' in PARTS:
     roots = []
     for sx in (1, -1):
         out = hs * sx
-        for k, (y, L, r0) in enumerate(((1.405, 0.070, 0.0085), (1.372, 0.082, 0.0095), (1.335, 0.080, 0.0095), (1.298, 0.066, 0.0085))):
-            # Bursting out of the meat at the wound's edge, beside the heart: out and forward, then curling forward and
-            # IN round it (turning about d0 x -out carries the direction toward the middle).
-            p, n = skin('front', 'torso', sx * 0.052, y)
-            base = p - n * 0.010
-            d0 = (out * 0.75 + fw * 0.65 + hu * (0.10 * (1.5 - k))).normalized()
-            axis = d0.cross(-out).normalized()
-            horn(f'rib{sx}{k}', base, d0, axis, L, r0, curl=1.55)
-            roots.append(base)
+        # Traced ALONG the probed skin: each breaks out of the meat at the wound's outer edge, arches over the skin and
+        # reaches in to hook onto the housing's flank, bone fingers gripping the heart. Bursting straight forward they
+        # showed as stubs and pegs; a straight horn across the chest's curve buried itself and left only its tip. The
+        # gap at the middle lets the conduit through.
+        for k, (y, y1, x0) in enumerate(((1.402, 1.372, 0.098), (1.366, 1.350, 0.108), (1.296, 1.310, 0.108), (1.258, 1.286, 0.098))):
+            N_ = 24; pts = []; rad = []
+            for i_ in range(N_ + 1):
+                u = i_ / N_
+                x = x0 + (0.033 - x0) * u; yy = y + (y1 - y) * u
+                sp, sn_ = skin('front', 'torso', sx * x, yy)
+                # Under the skin at the root only, then held clear all the way onto the housing. Shallow at the root showed a rounded
+                # sausage end; an arch that dived again at the tip left detached worms that never reached the heart.
+                e = min(1.0, u / 0.35); off = -0.012 + 0.026 * e * e * (3 - 2 * e)
+                pts.append(sp + sn_ * off); rad.append(0.0085 * (1 - u) ** 0.7 + 0.0012)
+            tube(f'rib{sx}{k}', pts, rad, segs=12)
+            roots.append(pts[0])
     o = fuse('ribs', voxel=0.0013, smooth=(0.5, 3), noise=0.0008, noise_scale=0.02)
-    decimate(o, 5000)
+    decimate(o, 3500)
     bake_ao(o, material='impclaw', gain=1.0, gamma=1.2, tint=(1.0, 1.0, 1.0))
     # Bloody where they tear out of the meat, old bone toward the broken tips.
     tint_ao(o, lambda co: (lambda u: (0.28 + 0.40 * u, 0.05 + 0.52 * u, 0.05 + 0.40 * u))(
         min(1.0, min((co - r).length for r in roots) / 0.06)))
-    glow_bake(o, LIGHT, 0.09, 1.6, 0.5)
+    glow_bake(o, LIGHT, 0.045, 2.0, 0.4)
     install(o, 'spine|ribs'); clear_work()
 
 if 'spines' in PARTS:

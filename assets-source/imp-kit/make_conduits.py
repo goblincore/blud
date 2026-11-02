@@ -1,7 +1,8 @@
-# Imp: the FUEL CONDUITS that tie the fire together: from the forge-heart's flanks (make_torso.py) up across the chest
-# to the front of each shoulder, down the front of the upper arm, and down the forearm into the fist's socket collar
-# (make_hands.py), so the fire in the hands visibly comes from the chest. A ribbed skullmetal hose whose seams burn
-# (a baked `_glow` band at each rib), in three segments, each riding ONE bone (biomech-style.md, "Hoses"):
+# Imp: the FUEL CONDUITS that tie the fire together: from the forge-heart's flanks (make_torso.py) out across the ribs
+# to the armpit (straight up to the shoulders the pair read as a V necklace), down the front of the upper arm, and down the forearm into the fist's socket collar
+# (make_hands.py), so the fire in the hands visibly comes from the chest. A dark iron hose, sunk part-way into the
+# flesh, with a thin burning seam every few cm (a baked `_glow` band; ribs close together with a glow floor read as a
+# string of orange beads), in three segments, each riding ONE bone (biomech-style.md, "Hoses"):
 #   chest  spine|conduitL       heart -> shoulder port
 #   upper  upperArm.l|conduit   shoulder port -> elbow port
 #   fore   foreArm.l|conduit    elbow port -> the socket's collar at the wrist
@@ -16,13 +17,13 @@ except NameError:
     PARTS = {'chest', 'upper', 'fore'}
 
 UP = Vector((0, 0, 1))
-HOSE_R, RIB_EVERY = 0.0065, 0.014
+HOSE_R, RIB_EVERY = 0.0070, 0.024
 UA0, UA1 = BONE['upperArm.l']; FA0, FA1 = BONE['foreArm.l']
 FU, FF = BoneFrame(UA0, UA1), BoneFrame(FA0, FA1)
 # Arm skin radii along each bone (imp.blob: the deltoid r 0.070 at the clavicle's end, the upper arm 0.046 -> 0.036,
 # the forearm 0.050 -> 0.032 with a belly r 0.052 x 2 tall at 0.30), plus the hose's radius and a few mm of air.
-ur = lambda t: 0.046 - 0.010 * t + 0.022 * max(0.0, 1 - t / 0.22) + HOSE_R + 0.004
-fr = lambda t: 0.050 - 0.018 * t + 0.010 * bell((t - 0.30) / 0.35) + HOSE_R + 0.004
+ur = lambda t: 0.046 - 0.010 * t + 0.022 * max(0.0, 1 - t / 0.22) + HOSE_R * 0.35
+fr = lambda t: 0.050 - 0.018 * t + 0.010 * bell((t - 0.30) / 0.35) + HOSE_R * 0.35
 
 
 def catmull(ctrl, n):
@@ -46,15 +47,16 @@ def hose(name, pts, kit, port_end=True, port_start=False):
     k = 1
     while k * RIB_EVERY < S[-1] - 0.006:
         s = k * RIB_EVERY; j = next(i for i in range(1, len(S)) if S[i] >= s); w = (s - S[j - 1]) / max(1e-9, S[j] - S[j - 1])
-        ring(f'{name}r{k}', pts[j - 1].lerp(pts[j], w), (pts[j] - pts[j - 1]).normalized(), HOSE_R * 1.05, 0.0018, segs=20)
+        ring(f'{name}r{k}', pts[j - 1].lerp(pts[j], w), (pts[j] - pts[j - 1]).normalized(), HOSE_R * 1.02, 0.0012, segs=16)
         k += 1
     for at, tan in ((pts[-1], pts[-1] - pts[-2]) if port_end else (None, None), (pts[0], pts[1] - pts[0]) if port_start else (None, None)):
         if at is None: continue
         ball(f'{name}port', at, HOSE_R * 1.9)
         ring(f'{name}pr', at, tan.normalized(), HOSE_R * 1.8, 0.0024, segs=24)
     o = fuse(name, voxel=0.0011, smooth=(0.5, 2), noise=0.0006, noise_scale=0.02)
-    decimate(o, 3500)
+    decimate(o, 1800)
     bake_ao(o, 'impmetal', gain=1.0, gamma=1.3)
+    tint_ao(o, lambda co: (0.35, 0.34, 0.33))   # dark iron: it should sit back and let the seams burn
     # The seams burn: a band of glow between each pair of ribs, from the hose's own arc length.
     kd = KDTree(len(pts))
     for i, p in enumerate(pts): kd.insert(p, i)
@@ -64,8 +66,9 @@ def hose(name, pts, kit, port_end=True, port_start=False):
     ga = me.attributes.new('_glow', 'FLOAT', 'POINT')
     for v, g in zip(me.vertices, ga.data):
         _, i, dist = kd.find(v.co)
-        band = 0.5 + 0.5 * math.cos(2 * math.pi * (S[i] / RIB_EVERY + 0.5))
-        g.value = 0.15 + 0.75 * band ** 4 if dist < HOSE_R * 1.6 else 0.25
+        # A soft pulse at every SECOND rib, no floor: at every rib and sharper, the chest's short run read as bee stripes.
+        band = 0.5 + 0.5 * math.cos(2 * math.pi * S[i] / (RIB_EVERY * 2))
+        g.value = band ** 10 * 0.85 if dist < HOSE_R * 1.6 else 0.0
     install(o, kit)
     b, _, n = kit.partition('|')
     mirror_to_r(o, (b.replace('.l', '.r') + '|' + n) if '.l' in b else (b + '|' + n.replace('L', 'R')))
@@ -75,10 +78,10 @@ def hose(name, pts, kit, port_end=True, port_start=False):
 if 'chest' in PARTS:
     drop(['spine|conduitL', 'spine|conduitR']); clear_work()
     on = lambda x, y, off: (lambda pn: pn[0] + pn[1] * off)(skin('front', 'torso', x, y))
-    # From the heart's left flank (its semi-axis across is 0.042: make_torso.py) out over the pec and up to the front
-    # of the shoulder, a hose's breadth off the skin.
-    ctrl = [on(0.040, 1.345, 0.004), on(0.075, 1.375, 0.008), on(0.110, 1.420, 0.008), on(0.140, 1.455, 0.009),
-            on(0.158, 1.468, 0.012)]
+    # From the heart's left flank (its semi-axis across is 0.042: make_torso.py) out over the ribs and up to the armpit's
+    # front, sunk part-way into the skin.
+    ctrl = [on(0.038, 1.326, 0.002), on(0.075, 1.330, 0.003), on(0.110, 1.368, 0.003), on(0.138, 1.405, 0.004),
+            on(0.156, 1.445, 0.006)]
     hose('conduitL', catmull(ctrl, 10), 'spine|conduitL')
 
 if 'upper' in PARTS:

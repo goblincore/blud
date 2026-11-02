@@ -460,7 +460,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // The fireball-throwing demon (imp.blob's header): a gaunt hunched biped on the
   // butcher's digitigrade skeleton, its flesh in the .blob, sinew and veins in the
   // baked body normal map, and the hard parts (talons and burning hand sockets,
-  // teeth, ocular plate, chest spreader, foot claws) Blender kit
+  // teeth and horns, a forge-heart and its fuel lines, foot claws) Blender kit
   // (assets-source/imp-kit/). No face sheet: the face is prims and kit.
   imp: {
     name: 'imp', src: impBlobSrc,

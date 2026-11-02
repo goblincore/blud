@@ -633,7 +633,7 @@ throws fireballs. What it taught:
   hung open). It reads at fighting range as an orange point between dark claws, and the fireball leaves from it. A
   straight flared tube for the cup read as a plastic drum; bulge it over the knuckles and give the rim points. Knuckles
   as balls read as marbles; ridges do not.
-- **Fire light without lights.** The coal, the chest furnace and the eye embers light the parts round them through
+- **Fire light without lights.** The coal and the chest's forge-heart light the parts round them through
   baked `_glow` (`glow_bake` in `imp_common.py`: falloff times facing). A second glow colour needs its own material name
   in `GLOW_FROM_ATTRIBUTE`: `impmetal` (skullmetal's look) and `impclaw` (horn's) burn orange where `skullmetal` burns
   red. (The teratoma's `orbitmetal` alias is not in kit-overlay.ts on main, so its socket glow falls back to the default
@@ -652,6 +652,24 @@ throws fireballs. What it taught:
   faces the player and raises `fire` once at `IMP_TUNING.fireAt`, and `MotionProfile.spit` from `handTipR` puts the
   ball in the hand. A strike pitch of 1.05 ended the follow-through 45 deg up and read as a lob. Judge it with
   `BLOB_SWING_SWEEP=throw:0:0.6 BLOB_YAW=-1.3` (yaw in RADIANS; degrees spin the camera round to a random angle).
+- **A glowing part needs a reason to exist.** A cage of bars over a glowing orb between two hooked blades read as "an
+  afterthought" (owner). What replaced it is a SYSTEM: a crested skullmetal heart set in the wound, the fire showing
+  only through a slit, and fuel lines from it over the ribs and down the arms into the burning fists, so the chest
+  explains the hands. Keep the glow tight (`glow_bake` reach ~0.03 at the lips): at 0.07 the whole housing went orange
+  and stopped reading as metal.
+- **Glowing hoses: dark iron, thin seams, no floor.** Ribs every 1.4 cm with a glow floor read as a string of orange
+  beads, and a pair run straight to the shoulders as a V necklace. Ribs every 2.4 cm, a seam at `band ** 24`, the hose
+  sunk part-way into the skin and routed over the ribs to the armpit read as fire running under the hide.
+- **Teeth root in the flesh, not on the mouth.** A dark mouth prim stands proud, so a probe of the whole head lands on
+  its face and teeth float in front of it; seated inside it they vanish and the mouth reads as a black ring. Probe the
+  head with that prim left out (`scripts/imp-skin.ts` `front.flesh`), root just above and below it, and rake the teeth
+  out over the dark. Make the gap tall enough to be a gape.
+- **Forward horns leave sideways first.** Up-first read as antennae. Out, then turning forward (2.1 rad over 15 cm),
+  with rings barely proud of the horn (proud ones read as a corrugated pipe).
+- **Blender aborts on a name like `crest3.14159`:** it parses the `.NNN` suffix as an integer (`stoi: out of range`).
+  Keep part names integral.
+- **`lab never booted` can just mean load.** The turntable waits 80 s; at a load average of 80 a cold boot took 94 s.
+  Check `uptime` before suspecting your change.
 - **A light projectile, not the rocket.** The teratoma's fireball is the warbull's rocket (the dynamite's blast). An
   imp throws often from a quick body, so `fireball.ts` is its own straight-ish ball (11 m/s, a slight droop it aims
   for, 14 on a hit and 5 on a near miss, a 0.55 m fire burst through the dynamite's burst visual and light), and it
