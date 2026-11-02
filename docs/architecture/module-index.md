@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 52 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 53 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
@@ -548,6 +548,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
 - `webgpu/kit-remains-ground.ts` — What a gibbed body's kit and gun land on (kit-remains.ts): the sector debris ground on a sector level; on a room level the same walls the gib chunks…
 - `webgpu/kit-remains.ts` — WHO HOLDS A KIT AFTER ITS BODY IS GONE.
+- `webgpu/kit-template.ts` — ONE PARSE PER KIT (2026-11-01): a kit file is fetched and parsed once; each body gets a clone of the parsed scene.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
 - `webgpu/level-batch.ts` — LEVEL BATCHING, THE PURE CORE (draw-count pass, 2026-10-28).
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.

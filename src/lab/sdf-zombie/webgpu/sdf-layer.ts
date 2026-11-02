@@ -2426,8 +2426,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       const timeoutMs = opts?.timeoutMs ?? PRECOMPILE_COLD_PASS_TIMEOUT_MS;
       const previousTarget = renderer.getRenderTarget();
       // A CLONE, deliberately: the live loop is drawing between awaits, and the
-      // real camera's layer mask must not be SDF_LAYER for the whole compile.
-      const bgCamera = camera.clone();
+      // real camera's layer mask must not be SDF_LAYER for the whole compile. Not recursive: the viewmodel hangs under
+      // the camera, and a clone of it per compile (6 MB, kept by three's render lists) was 200 MB on MAP28's 30 crowd types.
+      const bgCamera = new THREE.PerspectiveCamera().copy(camera, false);
       bgCamera.layers.set(SDF_LAYER);
       bgCamera.updateMatrixWorld();
       bgCamera.matrixWorldInverse.copy(bgCamera.matrixWorld).invert();

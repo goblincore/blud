@@ -453,7 +453,7 @@ key if the later-volley misses ever matter.
 
 **Short answer.** Doom 2 MAP28 converts, boots, and can be walked from start to exit with its 111 enemies. Level geometry
 did not break the engine. What breaks first at this size is **SDF bodies**: their march cost when several crowd the view,
-then ~7 MB of heap per body, then the pre-warm time. Finer zones, the expected first fix, gained nothing, so they are not in.
+then memory per body ("Body memory" below), then the pre-warm time. Finer zones, the expected first fix, gained nothing, so they are not in.
 What the converter cannot do yet matters more than what the renderer cannot: only 4 of Doom 2's 32 maps can be finished
 this way, and MAP28 is one of them by luck.
 
@@ -518,7 +518,28 @@ roster for a level needs this table: a kind choice can double the worst frame.
 
 Read: 300 objects a frame on MAP13 costs 13 ms of draw CPU, which is fine. Past ~250 bodies it is the bodies: `tick` grows with the bodies in view,
 GC reaches 50 ms a frame at 3+ GB, and the level pre-warm (one mesh a step) stops finishing in useful time. Geometry alone (the tile with `?nospawn`): tick 0.5, draw 13, fence 6, heap 0.34 GB.
-Heap per body comes out at 7–8 MB on every level. Cause not looked at.
+Heap per body comes out at 7–8 MB on every level. (That number divides uncollected heap by bodies: see "Body memory" below for what it really was.)
+
+### Body memory (2026-11-01)
+
+Measured after a forced GC (`HeapProfiler.collectGarbage`; `performance.memory` before one overstates by 300 MB), array
+buffers traced by allocation stack, JS by the sampling heap profiler. MAP28 with no bodies is 140 MB live; with its 111, 1138 MB:
+
+| What | Live MB | State |
+| --- | --- | --- |
+| Kit glTF parsed per body (butcher 5.7, flayer 5.6, teratoma 9.4 MB a body; zombie 0.1) | 320 | **fixed:** one parse, a clone per body (`kit-template.ts`), `?kitshare=0` for the A/B |
+| `precompileInBackground`'s recursive `camera.clone()` copied the viewmodel, 6 MB per compile, kept by three | 200 | **fixed:** a camera copy without children |
+| 30 crowd types for 7 characters (`name@room`), each sized for 64 bodies: tile entries 167, prim atlas 97 | 265 | open |
+| Array buffers allocated under `sdfLayer.render`, not identified | 76 | open |
+| Each body's own JS objects, 0.7 MB | 70 | fine |
+
+After the two fixes: **571 MB** (JS 131, buffers 440; E1M1 402 MB). Frame cost did not change within this machine's noise (quiet round, s80:
+tick 15 / draw 11 ms in both arms). Boot time showed no clear gain either: 20-30 s in both arms under load, so the kit cache's boot saving is unmeasured. GPU memory is not measured, though kit attributes now upload once.
+
+Rules this sets: a shared kit geometry is never written or disposed (`isSharedKitGeometry`). `kit-damage` and a burst that re-weights
+clone it first; a sculpted kit split by bone writes nothing. The crowd types are per room for a reason (the pale zombie, 2026-09-14,
+`game-crowd-types.ts`): do not merge them across rooms; size each to the bodies it has, with an answer for a late spawn.
+Seen in both arms, so not this change: gib pieces hanging in the air against a wall after a rocket.
 
 **What broke, in the order found:**
 1. **Headroom against the world scale (fixed).** At the standard 35 u/m MAP28's 64-unit corridors are 1.83 m, under `SECTOR_HEADROOM_M` 1.9. 86 of 116 sectors
