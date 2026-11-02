@@ -18,6 +18,17 @@ export interface RigBendConstraint {
   restPole: Vec3;
   /** Optional forward-fold limit in radians, in [π/2, π); 150° for zombies. */
   maxFlex?: number;
+  /** THE LIVE HINGE (zombie knee spike 2026-11-02): two rig points whose a -> b direction is the joint's hinge axis
+   *  in the body (hipL -> hipR for a knee, shoulderL -> shoulderR for an elbow). Present, the pole is
+   *  `axisSign * cross(upper, axis)`, so it rolls with the trunk. Absent, the pole is restPole carried by the body yaw
+   *  and the upper bone's shortest swing, which ignores a roll: on every face-down free-ragdoll corpse it pointed
+   *  130-165° from the true back, so the stop let the knee fold the wrong way and blocked the right one. */
+  axis?: readonly [number, number];
+  /** +1 or -1: fixes the cross product's sign so the live pole matches restPole at rest. */
+  axisSign?: number;
+  /** With `axis`: how far (rad) the lower bone may leave the hinge plane. The rig has no twist, so this stands in for
+   *  the hip's (shoulder's) rotation; absent = no plane limit (only the half-plane stops). */
+  planeSlack?: number;
 }
 
 /** A limb segment (two rig points) the head capsule keeps out. */
@@ -129,14 +140,21 @@ export function constrainRigBends(
     // Recoil can move the animation target itself through the wrong side.
     // The stop belongs to the authored arm, never to that transient target.
     // Carry its pole through body yaw and then the upper arm's residual swing.
-    const yaw = qFromAxisAngle([0, 1, 0], state.bodyYaw ?? 0);
-    const restUpper = qRotate(yaw, bend.restUpper);
-    const restPole = qRotate(yaw, bend.restPole);
-    const pole = normalize(qRotate(qFromTo(restUpper, normalize(upper)), restPole));
+    const pole = livePole(points, bend, upper) ?? (() => {
+      const yaw = qFromAxisAngle([0, 1, 0], state.bodyYaw ?? 0);
+      return normalize(qRotate(qFromTo(qRotate(yaw, bend.restUpper), normalize(upper)), qRotate(yaw, bend.restPole)));
+    })();
     const normals = [pole];
     if (bend.maxFlex !== undefined) normals.push(sub(scale(normalize(upper), Math.sin(bend.maxFlex)),
       scale(pole, Math.cos(bend.maxFlex))));
-    if (normals.every(n => dot(fore, n) >= -1e-9)) continue;
+    // The hinge plane holds upper and pole; `hinge` is its normal. The BEND (the lower bone's share off the upper's
+    // line) may point within planeSlack of the plane: measured on the whole bone instead, a 20° slack let a knee
+    // bent under 20° point straight sideways, the buckle that read as broken.
+    const hinge = bend.axis && bend.planeSlack !== undefined ? normalize(cross(normalize(upper), pole)) : null;
+    const uHat = normalize(upper);
+    const offPlane = (d: Vec3) => hinge
+      ? Math.abs(dot(d, hinge)) - Math.sin(bend.planeSlack!) * len(sub(d, scale(uHat, dot(d, uHat)))) : -1;
+    if (normals.every(n => dot(fore, n) >= -1e-9) && offPlane(fore) <= 1e-9) continue;
     let dir = normalize(fore);
     // Project onto extension first, then maximum flexion. For our 150°
     // flexion limit the inward normals have positive dot product, so the
@@ -146,6 +164,16 @@ export function constrainRigBends(
       if (forbidden >= 0) continue;
       const tangent = sub(dir, scale(normal, forbidden));
       dir = len(tangent) < 1e-8 ? normalize(upper) : normalize(tangent);
+    }
+    // Then the hinge plane: turn the bend about the upper bone to within planeSlack of the pole side, keeping the
+    // fold angle. The stops above have already put the bend on the pole side, and a bigger pole share only moves
+    // the bone further inside both of them.
+    let planeSide = 0;
+    if (hinge && offPlane(dir) > 1e-9) {
+      planeSide = Math.sign(dot(dir, hinge));
+      const along = dot(dir, uHat), bendLen = len(sub(dir, scale(uHat, along)));
+      dir = normalize(add(scale(uHat, along), scale(add(scale(pole, Math.cos(bend.planeSlack!)),
+        scale(hinge, planeSide * Math.sin(bend.planeSlack!))), bendLen)));
     }
     let pos = add(mid.pos, scale(dir, foreLength));
     const fy = floorAt ? floorAt(pos[0], pos[2], end.pos) : floorY;
@@ -171,6 +199,20 @@ export function constrainRigBends(
         candidates.sort((a, b) => dot(b, dir) - dot(a, dir));
         if (candidates[0]) horizontal = candidates[0];
       }
+      // A live hinge lays the bone flat IN its plane (the plane's horizontal line), not wherever is flat: the floor
+      // turned a buckling knee 77° sideways the frame its foot landed. A level plane (a knee lying on its side)
+      // has no such line and keeps the choice above.
+      const level = hinge ? cross(hinge, [0, 1, 0]) : null;
+      if (level && len(level) > 1e-3 && offPlane(horizontal) > 1e-9) {
+        const ok = [normalize(level), scale(normalize(level), -1)].filter(v => normals.every(n => dot(v, n) >= -1e-9));
+        ok.sort((a, b) => dot(b, dir) - dot(a, dir));
+        // No flat line in the plane clears the stops (a face-up leg whose knee sits below its hip: its back of knee
+        // faces the floor): lie it straight in the plane rather than turning the shin sideways (which read as a
+        // broken knee). SPIKE OPEN ISSUE: the end can sit up to ~4 cm under the floor plane at the end of the frame.
+        // Tried and worse: holding the end on the floor short of its length (2 of 8 seeds never settled), lifting
+        // the knee with it (every corpse crept ~2 mm a frame), the flat direction nearest the plane (knees sideways).
+        horizontal = ok[0] ?? normalize(upper);
+      }
       dir = normalize(horizontal);
       pos = add(mid.pos, scale(dir, foreLength));
     }
@@ -182,10 +224,24 @@ export function constrainRigBends(
       const intoStop = dot(sub(velocity, sub(mid.pos, mid.prev)), normal);
       if (intoStop < 0) velocity = sub(velocity, scale(normal, intoStop));
     }
+    if (hinge && planeSide !== 0) {
+      const outward = dot(sub(velocity, sub(mid.pos, mid.prev)), hinge) * planeSide;
+      if (outward > 0) velocity = sub(velocity, scale(hinge, outward * planeSide));
+    }
     if (points === state.points) points = points.slice();
     points[bend.end] = { ...end, pos, prev: sub(pos, velocity) };
   }
   return points === state.points ? state : { ...state, points };
+}
+
+/** The pole from the live hinge axis (RigBendConstraint.axis), or null without one (or when it is degenerate: the
+ *  upper bone along the axis). */
+function livePole(points: readonly RigPoint[], bend: RigBendConstraint, upper: Vec3): Vec3 | null {
+  if (!bend.axis) return null;
+  const a = points[bend.axis[0]], b = points[bend.axis[1]];
+  if (!a || !b) return null;
+  const pole = scale(cross(upper, sub(b.pos, a.pos)), bend.axisSign ?? 1);
+  return len(pole) < 1e-8 ? null : normalize(pole);
 }
 
 /** Closest points between segments p1-q1 and p2-q2 (Ericson, Real-Time

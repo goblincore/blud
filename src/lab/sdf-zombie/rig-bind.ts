@@ -160,6 +160,11 @@ const PENDULUM_CHAIN: readonly string[] = ['hem2', 'hem3'];
  *  this keeps it where his hands and the attack's jiggle put it, with a little give. */
 export const HEM_HELD_SCALE = 0.7;
 
+/** ZOMBIE KNEE SPIKE (2026-11-02, owner: the free-ragdoll knee "always looks weird"). How far (rad) a shin may leave
+ *  its knee's hinge plane: the rig has no twist, so this stands in for the hip's rotation. Measured before it: knees
+ *  buckled 60-80° sideways. */
+export const KNEE_PLANE_SLACK = 20 * Math.PI / 180;
+
 export function bindRig(body: BuildResult): BoundRig {
   // Deduplicate joints: a bone's tail and its child's head are the same point.
   const positions: Vec3[] = [];
@@ -241,8 +246,12 @@ export function bindRig(body: BuildResult): BoundRig {
     const back = vscale(bodyForward, -1);
     const restPole = normalize(sub(back, vscale(restUpper, dot(back, restUpper))));
     if (len(restPole) < 1e-8) continue;
+    // The live hinge: the hip-to-hip line, so the stop rolls with the pelvis (rig.ts RigBendConstraint.axis).
+    const hips = [body.bones.get('thigh.l')?.head, body.bones.get('thigh.r')?.head];
+    const hinge = hips[0] && hips[1] ? { axis: [indexOf(hips[0]), indexOf(hips[1])] as const,
+      axisSign: dot(cross(restUpper, sub(hips[1], hips[0])), restPole) < 0 ? -1 : 1, planeSlack: KNEE_PLANE_SLACK } : {};
     rig.bends.push({ root: indexOf(thigh.head), mid: indexOf(thigh.tail),
-      end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+      end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180, ...hinge });
   }
 
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.

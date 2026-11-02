@@ -88,8 +88,11 @@ export const COLLAPSE_TUNING = {
   groundFriction: 0.72,
   /** Rope: how far a hip may wander from the pelvis (× rest distance). */
   anchorSlack: 1.2,
-  /** Rope: knee stays bent — max hip↔foot is this fraction of full extension. */
-  legSlack: 0.94,
+  /** Rope: knee stays bent — max hip↔foot is this fraction of full extension. 0.94 (a forced ~40° bend) dated from
+   *  knees with no hinge, which went plank-straight; with the live knee hinge (rig.ts RigBendConstraint.axis) it
+   *  fought gravity on a face-down corpse, whose bend lifts the foot: the shins jittered, then stood up in the air.
+   *  0.99 leaves a ~17° bend. */
+  legSlack: 0.99,
   /** Rope: elbow stays bent — max shoulder↔hand fraction of full extension. */
   armSlack: 0.9,
   /** Rope: max hip↔hip / shoulder↔shoulder spread (× rest distance). */
