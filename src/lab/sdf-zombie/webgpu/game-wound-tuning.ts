@@ -12,6 +12,8 @@ import { SPILL_CHANCE } from '../entrails-spawn';
 import { rebuildCast } from './game-spawn';
 import { applyWoundRamp } from './game-wound-vfx';
 import { type WoundTuningValues } from './wound-panel';
+import { setJointToughness } from '../connectivity';
+import { setCorpseIntegrity } from '../collapse';
 
 
 /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
@@ -35,6 +37,19 @@ export function applyWoundTuning(ctx: GameContext, o: Partial<WoundTuningValues>
   }
   if (ramp) for (const a of ctx.world.actors) applyWoundRamp(ctx, a.view);   // chunks copy the body template's meatCfg at spawn
   if (o.gutSize !== undefined) ctx.vfx.woundTuning.gutSize = o.gutSize;
+  // Gameplay knobs (spec 2026-11-02), read live by the sever check and the fall.
+  if (o.shoulderToughness !== undefined) {
+    ctx.vfx.woundTuning.shoulderToughness = o.shoulderToughness;
+    setJointToughness({ root: o.shoulderToughness });
+  }
+  if (o.elbowToughness !== undefined) {
+    ctx.vfx.woundTuning.elbowToughness = o.elbowToughness;
+    setJointToughness({ mid: o.elbowToughness });
+  }
+  if (o.corpseIntegrity !== undefined) {
+    ctx.vfx.woundTuning.corpseIntegrity = o.corpseIntegrity;
+    setCorpseIntegrity(o.corpseIntegrity);
+  }
   // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
   // they shape every rope spawned from now on; existing ropes keep theirs.
   if (o.coilTightness !== undefined) ctx.vfx.woundTuning.coilTightness = o.coilTightness;

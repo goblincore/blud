@@ -40,7 +40,8 @@ export type WoundTuningKey =
   | 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio'
   | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
   | 'coilTightness' | 'springiness' | 'organAmp'
-  | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice';
+  | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice'
+  | 'shoulderToughness' | 'elbowToughness' | 'corpseIntegrity';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -64,6 +65,14 @@ const _WOUND_KEYS = [
   { key: 'meatClot', label: 'meat clots', min: 0, max: 2.5, step: 0.05, value: 1 },
   { key: 'meatGlint', label: 'meat glints', min: 0, max: 2, step: 0.05, value: 1 },
   { key: 'meatCrevice', label: 'meat crevice', min: 0, max: 1.5, step: 0.05, value: 1 },
+  // JOINT TOUGHNESS + CORPSE INTEGRITY (spec 2026-11-02). Live: the next sever
+  // check / the next fall read them. The values MUST match the shipped
+  // connectivity.ts JOINT_TOUGHNESS and collapse.ts CORPSE_INTEGRITY (pinned
+  // by wound-panel.test.ts). 'shoulder' scales the shoulder AND hip, 'elbow'
+  // the elbow AND knee; below 1 is harder to cut.
+  { key: 'shoulderToughness', label: 'shoulder/hip cut', min: 0.3, max: 1.5, step: 0.05, value: 0.6 },
+  { key: 'elbowToughness', label: 'elbow/knee cut', min: 0.5, max: 3, step: 0.05, value: 1.7 },
+  { key: 'corpseIntegrity', label: 'corpse integrity', min: 0, max: 1, step: 0.05, value: 0.7 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];
