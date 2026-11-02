@@ -362,6 +362,19 @@ describe('the split field is a sound, continuous distance bound (the march relie
   }
 });
 
+describe('a head\'s hold (HeadFrame.hold, SPLIT_HEADS)', () => {
+  it('scales the hold ball alone: rho grows by holdFrac x radius x (hold - 1); the hinge, the plane and the cut faces stay', () => {
+    const st = forcedSplit('middle', 0, 0, 1)!;
+    const plain = splitWarpOf(st, FRAME)!, held = splitWarpOf(st, headFrameOf({ centre: FRAME.centre, axes: [0.08, 0.11, 0.09] }, FRAME.quat, 1.2))!;
+    expect(headFrameOf({ centre: FRAME.centre, axes: [0.08, 0.11, 0.09] }, FRAME.quat).hold).toBeUndefined();
+    expect(held.r - plain.r).toBeCloseTo(HEAD_SPLIT.holdFrac * FRAME.radius * 0.2, 12);
+    expect(held.h).toEqual(plain.h);
+    expect(held.n).toEqual(plain.n);
+    expect(held.d0).toBe(plain.d0);
+    expect(splitFaceSegs(st, { ...FRAME, hold: 1.2 })).toEqual(splitFaceSegs(st, FRAME));
+  });
+});
+
 describe('open, widen, force: the state a chop or the seam leaves', () => {
   it('splitMaxAngle: both halves vs one side, per preset; 0 when closed', () => {
     expect(splitMaxAngle(makeSplitState())).toBe(0);
