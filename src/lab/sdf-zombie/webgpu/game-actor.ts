@@ -965,13 +965,16 @@ export function createZombieActor(opts: {
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
     const gone = (l: LimbId) => bornWith.has(l) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
-    // A leg with ANY distal cut has lost its foot (severDistal kills the prim
-    // and everything outward), so it can no longer bear weight: count it as
-    // missing for the gait/collapse. Otherwise two shot-off shins left the
-    // torso standing on air (the cluster stays alive on a mid-limb cut).
-    const legGone = (l: LimbId) => gone(l)
+    // A limb with ANY distal cut has lost its foot or hand (severDistal kills
+    // the prim and everything outward), so it can no longer bear weight or
+    // hold anything: count it as missing for the gait, collapse and carry.
+    // Otherwise two shot-off shins left the torso standing on air, and (with
+    // the elbow the usual cut since joint toughness, 2026-11-02) a forearm cut
+    // left the prop in a hand that was gone. The cluster stays alive on a
+    // mid-limb cut, so the stump still renders.
+    const limbGone = (l: LimbId) => gone(l)
       || current.prims.some(p => p.limb === l && p.dead && p.op !== 'sub');
-    return { legL: legGone('legL'), legR: legGone('legR'), armL: gone('armL'), armR: gone('armR') };
+    return { legL: limbGone('legL'), legR: limbGone('legR'), armL: limbGone('armL'), armR: limbGone('armR') };
   }
 
   /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
