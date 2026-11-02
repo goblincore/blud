@@ -2,6 +2,29 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Limb toughness, corpse integrity, the neck stub — 2026-11-02
+
+Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2026-11-02-limb-toughness-corpse-integrity-design.md) ·
+[plan](../superpowers/plans/2026-11-02-limb-toughness-corpse-integrity.md). Owner look pending.
+
+- [x] **Arms and legs come off at the elbow or knee; the shoulder and hip resist** (owner: a whole arm "is a long tube").
+  `connectivity.ts JOINT_TOUGHNESS`, read from bone names: shoulder/hip 0.6, elbow/knee 1.7, others 1. Measured (zombie,
+  synthetic hits): a shoulder now survives 12 pellets and 31 of 32 first slugs (was ~1 hit); elbow and knee come off in 1-2 hits
+  as before; half of all mid-upper-arm or mid-thigh hits reach the elbow or knee within 6 pellets (was never). The hip never cuts
+  from the front. In the arena, one slug took a zombie's forearm at the elbow. The soldier family keeps factors of 1 (its own injury
+  budget). Decoration prims that make fake joints are listed in `connectivity-toughness.test.ts` (bride, goblin-home, minotaur legR).
+- [x] **A lost forearm counts as a lost arm** (`missingLimbs`): the bride drops her sword when her forearm goes.
+- [x] **Corpses keep their shape** (`collapse.ts` braces, `CORPSE_INTEGRITY` 0.7, per-profile `corpseIntegrity`). Zombie head to
+  pelvis settles at 0.61-0.72 m (rest 0.71; was 0.11, the head in the pelvis). Joints lie at their flesh thickness, the skull lets
+  go of its look cone over the fall, and the fall starts with a lean along the killing shot. Integrity 0 is the old fall exactly.
+  Arena: integrity 0 a crumpled heap, 0.7 and 1 a body lying full length.
+- [x] **A severed head flies without its neck stub** (`severLimb`): unit-tested on zombie, soldier, goblin and clown; not yet seen
+  in the game (the zombie's own decap is the swell-and-pop).
+- [x] Sliders on the wound panel: shoulder/hip cut, elbow/knee cut, corpse integrity (also `__sdfGame.setWoundTuning`).
+- [ ] Owner: tune the three sliders by eye; judge the fall at 0.7 against 1.
+- [ ] Head splitting for every enemy: soldier done on branch `claude/reverent-blackwell-4b31ca` (its own session), with a roll-out note.
+- Known, not ours: `pack-golden.test.ts` chair and gamer byte pins fail locally on main too.
+
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
