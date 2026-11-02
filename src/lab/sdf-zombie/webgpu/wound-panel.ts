@@ -70,8 +70,8 @@ const _WOUND_KEYS = [
   // connectivity.ts JOINT_TOUGHNESS and collapse.ts CORPSE_INTEGRITY (pinned
   // by wound-panel.test.ts). 'shoulder' scales the shoulder AND hip, 'elbow'
   // the elbow AND knee; below 1 is harder to cut.
-  { key: 'shoulderToughness', label: 'shoulder/hip cut', min: 0.3, max: 1.5, step: 0.05, value: 0.6 },
-  { key: 'elbowToughness', label: 'elbow/knee cut', min: 0.5, max: 3, step: 0.05, value: 1.7 },
+  { key: 'shoulderToughness', label: 'shoulder/hip cut (→ easier)', min: 0.3, max: 1.5, step: 0.05, value: 0.6 },
+  { key: 'elbowToughness', label: 'elbow/knee cut (→ easier)', min: 0.5, max: 3, step: 0.05, value: 1.7 },
   { key: 'corpseIntegrity', label: 'corpse integrity', min: 0, max: 1, step: 0.05, value: 0.7 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 

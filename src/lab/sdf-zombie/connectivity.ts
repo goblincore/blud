@@ -289,3 +289,18 @@ export function cutChains(
   }
   return out;
 }
+
+/** The limb's elbow/knee as a chain cut — where a points-based sever (the soldier's injury rules) takes
+ *  the limb, so it leaves the short piece and a stump rather than the whole tube. Null when the limb has
+ *  no mid joint (a gun arm, decoration legs): the caller cuts the whole limb. */
+export function midJointCut(body: BuildResult, limb: LimbId): ChainCut | null {
+  const c = body.clusters.find(k => k.limb === limb);
+  if (!c?.alive) return null;
+  const order = chainOrder(body, c);
+  for (let j = 0; j + 1 < order.length; j++) {
+    if (jointClass(limb, body.prims[order[j]!]!, body.prims[order[j + 1]!]!) === 'mid') {
+      return { limb, fromPrim: order[j + 1]! };
+    }
+  }
+  return null;
+}

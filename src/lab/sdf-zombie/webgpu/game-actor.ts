@@ -43,7 +43,7 @@ import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains, chainOrder, jointPoint, JOINT_TOUGHNESS, NEUTRAL_TOUGHNESS } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint, midJointCut, JOINT_TOUGHNESS } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
 import { createFloater, type FloaterSpace } from './floater-move';
@@ -1307,12 +1307,21 @@ export function createZombieActor(opts: {
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, soldierDamage ? NEUTRAL_TOUGHNESS : JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
+    // The injury rules sever an arm or leg by points, not by where the shots cut: that takes it at the
+    // elbow/knee (midJointCut), the same short piece a cut there makes — the shoulder stays hard.
+    const injuryCuts = (injury?.sever ?? []).map(limb => (limb === 'head' || limb === 'torso' ? null : midJointCut(current, limb)) ?? limb);
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)),
+      ...injuryCuts.filter((c): c is LimbId => typeof c === 'string')])];
     for (const limb of fullCuts) {
       if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, soldierDamage ? NEUTRAL_TOUGHNESS : JOINT_TOUGHNESS)) {
+    for (const cut of injuryCuts) {
+      if (typeof cut === 'string' || fullCuts.includes(cut.limb)) continue;
+      detach(cut.limb, severDistal(current, cut));
+    }
+    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, JOINT_TOUGHNESS)) {
+      if (injuryCuts.some(c => typeof c !== 'string' && c.limb === cut.limb)) continue;
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
