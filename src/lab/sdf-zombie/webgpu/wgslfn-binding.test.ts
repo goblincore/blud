@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/wgslfn-binding.test.ts
 //
-// GPU-free proof of how the installed three (0.186) binds wgslFn call arguments: an OBJECT argument binds by parameter NAME, an ARRAY argument binds by POSITION.
+// GPU-free proof of how the installed three (0.187) binds wgslFn call arguments: an OBJECT argument binds by parameter NAME, an ARRAY argument binds by POSITION.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { wgslFn } from 'three/tsl';
@@ -35,7 +35,7 @@ const generateCall = (callNode: Callable): string => {
   return callNode.build(builder);
 };
 
-describe('wgslFn argument binding (installed three 0.186)', () => {
+describe('wgslFn argument binding (installed three 0.187)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });

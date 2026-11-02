@@ -1453,7 +1453,7 @@ export function createMarchMaterial(
     spotPos: u.spotPos,
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
-    // KEYS BIND BY NAME HERE, not by position. three 0.186 resolves every
+    // KEYS BIND BY NAME HERE, not by position. three 0.187 resolves every
     // WGSL input through parameters[inputNode.name]
     // (nodes/code/FunctionCallNode.js, generate — proven GPU-free in
     // wgslfn-binding.test.ts), so a key's ORDER in this object cannot

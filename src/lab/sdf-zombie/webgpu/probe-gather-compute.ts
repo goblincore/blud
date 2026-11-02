@@ -13,7 +13,7 @@
 // kernel is pinned by probe-dynamic.wgsl.test.ts. Nothing here is verifiable
 // without a GPU; readback() exists for the browser-driven checks.
 import * as THREE from 'three/webgpu';
-import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
+import { wgslFn, uniform, storage, instanceIndex, computeKernel } from 'three/tsl';
 import { withPassLabel } from './gpu-pass-timing';
 import { K_PROBE_GATHER } from './probe-dynamic.wgsl';
 import { packProbeCapsuleGroups, probeCapsuleStorageVec4s } from '../probe-capsule-groups';
@@ -112,9 +112,9 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
   // of the kernel call, and the kernel's workgroupBarrier would then sit behind
   // a non-uniform guard — which Tint REJECTS at pipeline creation.
   // surface-nets-compute.ts dispatches its barrier kernel the same way, for the
-  // same reason. The count here is the worst case (tpp = WG, i.e. one
-  // workgroup per probe); every update overrides it with this frame's count.
-  const node = compute(call, [caps.maxProbes, 1, 1] as unknown as number, [PROBE_GATHER_WORKGROUP]);
+  // same reason. computeKernel has neither count nor dispatch size of its own, which is
+  // what lets every update pass this frame's (three r187 throws otherwise).
+  const node = computeKernel(call, [PROBE_GATHER_WORKGROUP]);
   let disposed = false;
 
   return {
