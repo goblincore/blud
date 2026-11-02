@@ -764,3 +764,7 @@ After the E1M1 exploration wraps (perf, doors, culling), and after a spec that m
 - zone culling at scale.
 
 Enemies aren't built yet; map the roster onto the current cast and note the gaps. The WAD-derived JSON is still never committed.
+
+## Kit pieces around the camera at load (2026-11-02)
+
+Bones are posed in world space, so a kit (or held prop) that has not been posed is a bind pose at the world origin, and a Doom level starts the player at exactly the origin. The kit pre-warm forced those kits to draw, one a step, so for the first seconds pieces of the cast flashed around the camera. Fix: neither draws before its first pose (the inner node, since `object.visible` is the sight cull's), the pre-warm waits for the pose, and a hidden settled body takes one pose on load. `__sdfGame.kitsShownUnposed()` should stay empty once play starts (the warm frame behind the loader flips everything visible). MAP28 headless, frames in the seconds after ready: 4 of 78 showed pieces before, 0 of 208 after, three boots.

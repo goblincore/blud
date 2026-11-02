@@ -291,6 +291,8 @@ export interface KitWreck {
 }
 
 export interface KitOverlay {
+  /** False until the first pose: the kit stands in its bind pose at the world origin until then, and is not drawn. */
+  readonly posed: boolean;
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
   object: THREE.Object3D;
   /** Detached pieces remain in world space when the attached kit is hidden. */
@@ -495,6 +497,9 @@ export async function loadKit(
   const object = new THREE.Group();
   object.add(kitScene);
   object.position.set(root[0], root[1], root[2]);
+  // Not drawn until the first pose: the bones are posed in world space, so until then the kit is a bind pose at the
+  // world origin, which is where a Doom level starts the player. On the inner node: `object.visible` is the sight cull's.
+  kitScene.visible = false;
 
   const bones = new Map<string, THREE.Bone>();
   const skinned: THREE.SkinnedMesh[] = [];
@@ -563,6 +568,7 @@ export async function loadKit(
   let posed = false;
   const pose: KitOverlay['pose'] = (frames, damage) => {
     posed = true;
+    kitScene.visible = true;
     poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
@@ -580,6 +586,7 @@ export async function loadKit(
     object,
     debris,
     bones,
+    get posed() { return posed; },
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
     dropped: () => damageView?.dropped() ?? [],

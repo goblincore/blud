@@ -241,6 +241,9 @@ export function kitPoseSkippable(ctx: GameContext, a: ZombieActor, march: Readon
   const z = ctx.world.zoneCull;
   if (!z || !z.on) return false;
   if (ctx.render.visualActors.has(a) || march.has(a)) return false;
+  // Every kit and prop takes one pose as soon as it has loaded: the pre-warm draws only a posed one, wherever it is.
+  const ch = a.character;
+  if ((ch?.kit && !ch.kit.posed) || (ch?.prop && !ch.prop.posed)) return false;
   // A released prop falls inside the pose (and a dying body's kit follows its fall): only a settled body skips.
   if (!(a.settled?.() ?? false) || a.character?.prop?.released) return false;
   const warm = ctx.boot.kitPrewarm?.forcedRoot ?? null;
