@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -580,13 +580,14 @@ export const TERATOMA_PROFILE: MotionProfile = {
 };
 
 /** The imp (characters/imp.blob): a gaunt hunched demon on the butcher's digitigrade legs that THROWS FIREBALLS.
- *  Quick and agile: the flayer's 2.0 Hz prowl at a faster cruise, and a quick turn. Up close the zombie mind's
+ *  Quick and agile: the flayer's 2.0 Hz prowl with loose, low, swinging arms (gait.ts IMP_PROWL) at a faster
+ *  cruise, and a quick turn. Up close the zombie mind's
  *  unarmed swing, which with talons for hands reads as a claw rake (the venus's lesson); at range it winds up and
  *  throws (enemy-mind.ts makeImpMind): the fireball is born in the right hand's burning socket and leaves from it. */
 export const IMP_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'imp',
-  gait: { walk: PROWL_QUICK, run: PROWL_QUICK },
+  gait: { walk: IMP_PROWL, run: IMP_PROWL },
   cruise: 1.6,
   turnRate: 3.2,
   throws: 'fireball',

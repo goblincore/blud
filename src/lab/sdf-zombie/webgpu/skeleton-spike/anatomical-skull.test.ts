@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { AnatomicalSkullKit, SKULL_OPENINGS, SKULL_PIECES, readSkullOpenings, skullEyePoint } from './anatomical-skull';
+import { AnatomicalSkullKit, SKULL_OPENINGS, SKULL_PIECES, readSkullEyeRadius, readSkullOpenings, skullEyePoint } from './anatomical-skull';
 import { ANATOMICAL_SKULL_ASSET, OWN_SKULLS } from './skull-cast';
 import { anatomicalSkullGltf, anatomicalSkullSource } from './anatomical-skull.fixture';
 import { parseBlob } from '../../blob-parse';
@@ -141,6 +141,13 @@ describe('a skull asset of a character\'s own (skull-cast.ts OWN_SKULLS): its ki
     expect(readSkullOpenings({ schema: 1, openings: good })).toEqual(good);
     for (const bad of [null, {}, { openings: {} }, { openings: { ...good, nasal: [0, 0] } }, { openings: { ...good, orbitLeft: [0, NaN, 0] } }, { openings: { ...good, orbitRight: '0,0,0' } }]) {
       expect(() => readSkullOpenings(bad, 'imp-skull.json'), JSON.stringify(bad)).toThrow(/imp-skull\.json: openings\.\w+ is not a point/);
+    }
+  });
+  it('a manifest\'s modelled eyes are a positive radius, or absent', () => {
+    expect(readSkullEyeRadius({ eyes: { radius: 0.008 } })).toBe(0.008);
+    expect(readSkullEyeRadius({ openings: {} })).toBeNull();
+    for (const bad of [{ eyes: {} }, { eyes: { radius: 0 } }, { eyes: { radius: '8' } }, { eyes: null }]) {
+      expect(() => readSkullEyeRadius(bad, 'imp-skull.json'), JSON.stringify(bad)).toThrow(/imp-skull\.json: eyes\.radius/);
     }
   });
 });

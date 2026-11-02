@@ -108,6 +108,10 @@ export const SWING_ARCS: Record<SwingVariant, {
   strikePitch: number;
   windupYaw: number;
   strikeYaw: number;
+  /** A FOLLOW-THROUGH (the throw): where the arm carries on to through the hold, easing out, instead of holding at
+   *  the strike; the recovery then returns from here. Absent: the arm holds at the strike. */
+  followPitch?: number;
+  followYaw?: number;
 }> = {
   hook: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: -0.85, strikeYaw: 0.90 },
   overhead: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: -0.15, strikeYaw: 0.10 },
@@ -126,12 +130,37 @@ export const SWING_ARCS: Record<SwingVariant, {
   // over the shoulder (2.4 rad, past the overhead chop's 1.35), a little out, then whips forward and down at the
   // target, a touch across the body. 0.45, not more: at 1.05 the follow-through stopped with the arm 45 deg up and
   // read as a lob (side-on sweep, BLOB_SWING_SWEEP=throw:0:0.6). The ball leaves from the hand on the way through
-  // (IMP_TUNING.fireAt).
-  throw: { windupPitch: 2.4, strikePitch: 0.45, windupYaw: -0.35, strikeYaw: 0.18 },
+  // (IMP_TUNING.fireAt). Then it does not stop there (2026-11-02, owner: "a throw with a windup and follow
+  // through"): the arm carries on down and across the body to below the shoulder's reach (followPitch/Yaw), on
+  // THROW_TUNING's beats.
+  throw: { windupPitch: 2.4, strikePitch: 0.45, windupYaw: -0.35, strikeYaw: 0.18, followPitch: -0.35, followYaw: 0.70 },
   slam: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
-export type AttackTuning = typeof ATTACK_TUNING;
+export type AttackTuning = { readonly [K in keyof typeof ATTACK_TUNING]: number };
+
+/** THE THROW'S BEATS (the imp): a long cock, a fast whip and a long follow-through, where a melee swing is quick
+ *  in and holds. The wind-up takes 42% of the throw (the telegraph: the body draws back and the off arm points at
+ *  the target), the strike 10% (the ball leaves late in it, IMP_TUNING.fireAt), and the arm carries on through to
+ *  70% (SWING_ARCS.throw's follow). The body throws itself into it: more draw-back, more drive, more twist. */
+export const THROW_TUNING: AttackTuning = {
+  ...ATTACK_TUNING,
+  windupEnd: 0.42,
+  strikeEnd: 0.52,
+  holdEnd: 0.70,
+  lunge: 0.16,
+  windback: 0.10,
+  chestDrive: 0.14,
+  chestRear: 0.09,
+  shoulderDrive: 0.11,
+  offGuardPitch: 0.85,
+  handDrop: 0.04,
+};
+
+/** The beats a variant swings on: the throw's own, every other the melee swing's. */
+export function tuningOf(variant: SwingVariant): AttackTuning {
+  return variant === 'throw' ? THROW_TUNING : ATTACK_TUNING;
+}
 
 export interface AttackPose {
   /** Body-local per-joint offsets — ADD to gait's offsets; missing = zero. */
@@ -191,7 +220,7 @@ function lerp(a: number, b: number, t: number): number {
  * Phases outside [0, 1] return the rest pose, never an extrapolated one.
  */
 export function armArc(
-  phase: number, variant: SwingVariant, tuning: AttackTuning = ATTACK_TUNING,
+  phase: number, variant: SwingVariant, tuning: AttackTuning = tuningOf(variant),
 ): { pitch: number; yaw: number; active: number } {
   const T = tuning;
   const a = SWING_ARCS[variant];
@@ -208,13 +237,16 @@ export function armArc(
       active: 1,
     };
   }
+  const endPitch = a.followPitch ?? a.strikePitch, endYaw = a.followYaw ?? a.strikeYaw;
   if (phase < T.holdEnd) {
-    return { pitch: a.strikePitch, yaw: a.strikeYaw, active: 1 };
+    // The follow-through eases OUT: it leaves the strike at the strike's speed and settles.
+    const u = (phase - T.strikeEnd) / (T.holdEnd - T.strikeEnd), t = 1 - (1 - u) * (1 - u);
+    return { pitch: lerp(a.strikePitch, endPitch, t), yaw: lerp(a.strikeYaw, endYaw, t), active: 1 };
   }
   const t = smooth((phase - T.holdEnd) / (1 - T.holdEnd));
   return {
-    pitch: lerp(a.strikePitch, 0, t),
-    yaw: lerp(a.strikeYaw, 0, t),
+    pitch: lerp(endPitch, 0, t),
+    yaw: lerp(endYaw, 0, t),
     active: 1 - t,
   };
 }
@@ -236,7 +268,7 @@ export function attackPose(
   phase: number,
   side: 'L' | 'R',
   variant: SwingVariant,
-  tuning: AttackTuning = ATTACK_TUNING,
+  tuning: AttackTuning = tuningOf(variant),
 ): AttackPose {
   const T = tuning;
   const d = attackDrive(phase, T);

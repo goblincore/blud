@@ -32,6 +32,16 @@ HORN_CUT = lambda co: abs(co.x - CX) > 0.096 and co.z > 2.035
 # Scaled toward the human asset's size (113 mm wide); the fit sizes it to the head either way.
 SCALE = 0.6
 BUDGET = 9900
+# How far the cavity bake looks for bone (m, after SCALE): the sockets, the nasal pit and the sutures, not the face.
+AO_REACH = 0.06
+# THE SNOUT (2026-11-02, owner: the imp's flesh has a long muzzle the skull had none of, so a shot across it could
+# leave the muzzle's tip floating). The face below the orbits is drawn forward this far (m, after SCALE) at its
+# front, nothing at the skull's middle, and narrowed as it goes: the maxilla, the nasal pit, the teeth and the jaw's
+# front ride out into a snout under the hide's.
+SNOUT = 0.055
+SNOUT_TAPER = 0.30
+# And dropped (m): the hide's muzzle slopes down from the brow; level, the snout's bridge broke through its top.
+SNOUT_DROP = 0.038
 PIECES = ['frontal', 'parietal-left', 'parietal-right', 'occipital', 'temporal-left', 'temporal-right',
           'zygomatic-left', 'zygomatic-right', 'maxilla-left', 'maxilla-right', 'upper-teeth', 'mandible',
           'cranial-base', 'nasal-core']
@@ -51,6 +61,20 @@ def region(c):
     if z >= 2.10: return f'parietal-{side}'
     if abs(x) > 0.06: return f'temporal-{side}'
     return 'cranial-base'
+
+
+def smoothstep(a, b, v):
+    t = min(1.0, max(0.0, (v - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def snout(co):
+    """The point drawn into the snout. Blender frame, centred and scaled: the face is -y, up is +z."""
+    ahead, up = -co.y, co.z
+    w = smoothstep(0.015, 0.075, ahead) * (1 - smoothstep(-0.005, 0.05, up))
+    # The jaw's front starts further back (its chin sits under the orbits' line), so it rides out with the snout.
+    w = max(w, smoothstep(-0.03, 0.05, ahead) * (1 - smoothstep(-0.045, -0.02, up)))
+    return Vector((co.x * (1 - SNOUT_TAPER * w), co.y - SNOUT * w, co.z - SNOUT_DROP * w))
 
 
 def select(objects, active=None):
@@ -146,6 +170,8 @@ def main():
     skull, eye_a, eye_b = dst.objects
     for o in dst.objects: scene.collection.objects.link(o); o.data = o.data.copy()
     eyes = [sum((o.matrix_world @ v.co for v in o.data.vertices), Vector()) / len(o.data.vertices) for o in (eye_a, eye_b)]
+    # The eyeballs the skull was modelled with: the game seats its eyes where these sat, at their size.
+    eye_radius = sum(max((o.matrix_world @ v.co - e).length for v in o.data.vertices) for o, e in zip((eye_a, eye_b), eyes)) / 2
     for o in (eye_a, eye_b): bpy.data.objects.remove(o, do_unlink=True)
     skull.data.transform(skull.matrix_world); skull.matrix_world.identity()
     source_tris = tris(skull)
@@ -168,7 +194,9 @@ def main():
     lo, hi = bounds(skull)
     centre = Vector([(lo[i] + hi[i]) / 2 for i in range(3)])
     for v in skull.data.vertices: v.co = (v.co - centre) * SCALE
-    eyes = [(e - centre) * SCALE for e in eyes]
+    eyes = [snout((e - centre) * SCALE) for e in eyes]
+    eye_radius *= SCALE
+    for v in skull.data.vertices: v.co = snout(v.co)
     size = max(hi[i] - lo[i] for i in range(3)) * SCALE
     attr = skull.data.attributes.new('piece', 'INT', 'FACE')
     for p, r in zip(attr.data, region_of): p.value = r
@@ -190,7 +218,7 @@ def main():
     bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.006)
     bpy.ops.object.mode_set(mode='OBJECT')
-    atlas = bpy.data.images.new('imp-skull-normal', width=1024, height=1024)
+    atlas = bpy.data.images.new('imp-skull-normal', width=1024, height=1024, alpha=True)
     atlas.generated_color = (0.5, 0.5, 1, 1)
     atlas.colorspace_settings.name = 'Non-Color'
     mat = material('imp-skull-bone', atlas if not args.skip_bake else None)
@@ -206,6 +234,23 @@ def main():
         scene.render.bake.margin = 4
         select([high, low], low)
         bpy.ops.object.bake(type='NORMAL')
+        # The hollows into the atlas's alpha (1 open bone, 0 deep in a socket): the game darkens and dirties the
+        # skull by it (anatomical-skull.wgsl.ts, `grime`). Read off the source mesh like the normals: baked on the low
+        # mesh itself, the rays leaving its smooth normals hit the next flat triangle and crackle every face black.
+        hollow = bpy.data.images.new('imp-skull-ao', width=1024, height=1024)
+        hollow.colorspace_settings.name = 'Non-Color'
+        tex = next(n for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE')
+        tex.image = hollow
+        if scene.world is None: scene.world = bpy.data.worlds.new('bake')
+        scene.world.light_settings.distance = AO_REACH
+        scene.cycles.samples = 128
+        select([high, low], low)
+        bpy.ops.object.bake(type='AO')
+        tex.image = atlas
+        px = list(atlas.pixels); ao = hollow.pixels[:]
+        px[3::4] = ao[0::4]
+        atlas.alpha_mode = 'STRAIGHT'
+        atlas.pixels[:] = px
         atlas.filepath_raw = str(OUT / 'normal.png'); atlas.file_format = 'PNG'
         atlas.save(); atlas.pack()
         print('BAKED', flush=True)
@@ -240,6 +285,7 @@ def main():
                 'normalAtlas': None if args.skip_bake else [1024, 1024],
                 'coordinates': 'glTF metres, +Y up, face +Z; orientation verified by preview',
                 'openings': {'orbitLeft': g(left), 'orbitRight': g(right), 'nasal': g(nasal)},
+                'eyes': {'radius': eye_radius},
                 'pieces': []}
     for o in pieces:
         lo, hi = bounds(o)

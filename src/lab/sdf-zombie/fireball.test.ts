@@ -4,7 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { FIREBALL, IMP_TUNING, burstPlayerDamage, fireballVelocity, spawnFireball, stepFireballs, throwFires, type Fireball } from './fireball';
 import { makeImpMind, type MindInput } from './webgpu/enemy-mind';
-import { armArc } from './attack';
+import { THROW_TUNING, armArc } from './attack';
+import { IMP_PROWL, makeGaitState, stepGait } from './gait';
 import type { Vec3 } from './types';
 
 const input = (dist: number, over: Partial<MindInput> = {}): MindInput => ({
@@ -63,9 +64,30 @@ describe('the throw', () => {
     let n = 0;
     for (let i = 1; i <= 100; i++) if (throwFires((i - 1) / 100, i / 100)) n++;
     expect(n).toBe(1);
-    const cocked = armArc(0.25, 'throw'), release = armArc(IMP_TUNING.fireAt, 'throw');
+    const cocked = armArc(THROW_TUNING.windupEnd, 'throw'), release = armArc(IMP_TUNING.fireAt, 'throw');
     expect(cocked.pitch, 'cocked up and back past the vertical').toBeGreaterThan(Math.PI / 2);
     expect(release.pitch, 'coming forward at the release').toBeLessThan(cocked.pitch);
+    // The release falls in the whip, and the arm carries on down and across past the strike before it recovers.
+    expect(IMP_TUNING.fireAt).toBeGreaterThan(THROW_TUNING.windupEnd);
+    expect(IMP_TUNING.fireAt).toBeLessThan(THROW_TUNING.strikeEnd);
+    const strike = armArc(THROW_TUNING.strikeEnd - 1e-6, 'throw'), follow = armArc(THROW_TUNING.holdEnd - 1e-6, 'throw');
+    expect(follow.pitch, 'followed through below the strike').toBeLessThan(strike.pitch - 0.5);
+    expect(follow.yaw, 'and across the body').toBeGreaterThan(strike.yaw + 0.3);
+  });
+
+  it('walks with loose low arms that swing against the legs', () => {
+    let state = makeGaitState(7);
+    const swingL: number[] = [], swingR: number[] = [];
+    for (let i = 0; i < 120; i++) {
+      const step = stepGait(state, { missing: {}, wounded: {}, damageMeter: 0 } as never, 1 / 60, 'reach', IMP_PROWL);
+      state = step.state;
+      expect(step.pose.reach!.pitchL, 'low: far under the mummy reach').toBeLessThan(0.5);
+      swingL.push(step.pose.reach!.swing!.L); swingR.push(step.pose.reach!.swing!.R);
+    }
+    expect(Math.max(...swingL) - Math.min(...swingL)).toBeGreaterThan(0.6);
+    // The two arms swing in opposition.
+    const corr = swingL.reduce((a, l, i) => a + l * swingR[i]!, 0);
+    expect(corr).toBeLessThan(0);
   });
 });
 

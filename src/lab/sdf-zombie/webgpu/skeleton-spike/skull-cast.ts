@@ -142,7 +142,12 @@ export function ballHeadFit(character: string): Readonly<SkullFitSpec> | null {
  *  normal map). `manifest`: the asset's JSON, whose `openings` (orbitLeft, orbitRight, nasal: points in the asset's
  *  assembled frame, as anatomical-skull.ts SKULL_OPENINGS) a fit to the flesh holds the skull by; null for the
  *  anatomical skull, whose openings are SKULL_OPENINGS. */
-export interface SkullAsset { readonly name: string; readonly url: string; readonly manifest: string | null }
+export interface SkullAsset {
+  readonly name: string; readonly url: string; readonly manifest: string | null;
+  /** How dirty the exposed bone is drawn (0 or absent: clean; 1: a grubby wash, blood in the hollows its atlas's alpha
+   *  marks, torn flesh clinging: anatomical-skull.wgsl.ts). */
+  readonly grime?: number;
+}
 /** The human skull, the asset every humanoid can draw. */
 export const ANATOMICAL_SKULL_ASSET: SkullAsset = Object.freeze({ name: 'anatomical', url: '/assets/lab/anatomical-skull.glb', manifest: null });
 
@@ -158,7 +163,7 @@ export interface OwnSkull {
  *  (sculpt-variant.ts PLAIN_SKULL_CHARACTERS). A character listed here is never one of HUMANOIDS: the human asset is
  *  never fitted to it. */
 export const OWN_SKULLS: Readonly<Record<string, Readonly<OwnSkull>>> = deepFreeze({
-  imp: { asset: { name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json' }, spec: { fit: 'envelope' } },
+  imp: { asset: { name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json', grime: 1 }, spec: { fit: 'envelope' } },
 });
 
 /** `character`'s own skull; null for a character with none (it draws the anatomical skull or its sculpted bone). */

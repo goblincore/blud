@@ -22,7 +22,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Second pass 2026-11-02** (owner): bigger head (x1.25), shorter legs (pelvis 0.94 -> 0.76) and arms, big
   splayed claw feet (flesh toes, kit claws), and an exposed skull of its own: the twinhead's demon skull mesh
   (`public/assets/lab/imp-skull.glb`, built by `scripts/build_imp_skull.py`, loaded through `OWN_SKULLS`).
-- [ ] Owner review. Open: no eyes in the exposed skull's sockets; the cut horn knob on each temple; metal skull parts
+- [x] **Third pass 2026-11-02** (owner): the exposed skull dirtied (baked hollows, blood, clinging flesh, black
+  sockets), a snout under the muzzle so no flesh floats, red-pupil eyes from the skull's modelled eyeballs; loose low
+  arms that swing (`IMP_PROWL`); a throw with a long cock, a whip and a follow-through (`THROW_TUNING`).
+- [ ] Owner review. Open: the cut horn knob on each temple; metal skull parts
   on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
   ball (a tinted tracer, like the bile); kit optimisation.
 

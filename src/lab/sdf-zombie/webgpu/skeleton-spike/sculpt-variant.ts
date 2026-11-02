@@ -84,8 +84,9 @@ export const SECOND_PAINT_CHARACTERS: ReadonlySet<string> = new Set(['zombie', '
 
 /** THE CHARACTERS WHOSE HEAD BONE IS ITS OWN SKULL, not a human one: the imp's is a demon skull, drawn from its own
  *  asset (skull-cast.ts OWN_SKULLS), with its sculpted bone (the `.blob`'s `bones` block, authored in the same shape)
- *  under it when the asset is off. No eyes are seated in it: the seats are the human sockets' places, and on its
- *  muzzle two pink eyeballs read as "the simplified humanoid skull" (owner, 2026-11-02). */
+ *  under it when the asset is off. No eye is seated at the human sockets' places (on its muzzle two pink eyeballs
+ *  read as "the simplified humanoid skull", owner, 2026-11-02): its eyes sit in its own asset's orbits
+ *  (anatomical-skull.ts FittedSkull.eyes), and with the asset off it has none. */
 export const PLAIN_SKULL_CHARACTERS: ReadonlySet<string> = new Set(['imp']);
 
 /** The paint `character`'s bones are drawn with under `recipe`: the recipe's for a character the second paint is

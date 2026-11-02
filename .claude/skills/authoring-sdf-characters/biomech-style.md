@@ -696,3 +696,18 @@ throws fireballs. What it taught:
 - **The validator's "bone inside flesh" is optimistic in thin overlaps.** The flesh SDF underestimates depth where thin
   prims overlap, so a bone that passes can still breach. Filler prims fix it but change the skin; shrinking the bone
   about a pivot (and dropping the flesh brows and jaw from the bone copy, re-cut as thin bars) does not.
+- **An exposed skull needs dirt to read** (owner: clean bone with no eyes was "impossible to see the skull features").
+  `build_imp_skull.py` bakes the hollows (AO from the source mesh onto the low one: baked on the low mesh alone, its
+  smooth normals crackle every triangle black) into the normal atlas's alpha, and `SkullAsset.grime` turns on a wash,
+  dried blood in the hollows, small clinging flesh islands, and the sockets going black last (painted before the
+  blood, the blood covered them). Large cling islands sat on the muzzle as a pink nose: keep them small.
+- **The skull must reach as far as the flesh does.** A long flesh muzzle over a short-faced skull leaves the muzzle's
+  tip floating once a shot cuts across it. The build script draws the lower face forward into a snout (`snout()`,
+  dropped to follow the hide's slope; level, its bridge broke the muzzle's top) and `IMP_FIT` grows to match.
+- **Eyes from the model, not a search.** The orbit search (skull-orbits.ts) took a temple pit for one of the imp's
+  slanted slit orbits. The demon skull was modelled with eyeballs, so the manifest carries their `eyes.radius` and the
+  envelope fit seats eyes at the orbit openings, carried by the fit.
+- **Loose arms are still the reach style.** `IMP_PROWL` lowers the reach (0.30 rad, forearm 45 deg down) and adds
+  `reachSwing` against the legs, scaled by the walk's blend so standing still holds them; the throw's and claw's arcs
+  add on top unchanged. The throw has its own beats (`THROW_TUNING`: a 42% cock, a 10% whip, a follow-through down and
+  across to 70%, `SWING_ARCS.throw.followPitch/Yaw`).

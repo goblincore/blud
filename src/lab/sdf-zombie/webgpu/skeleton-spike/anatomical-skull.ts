@@ -72,7 +72,7 @@ export interface FittedSkull {
    *  one at -x first. Empty for the envelope fit. */
   orbits: SkullOrbit[];
   /** A skull fitted to the flesh: its eye seats, head-local, one in each orbit and sized from them. Null for the
-   *  envelope fit, whose eyes stay where the sculpted skull seats them (mesh-eyes.ts), as they were before any skull
+   *  envelope fit of an asset with no eyes of its own (the human one), whose eyes stay where the sculpted skull seats them (mesh-eyes.ts), as they were before any skull
    *  was fitted to the flesh. The seats are the skull's; whether an eye is DRAWN in them is the head's: a head the
    *  sculpted skull seats no eye in (the bonewalker's, the described schoolgirl's) draws none here either
    *  (mesh-renderer.ts eyeSeats). */
@@ -84,7 +84,7 @@ export interface FittedSkull {
  * would erase them. Intact-flesh containment is verified against real bodies. */
 /** The imp's envelope fractions (skullFitMatrix): its share of the bone's box in width, height and depth, the height
  *  of its centre, and how far forward of the box's middle it sits (a share of the depth). */
-export const IMP_FIT = { width: 0.66, height: 0.64, depth: 0.66, centre: 0.52, forward: 0.0 } as const;
+export const IMP_FIT = { width: 0.66, height: 0.64, depth: 0.88, centre: 0.52, forward: 0.11 } as const;
 export function skullFitMatrix(bounds: BoneFieldSource['bounds'], raw: THREE.Box3, character = ''): THREE.Matrix4 {
   const size = raw.getSize(new THREE.Vector3());
   const centre = raw.getCenter(new THREE.Vector3());
@@ -129,10 +129,13 @@ export class AnatomicalSkullKit {
   /** `fit`: a fit's name (every character of the asset's cast draws the skull, fitted that way: for the human asset
    *  every humanoid of HUMANOID_SKULLS), or a plan. `asset`: whose plates these are, which decides who they may be
    *  fitted to (skull-cast.ts skullAssetFits) and tags each fitted geometry (`userData.skullAsset`, its name) so the
-   *  renderer draws it under this kit's own normal map. `openings`: the asset's (its manifest's). */
+   *  renderer draws it under this kit's own normal map. `openings`: the asset's (its manifest's). `eyeRadius`: the
+   *  eyeballs the asset was modelled with (its manifest's `eyes`), centred on its orbit openings; with it the envelope
+   *  fit seats its eyes there (null: the human asset's way, below). */
   constructor(
     readonly source: readonly { id: string; geometry: THREE.BufferGeometry }[], readonly normalMap: THREE.Texture, readonly normalScale: THREE.Vector2,
     fit: SkullFitName | SkullFitPlan = 'envelope', readonly asset: SkullAsset = ANATOMICAL_SKULL_ASSET, readonly openings: SkullOpenings = SKULL_OPENINGS,
+    readonly eyeRadius: number | null = null,
   ) {
     if (typeof fit === 'function') { this.fit = null; this.#plan = fit; }
     else { const spec = Object.freeze({ fit }); this.fit = fit; this.#plan = () => spec; }
@@ -179,7 +182,15 @@ export class AnatomicalSkullKit {
     const geometry = mergeGeometries(pieces.map(p=>p.geometry),false)!;
     geometry.userData.anatomicalSkull = true; geometry.userData.skullAsset = this.asset.name;
     geometry.computeBoundingSphere();
-    head = { pieces, fit:null, orbits:[], eyes:null, mesh: { key:`${source.revision}:anatomical-skull-1`, geometry, mesher:'asset',
+    // An asset modelled with its eyeballs (a character's own skull: the sculpted bone under it seats no eye,
+    // mesh-renderer.ts eyeSeats, PLAIN_SKULL_CHARACTERS) has them back where they were, carried by the fit. Its orbits
+    // are not searched for (skull-orbits.ts): on the imp's slanted slits the search took a pit in the temple.
+    const eyes = this.eyeRadius === null ? null : [this.openings.orbitRight, this.openings.orbitLeft].map(o => {
+      const c = new THREE.Vector3(...o).applyMatrix4(fit);
+      const sx = new THREE.Vector3().setFromMatrixColumn(fit, 0).length(), sy = new THREE.Vector3().setFromMatrixColumn(fit, 1).length();
+      return { center: c.toArray() as Vec3, radius: this.eyeRadius! * (sx + sy) / 2 };
+    });
+    head = { pieces, fit:null, orbits:[], eyes, mesh: { key:`${source.revision}:anatomical-skull-1`, geometry, mesher:'asset',
       verts:geometry.getAttribute('position').count, tris:geometry.getIndex()!.count/3,
       bakeMs:0, overflow:false, clamped:false, droppedQuads:0 } };
     this.#fitted.set(source.revision,head);
@@ -272,9 +283,10 @@ export function readSkullOpenings(manifest: unknown, from = 'the manifest'): Sku
 
 /** `asset`'s kit: its plates (loadAnatomicalSkull) and, where it has a manifest, the openings read from it. */
 export async function loadSkullAsset(asset: SkullAsset, fit: SkullFitName | SkullFitPlan = 'envelope'): Promise<AnatomicalSkullKit> {
-  const openings = asset.manifest === null ? SKULL_OPENINGS : fetch(asset.manifest).then(async r => {
+  const openings = asset.manifest === null ? { openings: SKULL_OPENINGS, eyeRadius: null } : fetch(asset.manifest).then(async r => {
     if (!r.ok) throw new Error(`${asset.manifest}: ${r.status}`);
-    return readSkullOpenings(await r.json(), asset.manifest!);
+    const manifest = await r.json();
+    return { openings: readSkullOpenings(manifest, asset.manifest!), eyeRadius: readSkullEyeRadius(manifest, asset.manifest!) };
   });
   // Both requests at once; a manifest that fails fails the kit (the plates are not kept).
   const [read, plates] = await Promise.allSettled([openings, loadSkullPlates(asset.url, asset.name)]);
@@ -284,7 +296,17 @@ export async function loadSkullAsset(asset: SkullAsset, fit: SkullFitName | Skul
   }
   if (plates.status === 'rejected') throw plates.reason;
   const { source, normalMap, normalScale } = plates.value;
-  return new AnatomicalSkullKit(source, normalMap, normalScale, fit, asset, read.value);
+  return new AnatomicalSkullKit(source, normalMap, normalScale, fit, asset, read.value.openings, read.value.eyeRadius);
+}
+
+/** An asset manifest's `eyes.radius` (the eyeballs it was modelled with, centred on its orbit openings): null with no
+ *  `eyes`; throws on one that is not a positive number. */
+export function readSkullEyeRadius(manifest: unknown, from = 'the manifest'): number | null {
+  const eyes = (manifest as { eyes?: { radius?: unknown } } | null)?.eyes;
+  if (eyes === undefined) return null;
+  const r = eyes?.radius;
+  if (typeof r !== 'number' || !(r > 0) || !Number.isFinite(r)) throw new Error(`${from}: eyes.radius is not a positive number`);
+  return r;
 }
 
 /** Loads the plates at `url` into a kit (`asset`, `openings`: see AnatomicalSkullKit). Throws on an asset that breaks

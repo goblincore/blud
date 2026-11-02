@@ -37,11 +37,11 @@ export const FIREBALL = {
 
 /** The throw's beats and the imp mind's ranged tuning (enemy-mind.ts makeImpMind). */
 export const IMP_TUNING = {
-  /** The whole throw, s: the wind-up is attack.ts's first quarter (ATTACK_TUNING.windupEnd), the overhand strike
-   *  the next. Quick: an imp is a skirmisher, but the cocked arm must read as a telegraph. */
-  throwSec: 0.95,
-  /** The phase the ball leaves the hand: late in the strike, the arm thrown forward past the shoulder. */
-  fireAt: 0.44,
+  /** The whole throw, s, on attack.ts THROW_TUNING's beats: a 0.48 s cock (the telegraph), a 0.11 s whip, the
+   *  follow-through, the recovery. */
+  throwSec: 1.15,
+  /** The phase the ball leaves the hand: late in the strike (0.42-0.52), the arm whipped forward past the shoulder. */
+  fireAt: 0.49,
   /** It throws at a player between these distances (m) it can see, every cooldown seconds, the first after `first`.
    *  Inside `min` it closes and claws instead. */
   band: { min: 2.6, max: 16 },

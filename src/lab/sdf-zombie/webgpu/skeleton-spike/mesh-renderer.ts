@@ -419,7 +419,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // its craters read at `pWorld`, the atlas sample, the normal that sample tilts (from the fragment's own world
   // position and normal), and the look. One for each skull asset the page draws (the human skull's, the imp's own),
   // by the asset's name, which each fitted geometry carries (userData.skullAsset): each samples its own kit's atlas.
-  type PlateShade = { surface(pWorld: unknown): unknown; texel(): Node<'vec3'>; normal(texel: unknown): Node<'vec3'>; look: unknown };
+  type PlateShade = { surface(pWorld: unknown, hollow: unknown): unknown; texel(): Node<'vec3'>; hollow(): Node<'float'>; normal(texel: unknown): Node<'vec3'>; look: unknown };
   const plates = new Map<string, PlateShade>();
   const skullMaterials = new Map<string, MeshBasicNodeMaterial>();
   if (cache.skullKits.length > 0) {
@@ -428,9 +428,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     for (const kit of cache.skullKits) {
       if (plates.has(kit.asset.name)) continue;
       const plate: PlateShade = {
-        surface: pWorld => sf({pWorld:pWorld as never,pLocal:positionGeometry,boneColor:u.boneColor,deepColor:u.deepColor,
-          woundTex:texture(woundTex),woundCount:u.woundCount}),
+        surface: (pWorld, hollow) => sf({pWorld:pWorld as never,pLocal:positionGeometry,boneColor:u.boneColor,deepColor:u.deepColor,
+          woundTex:texture(woundTex),woundCount:u.woundCount,hollow:hollow as never,grime:float(kit.asset.grime ?? 0)}),
         texel: () => texture(kit.normalMap).xyz as unknown as Node<'vec3'>,
+        // The atlas's alpha: the baked hollows (1 where it has none), which a dirty skull darkens.
+        hollow: () => texture(kit.normalMap).w as unknown as Node<'float'>,
         normal: texel => nf({p:positionWorld,n:normalWorld,uv:uv(),texel:texel as never,
           normalScale:vec2(kit.normalScale.x,kit.normalScale.y)}) as unknown as Node<'vec3'>,
         look: vec4(u.look.x,u.look.y,mul(u.look.z,0.12),mul(u.look.w,0.10)),
@@ -438,7 +440,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       plates.set(kit.asset.name, plate);
       const skullMaterial = new MeshBasicNodeMaterial();
       skullMaterial.name = SEGMENT_MATERIALS.plate;
-      skullMaterial.colorNode = lit(plate.surface(positionWorld),plate.look,plate.normal(plate.texel()));
+      skullMaterial.colorNode = lit(plate.surface(positionWorld,plate.hollow()),plate.look,plate.normal(plate.texel()));
       skullMaterial.depthTest = true; skullMaterial.depthWrite = true;
       skullMaterial.side = THREE.DoubleSide;
       skullMaterials.set(kit.asset.name, skullMaterial);
@@ -611,11 +613,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     const skullSplitMaterial = new MeshBasicNodeMaterial();
     skullSplitMaterial.name = SEGMENT_MATERIALS.plateSplit;
     skullSplitMaterial.colorNode = kept(
-      normal => lit(cutBoneFn!({
-        surface: parts.surface(clip.xyz) as never, keep: fractureFn!({ q: clip.xyz, ...record }) as never, rim: splitLook.rim,
+      ({ normal, hollow }) => lit(cutBoneFn!({
+        surface: parts.surface(clip.xyz, hollow) as never, keep: fractureFn!({ q: clip.xyz, ...record }) as never, rim: splitLook.rim,
       }), parts.look, normal),
-      // The atlas is sampled and the normal takes dpdx / dpdy: both ahead of the branch.
-      () => parts.normal(parts.texel().toVar()).toVar(),
+      // The atlas is sampled (its normal and its hollows) and the normal takes dpdx / dpdy: all ahead of the branch.
+      () => ({ normal: parts.normal(parts.texel().toVar()).toVar(), hollow: parts.hollow().toVar() }),
     );
     splitSided(skullSplitMaterial);
     skullSplitMaterials.set(name, skullSplitMaterial);
@@ -961,9 +963,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const eyeSeats = (source: BoneFieldSource): readonly MeshEyePlacement[] => {
     let seats = seatsOf.get(source);
     if (!seats) {
-      // A plain skull (PLAIN_SKULL_CHARACTERS) is its own shape, with no human sockets for an eye to sit in.
-      const sculpted = PLAIN_SKULL_CHARACTERS.has(source.character) ? [] : meshEyePlacements(meshBoneSource(source, cache.sculpt.shape));
-      seats = sculpted.length > 0 ? cache.skullKitOf(source.character)?.head(source)?.eyes ?? sculpted : sculpted;
+      // A plain skull (PLAIN_SKULL_CHARACTERS) is its own shape, with no human sockets for an eye to sit in: its eyes
+      // are its own asset's, in that skull's orbits (none with the asset off).
+      if (PLAIN_SKULL_CHARACTERS.has(source.character)) seats = cache.skullKitOf(source.character)?.head(source)?.eyes ?? [];
+      else {
+        const sculpted = meshEyePlacements(meshBoneSource(source, cache.sculpt.shape));
+        seats = sculpted.length > 0 ? cache.skullKitOf(source.character)?.head(source)?.eyes ?? sculpted : sculpted;
+      }
       seatsOf.set(source, seats);
     }
     return seats;

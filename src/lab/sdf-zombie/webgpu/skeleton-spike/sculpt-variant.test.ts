@@ -312,7 +312,7 @@ describe('resolveSkull: who draws the anatomical skull, and under which fit', ()
 describe('resolveSkull: who draws a skull of their own (skull-cast.ts OWN_SKULLS)', () => {
   it('the imp draws its own demon skull, under the envelope fit, wherever the plates may be drawn; never the human plates', () => {
     expect(ownSkullOf('imp')).toBe(OWN_SKULLS.imp);
-    expect(OWN_SKULLS.imp!.asset).toEqual({ name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json' });
+    expect(OWN_SKULLS.imp!.asset).toEqual({ name: 'imp', url: '/assets/lab/imp-skull.glb', manifest: '/assets/lab/imp-skull.json', grime: 1 });
     expect(OWN_SKULLS.imp!.spec).toEqual({ fit: 'envelope' });
     for (const search of ['', '?level=night-train', '?spawn=imp', '?skull=anatomical', '?skullfit=snug', '?skull=anatomical&skullfit=tight', '?skull=nonsense']) {
       const choice = resolveSkull(search);
