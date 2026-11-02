@@ -43,7 +43,7 @@ import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint, JOINT_TOUGHNESS, NEUTRAL_TOUGHNESS } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
   woundFromPellet, woundFromSlug,
@@ -1187,12 +1187,12 @@ export function createZombieActor(opts: {
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, soldierDamage ? NEUTRAL_TOUGHNESS : JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
       if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
+    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, soldierDamage ? NEUTRAL_TOUGHNESS : JOINT_TOUGHNESS)) {
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
     }

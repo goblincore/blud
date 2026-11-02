@@ -32,6 +32,50 @@ export const JOINT_EPS = 0.06;
 /** Ring sample count around a cross-section disc in the union-coverage test. */
 export const DISC_RING_SAMPLES = 8;
 
+/**
+ * JOINT TOUGHNESS (spec 2026-11-02 §3, owner): an arm or leg should come off
+ * at the elbow or knee, leaving a stump on the torso; a whole limb off the
+ * shoulder or hip flies as a long tube. Measured before: the shoulder cut in
+ * ~1 hit, the same as the elbow. The sever test scales every wound's sever
+ * radius by its joint's factor; the crater is unchanged.
+ *  - root: the attachment neck and any joint INTO a root bone (the shoulder
+ *          ball → upper arm joint is a shoulder cut too).
+ *  - mid:  the upper → lower boundary (elbow, knee): a wider zone, so hits
+ *          along the upper arm or thigh reach it.
+ *  - other: everything else (wrist, ankle, decoration joints) — as before.
+ * Classified by BONE NAME, never chain index: decoration prims (the bride's)
+ * make fake joints.
+ */
+export type JointClass = 'root' | 'mid' | 'other';
+// Tuned by sweep (connectivity-toughness.test.ts): root 0.6 is the stiffest
+// value at which sustained slugs still take a shoulder; mid 1.7 makes half of
+// all mid-upper-arm / mid-thigh hits reach the elbow / knee within 6 pellets.
+export const JOINT_TOUGHNESS: { root: number; mid: number } = { root: 0.6, mid: 1.7 };
+export function setJointToughness(k: Partial<typeof JOINT_TOUGHNESS>): void {
+  Object.assign(JOINT_TOUGHNESS, k);
+}
+/** Factors of 1: the cut rule before toughness. The soldier family keeps it —
+ *  its own regional injury model (soldier-damage.ts) budgets arm loss. */
+export const NEUTRAL_TOUGHNESS: Readonly<typeof JOINT_TOUGHNESS> = { root: 1, mid: 1 };
+const ROOT_BONES = new Set(['clavicle', 'upperArm', 'upperarm', 'thigh', 'femur']);
+const MID_BONES = new Set(['foreArm', 'forearm', 'shin', 'tibia']);
+const SCALED_LIMBS = new Set<LimbId>(['armL', 'armR', 'legL', 'legR']);
+// `femur2.l` (the broodmother's numbered legs) classes as `femur`.
+const boneBase = (b: string | undefined): string => (b ?? '').replace(/\d*\.[lr]$/, '');
+
+/** The class of the joint between two consecutive chain prims. */
+export function jointClass(limb: LimbId, prox: Primitive, distal: Primitive): JointClass {
+  if (!SCALED_LIMBS.has(limb)) return 'other';
+  const p = boneBase(prox.bone), d = boneBase(distal.bone);
+  if (MID_BONES.has(d) && !MID_BONES.has(p)) return 'mid';
+  if (ROOT_BONES.has(d)) return 'root';
+  return 'other';
+}
+
+function toughness(c: JointClass, t: Readonly<typeof JOINT_TOUGHNESS>): number {
+  return c === 'root' ? t.root : c === 'mid' ? t.mid : 1;
+}
+
 /** A carve sphere in world space — blast/pellet wounds only (burns never cut).
  *  The radius is the wound's SEVER calibre (`severRadius`), which defaults
  *  to its crater radius but may exceed it — severing is a damage decision
@@ -70,8 +114,11 @@ function carveSpheres(prims: Primitive[], wounds: Wound[], bodyYaw = 0): CarveSp
  * every sample sits within `girth` of `centre` — and short-circuits the ring.
  */
 function sectionCut(
-  centre: Vec3, girth: number, axis: Vec3, spheres: CarveSphere[],
+  centre: Vec3, girth: number, axis: Vec3, carve: CarveSphere[],
+  /** The joint's toughness factor on every sphere's radius. */
+  scaleBy = 1,
 ): boolean {
+  const spheres = scaleBy === 1 ? carve : carve.map(s => ({ centre: s.centre, radius: s.radius * scaleBy }));
   for (const s of spheres) {
     if (len(sub(centre, s.centre)) + girth < s.radius) return true;
   }
@@ -148,6 +195,7 @@ export function cutLimbs(
   body: BuildResult, wounds: Wound[], torsoCentre: Vec3,
   /** The yaw `body` is posed at — 0 for the rest body (see carveSpheres). */
   bodyYaw = 0,
+  tough: Readonly<typeof JOINT_TOUGHNESS> = JOINT_TOUGHNESS,
 ): LimbId[] {
   const spheres = carveSpheres(body.prims, wounds, bodyYaw);
   if (spheres.length === 0) return [];
@@ -175,11 +223,12 @@ export function cutLimbs(
 
     const girth = endpointGirth(prims, root);
     const dir = normalize(sub(torsoCentre, root));
+    const rootScale = SCALED_LIMBS.has(c.limb) ? toughness('root', tough) : 1;
 
     let cut = false;
     for (let k = 0; k < NECK_SAMPLES && !cut; k++) {
       const sample = add(root, scale(dir, (k / (NECK_SAMPLES - 1)) * NECK_LEN));
-      if (sectionCut(sample, girth, dir, spheres)) cut = true;
+      if (sectionCut(sample, girth, dir, spheres, rootScale)) cut = true;
     }
     if (cut) out.push(c.limb);
   }
@@ -204,7 +253,10 @@ export interface ChainCut {
  * does the head: the head stays whole (face carves + the intact bouncing
  * head are Blood signatures, gore-feel spec §1).
  */
-export function cutChains(body: BuildResult, wounds: Wound[], bodyYaw = 0): ChainCut[] {
+export function cutChains(
+  body: BuildResult, wounds: Wound[], bodyYaw = 0,
+  tough: Readonly<typeof JOINT_TOUGHNESS> = JOINT_TOUGHNESS,
+): ChainCut[] {
   const spheres = carveSpheres(body.prims, wounds, bodyYaw);
   if (spheres.length === 0) return [];
   const torso = body.clusters.find(c => c.limb === 'torso');
@@ -229,7 +281,7 @@ export function cutChains(body: BuildResult, wounds: Wound[], bodyYaw = 0): Chai
         (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2,
       ];
       const axis = normalize(sub(mid(distal), mid(prox)));
-      if (sectionCut(joint, girth, axis, spheres)) {
+      if (sectionCut(joint, girth, axis, spheres, toughness(jointClass(c.limb, prox, distal), tough))) {
         out.push({ limb: c.limb, fromPrim: order[j + 1]! });
         break;
       }
