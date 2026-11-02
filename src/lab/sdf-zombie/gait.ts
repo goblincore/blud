@@ -150,6 +150,10 @@ export const GAIT_TUNING = {
   reachBobAmp: 0.035,
   /** Reach style: lateral sway riding the hip-sway beat (m). */
   reachSwayAmp: 0.025,
+  /** Reach style: each arm's swing about its reach (rad) as the body walks, forward as the leg on its side goes back
+   *  (motion.ts scales it by the walk's blend, so a body standing still holds its reach). 0, every gait before the
+   *  imp's: the arms hold still in the reach. */
+  reachSwing: 0,
   /** Head counter-bob as a fraction of the root bob. */
   headBob: 0.5,
   /** Scale on the sideways sway of everything ABOVE the hips (spine, chest, clavicles, neck, head), 0..1, default 1 (every
@@ -472,6 +476,23 @@ export const PROWL: GaitProfile = {
  *  knee flattened to 27 mm off the hip-to-hock line, butcher-blob.test.ts). */
 export const PROWL_QUICK: GaitProfile = { ...PROWL, name: 'prowl-quick', strideFreq: 2.0 };
 
+/** The imp's prowl: PROWL_QUICK with LOOSE arms (2026-11-02, owner: the zombie's stiff outstretched arms were wrong
+ *  for him, "less stiff and lower arms and more fluid"). The upper arm hangs a little forward (0.30 rad, not the
+ *  mummy's 1.42 at the horizon) with the forearm cocked 45 deg forward and down, talons ready by the thighs (at 0.55
+ *  and -0.65 the forearms still stood level at the chest and read as the reach), and each arm swings 0.42 rad
+ *  against its leg as he walks; a deeper bob and sway carry them. Still the reach style, so the throw's and the
+ *  claw's arcs add to it as they do to the zombie's. */
+export const IMP_PROWL: GaitProfile = {
+  ...PROWL_QUICK,
+  name: 'imp-prowl',
+  reachPitch: 0.30,
+  reachElbowDrop: -0.50,
+  reachShoulderUp: 0,
+  reachBobAmp: 0.045,
+  reachSwayAmp: 0.035,
+  reachSwing: 0.42,
+};
+
 /** The deadeye's prowl: PROWL with CARRY arms (motion.ts takes the arm style from the gait, so a gunner needs a
  *  carry gait; the pistol's carry owns the right arm and the left swings). */
 export const PROWL_CARRY: GaitProfile = { ...PROWL, name: 'prowl-carry', armStyle: 'carry', armSwing: 0.03 };
@@ -688,6 +709,8 @@ export interface ReachPose {
   /** Rigid bob/sway translation riding the stride beat — applied to the
    *  WHOLE arm (shoulder-relative), so it never changes a segment length. */
   shift: Vec3;
+  /** The walk's swing per side (rad, ADDED to the pitch, GaitProfile.reachSwing); absent when the gait has none. */
+  swing?: { L: number; R: number };
 }
 
 /** One frame of gait output — rest-pose TARGET offsets, body-local. */
@@ -995,6 +1018,15 @@ export function stepGait(
       drop: T.reachElbowDrop,
       shift: [T.reachSwayAmp * Math.sin(swayPhase), -T.reachBobAmp * bobCurve, 0],
     };
+    if (T.reachSwing) {
+      // The foot's place along its stride, +1 front to -1 back: it goes back through the stance and forward through
+      // the swing. The arm on its side swings the other way.
+      const foot = (phi: number, side: 'L' | 'R'): number => {
+        const p = stanceProgress(phi, duty(side));
+        return p.stance ? Math.cos(Math.PI * p.v) : -Math.cos(Math.PI * p.u);
+      };
+      reach.swing = { L: -T.reachSwing * raiseL * foot(phiL, 'L'), R: -T.reachSwing * raiseR * foot(phiR, 'R') };
+    }
   }
 
   const legA = leg(phiL, 'L');

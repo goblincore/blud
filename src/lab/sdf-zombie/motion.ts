@@ -1031,7 +1031,7 @@ export function stepMotion(
       const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
-      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence + (r.swing ? r.swing[side] * blend : 0);
       const pitch = attack
         ? basePitch + (side === 'L' ? attack.reach.pitchL : attack.reach.pitchR)
         : basePitch;

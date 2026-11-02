@@ -21,6 +21,7 @@ import { arbitrate, type RingClaimant } from '../melee-ring';
 import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
 import { BILE, stepBile } from '../bile';
+import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -41,6 +42,8 @@ import { stepSectorLight } from './game-sector-light';
 import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
+import { igniteExplosionLight } from './game-dynamite-throw';
+import { scaleBurstVisual } from './game-wound-vfx';
 import { stepPendingGibImpulses } from './game-gib-spawn';
 import { blastShielded, ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
@@ -63,7 +66,7 @@ import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
 import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
 import { carryFreshShots, expired, GRAPESHOT, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { shotFixEnabled, traceField } from '../body-field';
-import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, stepWeaponSlots } from './game-weapon-rig';
+import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
 import { headShape } from './game-zombie-face';
@@ -1213,6 +1216,33 @@ export function tick(ctx: GameContext, dt: number) {
         if (sp.cause === 'player') damagePlayer(ctx, BILE.playerDamage, 'pellet');
       }
     }
+    // FIREBALLS (the imp's throw, fireball.ts): flung straight with a slight droop, bursting on the first thing they
+    // touch in a small fire flash (the dynamite's burst visual and light at a fraction of its height). Only the player
+    // is hurt: a direct hit, or a singe from a burst beside them. Never the thrower or its kin (#69).
+    if (ctx.weapon.fireballs.length) {
+      const pp = ctx.player.player.pos;
+      const stepped = stepFireballs(ctx.weapon.fireballs, dt, {
+        hitsWorld: (from, to) => (ctx.world.level.def?.sectors ? sectorWorldHit(ctx, from, to) !== null
+          : to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2]))
+          || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+        hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius + FIREBALL.radius, PLAYER.height),
+      });
+      ctx.weapon.fireballs = stepped.live;
+      for (const b of stepped.bursts) {
+        ctx.telemetry.telemetry.event('fireball-burst', { cause: b.cause, owner: b.owner, x: b.at[0], y: b.at[1], z: b.at[2] });
+        const centre: Vec3 = [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]];
+        const hurt = burstPlayerDamage(b, centre);
+        // A direct hit always lands; a near miss's singe stops at sector geometry, like the rocket's blast.
+        if (hurt > 0 && (b.cause === 'player' || !blastShielded(ctx, b.at, centre))) damagePlayer(ctx, hurt, 'blast');
+        if (b.cause === 'age') continue;
+        // A fist-sized flash, not a bundle's blast: 0.55 m of fire against the dynamite's ~2 m.
+        const burst = scaleBurstVisual(ctx, { kind: 'air', at: b.at, heightM: 0.55 });
+        igniteExplosionLight(ctx, b.at);
+        if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(burst);
+        else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(burst);
+        else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
+      }
+    }
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.
@@ -1227,6 +1257,18 @@ export function tick(ctx: GameContext, dt: number) {
       const v = ctx.weapon.bileViews[k]!;
       const b = ctx.weapon.bile[k];
       if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: BILE.radius, kind: 'slug' }, tracerEye);
+      else hideTracer(ctx, v);
+    }
+    while (ctx.weapon.fireballViews.length < ctx.weapon.fireballs.length) {
+      const view = newTracerView(ctx);
+      // Fire: the additive tracer pushed to a hot orange.
+      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(1.0, 0.45, 0.08);
+      ctx.weapon.fireballViews.push(view);
+    }
+    for (let k = 0; k < ctx.weapon.fireballViews.length; k++) {
+      const v = ctx.weapon.fireballViews[k]!;
+      const b = ctx.weapon.fireballs[k];
+      if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
       else hideTracer(ctx, v);
     }
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
