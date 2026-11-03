@@ -21,7 +21,7 @@ import sys
 
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / '.scratch/imp-skull'
@@ -39,9 +39,24 @@ AO_REACH = 0.06
 # front, nothing at the skull's middle, and narrowed as it goes: the maxilla, the nasal pit, the teeth and the jaw's
 # front ride out into a snout under the hide's.
 SNOUT = 0.055
-SNOUT_TAPER = 0.30
+# Barely narrowed at the front, so the kit's upper teeth (assets-source/imp-kit/make_head.py, set on the hide's mouth)
+# root on the maxilla across the whole row: at 0.30 the outer ones stood 2 cm off it.
+SNOUT_TAPER = 0.10
+# THE TOOTH ROW rides out further than the face above it (m), to meet the kit's upper teeth; the pull fades out over
+# the 16 mm above ROW_TOP (the row's top, centred and scaled). The whole snout drawn out that far broke the nasal
+# bridge through the hide's.
+SNOUT_ROW = 0.015
+ROW_TOP = -0.012
 # And dropped (m): the hide's muzzle slopes down from the brow; level, the snout's bridge broke through its top.
 SNOUT_DROP = 0.038
+# THE GAPE (2026-11-02, owner: shot open, the skull's teeth and the kit's never met). The hide's mouth hangs open
+# (imp.blob's dark slot) and the kit's lower teeth root under it, 4 cm below and ahead of this skull's short shut jaw.
+# The mandible (with the teeth on its ridge) swings open about its condyles by JAW_OPEN (radians) and is thrust forward
+# by JAW_THRUST (m, after SCALE), before the snout draws the face out, so the kit's lower row stands on its front. It
+# is narrowed to JAW_WIDTH round the centre line: full width, its sides broke the hide at the mouth's corners.
+JAW_OPEN = 0.85
+JAW_THRUST = 0.035
+JAW_WIDTH = 0.75
 PIECES = ['frontal', 'parietal-left', 'parietal-right', 'occipital', 'temporal-left', 'temporal-right',
           'zygomatic-left', 'zygomatic-right', 'maxilla-left', 'maxilla-right', 'upper-teeth', 'mandible',
           'cranial-base', 'nasal-core']
@@ -52,6 +67,8 @@ def region(c):
     x, y, z = c.x - CX, c.y, c.z
     side = 'left' if x > 0 else 'right'
     if z < 1.995 and y < -0.13: return 'mandible'
+    # The jaw's own teeth and alveolar ridge, on top of it behind the upper row: they open with it (JAW_OPEN).
+    if z < 2.022 and -0.222 < y < -0.13: return 'mandible'
     if z < 2.03 and y < -0.21: return 'upper-teeth'
     if abs(x) < 0.022 and 2.03 <= z < 2.085 and y < -0.22: return 'nasal-core'
     if z < 2.075 and y < -0.17: return f'maxilla-{side}'
@@ -74,7 +91,51 @@ def snout(co):
     w = smoothstep(0.015, 0.075, ahead) * (1 - smoothstep(-0.005, 0.05, up))
     # The jaw's front starts further back (its chin sits under the orbits' line), so it rides out with the snout.
     w = max(w, smoothstep(-0.03, 0.05, ahead) * (1 - smoothstep(-0.045, -0.02, up)))
-    return Vector((co.x * (1 - SNOUT_TAPER * w), co.y - SNOUT * w, co.z - SNOUT_DROP * w))
+    # The tooth row rides further out than the bridge above it (SNOUT_ROW), so the kit's upper teeth root on bone and
+    # the nasal bridge stays under the hide.
+    row = w * (1 - smoothstep(ROW_TOP - 0.016, ROW_TOP, up))
+    return Vector((co.x * (1 - SNOUT_TAPER * w), co.y - SNOUT * w - SNOUT_ROW * row, co.z - SNOUT_DROP * w))
+
+
+def open_jaw(obj, region_of):
+    """Swings the mandible open about its condyles by JAW_OPEN and thrusts it forward by JAW_THRUST; returns the faces'
+    regions (some are dropped). The sculpt is one shut mesh, so the mandible is cut free along its border first: a
+    vertex shared with the cheek or the teeth, moved with only some of its faces, stretched those faces into streaks
+    across the gape. Jaw specks the cut leaves (bone joined to the rest only through the upper face) are dropped: moved
+    with the jaw they hung in the air in front of it."""
+    mand = PIECES.index('mandible')
+    bm = bmesh.new(); bm.from_mesh(obj.data); bm.faces.ensure_lookup_table()
+    for f in bm.faces: f.tag = region_of[f.index] == mand
+    is_jaw = lambda f: f.tag
+    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if len({is_jaw(f) for f in e.link_faces}) > 1])
+    seen, specks = set(), []
+    for f in bm.faces:
+        if not f.tag or f in seen: continue
+        island, stack = [], [f]; seen.add(f)
+        while stack:
+            g = stack.pop(); island.append(g)
+            for e in g.edges:
+                for h in e.link_faces:
+                    if h.tag and h not in seen: seen.add(h); stack.append(h)
+        if len(island) < 40: specks += island
+    dropped = set(specks)
+    regions = [r for f, r in zip(bm.faces, region_of) if f not in dropped]
+    bmesh.ops.delete(bm, geom=specks, context='FACES')
+    jaw = [v for v in bm.verts if v.link_faces and all(is_jaw(f) for f in v.link_faces)]
+    lo = Vector([min(v.co[i] for v in jaw) for i in range(3)]); hi = Vector([max(v.co[i] for v in jaw) for i in range(3)])
+    # The condyles: the top of the jaw's rearmost centimetre (its lowest rear point is the jaw's angle, not the hinge).
+    rear = [v.co for v in jaw if v.co.y > hi.y - 0.01]
+    top = max(c.z for c in rear)
+    cond = [c for c in rear if c.z > top - 0.01]
+    hinge = sum(cond, Vector()) / len(cond)
+    turn = Matrix.Rotation(JAW_OPEN, 3, 'X')   # the face is -y: a positive turn about +x takes it down
+    for v in jaw:
+        v.co = hinge + turn @ (v.co - hinge) - Vector((0, JAW_THRUST, 0))
+        v.co.x *= JAW_WIDTH
+    bm.to_mesh(obj.data); bm.free()
+    print('JAW', len(jaw), 'specks', len(specks), 'bounds', tuple(round(c, 3) for c in lo), tuple(round(c, 3) for c in hi),
+          'hinge', tuple(round(c, 4) for c in hinge), flush=True)
+    return regions
 
 
 def select(objects, active=None):
@@ -195,6 +256,7 @@ def main():
     centre = Vector([(lo[i] + hi[i]) / 2 for i in range(3)])
     for v in skull.data.vertices: v.co = (v.co - centre) * SCALE
     eyes = [snout((e - centre) * SCALE) for e in eyes]
+    region_of = open_jaw(skull, region_of)
     eye_radius *= SCALE
     for v in skull.data.vertices: v.co = snout(v.co)
     size = max(hi[i] - lo[i] for i in range(3)) * SCALE

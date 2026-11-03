@@ -83,8 +83,11 @@ export interface FittedSkull {
  * face and full cavities come from the source, not a field projection that
  * would erase them. Intact-flesh containment is verified against real bodies. */
 /** The imp's envelope fractions (skullFitMatrix): its share of the bone's box in width, height and depth, the height
- *  of its centre, and how far forward of the box's middle it sits (a share of the depth). */
-export const IMP_FIT = { width: 0.66, height: 0.64, depth: 0.88, centre: 0.52, forward: 0.11 } as const;
+ *  of its centre, and how far forward of the box's middle it sits (a share of the depth). The cranium sits where
+ *  { width 0.66, height 0.64, depth 0.88, centre 0.52, forward 0.11 } put it before the jaw was opened and the snout
+ *  drawn out to the kit's teeth (build_imp_skull.py JAW_*, SNOUT_ROW): those grew the asset's box down and forward, and
+ *  these are the same placement and scale for the bigger box. */
+export const IMP_FIT = { width: 0.66, height: 0.7183, depth: 0.9269, centre: 0.4808, forward: 0.1335 } as const;
 export function skullFitMatrix(bounds: BoneFieldSource['bounds'], raw: THREE.Box3, character = ''): THREE.Matrix4 {
   const size = raw.getSize(new THREE.Vector3());
   const centre = raw.getCenter(new THREE.Vector3());

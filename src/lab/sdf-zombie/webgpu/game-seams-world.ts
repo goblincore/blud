@@ -146,6 +146,8 @@ export function createWorldSeams(ctx: GameContext) {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
         hit: a.hit, hitSlug: a.hitSlug,
+        /** Sever a limb outright, or from that chain position (game-actor debugSever): the shot-off-arm repro. */
+        sever: a.debugSever,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
         visualWoundList: () => [...a.visualWounds()],
