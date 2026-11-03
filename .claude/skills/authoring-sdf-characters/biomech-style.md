@@ -719,6 +719,10 @@ throws fireballs. What it taught:
   free along its border (shared vertices stretched into streaks across the gape), swung open, thrust forward and
   narrowed in `build_imp_skull.py` (`JAW_OPEN`, `JAW_THRUST`, `JAW_WIDTH`, `SNOUT_ROW`). Anything that grows the
   asset's box moves the whole fit, so solve `IMP_FIT` for the old matrix and the cranium stays put.
+- **A kit only sheds if the registry says so.** Without `kitSheds: true` (or `armoured`) in `character-registry.ts`
+  the kit never runs `createKitDamage`: a shot-off arm left the imp's fist and hoses hanging in the air, though every
+  island was on the right bone. With it, a `tooth` island also falls out when a crater reaches it, so kit teeth never
+  float in front of the exposed skull (the seating above only narrows that gap).
 - **A hose sheds by the bone it rides.** Kit pieces leave with the limb their island is skinned to (kit-damage.ts
   `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
   the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds
