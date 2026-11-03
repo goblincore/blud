@@ -70,9 +70,9 @@ import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
 import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
 import type { SoldierStaggerLevel } from './soldier-stagger';
-import type { BraceLimit, CollapsePhase, FootPlant, HipCone, CollapseState, MissingLimbs, RopeLimit } from './collapse';
+import type { BraceLimit, CollapsePhase, CorpseBody, FootPlant, HipCone, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
-  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBraces, collapseFootPlants, collapseHipCones, collapseRopes, makeCollapseState, stepCollapse,
+  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBody, collapseBraces, collapseFootPlants, collapseHipCones, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
@@ -270,6 +270,8 @@ export interface MotionJoints {
   hipCones: readonly HipCone[];
   /** Corpse foot plants (collapse.ts plantFeet), constant for the body. */
   footPlants: readonly FootPlant[];
+  /** Corpse self-collision capsules (collapse.ts relaxBodyCollisions), constant for the body; null without limbs. */
+  corpseBody: CorpseBody | null;
   /** Per rig point: how much higher than the foot joint it rests on the
    *  floor (m) — its flesh depth over the foot's. A corpse lies ON its torso,
    *  not with every joint at ankle height. */
@@ -316,6 +318,7 @@ export function makeMotionJoints(
     braces: collapseBraces(names, baseRest),
     hipCones: collapseHipCones(names, baseRest),
     footPlants: collapseFootPlants(names, baseRest),
+    corpseBody: collapseBody(names, baseRest, q => fleshGirth(body, q, BODY_GIRTH_CAP)),
     floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
 }
@@ -332,18 +335,23 @@ const FLOOR_LIFT_CAP = 0.14;
  * (Depth of the joint INSIDE the flesh does not work: joints sit at bone ends,
  * at the surface — the zombie's chest joint is 1 cm deep in a 12 cm chest.)
  */
+function fleshGirth(body: BuildResult, q: Vec3, cap: number): number {
+  let best = 0;
+  for (const p of body.prims) {
+    if (p.op === 'sub' || p.dead) continue;
+    const ab = sub(p.b, p.a), L2 = dot(ab, ab);
+    const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
+    if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
+    best = Math.max(best, p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]));
+  }
+  return Math.min(best, cap);
+}
+
+/** A corpse bone's collision radius cap (m): a bloated belly prim must not wedge the arms a foot off the body. */
+const BODY_GIRTH_CAP = 0.16;
+
 function floorLiftFor(body: BuildResult, rest: readonly Vec3[], foot: number | undefined): number[] {
-  const girth = (q: Vec3): number => {
-    let best = 0;
-    for (const p of body.prims) {
-      if (p.op === 'sub' || p.dead) continue;
-      const ab = sub(p.b, p.a), L2 = dot(ab, ab);
-      const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
-      if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
-      best = Math.max(best, p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]));
-    }
-    return Math.min(best, FLOOR_LIFT_CAP);
-  };
+  const girth = (q: Vec3): number => fleshGirth(body, q, FLOOR_LIFT_CAP);
   const footGirth = foot === undefined ? 0 : girth(rest[foot]!);
   return rest.map(q => Math.max(0, girth(q) - footGirth));
 }
@@ -595,6 +603,8 @@ export interface MotionFrame {
   hipCones: readonly HipCone[];
   /** Foot plants for a collapsed body (collapse.ts plantFeet); empty while it stands. */
   footPlants: readonly FootPlant[];
+  /** Self-collision for a collapsed body (collapse.ts relaxBodyCollisions); null while it stands. */
+  corpseBody: CorpseBody | null;
   /** The integrity to relax them at: the profile's corpseIntegrity, else the
    *  live CORPSE_INTEGRITY knob. */
   integrity: number;
@@ -1769,6 +1779,7 @@ export function stepMotion(
       braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
       hipCones: collapsed && !structural && integrity > 0 ? joints.hipCones : [],
       footPlants: collapsed && !structural ? joints.footPlants : [],
+      corpseBody: collapsed && !structural ? joints.corpseBody : null,
       integrity,
       floorLift: joints.floorLift,
       // An authored death fall lies the skull with the neck at once (the soldier's headFollowsRig).

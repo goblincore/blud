@@ -166,7 +166,7 @@ export function constrainRigBends(
       // A planted foot (collapse.ts plantFeet) stays put: the knee goes where the bones allow. A knee that would go
       // under the floor (the body has come down past the foot) cannot be held there: the floor threw it back up
       // and launched the corpse 0.6 m. The foot lets go and the stop below swings it as for any free end.
-      const knee = plantedKnee(points, bend);
+      const knee = plantedKnee(points, bend, state.bendStepCap);
       const kneeFloor = !knee ? undefined : floorAt ? floorAt(knee.pos[0], knee.pos[2], mid.pos) : floorY;
       if (knee && (kneeFloor === undefined || knee.pos[1] >= kneeFloor)) {
         if (points === state.points) points = points.slice();
@@ -283,7 +283,7 @@ export function constrainRigBends(
  * kneels. Moved with its prev (no speed added). Null when it cannot (no hinge, a span the bones cannot make, a
  * degenerate frame): the knee stays where physics put it.
  */
-function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint): RigPoint | null {
+function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint, stepCap?: number): RigPoint | null {
   if (!bend.axis) return null;
   const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
   const a = points[bend.axis[0]], b = points[bend.axis[1]];
@@ -297,7 +297,11 @@ function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint): RigP
   if (len(back) < 1e-6) return null;
   const w = scale(normalize(back), -1);
   const x = (l1 * l1 - l2 * l2 + d * d) / (2 * d), r = Math.sqrt(Math.max(0, l1 * l1 - x * x));
-  const pos = add(root.pos, add(scale(u, x), scale(w, r)));
+  let pos = add(root.pos, add(scale(u, x), scale(w, r)));
+  // Capped like the stop (RigState.bendStepCap): a knee pushed off its hinge plane (a corpse's legs pressed together)
+  // was put back in ONE step, a 40-90 cm snap that the next verlet step carried on as speed (2026-11-03).
+  const move = sub(pos, mid.pos), dm = len(move);
+  if (stepCap !== undefined && dm > stepCap) pos = add(mid.pos, scale(move, stepCap / dm));
   return { ...mid, pos, prev: add(mid.prev, sub(pos, mid.pos)) };
 }
 
