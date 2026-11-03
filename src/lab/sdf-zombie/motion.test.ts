@@ -4,7 +4,8 @@
 // runs against the REAL zombie body's joint layout where it matters (so the
 // gait↔bindRig ordering contract is pinned), and against stub rig points for
 // the per-frame pipeline — stepMotion never touches the renderer.
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { setDeathFall } from './death-fall';
 import {
   applyFloorContact, FIRE, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion, SUBSTEP_TUNING,
@@ -452,6 +453,9 @@ describe('stepMotion — reach arm pivot (socketed shoulders)', () => {
 });
 
 describe('stepMotion — collapse', () => {
+  // The free-ragdoll collapse (authored deaths off, death-fall.ts).
+  beforeAll(() => setDeathFall({ on: false }));
+  afterAll(() => setDeathFall({ on: true }));
   it('forced collapse: full gravity, rest pull ramps off, ropes appear, root freezes', () => {
     const j = realJoints();
     const sig = (i: number): MotionSignals => ({
@@ -1760,7 +1764,7 @@ describe('soldier impact-driven death', () => {
   it.each([-1, 1])('a lethal side impact throws the body in the incoming direction (%s)', side => {
     const j = soldierJoints();
     const { frame, state } = run(j, makeMotionState(9, [0,0,0]),
-      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 30, i => ({ ...NO_SIGNALS(),
+      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 60, i => ({ ...NO_SIGNALS(),
         fatal: true, forcedCollapse: true,
         shot: i === 0 ? { type:'blast', dirWorld:[side,0,0], woundWorld:[0,1.2,0], torso:true } : null,
       }));

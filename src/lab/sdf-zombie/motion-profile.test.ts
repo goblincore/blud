@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/motion-profile.test.ts
 import { describe, it, expect } from 'vitest';
-import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand, isSoldierFamily, JUGGERNAUT_PROFILE } from './motion-profile';
+import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand, isSoldierFamily, JUGGERNAUT_PROFILE, BUTCHER_PROFILE, GOBLIN_PROFILE } from './motion-profile';
 import { SHAMBLE, MARCH, RUN } from './gait';
 import { WANDER_TUNING } from './wander';
 
@@ -52,4 +52,13 @@ it('juggernaut: a slower, heavier-turning soldier that never runs', () => {
   expect(JUGGERNAUT_PROFILE.turnRate!).toBeLessThan(SOLDIER_PROFILE.turnRate!);
   expect(runWeight(JUGGERNAUT_PROFILE, 99)).toBe(0);
   expect(JUGGERNAUT_PROFILE.gunner).toBeDefined();
+});
+
+describe('physicsDeath', () => {
+  it('the zombie dies on the free ragdoll; the bodies built on his profile keep the authored falls', () => {
+    expect(ZOMBIE_PROFILE.physicsDeath).toBe(true);
+    expect(BUTCHER_PROFILE.physicsDeath).toBe(false);
+    expect(GOBLIN_PROFILE.physicsDeath).toBe(false);
+    expect(SOLDIER_PROFILE.physicsDeath).toBeUndefined();
+  });
 });

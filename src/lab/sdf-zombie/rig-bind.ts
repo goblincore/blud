@@ -25,6 +25,10 @@ interface PrimBind {
   b: EndpointBind;
   /** Arm endpoint insets rotate with their bone, including at full extension. */
   armFrame?: { head: number; tail: number; restDir: Vec3 };
+  /** A torso prim's trunk bone (spine, pelvis), or a hand's or a foot's own bone: its offset and shape turn with the
+   *  bone as far as the corpse's headFollow lets go (applyRig), so a lying body's flesh lies with it. Standing
+   *  (follow 0) it is unused. */
+  lieFrame?: { head: number; tail: number; restDir: Vec3 };
 }
 
 /** The upper-arm / forearm bone for a side, under either naming convention:
@@ -463,6 +467,10 @@ export function bindRig(body: BuildResult): BoundRig {
     const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
       restDir: normalize(sub(bone.tail, bone.head)) };
+    const lies = !bone && p.bone && ((p.limb === 'torso' && !/\.[lr]$/.test(p.bone)) || /^(hand|foot)/i.test(p.bone));
+    const own2 = lies ? body.bones.get(p.bone!) : undefined;
+    if (own2 && indexOf(own2.head) !== indexOf(own2.tail)) binding.lieFrame = { head: indexOf(own2.head),
+      tail: indexOf(own2.tail), restDir: normalize(sub(own2.tail, own2.head)) };
     return binding;
   };
 
@@ -691,8 +699,23 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     return q;
   };
   const yawRotation: Quat = [0, Math.sin(bodyYaw / 2), 0, Math.cos(bodyYaw / 2)];
+  // THE LYING TRUNK (owner playtest 2026-11-02: "an orb around his midsection"): torso flesh turned only with the
+  // yaw, so on a corpse lying flat each ellipsoid kept standing up and its offset kept pointing at the sky — a ball
+  // of flesh above the belly. As the corpse's head lets go (headFollow) the trunk prims turn with their bone instead.
+  // A hand's orb had the same fault: it hung off the tip in the standing frame and drifted 15 cm off a dead soldier's
+  // wrist ("his orb hands seem detached").
+  const trunkFollow = headFollowOf(bound.rig);
+  const trunkRotation = (frame: { head: number; tail: number; restDir: Vec3 }): Quat => {
+    const b = rotationOf(frame);
+    if (trunkFollow >= 1) return b;
+    const a = yawRotation, sgn = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1;
+    const m: Quat = [0, 1, 2, 3].map(k => a[k]! * (1 - trunkFollow) + b[k]! * sgn * trunkFollow) as unknown as Quat;
+    const l = Math.hypot(m[0], m[1], m[2], m[3]);
+    return [m[0] / l, m[1] / l, m[2] / l, m[3] / l];
+  };
   const posePrimitive = (p: Primitive, bind: PrimBind): Primitive => {
-    const q = bind.armFrame ? rotationOf(bind.armFrame) : yawRotation;
+    const q = bind.armFrame ? rotationOf(bind.armFrame)
+      : bind.lieFrame && trunkFollow > 0 ? trunkRotation(bind.lieFrame) : yawRotation;
     const turned = Math.abs(1 - q[3]) > 1e-6;
     const orientedShape = p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]
       || p.box || p.shell || p.strand || p.orient;
@@ -1049,7 +1072,8 @@ export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
     ...bound,
     rig: constrainRigBends({
       ...bound.rig,
-      points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
+      // `delta` is a 1/60 s shove: this step's displacement for the same speed (rig.ts stepDt).
+      points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, vscale(delta, (bound.rig.stepDt ?? 1 / 60) * 60)) } : p),
     }),
   };
 }

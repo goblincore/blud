@@ -2,6 +2,33 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Imp (gaunt fireball-throwing demon: burning socket fists, a forge-heart feeding them) — first pass 2026-10-24
+
+- [x] **Body** `characters/imp.blob`: a gaunt, hunched, pale-hide demon on the butcher's digitigrade legs (flesh, not
+  machine), long arms with a `hand` bone, a deep hunch. The head is flesh over a simplified version of the twinhead's
+  demon skull (owner): V brow, slanted sunken sockets with red embers, cheekbones, flared nostrils, long muzzle,
+  chin point. `?character=imp`, `?spawn=imp`.
+- [x] **Kit** `assets-source/imp-kit/` (headless `build.py`, skin probed by `scripts/imp-skin.ts`): socket fists
+  (a knuckled skullmetal cup round a burning coal, caged by five curled talons, glowing from a baked `_glow`), fangs
+  rooted in the flesh round a dark gape, forward-hooking horns, a forge-heart in the chest wound (a crested housing
+  with a burning slit, prised-open ribs round it), dark fuel conduits with burning seams from the heart down each arm
+  into the fists, back and shoulder spines, splayed foot talons and a hock spur. ~116k tris; optimisation is the
+  later pass.
+- [x] **Body normal map** from `characters/imp.detail` (`scripts/imp-detail-gen.ts`): a starved rib cage, spine
+  knuckles, sinew cords down the forearms, shins and metatarsals, veins; torso baked round the hunched spine axis.
+- [x] **Attacks**: `IMP_PROFILE` (PROWL_QUICK at 1.6 m/s, quick turn). Up close the zombie mind's swing as a claw
+  rake; at range `makeImpMind` winds up and throws overhand (`attack.ts` `throw`): `fireball.ts` flies from the right
+  socket (`spit` from `handTipR`) at 11 m/s, 14 on a hit, 5 on a near miss, a small fire burst. Seen in the arena.
+- [x] **Second pass 2026-11-02** (owner): bigger head (x1.25), shorter legs (pelvis 0.94 -> 0.76) and arms, big
+  splayed claw feet (flesh toes, kit claws), and an exposed skull of its own: the twinhead's demon skull mesh
+  (`public/assets/lab/imp-skull.glb`, built by `scripts/build_imp_skull.py`, loaded through `OWN_SKULLS`).
+- [x] **Third pass 2026-11-02** (owner): the exposed skull dirtied (baked hollows, blood, clinging flesh, black
+  sockets), a snout under the muzzle so no flesh floats, red-pupil eyes from the skull's modelled eyeballs; loose low
+  arms that swing (`IMP_PROWL`); a throw with a long cock, a whip and a follow-through (`THROW_TUNING`).
+- [ ] Owner review. Open: the cut horn knob on each temple; metal skull parts
+  on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
+  ball (a tinted tracer, like the bile); kit optimisation.
+
 ## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22
 
 - [x] **Body** `characters/venus.blob`: a heavy, full-figured flesh body (hips 0.55 m across, a 0.17 waist, a rear

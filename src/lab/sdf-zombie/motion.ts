@@ -46,6 +46,7 @@
 // motion pipeline — it reads the posed prims.
 //
 import { soldierFallPose } from './soldier-fall';
+import { canDeathFall, corpseHoldStep, DEATH_FALL, deathFallPose, deathFallPull, type CorpseHold, type DeathFallChoice } from './death-fall';
 import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
@@ -376,6 +377,10 @@ export interface MotionState {
   fallFatal?: boolean;
   fallImpact?: Vec3;
   fallStrength?: number;
+  /** The authored death fall this body is playing (death-fall.ts); null = the soldier's own fall pose. */
+  fallKind?: DeathFallChoice | null;
+  /** A landed authored death's hold: the shape it re-anchored to and a hit's limp spell (death-fall.ts). */
+  corpseHold?: CorpseHold;
   plantL: PlantState;
   plantR: PlantState;
   /** A quadruped's FRONT paw plants ('foreleg' arm style only; absent on
@@ -474,6 +479,9 @@ export interface MotionConfig {
    *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
    *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
   pose?: readonly Vec3[];
+  /** AUTHORED DEATHS (death-fall.ts): asked once, on the first frame a killed body is down, for the fall it plays.
+   *  Absent = a neutral pick from the gait seed. */
+  deathFall?: () => DeathFallChoice;
   /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
    *  the wider of the two wins. Undefined or 0 changes nothing. */
   jawGape?: number;
@@ -1083,7 +1091,7 @@ export function stepMotion(
       const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
-      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence + (r.swing ? r.swing[side] * blend : 0);
       const pitch = attack
         ? basePitch + (side === 'L' ? attack.reach.pitchL : attack.reach.pitchR)
         : basePitch;
@@ -1600,19 +1608,45 @@ export function stepMotion(
     }
   }
 
-  const structural = isSoldierFamily(profile) && collapsed;
+  // AUTHORED DEATHS (death-fall.ts): every humanoid but a soft target or a physics-death body (the zombie) lies down along a keyed fall the
+  // rig springs toward, the way the soldier family always has.
+  const animatedDeath = !isSoldierFamily(profile) && DEATH_FALL.on && !profile.soft && !profile.physicsDeath
+    && canDeathFall(joints.names);
+  const structural = (isSoldierFamily(profile) || animatedDeath) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
-  const floorY = worldGround - (structural ? .13 : MOTION_TUNING.floorPad);
+  const floorY = worldGround - (structural && !animatedDeath ? .13 : MOTION_TUNING.floorPad);
   const fallPose = structural ? (state.fallPose ?? points.map(p => [...p.pos] as Vec3)) : undefined;
-  const fallFatal = !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
+  const fallFatal = animatedDeath || !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
   const fallImpact = state.fallImpact ?? sig.shot?.dirWorld ?? (state.recoil.joint !== null ? state.recoil.dirWorld : rotateYaw([0,0,-1], bodyYaw));
   const fallStrength = state.fallStrength ?? (sig.shot?.type === 'blast' ? 1 : sig.shot ? .4 : .8);
-  if (structural) {
+  // The fall is chosen on the first down frame of a body already dead; a soldier downed alive keeps his own
+  // pose (and its dead version if a later hit kills him), so his writhe never jumps to another fall.
+  const fallKind: DeathFallChoice | null | undefined = !structural ? undefined
+    : state.fallKind !== undefined ? state.fallKind
+    : fallFatal && DEATH_FALL.on && canDeathFall(joints.names)
+      ? (cfg.deathFall?.() ?? { kind: fallStrength >= 1 ? 'blown' : 'backward', strength: 1, side: (state.gait.seed & 1) ? 1 : -1 })
+      : null;
+  let corpse: ReturnType<typeof corpseHoldStep> = null;
+  if (structural && fallKind) {
+    const missing = new Set<GaitJointName>();
+    if (sig.missing.armL) (['elbowL', 'handL', 'handTipL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.armR) (['elbowR', 'handR', 'handTipR'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legL) (['kneeL', 'footL', 'toeL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legR) (['kneeR', 'footR', 'toeR'] as const).forEach(n => missing.add(n));
+    if (!sig.headAlive) missing.add('head');
+    const fall = deathFallPose(fallKind, {
+      base: joints.base, names: joints.names, start: fallPose!, pivot, shift, yaw: bodyYaw,
+      floor: floorY, limbFloor: worldGround - MOTION_TUNING.floorPad, impact: fallKind.impact ?? fallImpact, missing,
+    }, collapse.state.fallAge);
+    corpse = corpseHoldStep(fallKind, collapse.state.fallAge, state.corpseHold, !!sig.shot, dt, points.map(p => p.pos), fall, joints.names);
+    (corpse?.targets ?? fall).forEach((p, i) => { targets[i] = [...p] as Vec3; });
+  } else if (structural) {
     const fall = soldierFallPose(joints.base, joints.names, fallPose!, pivot, shift, bodyYaw, collapse.state.fallAge,
       floorY, sig.missing.legL || sig.wounded.legL, !fallFatal, fallImpact, fallStrength, sig.missing.armL);
     fall.forEach((p, i) => { targets[i] = p; });
   }
+  const fallPull = corpse?.pull ?? (fallKind ? deathFallPull(fallKind.kind, collapse.state.fallAge) : 1);
   // Sector levels: the structural pose lies every target on the ROOT's plane, held at rest pull 1.
   // A target over a floor lower than that (a ledge's lip, a pit) is released to fall to it; with
   // the pelvis over it the whole body goes (the torso is the load-bearing mass).
@@ -1654,7 +1688,8 @@ export function stepMotion(
   }
 
   const nextState: MotionState = {
-    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
+    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength, fallKind: fallKind ?? null } : {}),
+    ...(corpse ? { corpseHold: corpse.hold } : {}),
     wander, gait: gait.state, stagger: stagger.state,
     ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
@@ -1713,16 +1748,19 @@ export function stepMotion(
         const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return pins.length ? { posePins: pins } : {};
       })(),
-      restPull: structural ? 1 : collapse.restPull,
+      restPull: structural ? (fallKind ? fallPull : 1) : collapse.restPull,
       ...(restRelease ? { restRelease } : {}),
-      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0] : [0, -1.5, 0]) : collapsed
+      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0]
+        // A loosened fall (DEATH_FALL.pull/settle below 1) hands the weight back to gravity.
+        : [0, fallKind ? MOTION_TUNING.collapseGravity + (-1.5 - MOTION_TUNING.collapseGravity) * Math.min(1, fallPull) : -1.5, 0]) : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
       braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
       integrity,
       floorLift: joints.floorLift,
-      headFollow: collapsed && !structural ? Math.min(1, collapse.state.fallAge / COLLAPSE_TUNING.fallReleaseTime) : 0,
+      // An authored death fall lies the skull with the neck at once (the soldier's headFollowsRig).
+      headFollow: structural && fallKind ? 1 : collapsed && !structural ? Math.min(1, collapse.state.fallAge / COLLAPSE_TUNING.fallReleaseTime) : 0,
       phase: collapse.phase,
       collapsed,
       meter: collapse.state.meter,

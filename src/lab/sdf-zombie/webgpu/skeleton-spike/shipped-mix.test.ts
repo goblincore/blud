@@ -75,7 +75,8 @@ describe('the default page: one renderer, the shipped mix', () => {
     const said: string[] = [];
     const cache = await createBoneMeshCache('', line => { said.push(line); }, () => Promise.reject(new Error('no asset')));
     expect(cache.skullKit).toBeNull();
-    expect(said).toHaveLength(1);
+    // One line for the plates, one for the imp's own skull (its asset is asked for beside them).
+    expect(said).toEqual([expect.stringContaining('the anatomical skull did not load'), expect.stringContaining('the imp skull')]);
     const rows = drawnOn(cache);
     for (const c of ['zombie', 'soldier', 'juggernaut']) expect(rows[c], c).toMatchObject({ plates: false, head: bone(2), limb: bone(2), eyes: 2, seat: 'sculpt' });
     for (const c of ['cultist', 'female']) expect(rows[c], c).toMatchObject({ plates: false, head: bone(1), limb: bone(1), eyes: 2, seat: 'sculpt' });

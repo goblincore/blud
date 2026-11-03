@@ -371,9 +371,11 @@ export function collapseBraces(names: readonly GaitJointName[], restPose: readon
 /**
  * Relax the braces: `iterations` Gauss-Seidel passes, each pulling a pair back
  * inside [rest(1-tol), rest(1+tol)], split half/half between free ends as
- * stepRig's constraints are. Position-only: verlet reads the correction as
- * velocity, which is what makes a braced torso swing as one piece. Integrity
- * <= 0 returns the input untouched (the pre-brace fall, bit for bit).
+ * stepRig's constraints are. Each correction moves `prev` with `pos`, so it
+ * adds no speed: a brace that read as velocity fought the floor every step and
+ * pumped a lying corpse back up to 2 m (owner playtest 2026-11-02, worst in
+ * bullet time). Integrity <= 0 returns the input untouched (the pre-brace
+ * fall, bit for bit).
  */
 export function relaxBraces(
   points: readonly RigPoint[],
@@ -382,7 +384,7 @@ export function relaxBraces(
   iterations: number = CORPSE_INTEGRITY.iterations,
 ): readonly RigPoint[] {
   if (integrity <= 0 || braces.length === 0) return points;
-  const out: RigPoint[] = points.map(p => ({ pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, prev: p.prev, pinned: p.pinned }));
+  const out: RigPoint[] = points.map(p => ({ pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, prev: [p.prev[0], p.prev[1], p.prev[2]] as Vec3, pinned: p.pinned }));
   const tol = { trunk: braceTolerance('trunk', integrity), head: braceTolerance('head', integrity) };
   for (let it = 0; it < iterations; it++) {
     for (const br of braces) {
@@ -397,8 +399,8 @@ export function relaxBraces(
       const wa = pa.pinned ? 0 : 1, wb = pb.pinned ? 0 : 1;
       if (wa + wb === 0) continue;
       const k = (dist - target) / dist / (wa + wb);
-      if (wa) pa.pos = [pa.pos[0] + dx * k, pa.pos[1] + dy * k, pa.pos[2] + dz * k];
-      if (wb) pb.pos = [pb.pos[0] - dx * k, pb.pos[1] - dy * k, pb.pos[2] - dz * k];
+      if (wa) { pa.pos = [pa.pos[0] + dx * k, pa.pos[1] + dy * k, pa.pos[2] + dz * k]; pa.prev = [pa.prev[0] + dx * k, pa.prev[1] + dy * k, pa.prev[2] + dz * k]; }
+      if (wb) { pb.pos = [pb.pos[0] - dx * k, pb.pos[1] - dy * k, pb.pos[2] - dz * k]; pb.prev = [pb.prev[0] - dx * k, pb.prev[1] - dy * k, pb.prev[2] - dz * k]; }
     }
   }
   return out;

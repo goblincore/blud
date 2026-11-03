@@ -5,7 +5,8 @@
 // Measured before braces, on the zombie: head->pelvis 0.71 -> 0.11 m (the
 // head lands in the pelvis), chest->pelvis 0.48 -> 0.20 m, every joint at
 // one floor height (y 0.06).
-import { afterEach, describe, expect, it } from 'vitest';
+import { setDeathFall } from './death-fall';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { emptyActorSignals, makeActorMotion, stepActorMotion } from './actor';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
@@ -46,6 +47,9 @@ function fall(body: BuildResult, seed: number, integrity: number, profile?: Moti
 }
 
 describe('corpse integrity: the zombie', () => {
+  // The free-ragdoll corpse (authored deaths off, death-fall.ts): what the braces hold.
+  beforeAll(() => setDeathFall({ on: false }));
+  afterAll(() => setDeathFall({ on: true }));
   for (const seed of [1, 2, 3, 4]) {
     it(`seed ${seed}: the head stays out of the torso and the corpse lies down`, () => {
       const r = fall(buildBody(ZOMBIE, DEFAULT_BUILD_OPTS), seed, 0.7);

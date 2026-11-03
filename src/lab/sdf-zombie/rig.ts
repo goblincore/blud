@@ -72,6 +72,10 @@ export interface RigState {
   bodyYaw?: number;
   /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
   headFollowsRig?: boolean;
+  /** The dt of the last stepRig (s). Verlet keeps velocity as last step's displacement, so the next step
+   *  rescales it by dt / stepDt, and impulseAt reads it to turn a 60 Hz shove into this step's
+   *  displacement. Absent = 1/60. Without it a bullet-time step (0.2x) carried 5x the speed. */
+  stepDt?: number;
   /** A corpse's skull letting go of its look cone (0..1, MotionFrame.headFollow):
    *  0 clamps it as standing, 1 lies it with the neck. headFollowsRig wins. */
   headFollow?: number;
@@ -364,7 +368,7 @@ export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardS
 
 export interface StepOpts {
   gravity: Vec3;
-  /** Velocity bleed per step, 0..1. */
+  /** Velocity bleed per 1/60 s, 0..1 (scaled to the step like restStiffness). */
   damping: number;
   iterations: number;
   /**
@@ -401,10 +405,14 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
     return k === undefined || k === 1 ? st : 1 - Math.pow(1 - opts.restStiffness * k, frames);
   };
 
+  // TIME-CORRECTED VERLET: last step's displacement is velocity × the last dt; carry the velocity, not the
+  // displacement, into this step (a slow-motion step is shorter, so it moves less), and bleed per 1/60 s.
+  const carry = (state.stepDt ? Math.min(20, Math.max(0.05, dt / state.stepDt)) : 1)
+    * Math.pow(1 - opts.damping, frames);
   let points = state.points.map((p, i) => {
     if (state.posePins?.includes(i)) return { pos: state.restPose[i]!, prev: state.restPose[i]!, pinned: true };
     if (p.pinned) return { ...p, prev: p.pos };
-    const vel = scale(sub(p.pos, p.prev), 1 - opts.damping);
+    const vel = scale(sub(p.pos, p.prev), carry);
     let next = add(add(p.pos, vel), scale(opts.gravity, dt * dt));
     if (state.clothForce && (state.restScale?.[i] ?? 1) < 1) next = add(next, scale(state.clothForce, dt * dt));
     const sti = stOf(i);
@@ -431,6 +439,7 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
   // sub-millimetre correction cannot put an arm back inside).
   const result = constrainRigBends({
     ...state,
+    stepDt: dt,
     points: state.headKeepOut || state.torsoGuards
       ? applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0)
       : points,

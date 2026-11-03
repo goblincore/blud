@@ -19,7 +19,7 @@ import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
 import { sculptVariantOf } from './skeleton-spike/sculpt-variant';
-import { HUMANOIDS } from './skeleton-spike/skull-cast';
+import { HUMANOIDS, OWN_SKULLS } from './skeleton-spike/skull-cast';
 
 /** The name of the organ mesh spec the segment mesh cache builds by (null without the mesh skeleton; 'custom' for a
  *  spec that is none of ORGAN_MESHES). */
@@ -33,6 +33,8 @@ function organMeshName(ctx: GameContext): OrganMeshName | 'custom' | null {
 export function createSkeletonSeams(ctx: GameContext) {
   /** The anatomical skull's kit on this page; null without one. */
   const kitOf = () => ctx.render.segMeshCache?.skullKit ?? null;
+  /** The kit that draws `head`'s skull (the human skull's, or the character's own); null: its sculpted bone. */
+  const headKit = (head: { character: string } | undefined) => (head && ctx.render.segMeshCache?.skullKitOf(head.character)) || null;
   return {
     /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
      *  bones; ON draws every posed bone as an instanced polygonal tube and
@@ -186,7 +188,7 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!a || !r) return null;
       const mine = r.drawn.filter(d => d.owner === a);
       const head = ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
-      const plates = (head && ctx.render.segMeshCache?.skullKit?.head(head)?.pieces) || [];
+      const plates = (head && headKit(head)?.head(head)?.pieces) || [];
       // A split copy is drawn from its bone's twin geometry: instance data of its own on the bone's vertex data. The
       // shared position attribute says which plate either is.
       const plateOf = (g: THREE.BufferGeometry) => plates.find(p => p.geometry.getAttribute('position') === g.getAttribute('position'))?.id ?? null;
@@ -215,7 +217,7 @@ export function createSkeletonSeams(ctx: GameContext) {
     skullPlates: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
-      const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
+      const fitted = head && headKit(head)?.head(head);
       return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot], min: [...p.min], max: [...p.max] })) : null;
     },
     /** skeleton=mesh diagnostics: actor `id`'s eyes as this frame draws them, a closed head's or a split one's copies:
@@ -243,9 +245,9 @@ export function createSkeletonSeams(ctx: GameContext) {
     skullFit: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
-      const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
+      const fitted = head && headKit(head)?.head(head);
       if (!fitted) return null;
-      const f = fitted.fit, spec = ctx.render.segMeshCache!.skullKit!.fitOf(head!.character), sheet = head!.flesh?.sheet ?? null;
+      const f = fitted.fit, spec = headKit(head)!.fitOf(head!.character), sheet = head!.flesh?.sheet ?? null;
       return f ? {
         name: f.name, scale: [...f.result.affine.scale], offset: [...f.result.affine.offset], min: [...f.min], max: [...f.max],
         maxMove: f.result.warp.maxMove, passes: f.result.passes.length, shrunk: f.result.shrunk, ms: f.result.ms,
@@ -319,6 +321,9 @@ export function createSkeletonSeams(ctx: GameContext) {
       // Who draws the anatomical skull on this page, and under which fit: character to the fit's name (skull-fit.ts;
       // the eight ball-headed humanoids by default, skull-cast.ts). Empty: nobody (no kit).
       anatomical: Object.fromEntries(HUMANOIDS.flatMap(name => { const spec = kitOf()?.fitOf(name); return spec ? [[name, spec.fit]] : []; })),
+      // Who draws a skull of their own on this page (skull-cast.ts OWN_SKULLS), and its asset: character to the
+      // asset's name. Empty: nobody (its asset did not load, or every character draws its sculpted bone).
+      own: Object.fromEntries(Object.keys(OWN_SKULLS).flatMap(name => { const kit = ctx.render.segMeshCache?.skullKitOf(name); return kit ? [[name, kit.asset.name]] : []; })),
       // The sculpted skull's recipe in force (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the
       // cache's own) and which paint; and the variant that recipe is. The default is `full`:
       // { shape: 2, headCell: 0.005, paint: 2 }. Under the anatomical skull it is `classic`, which the other bones
@@ -330,7 +335,7 @@ export function createSkeletonSeams(ctx: GameContext) {
       skullFit: kitOf()?.fit ?? null,
       // Every skull the kit has fitted since boot: whose, under which fit, and how long it took to make (ms). One
       // per head revision, made when the character's skeleton sources are built (game-skeleton-actors.ts).
-      skullFits: kitOf() ? kitOf()!.made.map(m => ({ ...m })) : [],
+      skullFits: (ctx.render.segMeshCache?.skullKits ?? []).flatMap(kit => kit.made.map(m => ({ ...m }))),
       // How long the plates' asset took to load (request, parse, the kit's making; ms), and how long the boot stood
       // waiting for it where the skeleton is built (the load is started as the boot begins and runs beside it);
       // null on a page that did not load it.

@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -92,6 +92,9 @@ export interface MotionProfile {
    *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
    *  on the arm, so the arm's own swing carries it. */
   armWeapon?: { side: 'L' | 'R'; damage: number };
+  /** A THROWER (the imp): the zombie's mind and claws up close, and at range a wind-up and an overhand throw of a
+   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). */
+  throws?: 'fireball';
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -118,6 +121,9 @@ export interface MotionProfile {
   /** CORPSE INTEGRITY for this character (0..1, collapse.ts braces): how much
    *  the falling body keeps its shape. Absent follows the live global knob. */
   corpseIntegrity?: number;
+  /** The free physics death (collapse.ts) instead of an authored fall (death-fall.ts). The zombie's (owner
+   *  2026-11-02: the five falls repeat in a crowd); the bodies built on his profile opt back out. */
+  physicsDeath?: boolean;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */
@@ -182,6 +188,7 @@ export const ZOMBIE_PROFILE: MotionProfile = {
   runBand: { from: Infinity, to: Infinity },
   cruise: WANDER_TUNING.speed,
   armStyle: 'reach',
+  physicsDeath: true,
 };
 
 export const SOLDIER_PROFILE: MotionProfile = {
@@ -261,6 +268,7 @@ export const OGRE_PROFILE: MotionProfile = {
  *  low steps that stay inside his floor-length robe. */
 export const CULTIST_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'cultist',
   // Carry-style glide: the tommy gun owns the arms (gait.ts GLIDE_CARRY).
   gait: { walk: GLIDE_CARRY, run: GLIDE_CARRY },
@@ -358,6 +366,7 @@ export const WARBULL_PROFILE: MotionProfile = {
  *  shoots, and the spike is his silhouette. */
 export const TWINHEAD_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'twinhead',
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
@@ -380,6 +389,7 @@ export const TWINHEAD_PROFILE: MotionProfile = {
  *  it FAST, which is most of what makes it more dangerous than the base. */
 export const BUTCHER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'butcher',
   gait: { walk: PROWL, run: PROWL },
   // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
@@ -412,6 +422,7 @@ export const FLAYER_PROFILE: MotionProfile = {
  *  soldier family: bare flesh, a gore body like the twinhead. */
 export const DEADEYE_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'deadeye',
   gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
   // Slower than the butcher: he walks to a range and holds it.
@@ -437,6 +448,7 @@ export const DEADEYE_PROFILE: MotionProfile = {
  *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
 export const VENUS_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'venus',
   gait: { walk: STOMP, run: STOMP },
   cruise: 0.9,
@@ -450,6 +462,7 @@ export const VENUS_PROFILE: MotionProfile = {
  *  (1.15 m/s) and quick to turn: a hound runs you down. */
 export const GOREHOUND_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gorehound',
   gait: { walk: GOREHOUND, run: GOREHOUND },
   runBand: { from: Infinity, to: Infinity },
@@ -465,6 +478,7 @@ export const GOREHOUND_PROFILE: MotionProfile = {
  *  GUTCRAWLER_TUNING). Slow and heavy. */
 export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gutcrawler',
   gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
   runBand: { from: Infinity, to: Infinity },
@@ -481,6 +495,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
  *  (hound-attack.ts, bile.ts, enemy-mind.ts makeGibbetMind). */
 export const GIBBET_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gibbet',
   gait: { walk: GIBBET_STALK, run: GIBBET_STALK },
   runBand: { from: Infinity, to: Infinity },
@@ -501,6 +516,7 @@ export const GIBBET_PROFILE: MotionProfile = {
  *  first. Heavy and slow to turn. */
 export const CHAIR_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'chair',
   gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
   runBand: { from: Infinity, to: Infinity },
@@ -533,6 +549,7 @@ export const GAMER_PROFILE: MotionProfile = {
  *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
 export const TERATOMA_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'teratoma',
   gait: { walk: HOVER, run: HOVER },
   runBand: { from: Infinity, to: Infinity },
@@ -579,6 +596,23 @@ export const TERATOMA_PROFILE: MotionProfile = {
   },
 };
 
+/** The imp (characters/imp.blob): a gaunt hunched demon on the butcher's digitigrade legs that THROWS FIREBALLS.
+ *  Quick and agile: the flayer's 2.0 Hz prowl with loose, low, swinging arms (gait.ts IMP_PROWL) at a faster
+ *  cruise, and a quick turn. Up close the zombie mind's
+ *  unarmed swing, which with talons for hands reads as a claw rake (the venus's lesson); at range it winds up and
+ *  throws (enemy-mind.ts makeImpMind): the fireball is born in the right hand's burning socket and leaves from it. */
+export const IMP_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'imp',
+  gait: { walk: IMP_PROWL, run: IMP_PROWL },
+  cruise: 1.6,
+  turnRate: 3.2,
+  throws: 'fireball',
+  // The fireball leaves the right fist's burning socket: the hand bone's tail (handTipR) is the socket's coal
+  // (assets-source/imp-kit/make_hands.py EMBER, 0.96 down the bone); a few cm on clears the talons.
+  spit: { from: 'handTipR', offset: [0, 0, 0.04] },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -618,6 +652,7 @@ export const BRIDE_PROFILE: MotionProfile = {
  *  ogre's 0.075 for his 0.15 m hand. */
 export const GOBLIN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'goblin',
   // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
   // legs (0.7323 m since the 1.70 m rescale, 2026-10-11: cadence retuned in gait.ts). SHAMBLE_CARRY, the phase-3 interim,
@@ -661,6 +696,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   chair: CHAIR_PROFILE,
   gamer: GAMER_PROFILE,
   teratoma: TERATOMA_PROFILE,
+  imp: IMP_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

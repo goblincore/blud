@@ -1,0 +1,201 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "imp",
+  "width": 512,
+  "height": 1025,
+  "version": 2,
+  "yMin": 0.66,
+  "yMax": 1.32,
+  "axisX": 0,
+  "axisZ": 0.19,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        1.32,
+        0.19
+      ],
+      "tail": [
+        0,
+        0.66,
+        -0.06
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 256
+    },
+    {
+      "label": "upperArm.l",
+      "kind": "limb",
+      "head": [
+        0.2,
+        1.2056,
+        0.149
+      ],
+      "tail": [
+        0.2962,
+        0.9412,
+        0.2192
+      ],
+      "rMax": 0.13,
+      "row0": 257,
+      "rows": 80
+    },
+    {
+      "label": "foreArm.l",
+      "kind": "limb",
+      "head": [
+        0.2962,
+        0.9412,
+        0.2192
+      ],
+      "tail": [
+        0.3216,
+        0.7,
+        0.3592
+      ],
+      "rMax": 0.12,
+      "row0": 337,
+      "rows": 80
+    },
+    {
+      "label": "upperArm.r",
+      "kind": "limb",
+      "head": [
+        -0.2,
+        1.2056,
+        0.149
+      ],
+      "tail": [
+        -0.2962,
+        0.9412,
+        0.2192
+      ],
+      "rMax": 0.13,
+      "row0": 417,
+      "rows": 80
+    },
+    {
+      "label": "foreArm.r",
+      "kind": "limb",
+      "head": [
+        -0.2962,
+        0.9412,
+        0.2192
+      ],
+      "tail": [
+        -0.3216,
+        0.7,
+        0.3592
+      ],
+      "rMax": 0.12,
+      "row0": 497,
+      "rows": 80
+    },
+    {
+      "label": "thigh.l",
+      "kind": "limb",
+      "head": [
+        0.13,
+        0.9,
+        0
+      ],
+      "tail": [
+        0.13,
+        0.6297,
+        0.1893
+      ],
+      "rMax": 0.15,
+      "row0": 577,
+      "rows": 80
+    },
+    {
+      "label": "shin.l",
+      "kind": "limb",
+      "head": [
+        0.13,
+        0.6297,
+        0.1893
+      ],
+      "tail": [
+        0.13,
+        0.3145,
+        -0.057
+      ],
+      "rMax": 0.12,
+      "row0": 657,
+      "rows": 80
+    },
+    {
+      "label": "foot.l",
+      "kind": "limb",
+      "head": [
+        0.13,
+        0.3145,
+        -0.057
+      ],
+      "tail": [
+        0.13,
+        0.0315,
+        0.0188
+      ],
+      "rMax": 0.09,
+      "row0": 737,
+      "rows": 64
+    },
+    {
+      "label": "thigh.r",
+      "kind": "limb",
+      "head": [
+        -0.13,
+        0.9,
+        0
+      ],
+      "tail": [
+        -0.13,
+        0.6297,
+        0.1893
+      ],
+      "rMax": 0.15,
+      "row0": 801,
+      "rows": 80
+    },
+    {
+      "label": "shin.r",
+      "kind": "limb",
+      "head": [
+        -0.13,
+        0.6297,
+        0.1893
+      ],
+      "tail": [
+        -0.13,
+        0.3145,
+        -0.057
+      ],
+      "rMax": 0.12,
+      "row0": 881,
+      "rows": 80
+    },
+    {
+      "label": "foot.r",
+      "kind": "limb",
+      "head": [
+        -0.13,
+        0.3145,
+        -0.057
+      ],
+      "tail": [
+        -0.13,
+        0.0315,
+        0.0188
+      ],
+      "rMax": 0.09,
+      "row0": 961,
+      "rows": 64
+    }
+  ],
+  "backend": "cpu"
+}

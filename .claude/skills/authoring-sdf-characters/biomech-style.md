@@ -613,3 +613,101 @@ first, surging ~0.9 m (`slamAdvance`). A first pass that lifted the chest 0.30 m
 renders that checkout without a word; give each worktree its own `LAB_VITE_PORT`/`LAB_CDP_PORT` and read the
 `lab-servers: starting vite` line. The lab's 0.4 m reference cube hides a body this low (hide it in a `BLOB_PROBE`), and
 `BLOB_TARGET_X`/`BLOB_TARGET_Z` move the orbit centre to a head 0.8 m from the origin.
+
+## A fireball thrower: the imp (2026-10-24)
+
+The imp (`characters/imp.blob`, kit `assets-source/imp-kit/`) is a gaunt demon on the butcher's digitigrade legs that
+throws fireballs. What it taught:
+
+- **A reference is a point of departure.** The owner's brief came with a Doom 3 imp; the first head (a pale egg with an
+  eye-hole cluster and a lipless grin) read as an alien and as a copy. The owner pointed at the house style instead:
+  build the head as **flesh over a simplified version of the twinhead's demon skull** (not the metal skull itself, which
+  was tried and rejected as "the demon head"). In prims: a long low cranium blended wide into the temples, a brow ridge
+  per side in a V, slanted sunken sockets with a small red ember each, cheekbones sweeping back, a long narrow muzzle, a
+  jaw with a chin point, kit fangs and horns. Pitfalls on the way, each one a look: a cranium wider than the face (and
+  one brow bar straight across) reads as a **hat brim**; sockets that meet in the middle read as **goggles**; round dark
+  nostrils a centimetre across read as a **pig snout**, narrow slits raked up the muzzle read as flared nostrils; horns
+  curling up and back are seen end-on from the front as **mouse ears**, so sweep them out as much as back.
+- **No fingers: a socket, caged.** Each hand is a knuckled skullmetal cup round a burning coal (`ventglow`), with five
+  talons rising off a crown of points on its rim and curling hard back in over the mouth (curl ~1.8 rad; at 1.35 they
+  hung open). It reads at fighting range as an orange point between dark claws, and the fireball leaves from it. A
+  straight flared tube for the cup read as a plastic drum; bulge it over the knuckles and give the rim points. Knuckles
+  as balls read as marbles; ridges do not.
+- **Fire light without lights.** The coal and the chest's forge-heart light the parts round them through
+  baked `_glow` (`glow_bake` in `imp_common.py`: falloff times facing). A second glow colour needs its own material name
+  in `GLOW_FROM_ATTRIBUTE`: `impmetal` (skullmetal's look) and `impclaw` (horn's) burn orange where `skullmetal` burns
+  red. (The teratoma's `orbitmetal` alias is not in kit-overlay.ts on main, so its socket glow falls back to the default
+  look: worth a check.)
+- **Joining parts in Blender: deselect first.** `bpy.ops.object.join()` joins every SELECTED object, and a part's
+  install leaves it selected: the first eye-ember join swallowed the ocular plate, which then rendered as a glowing
+  yellow crown.
+- **A hunched torso bakes round a tilted axis.** At a 26 deg hunch the torso is probed and baked round the spine
+  (`--torso-axis 0,1.56,0.19:0,0.90,-0.06`; `scripts/imp-detail-gen.ts` probes from the same line). The zombie's
+  generated spinal column breached the starved back under the hunch (both the kyphosis and the lumbar curve): leave it
+  out and put the spine's ridge in the normal map. Leg detail is a `--limb` region per leg bone like the arms'
+  (`limbOf` in the generator picks `leg` or `arm`). **Sinew** is a long, nearly straight cord, thickest in its middle,
+  sampled every ~1.4 cm (no meander, no knots): it is what makes a starved limb ropy where veins make it swollen.
+- **The throw is an arm arc, not a new pose system.** `attack.ts` `throw` (windup pitch 2.4 rad, up and back past the
+  vertical; strike 0.45, forward and down) runs through the zombie arms' `armArc`; `makeImpMind` holds the body,
+  faces the player and raises `fire` once at `IMP_TUNING.fireAt`, and `MotionProfile.spit` from `handTipR` puts the
+  ball in the hand. A strike pitch of 1.05 ended the follow-through 45 deg up and read as a lob. Judge it with
+  `BLOB_SWING_SWEEP=throw:0:0.6 BLOB_YAW=-1.3` (yaw in RADIANS; degrees spin the camera round to a random angle).
+- **A glowing part needs a reason to exist.** A cage of bars over a glowing orb between two hooked blades read as "an
+  afterthought" (owner). What replaced it is a SYSTEM: a crested skullmetal heart set in the wound, the fire showing
+  only through a slit, and fuel lines from it over the ribs and down the arms into the burning fists, so the chest
+  explains the hands. Keep the glow tight (`glow_bake` reach ~0.03 at the lips): at 0.07 the whole housing went orange
+  and stopped reading as metal.
+- **Glowing hoses: dark iron, thin seams, no floor.** Ribs every 1.4 cm with a glow floor read as a string of orange
+  beads, and a pair run straight to the shoulders as a V necklace. Ribs every 2.4 cm, a seam at `band ** 24`, the hose
+  sunk part-way into the skin and routed over the ribs to the armpit read as fire running under the hide.
+- **Teeth root in the flesh, not on the mouth.** A dark mouth prim stands proud, so a probe of the whole head lands on
+  its face and teeth float in front of it; seated inside it they vanish and the mouth reads as a black ring. Probe the
+  head with that prim left out (`scripts/imp-skin.ts` `front.flesh`), root just above and below it, and rake the teeth
+  out over the dark. Make the gap tall enough to be a gape.
+- **Forward horns leave sideways first.** Up-first read as antennae. Out, then turning forward (2.1 rad over 15 cm),
+  with rings barely proud of the horn (proud ones read as a corrugated pipe).
+- **Blender aborts on a name like `crest3.14159`:** it parses the `.NNN` suffix as an integer (`stoi: out of range`).
+  Keep part names integral.
+- **`lab never booted` can just mean load.** The turntable waits 80 s; at a load average of 80 a cold boot took 94 s.
+  Check `uptime` before suspecting your change.
+- **A light projectile, not the rocket.** The teratoma's fireball is the warbull's rocket (the dynamite's blast). An
+  imp throws often from a quick body, so `fireball.ts` is its own straight-ish ball (11 m/s, a slight droop it aims
+  for, 14 on a hit and 5 on a near miss, a 0.55 m fire burst through the dynamite's burst visual and light), and it
+  hurts only the player.
+
+### The imp's second pass: proportions, claw feet, its own skull (2026-11-02)
+
+- **Shorter legs move everything above the hip.** Dropping the pelvis (0.94 → 0.76) is one number in the blob but every
+  height in the kit, the skin probes, the detail generator and the bake's torso axis. Keep one offset (`LOWER = 0.24`
+  in `imp_common.py`, the same constant in `scripts/imp-detail-gen.ts`) and subtract it at every above-hip height
+  rather than retuning each part; a bigger head is likewise one scale (`HS = 1.25` in `make_head.py`, the head prims
+  scaled to match). The torso axis in `bake-args.json` moves with it.
+- **Big claw feet: flesh toes, kit claws.** Splayed toes are blob pads plus tapering `bar` digits on the foot bone (the
+  foot tip is pinned to the ankle's rest offset, so the toes stay level through the walk); the kit only caps each digit
+  with a cuff ring and a curled horn claw in a darker keratin tint. A reference image for the idea stays out of the
+  repo.
+- **An exposed skull can be its own mesh.** The sculpted `bones` block (ratio/blob/bar only, nothing subtractive) made
+  a blobby demon skull. The anatomical skull path now takes a skull per character (`OWN_SKULLS` in `skull-cast.ts`):
+  the imp's is the twinhead's demon skull, horns cut, ~9.9k tris, split into the 14 `SKULL_PIECES` with openings in a
+  manifest, built reproducibly by `scripts/build_imp_skull.py` (Blender headless, `--publish`). Size it with its own
+  fit fractions (`IMP_FIT` in `anatomical-skull.ts`): at the human ones the crown came through the intact head. Leave
+  eyes out of a skull like this (`PLAIN_SKULL_CHARACTERS`), and keep the sculpted bone as the fallback and the sizing
+  target.
+- **The validator's "bone inside flesh" is optimistic in thin overlaps.** The flesh SDF underestimates depth where thin
+  prims overlap, so a bone that passes can still breach. Filler prims fix it but change the skin; shrinking the bone
+  about a pivot (and dropping the flesh brows and jaw from the bone copy, re-cut as thin bars) does not.
+- **An exposed skull needs dirt to read** (owner: clean bone with no eyes was "impossible to see the skull features").
+  `build_imp_skull.py` bakes the hollows (AO from the source mesh onto the low one: baked on the low mesh alone, its
+  smooth normals crackle every triangle black) into the normal atlas's alpha, and `SkullAsset.grime` turns on a wash,
+  dried blood in the hollows, small clinging flesh islands, and the sockets going black last (painted before the
+  blood, the blood covered them). Large cling islands sat on the muzzle as a pink nose: keep them small.
+- **The skull must reach as far as the flesh does.** A long flesh muzzle over a short-faced skull leaves the muzzle's
+  tip floating once a shot cuts across it. The build script draws the lower face forward into a snout (`snout()`,
+  dropped to follow the hide's slope; level, its bridge broke the muzzle's top) and `IMP_FIT` grows to match.
+- **Eyes from the model, not a search.** The orbit search (skull-orbits.ts) took a temple pit for one of the imp's
+  slanted slit orbits. The demon skull was modelled with eyeballs, so the manifest carries their `eyes.radius` and the
+  envelope fit seats eyes at the orbit openings, carried by the fit.
+- **Loose arms are still the reach style.** `IMP_PROWL` lowers the reach (0.30 rad, forearm 45 deg down) and adds
+  `reachSwing` against the legs, scaled by the walk's blend so standing still holds them; the throw's and claw's arcs
+  add on top unchanged. The throw has its own beats (`THROW_TUNING`: a 42% cock, a 10% whip, a follow-through down and
+  across to 70%, `SWING_ARCS.throw.followPitch/Yaw`).
