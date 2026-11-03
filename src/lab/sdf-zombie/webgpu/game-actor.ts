@@ -29,7 +29,10 @@ import {
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxBraces, relaxRopeConstraints, toughnessFor } from '../collapse';
+import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
+import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
+import { BLOW_THROW } from '../blow-away';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
@@ -43,7 +46,7 @@ import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains, chainOrder, jointPoint, midJointCut, JOINT_TOUGHNESS } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint, midJointCut, JOINT_TOUGHNESS, SOLDIER_TOUGHNESS } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
 import { createFloater, type FloaterSpace } from './floater-move';
@@ -61,7 +64,7 @@ import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
-import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
@@ -129,6 +132,8 @@ export const SOFT_TUNING = { hitsToKill: 2, severRange: 6 } as const;
  *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
 const BLAST_KNOCK_MPS = 1.2;
 const BLAST_KNOCK_DECAY = 7;
+/** A death this soon after the last volley (sim s) is that volley's kill: it may blow him away (blow-away.ts). */
+const KILL_VOLLEY_SEC = 0.5;
 
 /**
  * THE BLAST SIGNAL'S DIRECTION MUST BE A UNIT VECTOR, and handing it a VELOCITY
@@ -337,6 +342,8 @@ export interface ZombieActor {
   crowd?: { type: import('./crowd-type').CrowdType; slot: number };
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
+  /** Diagnostic: the rig's joints (world) by name, as the last step solved them. */
+  readonly rigJoints: () => { names: readonly string[]; points: Vec3[] };
   /**
    * The body the march is ACTUALLY drawing this frame: `posed()` in ordinary
    * play, or the rupture-displaced body while the window is running. The face
@@ -830,6 +837,8 @@ export function createZombieActor(opts: {
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
+  /** This body dies on the free physics ragdoll, not an authored fall (MotionProfile.physicsDeath: the zombie). */
+  const physicsDeath = !!(opts.profile ?? ZOMBIE_PROFILE).physicsDeath;
   /** Gun craters on this body take the wet red lip, and on its head the low lip (gunWetLip, headLip). */
   const goreBody = isGoreBody(opts.profile);
   let softKilled = false;
@@ -839,6 +848,27 @@ export function createZombieActor(opts: {
   let deathPlan: DeathPlan | null = null;
   let deathDir: Vec3 = [0, 0, 0];
   let deathThrown = false;
+  /** BLOWN AWAY (blow-away.ts): the rounds of the latest volley, how long ago it landed (sim s), and whether
+   *  this death has rolled and thrown. A thrown corpse goes limp at once, like the soft target's. */
+  let volley: KillVolley = EMPTY_VOLLEY;
+  let volleyAge = Infinity;
+  let blowAwayRolled = false;
+  /** The killing volley struck the head (picks the fall; death-fall.ts). */
+  let volleyHead = false;
+  /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
+   *  still rolls the blow-away chance (blow-away.ts); a hit now plays the 'blown' fall instead of a free throw. */
+  const deathFall = (): DeathFallChoice => {
+    blowAwayRolled = true;
+    const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+    const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
+    const choice = pickDeathFall({ blown: t ? t.base / BLOW_THROW.gun.base : null, struck }, blowRng);
+    return Math.hypot(volley.dirWorld[0], volley.dirWorld[2]) > 1e-6 && volleyAge < KILL_VOLLEY_SEC
+      ? { ...choice, impact: [...volley.dirWorld] as Vec3 } : choice;
+  };
+  let blownAway = false;
+  /** Sim seconds since the blow-away throw. */
+  let blownT = 0;
+  const blowRng: Rng = makeRng((opts.seed ^ 0xb10aa7a7) >>> 0);
   let dyingT = 0;
   let burstLeft = 0;
   let burstClock = 0;
@@ -1310,7 +1340,7 @@ export function createZombieActor(opts: {
     // The injury rules sever an arm or leg by points, not by where the shots cut: that takes it at the
     // elbow/knee (midJointCut), the same short piece a cut there makes — the shoulder stays hard.
     const injuryCuts = (injury?.sever ?? []).map(limb => (limb === 'head' || limb === 'torso' ? null : midJointCut(current, limb)) ?? limb);
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)),
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)),
       ...injuryCuts.filter((c): c is LimbId => typeof c === 'string')])];
     for (const limb of fullCuts) {
       if (limb === 'head' && pops()) continue;
@@ -1320,7 +1350,7 @@ export function createZombieActor(opts: {
       if (typeof cut === 'string' || fullCuts.includes(cut.limb)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, JOINT_TOUGHNESS)) {
+    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS)) {
       if (injuryCuts.some(c => typeof c !== 'string' && c.limb === cut.limb)) continue;
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
@@ -1649,6 +1679,7 @@ export function createZombieActor(opts: {
           enabled: true,
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
+          ...(DEATH_FALL.on && !softTarget && !physicsDeath ? { deathFall } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
@@ -1763,17 +1794,31 @@ export function createZombieActor(opts: {
         const hv = hand !== undefined ? vel[hand]! : [0, 0, 0] as Vec3;
         if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
       }
+      volleyAge += sdt;
+      if (blownAway) blownT += sdt;
+      // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
+      if (f.collapsed && !blowAwayRolled) {
+        blowAwayRolled = true;
+        // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
+        const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+        if (t) {
+          blownAway = true;
+          const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+          const vel = addSpin(bound.rig.points, deathThrowVelocities(bound.rig.points, volley.dirWorld, t, hemI), (blowRng() - 0.5) * 2.4);
+          bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        }
+      }
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
           ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
           torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
-          damping: 0.06,
+          damping: blownAway && blownT < BLOW_AIR_SEC ? BLOW_AIR_DAMPING : 0.06,
           iterations: 4,
           // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
           // ramp dragged the thrown body back upright and ate the throw.
-          restStiffness: STANDING_RIG.restStiffness * (softKilled && f.collapsed ? 0 : f.restPull),
+          restStiffness: STANDING_RIG.restStiffness * ((softKilled || blownAway) && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
@@ -1813,7 +1858,8 @@ export function createZombieActor(opts: {
       }
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
       for (const kick of f.kicks) {
@@ -2272,6 +2318,15 @@ export function createZombieActor(opts: {
     }
     damageRevision++; bakePaused = false;
     const bySlug = wound.shot?.weapon === 'slug';
+    if (wound.type !== 'burn') {
+      if (volleyAge > VOLLEY_SEC) { volley = EMPTY_VOLLEY; volleyHead = false; }
+      if (posed.prims[wound.primIdx]?.limb === 'head') volleyHead = true;
+      const struck = posed.prims[wound.primIdx]?.limb;
+      const origin = wound.shot?.weapon === 'shotgun' ? wound.shot.origin : undefined;
+      const rangeM = origin ? Math.hypot(hitWorld[0] - origin[0], hitWorld[1] - origin[1], hitWorld[2] - origin[2]) : Infinity;
+      volley = addToVolley(volley, bySlug ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet', dirWorld, struck === 'torso' || struck === 'head', rangeM);
+      volleyAge = 0;
+    }
     if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
@@ -2347,7 +2402,9 @@ export function createZombieActor(opts: {
     // Scaled BY WOUND KIND: a slug stamps a blast-profile wound and must
     // shove like one, not like a single pellet (the defect this task was
     // opened for).
-    const push = IMPULSE[wound.type];
+    // A corpse lying in its authored death goes limp under the hit (death-fall.ts corpseHoldStep) with no spring to
+    // bring it back, so the full shove slid it most of a metre per double barrel.
+    const push = IMPULSE[wound.type] * (state.corpseHold ? CORPSE_SHOVE : 1);
     bound = impulseAt(bound, hitWorld, [
       dirWorld[0] * push,
       dirWorld[1] * push,
@@ -2374,6 +2431,7 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
+    rigJoints: () => ({ names: joints.names, points: bound.rig.points.map(p => [...p.pos] as Vec3) }),
     drawnBody: () => drawnPose(),
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0, refPrims: posed.prims };

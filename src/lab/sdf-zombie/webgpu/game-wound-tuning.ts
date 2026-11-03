@@ -12,8 +12,10 @@ import { SPILL_CHANCE } from '../entrails-spawn';
 import { rebuildCast } from './game-spawn';
 import { applyWoundRamp } from './game-wound-vfx';
 import { type WoundTuningValues } from './wound-panel';
-import { setJointToughness } from '../connectivity';
+import { setJointToughness, setSoldierToughness } from '../connectivity';
 import { setCorpseIntegrity } from '../collapse';
+import { setBlowAway } from '../blow-away';
+import { setDeathFall } from '../death-fall';
 
 
 /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
@@ -46,9 +48,28 @@ export function applyWoundTuning(ctx: GameContext, o: Partial<WoundTuningValues>
     ctx.vfx.woundTuning.elbowToughness = o.elbowToughness;
     setJointToughness({ mid: o.elbowToughness });
   }
+  if (o.soldierShoulder !== undefined) {
+    ctx.vfx.woundTuning.soldierShoulder = o.soldierShoulder;
+    setSoldierToughness({ root: o.soldierShoulder });
+  }
+  if (o.soldierElbow !== undefined) {
+    ctx.vfx.woundTuning.soldierElbow = o.soldierElbow;
+    setSoldierToughness({ mid: o.soldierElbow });
+  }
   if (o.corpseIntegrity !== undefined) {
     ctx.vfx.woundTuning.corpseIntegrity = o.corpseIntegrity;
     setCorpseIntegrity(o.corpseIntegrity);
+  }
+  if (o.blowAway !== undefined) {
+    ctx.vfx.woundTuning.blowAway = o.blowAway;
+    setBlowAway({ scale: o.blowAway });
+  }
+  if (o.deathAnimated !== undefined) { ctx.vfx.woundTuning.deathAnimated = o.deathAnimated; setDeathFall({ on: o.deathAnimated >= 0.5 }); }
+  if (o.deathPull !== undefined) { ctx.vfx.woundTuning.deathPull = o.deathPull; setDeathFall({ pull: o.deathPull }); }
+  if (o.deathSettle !== undefined) { ctx.vfx.woundTuning.deathSettle = o.deathSettle; setDeathFall({ settle: o.deathSettle }); }
+  if (o.blowAwayRange !== undefined) {
+    ctx.vfx.woundTuning.blowAwayRange = o.blowAwayRange;
+    setBlowAway({ farM: Math.max(o.blowAwayRange, 2.6) });
   }
   // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
   // they shape every rope spawned from now on; existing ropes keep theirs.

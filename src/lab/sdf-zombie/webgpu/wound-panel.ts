@@ -41,7 +41,7 @@ export type WoundTuningKey =
   | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
   | 'coilTightness' | 'springiness' | 'organAmp'
   | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice'
-  | 'shoulderToughness' | 'elbowToughness' | 'corpseIntegrity';
+  | 'shoulderToughness' | 'elbowToughness' | 'soldierShoulder' | 'soldierElbow' | 'corpseIntegrity' | 'blowAway' | 'blowAwayRange' | 'deathAnimated' | 'deathPull' | 'deathSettle';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -72,7 +72,14 @@ const _WOUND_KEYS = [
   // the elbow AND knee; below 1 is harder to cut.
   { key: 'shoulderToughness', label: 'shoulder/hip cut (→ easier)', min: 0.3, max: 1.5, step: 0.05, value: 0.6 },
   { key: 'elbowToughness', label: 'elbow/knee cut (→ easier)', min: 0.5, max: 3, step: 0.05, value: 1.7 },
+  { key: 'soldierShoulder', label: 'soldier shoulder/hip cut (→ easier)', min: 0.05, max: 1.5, step: 0.05, value: 0.3 },
+  { key: 'soldierElbow', label: 'soldier elbow/knee cut (→ easier)', min: 0.1, max: 3, step: 0.05, value: 0.55 },
   { key: 'corpseIntegrity', label: 'corpse integrity', min: 0, max: 1, step: 0.05, value: 0.7 },
+  { key: 'blowAway', label: 'blown-away deaths', min: 0, max: 2, step: 0.05, value: 1 },
+  { key: 'blowAwayRange', label: 'blown-away max range (m)', min: 3, max: 15, step: 0.5, value: 7 },
+  { key: 'deathAnimated', label: 'authored deaths (0 = ragdoll)', min: 0, max: 1, step: 1, value: 1 },
+  { key: 'deathPull', label: 'death pose pull (← looser)', min: 0.1, max: 1, step: 0.05, value: 1 },
+  { key: 'deathSettle', label: 'pull after landing (← limper)', min: 0, max: 1, step: 0.05, value: 0.35 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];

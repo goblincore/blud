@@ -56,6 +56,12 @@ export function setJointToughness(k: Partial<typeof JOINT_TOUGHNESS>): void {
 }
 /** Factors of 1: the cut rule before toughness. The soldier family keeps it —
  *  its own regional injury model (soldier-damage.ts) budgets arm loss. */
+/** The soldier family's factors (owner playtest 2026-11-02: "quite difficult to see a full arm sever" on
+ *  a soldier). His arm also needs focused hits (soldier-damage.ts soldierArmCutAllowed). */
+export const SOLDIER_TOUGHNESS: { root: number; mid: number } = { root: 0.3, mid: 0.55 };
+export function setSoldierToughness(k: Partial<typeof SOLDIER_TOUGHNESS>): void {
+  Object.assign(SOLDIER_TOUGHNESS, k);
+}
 export const NEUTRAL_TOUGHNESS: Readonly<typeof JOINT_TOUGHNESS> = { root: 1, mid: 1 };
 const ROOT_BONES = new Set(['clavicle', 'upperArm', 'upperarm', 'thigh', 'femur']);
 const MID_BONES = new Set(['foreArm', 'forearm', 'shin', 'tibia']);

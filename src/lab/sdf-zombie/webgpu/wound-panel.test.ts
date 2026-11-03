@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DEATH_FALL } from '../death-fall';
 import { WOUND_KEYS, copyText, defaultsFrom } from './wound-panel';
-import { JOINT_TOUGHNESS } from '../connectivity';
+import { JOINT_TOUGHNESS, SOLDIER_TOUGHNESS } from '../connectivity';
 import { CORPSE_INTEGRITY } from '../collapse';
+import { BLOW_AWAY } from '../blow-away';
 
 describe('wound panel', () => {
   // The bug this test exists to make impossible: a panel whose COPY button
@@ -31,5 +33,12 @@ describe('gameplay knobs start at the shipped values', () => {
     expect(v.shoulderToughness).toBe(JOINT_TOUGHNESS.root);
     expect(v.elbowToughness).toBe(JOINT_TOUGHNESS.mid);
     expect(v.corpseIntegrity).toBe(CORPSE_INTEGRITY.value);
+    expect(v.blowAway).toBe(BLOW_AWAY.scale);
+    expect(v.blowAwayRange).toBe(BLOW_AWAY.farM);
+    expect(v.soldierShoulder).toBe(SOLDIER_TOUGHNESS.root);
+    expect(v.soldierElbow).toBe(SOLDIER_TOUGHNESS.mid);
+    expect(v.deathAnimated).toBe(DEATH_FALL.on ? 1 : 0);
+    expect(v.deathPull).toBe(DEATH_FALL.pull);
+    expect(v.deathSettle).toBe(DEATH_FALL.settle);
   });
 });

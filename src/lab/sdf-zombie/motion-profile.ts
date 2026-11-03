@@ -118,6 +118,9 @@ export interface MotionProfile {
   /** CORPSE INTEGRITY for this character (0..1, collapse.ts braces): how much
    *  the falling body keeps its shape. Absent follows the live global knob. */
   corpseIntegrity?: number;
+  /** The free physics death (collapse.ts) instead of an authored fall (death-fall.ts). The zombie's (owner
+   *  2026-11-02: the five falls repeat in a crowd); the bodies built on his profile opt back out. */
+  physicsDeath?: boolean;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */
@@ -182,6 +185,7 @@ export const ZOMBIE_PROFILE: MotionProfile = {
   runBand: { from: Infinity, to: Infinity },
   cruise: WANDER_TUNING.speed,
   armStyle: 'reach',
+  physicsDeath: true,
 };
 
 export const SOLDIER_PROFILE: MotionProfile = {
@@ -261,6 +265,7 @@ export const OGRE_PROFILE: MotionProfile = {
  *  low steps that stay inside his floor-length robe. */
 export const CULTIST_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'cultist',
   // Carry-style glide: the tommy gun owns the arms (gait.ts GLIDE_CARRY).
   gait: { walk: GLIDE_CARRY, run: GLIDE_CARRY },
@@ -358,6 +363,7 @@ export const WARBULL_PROFILE: MotionProfile = {
  *  shoots, and the spike is his silhouette. */
 export const TWINHEAD_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'twinhead',
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
@@ -380,6 +386,7 @@ export const TWINHEAD_PROFILE: MotionProfile = {
  *  it FAST, which is most of what makes it more dangerous than the base. */
 export const BUTCHER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'butcher',
   gait: { walk: PROWL, run: PROWL },
   // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
@@ -412,6 +419,7 @@ export const FLAYER_PROFILE: MotionProfile = {
  *  soldier family: bare flesh, a gore body like the twinhead. */
 export const DEADEYE_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'deadeye',
   gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
   // Slower than the butcher: he walks to a range and holds it.
@@ -437,6 +445,7 @@ export const DEADEYE_PROFILE: MotionProfile = {
  *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
 export const VENUS_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'venus',
   gait: { walk: STOMP, run: STOMP },
   cruise: 0.9,
@@ -450,6 +459,7 @@ export const VENUS_PROFILE: MotionProfile = {
  *  (1.15 m/s) and quick to turn: a hound runs you down. */
 export const GOREHOUND_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gorehound',
   gait: { walk: GOREHOUND, run: GOREHOUND },
   runBand: { from: Infinity, to: Infinity },
@@ -465,6 +475,7 @@ export const GOREHOUND_PROFILE: MotionProfile = {
  *  GUTCRAWLER_TUNING). Slow and heavy. */
 export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gutcrawler',
   gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
   runBand: { from: Infinity, to: Infinity },
@@ -481,6 +492,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
  *  (hound-attack.ts, bile.ts, enemy-mind.ts makeGibbetMind). */
 export const GIBBET_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gibbet',
   gait: { walk: GIBBET_STALK, run: GIBBET_STALK },
   runBand: { from: Infinity, to: Infinity },
@@ -501,6 +513,7 @@ export const GIBBET_PROFILE: MotionProfile = {
  *  first. Heavy and slow to turn. */
 export const CHAIR_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'chair',
   gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
   runBand: { from: Infinity, to: Infinity },
@@ -533,6 +546,7 @@ export const GAMER_PROFILE: MotionProfile = {
  *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
 export const TERATOMA_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'teratoma',
   gait: { walk: HOVER, run: HOVER },
   runBand: { from: Infinity, to: Infinity },
@@ -618,6 +632,7 @@ export const BRIDE_PROFILE: MotionProfile = {
  *  ogre's 0.075 for his 0.15 m hand. */
 export const GOBLIN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'goblin',
   // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
   // legs (0.7323 m since the 1.70 m rescale, 2026-10-11: cadence retuned in gait.ts). SHAMBLE_CARRY, the phase-3 interim,

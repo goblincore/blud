@@ -75,9 +75,11 @@ describe('relaxBraces', () => {
     out.forEach((q, i) => expect(len(sub(q.pos, p[i]!.pos))).toBeLessThan(1e-9));
   });
 
-  it('keeps prev, so the correction reads as velocity', () => {
+  it('moves prev with pos, so a correction adds no speed', () => {
     const p = folded();
     const out = relaxBraces(p, braces as BraceLimit[], 1);
-    expect(out[idx.head!]!.prev).toEqual(p[idx.head!]!.prev);
+    const v = (q: RigPoint) => sub(q.pos, q.prev);
+    out.forEach((q, i) => expect(len(sub(v(q), v(p[i]!)))).toBeLessThan(1e-9));
+    expect(len(sub(out[idx.head!]!.pos, p[idx.head!]!.pos))).toBeGreaterThan(0.05);
   });
 });

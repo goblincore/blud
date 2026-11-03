@@ -3,7 +3,8 @@
 // Bodies stand on the floor under them (sector levels 3a, Task 4), at the actor: a body built
 // standing on a 1 m floor and handed that ground walks exactly like the same body on y = 0, lifted
 // 1 m: not 2 m (the spawn floor is in the built body AND in MotionState.floorY), and not sinking.
-import { describe, expect, it } from 'vitest';
+import { setDeathFall } from '../death-fall';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
@@ -31,6 +32,9 @@ function actorAt(start: Vec3, ground?: LevelGround) {
 }
 
 describe('an actor on a sector floor', () => {
+  // Per-point corpse floors are the free ragdoll's (authored deaths off, death-fall.ts); a fall follows the soldier's pit rule.
+  beforeAll(() => setDeathFall({ on: false }));
+  afterAll(() => setDeathFall({ on: true }));
   it('walks exactly like the flat body, lifted by the floor', () => {
     const [x, , z] = spawnPoints(ROOMS[0]!)[0]!;
     const flat = actorAt([x, 0, z]);

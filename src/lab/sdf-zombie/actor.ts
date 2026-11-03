@@ -244,7 +244,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+      rig: constrainRigBends({ ...m.bound.rig, points, stepDt: sdt, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
         // This frame's weights, or none: a caller that stops passing them must not leave last frame's face behind.
         ...(morphs || m.bound.rig.morphs ? { morphs } : {}) },
         f.collapsed ? f.floorY : undefined),
