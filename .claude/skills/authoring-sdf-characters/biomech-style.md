@@ -722,7 +722,11 @@ throws fireballs. What it taught:
 - **A kit only sheds if the registry says so.** Without `kitSheds: true` (or `armoured`) in `character-registry.ts`
   the kit never runs `createKitDamage`: a shot-off arm left the imp's fist and hoses hanging in the air, though every
   island was on the right bone. With it, a `tooth` island also falls out when a crater reaches it, so kit teeth never
-  float in front of the exposed skull (the seating above only narrows that gap).
+  float in front of the exposed skull (the seating above only narrows that gap). Every kit has one or the other
+  (`characters/kit-sheds.test.ts` fails a new kit without it, and pins how far any torso piece reaches into a limb).
+- **A bone that names no limb sheds with its parent's.** A tusk bone under the forearm, a horn under the skull: kit
+  pieces on them ride the nearest ancestor that names a limb (`limbBone` in kit-damage.ts). `plate` islands take hits
+  and break only on an `armoured` kit; on a `kitSheds` kit a plate-named blade is scenery.
 - **A hose sheds by the bone it rides.** Kit pieces leave with the limb their island is skinned to (kit-damage.ts
   `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
   the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds

@@ -657,7 +657,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const kitUrl = entry.kit;
   if (kitUrl) {
     // Breakable: the kit leaves with the anatomy under it (character-registry.ts kitSheds); armour also takes hits.
-    const breakable = entry.armoured === true || entry.kitSheds === true;
+    const breakable = entry.armoured === true ? 'armour' : entry.kitSheds === true ? 'sheds' : false;
     const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable,
       { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable);
     kitLoad

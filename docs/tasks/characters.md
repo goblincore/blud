@@ -31,7 +31,15 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   arm (`make_conduits.py`, `characters/imp-kit.test.ts`). Second look (owner: fist and cable stayed on a shot-off arm;
   the teeth still float): the imp's kit never shed at all, only armoured kits did. New registry flag `kitSheds`
   (imp only) runs the kit damage without the armour; a crater that reaches a `tooth` island knocks it out, so the
-  skull's own teeth show. Every other sculpted kit (venus, teratoma, ogre, ...) still stays on a severed limb.
+  skull's own teeth show.
+- [x] **Every kit sheds 2026-11-03**: `kitSheds` on every non-armoured kit (venus, teratoma, ogre, cyberdemon, bloatmaw,
+  gnasher, the twinhead family, gorehound, gibbet, chair, gamer, warbull, goblins, clowns). A kit bone that names no
+  limb (gnasher's tusks, the horns, the clown's collar points) rides its nearest limb-naming ancestor. A `plate` island
+  takes hits only on an `armoured` kit. `piecesOf` ~5x faster (13-49 ms per kit load in the browser, was 4-5x that); a
+  sculpted kit still bursts by bone on the gib frame. Pinned per kit by `characters/kit-sheds.test.ts`.
+- [ ] Follow-up: the flayer's spine-to-shoulder coupling reaches 7.3 cm into the left shoulder (and the butcher's and
+  deadeye's, ~3 cm, into the right), and a twinhead skull cable 9 cm over the right shoulder: they stay on the torso
+  when the arm goes. Split them at a coupling, as the imp's chest hose was.
 - [ ] Owner review. Open: the cut horn knob on each temple; metal skull parts
   on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
   ball (a tinted tracer, like the bile); kit optimisation.
