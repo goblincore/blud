@@ -67,6 +67,9 @@ export interface RigState {
   restPose: Vec3[];
   /** Animated weight-bearing joints that must not spring away from contact. */
   posePins?: readonly number[];
+  /** Most one bend-stop pass moves a bone's end (m); absent, the stop puts it straight back in range. A corpse sets
+   *  it (game-actor.ts CORPSE_BEND_STEP_M): see constrainRigBends. */
+  bendStepCap?: number;
   bends?: RigBendConstraint[];
   /** Heading of the authored body frame; independent of flinch/rest targets. */
   bodyYaw?: number;
@@ -196,7 +199,8 @@ export function constrainRigBends(
     }
     let pos = add(mid.pos, scale(dir, foreLength));
     const fy = floorAt ? floorAt(pos[0], pos[2], end.pos) : floorY;
-    if (fy !== undefined && pos[1] < fy && mid.pos[1] >= fy) {
+    // A capped stop (state.bendStepCap) skips the floor fallback below: the floor contact lifts the end next step.
+    if (state.bendStepCap === undefined && fy !== undefined && pos[1] < fy && mid.pos[1] >= fy) {
       // Floor contact already positioned the elbow above ground. A horizontal
       // forearm in the allowed half-plane satisfies BOTH constraints without
       // shortening the segment or undoing contact by pushing the wrist down.
@@ -241,6 +245,18 @@ export function constrainRigBends(
       }
       dir = normalize(horizontal);
       pos = add(mid.pos, scale(dir, foreLength));
+    }
+    // THE CAPPED STOP (corpse legs, owner playtest 2026-11-03: legs that "slide out flat", a still corpse that kicked a
+    // leg up to vertical). Put straight back in range, a shin far out of it (the pole turns with the trunk, the hip
+    // cones and the floor move the knee) teleported the foot across the knee, up to 1.3 m in one 1/60 s step, and
+    // the floor fallback above laid every folded leg flat or straight. The bones then dragged the shin and toe after
+    // the foot, which is the kick. Capped, the stop swings the bone back over a few steps.
+    if (state.bendStepCap !== undefined) {
+      const move = sub(pos, end.pos), d = len(move);
+      if (d > state.bendStepCap) {
+        dir = normalize(sub(add(end.pos, scale(move, state.bendStepCap / d)), mid.pos));
+        pos = add(mid.pos, scale(dir, foreLength));
+      }
     }
     // Moving pos without prev would inject another impulse. Keep allowed
     // velocity, remove only the relative velocity driving through the stop.

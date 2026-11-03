@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { FOOT_PLANT, plantFeet, relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
+import { ANKLE_LIMITS, FOOT_PLANT, HIP_LIMITS, plantFeet, relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -1398,6 +1398,15 @@ export function createZombieActor(opts: {
   // it always steps 1/60 s (the rate it was tuned at), banking the frame time
   // for the next step, and repose() draws it between its last two steps.
   const CORPSE_STEP = 1 / 60;
+  /** Most one knee or elbow stop pass moves a corpse's foot or hand per step (rig.ts THE CAPPED STOP). Five passes a
+   *  step (stepRig's four, the last word below): at most 5 cm, 3 m/s. 24 probe deaths dying mid-stride: 372 joint
+   *  jumps over 15 cm a step without it, 56 with it (with the hip and ankle caps, collapse.ts, 19), and 42 of 48
+   *  legs left bent instead of 9. */
+  const CORPSE_BEND_STEP_M = 0.01;
+  /** CORPSE_STEP_CAPS: the same for the hip cones and the ankle springs (collapse.ts). Uncapped, a hip cone threw a knee
+   *  25-34 cm in a step (and in a slump fought the planted knee every step), and an ankle pulled a toe 13 cm and the
+   *  bones dragged the foot after it: the still corpse that kicked a leg up to vertical. */
+  const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
   let corpseBank = 0;
   /** The corpse's points one fixed step back, and how far on toward the latest the drawn pose sits. */
   let corpseBefore: readonly RigPoint[] | null = null;
@@ -1885,6 +1894,7 @@ export function createZombieActor(opts: {
       }
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+          bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined,
           ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
           torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
         {
@@ -1899,7 +1909,7 @@ export function createZombieActor(opts: {
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
       // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
       if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
-      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones)];
+      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
       // hand tip reached its grip-line target only through the soft rest pull:
@@ -1928,17 +1938,18 @@ export function createZombieActor(opts: {
 
       if (f.collapsed) {
         const lift = corpseLift(f), floorY = f.floorY;
-        // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles).
-        points = relaxAnkles(points, f.hipCones, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0));
+        // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles), capped per step (CORPSE_STEP_CAPS).
+        points = relaxAnkles(points, f.hipCones, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0),
+          { ...ANKLE_LIMITS, maxStep: CORPSE_ANKLE_STEP_M });
         points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
-        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, pointFloor, lift);
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
       }
       bound = {
         ...bound,
         // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
-        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
       // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.

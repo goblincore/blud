@@ -63,7 +63,7 @@ import type { Wound } from './damage';
 import { WOUND_PROFILES } from './damage';
 import type { GaitJointName } from './gait';
 import type { RigPoint } from './rig';
-import { len, sub } from './vec';
+import { len, scale, sub } from './vec';
 
 /** Standing → falling → settled. The last two are terminal. */
 export type CollapsePhase = 'standing' | 'falling' | 'settled';
@@ -436,6 +436,8 @@ export const HIP_LIMITS = {
   extend: 25 * Math.PI / 180,
   abduct: 45 * Math.PI / 180,
   adduct: 20 * Math.PI / 180,
+  /** Most one pass moves the knee back toward range (m). The game corpse caps it (game-actor.ts CORPSE_STEP_CAPS). */
+  maxStep: Infinity,
 };
 
 export const HIP_SPLIT = { leg: 1, foot: 0, hip: 0 };
@@ -495,6 +497,8 @@ export const ANKLE_LIMITS = {
   outside: 0.5,
   /** Share of a blocked toe's pull the ankle takes instead (0 = none). */
   lift: 1,
+  /** Most the toe (or the ankle under it) moves in one step (m). The game corpse caps it (game-actor.ts CORPSE_STEP_CAPS). */
+  maxStep: Infinity,
 };
 
 /** A toe this close above its floor is on it (m). */
@@ -559,6 +563,8 @@ export function relaxAnkles(
     const m: Vec3 = [t[0] + e[0] * k, t[1] + e[1] * k, t[2] + e[2] * k];
     const lm = len(m);
     let d: Vec3 = lm < 1e-6 ? [0, 0, 0] : [m[0] * lt / lm - t[0], m[1] * lt / lm - t[1], m[2] * lt / lm - t[2]];
+    const ld = len(d);
+    if (ld > limits.maxStep) d = scale(d, limits.maxStep / ld);
     // The floor wins: a toe on it is not pulled into it (the speed below still goes). The ankle takes the correction
     // instead (toes dug in prop the foot up), as a distance constraint gives it to the free end, and its speed heading
     // back is dropped as the toe's is. ANKLE_LIMITS.lift scales it. (Straight up only, it fought gravity and the knee
@@ -738,7 +744,9 @@ export function relaxHipCones(
         (down[0] * cf + fwd[0] * sf) * ca + o[0] * sa,
         (down[1] * cf + fwd[1] * sf) * ca + o[1] * sa,
         (down[2] * cf + fwd[2] * sf) * ca + o[2] * sa];
-      const d: Vec3 = [want[0] * lt - thigh[0], want[1] * lt - thigh[1], want[2] * lt - thigh[2]];
+      let d: Vec3 = [want[0] * lt - thigh[0], want[1] * lt - thigh[1], want[2] * lt - thigh[2]];
+      const ld = len(d);
+      if (ld > limits.maxStep) d = scale(d, limits.maxStep / ld);
       move(knee, d, HIP_SPLIT.leg);
       move(out[c.foot], d, HIP_SPLIT.foot);
       move(hip, d, -HIP_SPLIT.hip);
