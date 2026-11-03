@@ -312,7 +312,7 @@ export function makeMotionJoints(
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
     braces: collapseBraces(names, baseRest),
-    hipCones: collapseHipCones(names),
+    hipCones: collapseHipCones(names, baseRest),
     floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
 }

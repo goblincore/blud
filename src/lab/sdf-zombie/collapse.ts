@@ -422,7 +422,12 @@ export interface HipCone {
   pelvis: number; chest: number;
   /** The right hip: the pelvis's right axis is otherHip -> hip (on the left, hip -> otherHip). */
   right: boolean;
+  /** The ankle spring (relaxAnkles): the toe, absent on a body without one. */
+  ankle?: AnkleRest;
 }
+
+/** The foot's rest aim in the shin frame (ankleFrame): pitch from straight down the shin toward the toe side, yaw out. */
+export interface AnkleRest { toe: number; pitch: number; yaw: number; fwdSign: number; }
 
 export const HIP_LIMITS = {
   /** Thigh forward of straight down along the trunk (rad). */
@@ -435,7 +440,7 @@ export const HIP_LIMITS = {
 
 export const HIP_SPLIT = { leg: 1, foot: 0, hip: 0 };
 
-export function collapseHipCones(names: readonly GaitJointName[]): HipCone[] {
+export function collapseHipCones(names: readonly GaitJointName[], restPose?: readonly Vec3[]): HipCone[] {
   const at = (n: GaitJointName) => names.indexOf(n);
   const pelvis = at('pelvis'), chest = at('chest');
   if (pelvis < 0 || chest < 0) return [];
@@ -443,7 +448,141 @@ export function collapseHipCones(names: readonly GaitJointName[]): HipCone[] {
   for (const [s, o] of [['L', 'R'], ['R', 'L']] as const) {
     const hip = at(`hip${s}`), knee = at(`knee${s}`), foot = at(`foot${s}`), otherHip = at(`hip${o}`);
     if (hip < 0 || knee < 0 || otherHip < 0) continue;
-    out.push({ hip, knee, foot, otherHip, pelvis, chest, right: s === 'R' });
+    const cone: HipCone = { hip, knee, foot, otherHip, pelvis, chest, right: s === 'R' };
+    const toe = at(`toe${s}`);
+    if (restPose && foot >= 0 && toe >= 0) {
+      const p = (i: number) => restPose[i]!;
+      const fr = ankleFrame(p(hip), p(knee), p(foot), p(otherHip), cone.right);
+      const t = sub(p(toe), p(foot)), lt = len(t);
+      if (fr && lt > 1e-6) {
+        // The forward axis's sign is whichever side the rest toe points to.
+        const fwdSign = dot3(t, fr.f) < 0 ? -1 : 1;
+        const a = ankleAngles(t, lt, fr.s, fr.r, fr.f, fwdSign);
+        cone.ankle = { toe, pitch: a.pitch, yaw: a.yaw, fwdSign };
+      }
+    }
+    out.push(cone);
+  }
+  return out;
+}
+
+// THE ANKLE SPRING (owner playtest 2026-11-03: the ankle "is very floppy").
+// The game never pins the toe (rig-bind.ts pinTips runs only in the lab), so
+// on a corpse the foot hangs off the ankle by its bone length alone: a ball
+// joint with no range. A hard stop in constrainRigBends (knee-ankle-toe, the
+// knee's hinge machinery) fought the floor and the feet thrashed 10-100 mm a
+// frame (2026-11-03, reverted). This is soft instead: the toe is pulled a
+// fraction of the way back into a human range each frame, moving pos and prev
+// together so the pull adds no speed, and its speed against the foot heading
+// further out is dropped. Inside the range nothing acts. The floor wins
+// outright: a toe on the floor that the pull would drive into it is left
+// alone (pulled anyway, the floor lifted it back every frame and the fight
+// leaked up the leg as a 3 mm/frame slide of the whole corpse).
+// Tried and dropped (16 seeds, toes unpinned as in the game): a pull toward the
+// rest aim inside the range (a resting foot held off rest fought it forever: a
+// 3 mm/frame creep in the arena); a swing damper on the toe against the foot
+// (whole-leg flips of 110-480 mm); a rigid foot at its rest aim (most settling
+// time and late jumps). This one cut feet left over 40 deg off rest from 12/32
+// to 4/32 with every corpse settling.
+export const ANKLE_LIMITS = {
+  /** Toe down along the shin past rest (plantarflexion, rad). */
+  plantar: 40 * Math.PI / 180,
+  /** Toe up toward the knee past rest (dorsiflexion). */
+  dorsi: 20 * Math.PI / 180,
+  /** Either way about the shin: stands in for the hip rotation the rig cannot hold. */
+  twist: 30 * Math.PI / 180,
+  /** Share of the way back into range per frame. */
+  outside: 0.5,
+  /** Share of a blocked toe's pull the ankle takes instead (0 = none). */
+  lift: 1,
+};
+
+/** A toe this close above its floor is on it (m). */
+const ANKLE_CONTACT_M = 0.005;
+
+const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** The shin frame: s down the shin, r the pelvis's right axis made square to the thigh and then to the shin, f = r x s
+ *  (sign fixed by the caller). Square to the thigh first because the shin alone can lie along the hip line (a leg folded
+ *  across the body: measured 0.84-0.99 cosine) and its frame then spun, whipping the toe 110-160 mm a frame; the thigh
+ *  cannot (the hip cone holds it within 45 deg of straight down sideways), and the knee hinges about that axis. */
+function ankleFrame(hip: Vec3, knee: Vec3, foot: Vec3, otherHip: Vec3, right: boolean) {
+  const unit = (v: Vec3): Vec3 | null => { const l = len(v); return l < 1e-6 ? null : [v[0] / l, v[1] / l, v[2] / l]; };
+  const square = (v: Vec3, to: Vec3): Vec3 => { const k = dot3(v, to); return [v[0] - to[0] * k, v[1] - to[1] * k, v[2] - to[2] * k]; };
+  const s = unit(sub(foot, knee)), th = unit(sub(knee, hip));
+  const ac = sub(hip, otherHip);
+  if (!s || !th) return null;
+  const r = unit(square(square(right ? ac : [-ac[0], -ac[1], -ac[2]], th), s));
+  if (!r) return null;
+  const f: Vec3 = [r[1] * s[2] - r[2] * s[1], r[2] * s[0] - r[0] * s[2], r[0] * s[1] - r[1] * s[0]];
+  return { s, r, f };
+}
+
+function ankleAngles(t: Vec3, lt: number, s: Vec3, r: Vec3, f: Vec3, fwdSign: number) {
+  const ts = dot3(t, s) / lt, tf = dot3(t, f) * fwdSign / lt, tr = dot3(t, r) / lt;
+  return { pitch: Math.atan2(tf, ts), yaw: Math.asin(Math.max(-1, Math.min(1, tr))) };
+}
+
+/** One soft pass of the ankle springs (and swing dampers) on the cones that carry one. */
+export function relaxAnkles(
+  points: readonly RigPoint[],
+  cones: readonly HipCone[],
+  /** The contact height under point `i` (the corpse floor plus its lift). */
+  floor: (i: number, p: RigPoint) => number,
+  limits: typeof ANKLE_LIMITS = ANKLE_LIMITS,
+): RigPoint[] {
+  if (!cones.some(c => c.ankle)) return points as RigPoint[];
+  const out = points.slice() as RigPoint[];
+  for (const c of cones) {
+    const a = c.ankle;
+    const knee = out[c.knee], foot = out[c.foot], hip = out[c.hip], other = out[c.otherHip], toe = a && out[a.toe];
+    if (!a || !knee || !foot || !hip || !other || !toe || toe.pinned) continue;
+    const fr = ankleFrame(hip.pos, knee.pos, foot.pos, other.pos, c.right);
+    const t = sub(toe.pos, foot.pos), lt = len(t);
+    if (!fr || lt < 1e-6) continue;
+    const { pitch, yaw } = ankleAngles(t, lt, fr.s, fr.r, fr.f, a.fwdSign);
+    const pc = Math.max(a.pitch - limits.plantar, Math.min(a.pitch + limits.dorsi, pitch));
+    const yc = Math.max(a.yaw - limits.twist, Math.min(a.yaw + limits.twist, yaw));
+    if (pc === pitch && yc === yaw) continue;
+    const k = limits.outside;
+    const cp = Math.cos(pc), sp = Math.sin(pc), cy = Math.cos(yc), sy = Math.sin(yc);
+    const fs = a.fwdSign;
+    const want: Vec3 = [
+      (fr.s[0] * cp + fr.f[0] * fs * sp) * cy + fr.r[0] * sy,
+      (fr.s[1] * cp + fr.f[1] * fs * sp) * cy + fr.r[1] * sy,
+      (fr.s[2] * cp + fr.f[2] * fs * sp) * cy + fr.r[2] * sy];
+    // Toward the range: the edge's toe less the toe.
+    const e: Vec3 = [want[0] * lt - t[0], want[1] * lt - t[1], want[2] * lt - t[2]], le = len(e);
+    if (le < 1e-9) continue;
+    const n: Vec3 = [e[0] / le, e[1] / le, e[2] / le];
+    // Part of the way along the chord, then back out to the foot's length (a swing, not a shortening).
+    const m: Vec3 = [t[0] + e[0] * k, t[1] + e[1] * k, t[2] + e[2] * k];
+    const lm = len(m);
+    let d: Vec3 = lm < 1e-6 ? [0, 0, 0] : [m[0] * lt / lm - t[0], m[1] * lt / lm - t[1], m[2] * lt / lm - t[2]];
+    // The floor wins: a toe on it is not pulled into it (the speed below still goes). The ankle takes the correction
+    // instead (toes dug in prop the foot up), as a distance constraint gives it to the free end, and its speed heading
+    // back is dropped as the toe's is. ANKLE_LIMITS.lift scales it. (Straight up only, it fought gravity and the knee
+    // and no corpse of 16 settled.)
+    const g = floor(a.toe, toe);
+    if (toe.pos[1] <= g + ANKLE_CONTACT_M && toe.pos[1] + d[1] < g) {
+      const l = limits.lift;
+      if (l > 0 && !foot.pinned) {
+        const fpos: Vec3 = [foot.pos[0] - d[0] * l, foot.pos[1] - d[1] * l, foot.pos[2] - d[2] * l];
+        let fprev: Vec3 = [foot.prev[0] - d[0] * l, foot.prev[1] - d[1] * l, foot.prev[2] - d[2] * l];
+        const fv = -((fpos[0] - fprev[0]) * n[0] + (fpos[1] - fprev[1]) * n[1] + (fpos[2] - fprev[2]) * n[2]);
+        if (fv < 0) fprev = [fprev[0] - n[0] * fv, fprev[1] - n[1] * fv, fprev[2] - n[2] * fv];
+        out[c.foot] = { ...foot, pos: fpos, prev: fprev };
+      }
+      d = [0, 0, 0];
+    }
+    const pos: Vec3 = [toe.pos[0] + d[0], toe.pos[1] + d[1], toe.pos[2] + d[2]];
+    let prev: Vec3 = [toe.prev[0] + d[0], toe.prev[1] + d[1], toe.prev[2] + d[2]];
+    // As the hip cone's `move`: drop the toe's speed against the foot still swinging it out of range.
+    const vn = (pos[0] - prev[0] - (foot.pos[0] - foot.prev[0])) * n[0]
+      + (pos[1] - prev[1] - (foot.pos[1] - foot.prev[1])) * n[1]
+      + (pos[2] - prev[2] - (foot.pos[2] - foot.prev[2])) * n[2];
+    if (vn < 0) prev = [prev[0] + n[0] * vn, prev[1] + n[1] * vn, prev[2] + n[2] * vn];
+    out[a.toe] = { ...toe, pos, prev };
   }
   return out;
 }

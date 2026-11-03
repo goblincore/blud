@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
-import { relaxBraces, relaxHipCones, relaxRopeConstraints, toughnessFor } from '../collapse';
+import { relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -1852,10 +1852,13 @@ export function createZombieActor(opts: {
       } : undefined;
 
       if (f.collapsed) {
-        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, corpseLift(f));
+        const lift = corpseLift(f), floorY = f.floorY;
+        // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles).
+        points = relaxAnkles(points, f.hipCones, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0));
+        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
-        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, pointFloor, corpseLift(f));
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, pointFloor, lift);
       }
       bound = {
         ...bound,

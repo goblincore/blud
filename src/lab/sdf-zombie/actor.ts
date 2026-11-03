@@ -28,7 +28,7 @@ import {
   type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
 import { constrainRigBends, stepRig } from './rig';
-import { relaxBraces, relaxHipCones, relaxRopeConstraints, type MissingLimbs } from './collapse';
+import { relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
@@ -238,10 +238,14 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       ? new Set([fistTip]) : undefined;
     points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
-      points = applyFloorContact(points, f.floorY, undefined, undefined, undefined, corpseLift(f));
+      const lift = corpseLift(f), floorY = f.floorY;
+      // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles).
+      // Pinned tips are already rigid: only a rig without them (the game's) needs the spring.
+      if (m.bound.tips.length === 0) points = relaxAnkles(points, f.hipCones, i => floorY + (lift?.[i] ?? 0));
+      points = applyFloorContact(points, f.floorY, undefined, undefined, undefined, lift);
       // One more brace pass after the floor moved points, then the floor again
       // so the last word keeps the corpse out of the ground.
-      if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, undefined, corpseLift(f));
+      if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, undefined, lift);
     }
     m.bound = {
       ...m.bound,
