@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 26 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 27 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -911,4 +911,5 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `pellet-falloff.ts` — PELLET DAMAGE FALLOFF (owner 2026-10-27: "add logic where the pellets do less damage after a certain range — damage falloff; close range = full…
 - `seed-band.ts` — SEED DIRTY BAND: which rows of a shutter motion seed changed since the last upload (meat pool and seed upload pass, 2026-10-29).
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
+- `slump-death.ts` — THE FORWARD SLUMP (owner playtest 2026-11-03: "it's not possible for the zombie to die like his knees bend and he falls over, back bent, rear in the…
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…

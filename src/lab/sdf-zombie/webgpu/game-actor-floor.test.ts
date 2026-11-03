@@ -4,6 +4,7 @@
 // standing on a 1 m floor and handed that ground walks exactly like the same body on y = 0, lifted
 // 1 m: not 2 m (the spawn floor is in the built body AND in MotionState.floorY), and not sinking.
 import { setDeathFall } from '../death-fall';
+import { SLUMP, setSlump } from '../slump-death';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -33,8 +34,10 @@ function actorAt(start: Vec3, ground?: LevelGround) {
 
 describe('an actor on a sector floor', () => {
   // Per-point corpse floors are the free ragdoll's (authored deaths off, death-fall.ts); a fall follows the soldier's pit rule.
-  beforeAll(() => setDeathFall({ on: false }));
-  afterAll(() => setDeathFall({ on: true }));
+  // No forward slumps (slump-death.ts): a slump's knees plant on the ledge and only its top hangs over.
+  const slump = SLUMP.chance;
+  beforeAll(() => { setDeathFall({ on: false }); setSlump({ chance: 0 }); });
+  afterAll(() => { setDeathFall({ on: true }); setSlump({ chance: slump }); });
   it('walks exactly like the flat body, lifted by the floor', () => {
     const [x, , z] = spawnPoints(ROOMS[0]!)[0]!;
     const flat = actorAt([x, 0, z]);

@@ -15,6 +15,7 @@ import { type WoundTuningValues } from './wound-panel';
 import { setJointToughness, setSoldierToughness } from '../connectivity';
 import { setCorpseIntegrity } from '../collapse';
 import { setBlowAway } from '../blow-away';
+import { setSlump } from '../slump-death';
 import { setDeathFall } from '../death-fall';
 
 
@@ -67,6 +68,7 @@ export function applyWoundTuning(ctx: GameContext, o: Partial<WoundTuningValues>
   if (o.deathAnimated !== undefined) { ctx.vfx.woundTuning.deathAnimated = o.deathAnimated; setDeathFall({ on: o.deathAnimated >= 0.5 }); }
   if (o.deathPull !== undefined) { ctx.vfx.woundTuning.deathPull = o.deathPull; setDeathFall({ pull: o.deathPull }); }
   if (o.deathSettle !== undefined) { ctx.vfx.woundTuning.deathSettle = o.deathSettle; setDeathFall({ settle: o.deathSettle }); }
+  if (o.slump !== undefined) { ctx.vfx.woundTuning.slump = o.slump; setSlump({ chance: o.slump }); }
   if (o.blowAwayRange !== undefined) {
     ctx.vfx.woundTuning.blowAwayRange = o.blowAwayRange;
     setBlowAway({ farM: Math.max(o.blowAwayRange, 2.6) });

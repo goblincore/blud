@@ -587,6 +587,102 @@ export function relaxAnkles(
   return out;
 }
 
+// THE FOOT PLANT (owner playtest 2026-11-03: "the legs always slide out flat";
+// a zombie never dies with its knees buckling under it, rump up, slumped over).
+// Probe feet travelled ~1.3 m in a collapse with knees ending ~18 deg bent: the
+// knee stop fixed a bend by swinging the foot, and the bone solve split every
+// length correction half-and-half, so a moving knee dragged its foot. The floor
+// only grips a point pushed INTO it, so nothing held a resting foot. A foot that
+// comes to rest on the floor is PINNED (stepRig, the floor and every corpse
+// limit leave a pinned point alone, and the knee stop then places the knee:
+// rig.ts plantedKnee), so the body folds over it. It lets go when the leg is
+// pulled nearly straight (the body falling away drags it) or folded past the
+// knee's range (the hips came down on it): a foot never anchors a whole corpse.
+export const FOOT_PLANT = {
+  /** A foot this close above its floor is on it (m). */
+  contactM: 0.02,
+  /** Slower than this along the floor, it plants (m/s). */
+  maxSpeed: 0.6,
+  /** Hip to foot over the leg's full length past which it lets go. */
+  stretch: 0.97,
+  /** The knee fold past which it lets go (rad): the knee stop's maxFlex less a margin. */
+  maxFold: 140 * Math.PI / 180,
+  /** A freed foot plants again only this far inside both release limits (a share of the leg / rad): without the gap
+   *  a foot at a limit pinned and let go on alternate steps. */
+  gap: 0.03,
+  gapFold: 15 * Math.PI / 180,
+};
+
+export interface FootPlant { hip: number; knee: number; foot: number; thigh: number; shin: number; }
+
+/** The two legs' plants from the rest pose (bone lengths); a body missing a point skips that leg. */
+export function collapseFootPlants(names: readonly GaitJointName[], restPose: readonly Vec3[]): FootPlant[] {
+  const out: FootPlant[] = [];
+  for (const s of ['L', 'R'] as const) {
+    const hip = names.indexOf(`hip${s}`), knee = names.indexOf(`knee${s}`), foot = names.indexOf(`foot${s}`);
+    if (hip < 0 || knee < 0 || foot < 0 || !restPose[hip] || !restPose[knee] || !restPose[foot]) continue;
+    out.push({ hip, knee, foot, thigh: len(sub(restPose[knee]!, restPose[hip]!)), shin: len(sub(restPose[foot]!, restPose[knee]!)) });
+  }
+  return out;
+}
+
+/** Decides each foot's pin for the NEXT step, from this step's end pose: plants a slow foot on the floor, frees a
+ *  stretched or over-folded leg. A newly planted or freed foot keeps no speed. */
+export function plantFeet(
+  points: readonly RigPoint[],
+  plants: readonly FootPlant[],
+  /** The contact height under point `i` (the corpse floor plus its lift). */
+  floor: (i: number, p: RigPoint) => number,
+  dt: number,
+  tuning: typeof FOOT_PLANT = FOOT_PLANT,
+  /** Knees plant too (the slump, slump-death.ts): a knee that comes down onto the floor holds there and its foot
+   *  lets go, so the shin lies down behind it and the hips pivot over the knees, rump up. Without it the hips kept
+   *  sinking past a kneeling knee, the knee placement drove it into the floor, the floor threw it up 0.46 m in a
+   *  frame and the legs slid out flat. */
+  kneel = false,
+): RigPoint[] {
+  if (plants.length === 0) return points as RigPoint[];
+  const out = points.slice() as RigPoint[];
+  for (const pl of plants) {
+    const hip = out[pl.hip], foot = out[pl.foot], knee = out[pl.knee];
+    if (!hip || !foot || !knee) continue;
+    if (kneel) {
+      if (knee.pinned) continue;
+      // On contact, at any speed: a knee coming down hard sticks (a kneeling knee is moving fast when it lands, and
+      // waiting for it to slow left it to be thrown back up).
+      if (knee.pos[1] <= floor(pl.knee, knee) + tuning.contactM) {
+        out[pl.knee] = { ...knee, pinned: true, prev: knee.pos };
+        if (foot.pinned) out[pl.foot] = { ...foot, pinned: false, prev: foot.pos };
+        continue;
+      }
+    }
+    const d = len(sub(foot.pos, hip.pos)), full = pl.thigh + pl.shin;
+    // The fold the hip-to-foot span forces (law of cosines).
+    const c = (pl.thigh * pl.thigh + pl.shin * pl.shin - d * d) / (2 * pl.thigh * pl.shin);
+    const fold = Math.PI - Math.acos(Math.max(-1, Math.min(1, c)));
+    const free = d > tuning.stretch * full || fold > tuning.maxFold;
+    if (foot.pinned) {
+      if (free) out[pl.foot] = { ...foot, pinned: false, prev: foot.pos };
+      continue;
+    }
+    if (d > (tuning.stretch - tuning.gap) * full || fold > tuning.maxFold - tuning.gapFold) continue;
+    if (foot.pos[1] > floor(pl.foot, foot) + tuning.contactM) continue;
+    const vx = foot.pos[0] - foot.prev[0], vz = foot.pos[2] - foot.prev[2];
+    if (Math.hypot(vx, vz) > tuning.maxSpeed * dt) continue;
+    out[pl.foot] = { ...foot, pinned: true, prev: foot.pos };
+  }
+  return out;
+}
+
+/** Every planted foot let go (the body stood back up, or the corpse is gone): a pin left set would hold the foot
+ *  through the walk. */
+export function releaseFeet(points: readonly RigPoint[], plants: readonly FootPlant[]): RigPoint[] {
+  if (!plants.some(pl => points[pl.foot]?.pinned || points[pl.knee]?.pinned)) return points as RigPoint[];
+  const out = points.slice() as RigPoint[];
+  for (const pl of plants) for (const i of [pl.foot, pl.knee]) if (out[i]?.pinned) out[i] = { ...out[i]!, pinned: false };
+  return out;
+}
+
 /** Relax the hip cones, `iterations` passes. No cones (or a body missing a
  *  point) returns the input untouched. */
 export function relaxHipCones(

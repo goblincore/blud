@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, toughnessFor } from '../collapse';
+import { FOOT_PLANT, plantFeet, relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -79,7 +79,8 @@ import { soldierVisualWounds } from '../soldier-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
-import { add, normalize, qMul, qRotate, sub } from '../vec';
+import { add, cross, normalize, qMul, qRotate, sub } from '../vec';
+import { planSlump, slumpVelocities } from '../slump-death';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
 import {
@@ -853,6 +854,11 @@ export function createZombieActor(opts: {
   let volley: KillVolley = EMPTY_VOLLEY;
   let volleyAge = Infinity;
   let blowAwayRolled = false;
+  /** A slump's feet hold a straight leg (a forward pitch pulling them taut is the rump up in the air); they let go
+   *  only when the knee is folded out of range or would go under the floor (rig.ts). */
+  const SLUMP_PLANT = { ...FOOT_PLANT, stretch: 1.01 };
+  /** This corpse slumps forward over planted feet (slump-death.ts): the feet plant only for it. */
+  let slumping = false;
   /** The killing volley struck the head (picks the fall; death-fall.ts). */
   let volleyHead = false;
   /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
@@ -1406,6 +1412,18 @@ export function createZombieActor(opts: {
     });
     return { ...bound, rig: { ...bound.rig, points } };
   }
+  /** The body's forward, level: the way the left knee bends (the knee hinge's pole reversed, rig.ts livePole), so
+   *  it follows the body as it stands now. Null on a body without a hinged knee. */
+  function kneeForward(): Vec3 | null {
+    const knee = joints.index.kneeL;
+    const bend = knee === undefined ? undefined : bound.rig.bends?.find(b => b.mid === knee);
+    if (!bend?.axis) return null;
+    const p = bound.rig.points;
+    const back = cross(sub(p[bend.mid]!.pos, p[bend.root]!.pos), sub(p[bend.axis[1]]!.pos, p[bend.axis[0]]!.pos));
+    const s = -(bend.axisSign ?? 1);
+    const l = Math.hypot(back[0], back[2]);
+    return l < 1e-6 ? null : [back[0] * s / l, 0, back[2] * s / l];
+  }
   function subSteps(dt: number): number[] {
     if (!(lastFrame?.collapsed ?? false)) {
       corpseBank = 0;
@@ -1850,6 +1868,19 @@ export function createZombieActor(opts: {
           const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
           const vel = addSpin(bound.rig.points, deathThrowVelocities(bound.rig.points, volley.dirWorld, t, hemI), (blowRng() - 0.5) * 2.4);
           bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        } else if ((!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage) {
+          // Not thrown: a share slump forward over their knees instead (slump-death.ts).
+          const plan = planSlump(blowRng);
+          const forward = plan && kneeForward();
+          if (plan && forward) {
+            slumping = true;
+            const vel = addSpin(bound.rig.points, slumpVelocities(bound.rig.points, forward, plan), plan.spin);
+            // The feet stand where they are from the first step: a standing leg is near its full length, past where
+            // plantFeet would ever plant it.
+            const feet = new Set(joints.footPlants.map(pl => pl.foot));
+            bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt)
+              .map((p, i) => feet.has(i) ? { ...p, pinned: true, prev: p.pos } : p) } };
+          }
         }
       }
       let points = stepRig(
@@ -1862,7 +1893,7 @@ export function createZombieActor(opts: {
           iterations: 4,
           // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
           // ramp dragged the thrown body back upright and ate the throw.
-          restStiffness: STANDING_RIG.restStiffness * ((softKilled || blownAway) && f.collapsed ? 0 : f.restPull),
+          restStiffness: STANDING_RIG.restStiffness * ((softKilled || blownAway || slumping) && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
@@ -1910,6 +1941,14 @@ export function createZombieActor(opts: {
         rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
+      // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.
+      {
+        const lift = corpseLift(f), floorY = f.floorY;
+        const feet = slumping && f.footPlants.length
+          ? plantFeet(bound.rig.points, f.footPlants, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0), sdt, SLUMP_PLANT, true)
+          : releaseFeet(bound.rig.points, joints.footPlants);
+        if (feet !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: feet } };
+      }
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);

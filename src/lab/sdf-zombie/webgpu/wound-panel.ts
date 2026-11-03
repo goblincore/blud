@@ -41,7 +41,7 @@ export type WoundTuningKey =
   | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
   | 'coilTightness' | 'springiness' | 'organAmp'
   | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice'
-  | 'shoulderToughness' | 'elbowToughness' | 'soldierShoulder' | 'soldierElbow' | 'corpseIntegrity' | 'blowAway' | 'blowAwayRange' | 'deathAnimated' | 'deathPull' | 'deathSettle';
+  | 'shoulderToughness' | 'elbowToughness' | 'soldierShoulder' | 'soldierElbow' | 'corpseIntegrity' | 'blowAway' | 'blowAwayRange' | 'slump' | 'deathAnimated' | 'deathPull' | 'deathSettle';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -77,6 +77,7 @@ const _WOUND_KEYS = [
   { key: 'corpseIntegrity', label: 'corpse integrity', min: 0, max: 1, step: 0.05, value: 0.7 },
   { key: 'blowAway', label: 'blown-away deaths', min: 0, max: 2, step: 0.05, value: 1 },
   { key: 'blowAwayRange', label: 'blown-away max range (m)', min: 3, max: 15, step: 0.5, value: 7 },
+  { key: 'slump', label: 'forward slump deaths', min: 0, max: 1, step: 0.05, value: 0.4 },
   { key: 'deathAnimated', label: 'authored deaths (0 = ragdoll)', min: 0, max: 1, step: 1, value: 1 },
   { key: 'deathPull', label: 'death pose pull (← looser)', min: 0.1, max: 1, step: 0.05, value: 1 },
   { key: 'deathSettle', label: 'pull after landing (← limper)', min: 0, max: 1, step: 0.05, value: 0.35 },

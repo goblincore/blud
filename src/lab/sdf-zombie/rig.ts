@@ -137,7 +137,7 @@ export function constrainRigBends(
   let points = state.points;
   for (const bend of state.bends ?? []) {
     const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
-    if (end.pinned) continue;
+    if (end.pinned && !bend.axis) continue;
     const upper = sub(mid.pos, root.pos), fore = sub(end.pos, mid.pos);
     const foreLength = len(fore);
     if (len(upper) < 1e-8 || foreLength < 1e-8) continue;
@@ -159,6 +159,21 @@ export function constrainRigBends(
     const offPlane = (d: Vec3) => hinge
       ? Math.abs(dot(d, hinge)) - Math.sin(bend.planeSlack!) * len(sub(d, scale(uHat, dot(d, uHat)))) : -1;
     if (normals.every(n => dot(fore, n) >= -1e-9) && offPlane(fore) <= 1e-9) continue;
+    if (end.pinned) {
+      // A planted foot (collapse.ts plantFeet) stays put: the knee goes where the bones allow. A knee that would go
+      // under the floor (the body has come down past the foot) cannot be held there: the floor threw it back up
+      // and launched the corpse 0.6 m. The foot lets go and the stop below swings it as for any free end.
+      const knee = plantedKnee(points, bend);
+      const kneeFloor = !knee ? undefined : floorAt ? floorAt(knee.pos[0], knee.pos[2], mid.pos) : floorY;
+      if (knee && (kneeFloor === undefined || knee.pos[1] >= kneeFloor)) {
+        if (points === state.points) points = points.slice();
+        points[bend.mid] = knee;
+        continue;
+      }
+      if (!bend.axis) continue;
+      if (points === state.points) points = points.slice();
+      points[bend.end] = { ...end, pinned: false, prev: end.pos };
+    }
     let dir = normalize(fore);
     // Project onto extension first, then maximum flexion. For our 150°
     // flexion limit the inward normals have positive dot product, so the
@@ -240,9 +255,34 @@ export function constrainRigBends(
       if (outward > 0) velocity = sub(velocity, scale(hinge, outward * planeSide));
     }
     if (points === state.points) points = points.slice();
-    points[bend.end] = { ...end, pos, prev: sub(pos, velocity) };
+    points[bend.end] = { ...end, pinned: false, pos, prev: sub(pos, velocity) };
   }
   return points === state.points ? state : { ...state, points };
+}
+
+/**
+ * THE PLANTED KNEE. The stop above fixes a bend by swinging the END, right for a hand in the air; a corpse's planted
+ * foot (collapse.ts plantFeet, pinned) must not move, so the KNEE goes where the two bone lengths put it between hip
+ * and foot, on the forward side of that line in the hinge plane: a sinking hip folds the knee forward, as a body
+ * kneels. Moved with its prev (no speed added). Null when it cannot (no hinge, a span the bones cannot make, a
+ * degenerate frame): the knee stays where physics put it.
+ */
+function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint): RigPoint | null {
+  if (!bend.axis) return null;
+  const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
+  const a = points[bend.axis[0]], b = points[bend.axis[1]];
+  if (mid.pinned || !a || !b) return null;
+  const l1 = len(sub(mid.pos, root.pos)), l2 = len(sub(end.pos, mid.pos));
+  const span = sub(end.pos, root.pos), d = len(span);
+  if (d < 1e-6 || d >= l1 + l2 || d <= Math.abs(l1 - l2)) return null;
+  const u = scale(span, 1 / d);
+  // Forward: opposite the pole the stop builds for a straight leg (livePole with the span as the upper bone).
+  const back = scale(cross(u, sub(b.pos, a.pos)), bend.axisSign ?? 1);
+  if (len(back) < 1e-6) return null;
+  const w = scale(normalize(back), -1);
+  const x = (l1 * l1 - l2 * l2 + d * d) / (2 * d), r = Math.sqrt(Math.max(0, l1 * l1 - x * x));
+  const pos = add(root.pos, add(scale(u, x), scale(w, r)));
+  return { ...mid, pos, prev: add(mid.prev, sub(pos, mid.pos)) };
 }
 
 /** The pole from the live hinge axis (RigBendConstraint.axis), or null without one (or when it is degenerate: the
