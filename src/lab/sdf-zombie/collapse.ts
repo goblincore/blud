@@ -406,6 +406,112 @@ export function relaxBraces(
   return out;
 }
 
+// HIP CONES (owner playtest 2026-11-03: the corpse "collapses in itself"). The
+// free ragdoll had no hip limit: thighs folded 100-175 deg up against the belly
+// and splayed 80-90 deg out (the splits), so a dead zombie balled up. Each cone
+// holds the thigh inside a human range in the live pelvis frame (down = pelvis
+// to chest reversed, forward = up x right, out = away from the other hip).
+// A correction rotates the thigh into range by moving knee and foot by half
+// and the hip back by half (a distance constraint's split, so a body falling
+// onto its folded leg is pushed apart rather than one leg snapping). See `move`
+// for the velocity: without it no version of this limit settled (2026-11-02/03).
+export interface HipCone {
+  hip: number; knee: number; foot: number;
+  /** The other hip: with this one, the pelvis's right axis. */
+  otherHip: number;
+  pelvis: number; chest: number;
+  /** The right hip: the pelvis's right axis is otherHip -> hip (on the left, hip -> otherHip). */
+  right: boolean;
+}
+
+export const HIP_LIMITS = {
+  /** Thigh forward of straight down along the trunk (rad). */
+  flex: 120 * Math.PI / 180,
+  /** Behind straight down. */
+  extend: 25 * Math.PI / 180,
+  abduct: 45 * Math.PI / 180,
+  adduct: 20 * Math.PI / 180,
+};
+
+export const HIP_SPLIT = { leg: 1, foot: 0, hip: 0 };
+
+export function collapseHipCones(names: readonly GaitJointName[]): HipCone[] {
+  const at = (n: GaitJointName) => names.indexOf(n);
+  const pelvis = at('pelvis'), chest = at('chest');
+  if (pelvis < 0 || chest < 0) return [];
+  const out: HipCone[] = [];
+  for (const [s, o] of [['L', 'R'], ['R', 'L']] as const) {
+    const hip = at(`hip${s}`), knee = at(`knee${s}`), foot = at(`foot${s}`), otherHip = at(`hip${o}`);
+    if (hip < 0 || knee < 0 || otherHip < 0) continue;
+    out.push({ hip, knee, foot, otherHip, pelvis, chest, right: s === 'R' });
+  }
+  return out;
+}
+
+/** Relax the hip cones, `iterations` passes. No cones (or a body missing a
+ *  point) returns the input untouched. */
+export function relaxHipCones(
+  points: readonly RigPoint[],
+  cones: readonly HipCone[],
+  iterations: number = CORPSE_INTEGRITY.iterations,
+  limits: typeof HIP_LIMITS = HIP_LIMITS,
+): readonly RigPoint[] {
+  if (cones.length === 0) return points;
+  const out: RigPoint[] = points.map(p => ({ pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, prev: [p.prev[0], p.prev[1], p.prev[2]] as Vec3, pinned: p.pinned }));
+  // Moves pos and prev together (no speed added), then drops the speed still heading out of range: a limb held at the
+  // limit is a resting contact, and speed kept into it built up every frame and leaked through the bones as a creep.
+  const move = (p: RigPoint | undefined, d: Vec3, k: number) => {
+    if (!p || p.pinned || k === 0) return;
+    p.pos = [p.pos[0] + d[0] * k, p.pos[1] + d[1] * k, p.pos[2] + d[2] * k];
+    p.prev = [p.prev[0] + d[0] * k, p.prev[1] + d[1] * k, p.prev[2] + d[2] * k];
+    const ld = len(d);
+    if (ld < 1e-9) return;
+    const n: Vec3 = [d[0] * Math.sign(k) / ld, d[1] * Math.sign(k) / ld, d[2] * Math.sign(k) / ld];
+    const vn = (p.pos[0] - p.prev[0]) * n[0] + (p.pos[1] - p.prev[1]) * n[1] + (p.pos[2] - p.prev[2]) * n[2];
+    if (vn < 0) p.prev = [p.prev[0] + n[0] * vn, p.prev[1] + n[1] * vn, p.prev[2] + n[2] * vn];
+  };
+  for (let it = 0; it < iterations; it++) {
+    for (const c of cones) {
+      const hip = out[c.hip], knee = out[c.knee], other = out[c.otherHip], pel = out[c.pelvis], chest = out[c.chest];
+      if (!hip || !knee || !other || !pel || !chest) continue;
+      const up = sub(chest.pos, pel.pos), across = sub(hip.pos, other.pos), thigh = sub(knee.pos, hip.pos);
+      const lu = len(up), la = len(across), lt = len(thigh);
+      if (lu < 1e-6 || la < 1e-6 || lt < 1e-6) continue;
+      const down: Vec3 = [-up[0] / lu, -up[1] / lu, -up[2] / lu];
+      const outA: Vec3 = [across[0] / la, across[1] / la, across[2] / la];
+      // `out` with its trunk component removed; right is `out` on the right hip, -out on the left.
+      const dd = outA[0] * down[0] + outA[1] * down[1] + outA[2] * down[2];
+      const o0: Vec3 = [outA[0] - down[0] * dd, outA[1] - down[1] * dd, outA[2] - down[2] * dd];
+      const lo = len(o0);
+      if (lo < 1e-6) continue;
+      const o: Vec3 = [o0[0] / lo, o0[1] / lo, o0[2] / lo];
+      const r: Vec3 = c.right ? o : [-o[0], -o[1], -o[2]];
+      // forward = up x right = -down x right
+      const fwd: Vec3 = [
+        -(down[1] * r[2] - down[2] * r[1]), -(down[2] * r[0] - down[0] * r[2]), -(down[0] * r[1] - down[1] * r[0])];
+      const t: Vec3 = [thigh[0] / lt, thigh[1] / lt, thigh[2] / lt];
+      const td = t[0] * down[0] + t[1] * down[1] + t[2] * down[2];
+      const tf = t[0] * fwd[0] + t[1] * fwd[1] + t[2] * fwd[2];
+      const to = t[0] * o[0] + t[1] * o[1] + t[2] * o[2];
+      const abd = Math.asin(Math.max(-1, Math.min(1, to)));
+      const flex = Math.atan2(tf, td);
+      const abdC = Math.max(-limits.adduct, Math.min(limits.abduct, abd));
+      const flexC = Math.max(-limits.extend, Math.min(limits.flex, flex));
+      if (abdC === abd && flexC === flex) continue;
+      const ca = Math.cos(abdC), sa = Math.sin(abdC), cf = Math.cos(flexC), sf = Math.sin(flexC);
+      const want: Vec3 = [
+        (down[0] * cf + fwd[0] * sf) * ca + o[0] * sa,
+        (down[1] * cf + fwd[1] * sf) * ca + o[1] * sa,
+        (down[2] * cf + fwd[2] * sf) * ca + o[2] * sa];
+      const d: Vec3 = [want[0] * lt - thigh[0], want[1] * lt - thigh[1], want[2] * lt - thigh[2]];
+      move(knee, d, HIP_SPLIT.leg);
+      move(out[c.foot], d, HIP_SPLIT.foot);
+      move(hip, d, -HIP_SPLIT.hip);
+    }
+  }
+  return out;
+}
+
 /**
  * Builds the body's rope set from its joint names (gait's jointNamesForBody
  * output) and the rig's rest pose. Called once at bind time; the result is

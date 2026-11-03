@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
-import { relaxBraces, relaxRopeConstraints, toughnessFor } from '../collapse';
+import { relaxBraces, relaxHipCones, relaxRopeConstraints, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -1824,6 +1824,7 @@ export function createZombieActor(opts: {
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
       // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
       if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
+      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones)];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
       // hand tip reached its grip-line target only through the soft rest pull:
@@ -1854,7 +1855,7 @@ export function createZombieActor(opts: {
         points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, corpseLift(f));
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
-        if (f.braces.length) points = applyFloorContact(relaxBraces(points, f.braces, f.integrity, 1), f.floorY, undefined, undefined, pointFloor, corpseLift(f));
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, pointFloor, corpseLift(f));
       }
       bound = {
         ...bound,

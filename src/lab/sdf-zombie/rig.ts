@@ -208,8 +208,15 @@ export function constrainRigBends(
       // has no such line and keeps the choice above.
       const level = hinge ? cross(hinge, [0, 1, 0]) : null;
       if (level && len(level) > 1e-3 && offPlane(horizontal) > 1e-9) {
+        // Ranked on the wanted `dir` with a pull toward where the bone already points: on `dir` alone a near tie
+        // could flip a resting foot to the far side of its knee in one frame.
+        const cur = normalize(sub(end.pos, mid.pos));
+        const rank = (v: Vec3) => dot(v, dir) + 0.5 * dot(v, cur);
         const ok = [normalize(level), scale(normalize(level), -1)].filter(v => normals.every(n => dot(v, n) >= -1e-9));
-        ok.sort((a, b) => dot(b, dir) - dot(a, dir));
+        // A bone already lying straight stays straight: the stops' edge sits on a flat line, and a hair across it
+        // turned the straight fallback below into that line, a snap of the foot past 90 deg.
+        if (dot(cur, uHat) > 0.97) ok.push(uHat);
+        ok.sort((a, b) => rank(b) - rank(a));
         // No flat line in the plane clears the stops (a face-up leg whose knee sits below its hip: its back of knee
         // faces the floor): lie it straight in the plane rather than turning the shin sideways (which read as a
         // broken knee). SPIKE OPEN ISSUE: the end can sit up to ~4 cm under the floor plane at the end of the frame.

@@ -70,9 +70,9 @@ import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
 import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
 import type { SoldierStaggerLevel } from './soldier-stagger';
-import type { BraceLimit, CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
+import type { BraceLimit, CollapsePhase, HipCone, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
-  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBraces, collapseRopes, makeCollapseState, stepCollapse,
+  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBraces, collapseHipCones, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
@@ -266,6 +266,8 @@ export interface MotionJoints {
   ropes: readonly RopeLimit[];
   /** Two-sided corpse-integrity braces (collapse.ts), constant for the body. */
   braces: readonly BraceLimit[];
+  /** Corpse hip limits (collapse.ts relaxHipCones), constant for the body. */
+  hipCones: readonly HipCone[];
   /** Per rig point: how much higher than the foot joint it rests on the
    *  floor (m) — its flesh depth over the foot's. A corpse lies ON its torso,
    *  not with every joint at ankle height. */
@@ -310,6 +312,7 @@ export function makeMotionJoints(
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
     braces: collapseBraces(names, baseRest),
+    hipCones: collapseHipCones(names),
     floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
 }
@@ -585,6 +588,8 @@ export interface MotionFrame {
   /** Corpse-integrity braces to relax after the ropes (collapse.ts
    *  relaxBraces). Empty while standing and for the soldier's structural fall. */
   braces: readonly BraceLimit[];
+  /** Hip limits to relax with the braces (collapse.ts relaxHipCones); empty exactly when braces are. */
+  hipCones: readonly HipCone[];
   /** The integrity to relax them at: the profile's corpseIntegrity, else the
    *  live CORPSE_INTEGRITY knob. */
   integrity: number;
@@ -1757,6 +1762,7 @@ export function stepMotion(
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
       braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
+      hipCones: collapsed && !structural && integrity > 0 ? joints.hipCones : [],
       integrity,
       floorLift: joints.floorLift,
       // An authored death fall lies the skull with the neck at once (the soldier's headFollowsRig).
