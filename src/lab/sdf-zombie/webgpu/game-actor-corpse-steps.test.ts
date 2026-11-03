@@ -56,3 +56,22 @@ describe('a corpse steps the same at any frame rate', () => {
     expect(highestAfterFall(i => (i % 12) < 4 ? 0.0003 : 1 / 60, 3)).toBeLessThan(0.8);
   });
 });
+
+describe('a corpse falls asleep (game-actor.ts CORPSE SLEEP)', () => {
+  beforeAll(() => setDeathFall({ on: false }));
+  afterAll(() => setDeathFall({ on: true }));
+  const pose = (a: ReturnType<typeof corpse>) => a.rigJoints().points.map(p => [...p]);
+  const moved = (a: number[][], b: number[][]) => Math.max(...a.map((p, i) => Math.hypot(p[0]! - b[i]![0]!, p[1]! - b[i]![1]!, p[2]! - b[i]![2]!)));
+
+  it('stops moving once it lies still, and an impulse wakes it', () => {
+    const a = corpse();
+    for (let i = 0; i < 6 * 60; i++) a.step(1 / 60);
+    const still = pose(a);
+    for (let i = 0; i < 60; i++) a.step(1 / 60);
+    expect(moved(pose(a), still)).toBe(0);
+    const hand = a.rigJoints().points[0]!;
+    a.rigImpulse([hand[0]!, hand[1]!, hand[2]!], [0, 0.05, 0]);
+    a.step(1 / 60); a.step(1 / 60);
+    expect(moved(pose(a), still)).toBeGreaterThan(1e-3);
+  });
+});

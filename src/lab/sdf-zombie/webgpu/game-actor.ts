@@ -1407,6 +1407,36 @@ export function createZombieActor(opts: {
    *  25-34 cm in a step (and in a slump fought the planted knee every step), and an ankle pulled a toe 13 cm and the
    *  bones dragged the foot after it: the still corpse that kicked a leg up to vertical. */
   const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
+  // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
+  // agree: the bones, the stops, the hip cones, the ankles and the floor each nudge it a little every step, and a
+  // body lying still drifted 2-7 cm a second at 7 s (the hip cones and the solver's own loop carried it sideways). So
+  // a corpse whose every joint has moved under `speed` for `time` falls asleep: its rig keeps its pose, with no
+  // speed, until something stirs it (a shot, a blast, a sever: the damage revision; or any impulse: a point whose
+  // pos and prev part). 24 probe deaths each way: 21-24 asleep a median 2.7-3.1 s after the blow, at 60 Hz and in full
+  // bullet time; at 0.2 m/s the feet still buzzing kept 2-5 of them awake.
+  const CORPSE_SLEEP = { speed: 0.35, time: 0.75 };
+  let corpseStillT = 0, corpseSleeping = false, corpseSleepRevision = -1;
+  function corpseAsleep(): boolean {
+    if (!corpseSleeping) return false;
+    const stirred = damageRevision !== corpseSleepRevision || bound.rig.points.some(p =>
+      p.pos[0] !== p.prev[0] || p.pos[1] !== p.prev[1] || p.pos[2] !== p.prev[2]);
+    if (stirred) { corpseSleeping = false; corpseStillT = 0; }
+    return corpseSleeping;
+  }
+  /** After a corpse step: counts the time every joint has stayed slow, and puts the body to sleep once it is enough. */
+  function noteCorpseMotion(before: readonly RigPoint[], dt: number): void {
+    const now = bound.rig.points;
+    let most = 0;
+    for (let i = 0; i < now.length; i++) {
+      const a = now[i]!.pos, b = before[i]?.pos ?? a;
+      most = Math.max(most, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    }
+    corpseStillT = most <= CORPSE_SLEEP.speed * dt ? corpseStillT + dt : 0;
+    if (corpseStillT < CORPSE_SLEEP.time) return;
+    corpseSleeping = true;
+    corpseSleepRevision = damageRevision;
+    bound = { ...bound, rig: { ...bound.rig, points: now.map(p => ({ ...p, prev: p.pos })) } };
+  }
   let corpseBank = 0;
   /** The corpse's points one fixed step back, and how far on toward the latest the drawn pose sits. */
   let corpseBefore: readonly RigPoint[] | null = null;
@@ -1892,6 +1922,9 @@ export function createZombieActor(opts: {
           }
         }
       }
+      // A sleeping corpse (CORPSE SLEEP) steps as usual below and keeps the pose it had.
+      if (!f.collapsed) { corpseSleeping = false; corpseStillT = 0; }
+      const rigBefore = bound.rig, restingRig = f.collapsed && corpseAsleep() ? rigBefore : null;
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
           bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined,
@@ -1960,6 +1993,8 @@ export function createZombieActor(opts: {
           : releaseFeet(bound.rig.points, joints.footPlants);
         if (feet !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: feet } };
       }
+      if (restingRig) bound = { ...bound, rig: restingRig };
+      else if (f.collapsed) noteCorpseMotion(rigBefore.points, sdt);
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
