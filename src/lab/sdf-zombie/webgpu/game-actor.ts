@@ -27,7 +27,7 @@ import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
-import { constrainRigBends, stepRig } from '../rig';
+import { constrainRigBends, stepRig, type RigPoint } from '../rig';
 import { relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
@@ -54,7 +54,7 @@ import {
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
-  makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
+  makeMotionJoints, makeMotionState, stepMotion, planSubSteps, SUBSTEP_TUNING,
   applyFloorContact, corpseLift, FALL_DROP_M, MOTION_TUNING, STANDING_RIG, releasedRestScale,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
@@ -765,7 +765,7 @@ export function createZombieActor(opts: {
   /** The one re-pose: applyRig, then the head deform (if any), then the pop's swell (if one is running), then the
    *  head split (if open). Every pose site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
-    const p = applyRig(current, bound, bodyYaw);
+    const p = applyRig(current, corpseDrawn(), bodyYaw);
     const d0 = headDeform ? headDeform(p) : p;
     const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
     const s = headSplit?.(d) ?? null;
@@ -1379,6 +1379,46 @@ export function createZombieActor(opts: {
     return false;
   }
 
+  // FIXED CORPSE STEPS (owner playtest 2026-11-03, "breakdancing": a corpse
+  // kicking itself upright, worst in bullet time). The ragdoll's limits (bone
+  // lengths, the knee and hip stops, the floor) are position shoves of a fixed
+  // size per STEP, and the floor turns a shove into the floor into a bounce. A
+  // short step makes the same shove a faster speed: at quarter speed the probe
+  // corpses hit 145-465 m/s and threw their legs 4-16 m up (at full speed under
+  // 0.4 m/s, 1.3 m); half speed, which a 120 Hz screen gives every frame, was
+  // already 72-133 m/s. The hit-stop is worse again: stepRig carries a step's
+  // displacement scaled by dt / stepDt (up to 20x), so the first step after a
+  // near-zero one multiplied the shoves into a kick. So once the body is down
+  // it always steps 1/60 s (the rate it was tuned at), banking the frame time
+  // for the next step, and repose() draws it between its last two steps.
+  const CORPSE_STEP = 1 / 60;
+  let corpseBank = 0;
+  /** The corpse's points one fixed step back, and how far on toward the latest the drawn pose sits. */
+  let corpseBefore: readonly RigPoint[] | null = null;
+  let corpseBlend = 1;
+  function corpseDrawn(): BoundRig {
+    const before = corpseBefore, now = bound.rig.points;
+    if (!before || corpseBlend >= 1 || before.length !== now.length) return bound;
+    const t = corpseBlend;
+    const points = now.map((p, i) => {
+      const b = before[i]!.pos;
+      return { ...p, pos: [b[0] + (p.pos[0] - b[0]) * t, b[1] + (p.pos[1] - b[1]) * t, b[2] + (p.pos[2] - b[2]) * t] as Vec3 };
+    });
+    return { ...bound, rig: { ...bound.rig, points } };
+  }
+  function subSteps(dt: number): number[] {
+    if (!(lastFrame?.collapsed ?? false)) {
+      corpseBank = 0;
+      corpseBefore = null;
+      corpseBlend = 1;
+      return planSubSteps(dt);
+    }
+    corpseBank = Math.min(corpseBank + Math.max(0, dt), SUBSTEP_TUNING.maxCatchup);
+    const n = Math.floor(corpseBank / CORPSE_STEP + 1e-9);
+    corpseBank = Math.max(0, corpseBank - n * CORPSE_STEP);
+    return Array.from({ length: n }, () => CORPSE_STEP);
+  }
+
   let bakePaused = false;
   let damageRevision = 0;
   /** UPDATE LOD: the damage revision step() last saw, and its own sim seconds since it changed. */
@@ -1402,7 +1442,11 @@ export function createZombieActor(opts: {
     // pose without the attack, and the photographed frame would not show it.)
     const swingPin = forcedSwing;
     forcedSwing = null;
-    for (const sdt of planSubSteps(dt)) {
+    const steps = subSteps(dt);
+    // The drawn corpse sits the banked share of a step past the one before the latest (corpseDrawn).
+    if (lastFrame?.collapsed) corpseBlend = corpseBank / CORPSE_STEP;
+    for (const sdt of steps) {
+      if (lastFrame?.collapsed) corpseBefore = bound.rig.points;
       // Heavy-hit choreography (see the state block): knock the ROOT before
       // the motion step so this sub-step's targets ride the moved root.
       // Bounds-clamped like stepWander's own integration, so a knock cannot
