@@ -32,8 +32,8 @@ export function buildSkeletonSources(ctx: GameContext, actor: ZombieActor, name:
   // again for a body a sever re-derived), and not in the frame its bone first shows: a fit to the flesh takes 30 to
   // 180 ms. It is made once per head revision (AnatomicalSkullKit.head keeps it), so every later actor of the same
   // character finds it made.
-  const kit = ctx.render.segMeshCache?.skullKit, head = kit ? sources.find(s => s.segment === 'head') : undefined;
-  if (kit && head) kit.head(head);
+  const head = sources.find(s => s.segment === 'head');
+  if (head) ctx.render.segMeshCache?.skullKitOf(head.character)?.head(head);
   return { body: actor.body, name, sources };
 }
 

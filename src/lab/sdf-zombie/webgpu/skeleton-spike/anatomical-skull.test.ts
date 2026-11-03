@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { AnatomicalSkullKit } from './anatomical-skull';
+import { AnatomicalSkullKit, SKULL_OPENINGS, SKULL_PIECES, readSkullEyeRadius, readSkullOpenings, skullEyePoint } from './anatomical-skull';
+import { ANATOMICAL_SKULL_ASSET, OWN_SKULLS } from './skull-cast';
 import { anatomicalSkullGltf, anatomicalSkullSource } from './anatomical-skull.fixture';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
@@ -110,5 +111,43 @@ describe('offline anatomical skull asset',()=> {
     expect(skullRayHit(skull.pieces,intactSkull(14),[(head.bounds.min[0]+head.bounds.max[0])*.5,
       head.bounds.min[1]+(head.bounds.max[1]-head.bounds.min[1])*.75,head.bounds.max[2]+.03],[0,0,-1])).not.toBeNull();
     // Do not dispose shared fixture source geometries; this kit is test-local.
+  });
+});
+
+describe('a skull asset of a character\'s own (skull-cast.ts OWN_SKULLS): its kit and its manifest\'s openings', () => {
+  it('a kit fits its own asset\'s cast alone, tags what it fits with the asset, and keeps the asset\'s openings', () => {
+    const body = buildBody(compileBlob(parseBlob(readFileSync('src/lab/sdf-zombie/characters/zombie.blob','utf8'))),DEFAULT_BUILD_OPTS);
+    const headAs = (character: string) => createSkeletonSources(body,bindRig(body),{character}).find(s=>s.segment==='head')!;
+    const openings = readSkullOpenings({ openings: { orbitLeft: [0.03, 0.01, 0.05], orbitRight: [-0.03, 0.01, 0.05], nasal: [0, -0.02, 0.06] } });
+    const imp = new AnatomicalSkullKit(anatomicalSkullSource(),new THREE.Texture(),new THREE.Vector2(1,1),'envelope',OWN_SKULLS.imp!.asset,openings);
+    const human = new AnatomicalSkullKit(anatomicalSkullSource(),new THREE.Texture(),new THREE.Vector2(1,1));
+    expect(imp.fitOf('imp')).toEqual({ fit: 'envelope' });
+    for (const name of ['zombie','cultist','ogre']) expect(imp.fitOf(name),name).toBeNull();
+    expect(human.fitOf('imp')).toBeNull();
+    expect(human.asset).toBe(ANATOMICAL_SKULL_ASSET);
+    expect(human.openings).toBe(SKULL_OPENINGS);
+    expect(imp.openings).toEqual(openings);
+    expect(skullEyePoint(openings)).toEqual({ x: 0, y: 0.01 });
+    const fitted = imp.head(headAs('imp'))!;
+    expect(fitted.pieces.map(p=>p.id)).toEqual([...SKULL_PIECES]);
+    expect(fitted.mesh.geometry.userData).toMatchObject({ anatomicalSkull: true, skullAsset: 'imp' });
+    for (const p of fitted.pieces) expect(p.geometry.userData.skullAsset).toBe('imp');
+    expect(human.head(headAs('zombie'))!.mesh.geometry.userData.skullAsset).toBe('anatomical');
+    expect(imp.head(headAs('zombie'))).toBeNull();
+    imp.dispose(); human.dispose();
+  });
+  it('a manifest\'s openings are three points or the asset does not load', () => {
+    const good = { orbitLeft: [0.02, 0, 0.04], orbitRight: [-0.02, 0, 0.04], nasal: [0, -0.03, 0.05] };
+    expect(readSkullOpenings({ schema: 1, openings: good })).toEqual(good);
+    for (const bad of [null, {}, { openings: {} }, { openings: { ...good, nasal: [0, 0] } }, { openings: { ...good, orbitLeft: [0, NaN, 0] } }, { openings: { ...good, orbitRight: '0,0,0' } }]) {
+      expect(() => readSkullOpenings(bad, 'imp-skull.json'), JSON.stringify(bad)).toThrow(/imp-skull\.json: openings\.\w+ is not a point/);
+    }
+  });
+  it('a manifest\'s modelled eyes are a positive radius, or absent', () => {
+    expect(readSkullEyeRadius({ eyes: { radius: 0.008 } })).toBe(0.008);
+    expect(readSkullEyeRadius({ openings: {} })).toBeNull();
+    for (const bad of [{ eyes: {} }, { eyes: { radius: 0 } }, { eyes: { radius: '8' } }, { eyes: null }]) {
+      expect(() => readSkullEyeRadius(bad, 'imp-skull.json'), JSON.stringify(bad)).toThrow(/imp-skull\.json: eyes\.radius/);
+    }
   });
 });
