@@ -30,9 +30,14 @@ const solve = (p: RigPoint[], passes: number, limits = BODY_COLLIDE) => {
 };
 
 describe('collapseBody (the zombie)', () => {
-  it('has a capsule per trunk, arm and leg bone, each with flesh-sized radius', () => {
-    expect(cb.capsules).toHaveLength(9);
-    for (const c of cb.capsules) { expect(c.r).toBeGreaterThan(0.03); expect(c.r).toBeLessThanOrEqual(0.16); }
+  it('has a capsule per trunk, head, arm, leg and foot bone, each with flesh-sized radius', () => {
+    expect(cb.capsules).toHaveLength(12);
+    for (const c of cb.capsules) { expect(c.r).toBeGreaterThan(0.03); expect(c.r).toBeLessThanOrEqual(0.2); }
+  });
+
+  it('gives the trunk its width: wider side to side than front to back', () => {
+    const t = cb.capsules[0]!;
+    expect(t.w).toBeGreaterThan(t.r + 0.03);
   });
 
   it('never has a pair in contact in the rest pose', () => {
@@ -50,6 +55,27 @@ describe('relaxBodyCollisions', () => {
     const out = solve(pts(pos), 20);
     expect(before).toBeLessThan(0.01);
     expect(toTrunk(out, out[idx.handL!]!.pos)).toBeGreaterThan(0.1);
+  });
+
+  it('keeps a forearm lying along the flank out of the trunk width, not just its depth', () => {
+    const pos = rest.map(v => [...v] as Vec3);
+    const chest = rest[idx.chest!]!, pelvis = rest[idx.pelvis!]!;
+    const w = cb.capsules[0]!.w!;
+    // The forearm laid along the left flank, half sunk into it.
+    pos[idx.elbowL!] = [chest[0] + w * 0.6, chest[1] - 0.05, chest[2]];
+    pos[idx.handL!] = [pelvis[0] + w * 0.6, pelvis[1] + 0.05, pelvis[2]];
+    const out = solve(pts(pos), 30);
+    expect(toTrunk(out, out[idx.handL!]!.pos)).toBeGreaterThan(w * 0.92 + 0.03);
+  });
+
+  it('pushes a hand out of the head', () => {
+    const pos = rest.map(v => [...v] as Vec3);
+    const neck = rest[idx.neck!]!, head = rest[idx.head!]!;
+    pos[idx.handR!] = [(neck[0] + head[0]) / 2 + 0.01, (neck[1] + head[1]) / 2, (neck[2] + head[2]) / 2];
+    const out = solve(pts(pos), 30);
+    const h = out[idx.handR!]!.pos, m = out[idx.neck!]!.pos, top = out[idx.head!]!.pos;
+    const mid: Vec3 = [(m[0] + top[0]) / 2, (m[1] + top[1]) / 2, (m[2] + top[2]) / 2];
+    expect(len(sub(h, mid))).toBeGreaterThan(0.1);
   });
 
   it('pushes a knee crossed through the other one apart', () => {

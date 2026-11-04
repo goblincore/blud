@@ -63,7 +63,7 @@ import type { Wound } from './damage';
 import { WOUND_PROFILES } from './damage';
 import type { GaitJointName } from './gait';
 import type { RigPoint } from './rig';
-import { len, scale, sub } from './vec';
+import { cross, len, scale, sub } from './vec';
 
 /** Standing → falling → settled. The last two are terminal. */
 export type CollapsePhase = 'standing' | 'falling' | 'settled';
@@ -778,15 +778,24 @@ export function collapseRopes(names: readonly GaitJointName[], restPose: readonl
 // legs through each other). A corpse had no self-collision but the arm guard spheres (rig.ts torsoGuards), which sit
 // where an UPRIGHT torso would be and turn only with the body's yaw: once the body tips over they float in the air,
 // and the legs had none at all. Here every bone is a capsule (radius = the flesh around its middle, from the body's
-// prims) and listed pairs are kept apart in the LIVE pose. A pair's clearance never exceeds 90% of its rest-pose
+// prims; the trunk an elliptical one, as wide as its flanks and as deep as its belly: a round trunk the depth of the
+// belly let forearms sink 8 cm into its sides, weirdzombie.mov) and listed pairs are kept apart in the LIVE pose. A pair's clearance never exceeds 90% of its rest-pose
 // distance, so the authored stance is never in contact. Each part of a segment that is attached to the other (a
 // shoulder at the chest, a hip at the pelvis, both hips at the pelvis) is left out by its range.
-export interface BodyCapsule { a: number; b: number; r: number; }
+export interface BodyCapsule {
+  a: number; b: number;
+  /** Flesh radius; for an elliptical trunk, its front-to-back half-thickness. */
+  r: number;
+  /** An elliptical trunk's side-to-side half-width, across `lat` (its hip-to-hip plus shoulder-to-shoulder line). */
+  w?: number;
+  lat?: readonly [number, number, number, number];
+}
 export interface BodyPair {
   i: number; j: number;
   /** Fractions of each capsule's segment that collide (the attached end is left out). */
   si: readonly [number, number]; sj: readonly [number, number];
-  clearance: number;
+  /** Clearance as a share of the two flesh radii along the contact (skin, or less where the rest pose is closer). */
+  fit: number;
 }
 export interface CorpseBody { capsules: readonly BodyCapsule[]; pairs: readonly BodyPair[]; invMass: readonly number[]; }
 
@@ -797,42 +806,63 @@ export const BODY_COLLIDE = {
   torsoMass: 0.35,
   /** Pair clearance at most this share of its rest-pose distance. */
   restShare: 0.9,
-  /** Capsule radius as a share of the flesh's: the SDF flesh blends where limbs meet, so a shallow touch reads as
-   *  flesh pressed together, and full radii held a collapsed body's knees apart against its hip cones (a fight that
-   *  kept the feet buzzing awake). */
+  /** Limb-against-limb clearance as a share of the flesh's: the SDF flesh blends where limbs meet, so a shallow
+   *  touch reads as flesh pressed together, and full radii held a collapsed body's knees apart against its hip cones
+   *  (a fight that kept the feet buzzing awake). */
   skin: 0.8,
+  /** Against the trunk and head, which are wide and must not swallow a limb (owner playtest 2026-11-04,
+   *  weirdzombie.mov: forearms sunk into the flanks, an arm through the head). */
+  trunkSkin: 0.92,
   /** Most one pass moves a point (m); the game corpse caps it (game-actor.ts CORPSE_STEP_CAPS). */
   maxStep: Infinity,
 };
 
-type CapsuleName = 'torso' | 'upperL' | 'upperR' | 'foreL' | 'foreR' | 'thighL' | 'thighR' | 'shinL' | 'shinR';
+type CapsuleName = 'torso' | 'head' | 'upperL' | 'upperR' | 'foreL' | 'foreR' | 'thighL' | 'thighR' | 'shinL' | 'shinR'
+  | 'footL' | 'footR';
 const CAPSULE_SPEC: ReadonlyArray<[CapsuleName, GaitJointName, GaitJointName]> = [
-  ['torso', 'pelvis', 'chest'],
+  ['torso', 'pelvis', 'chest'], ['head', 'neck', 'head'],
   ['upperL', 'shoulderL', 'elbowL'], ['upperR', 'shoulderR', 'elbowR'],
   ['foreL', 'elbowL', 'handL'], ['foreR', 'elbowR', 'handR'],
   ['thighL', 'hipL', 'kneeL'], ['thighR', 'hipR', 'kneeR'],
   ['shinL', 'kneeL', 'footL'], ['shinR', 'kneeR', 'footR'],
+  ['footL', 'footL', 'toeL'], ['footR', 'footR', 'toeR'],
 ];
 const FULL = [0, 1] as const;
 const TRUNK_POINTS: readonly GaitJointName[] = ['pelvis', 'chest', 'hipL', 'hipR', 'shoulderL', 'shoulderR'];
+/** The trunk's width line: hip to hip plus shoulder to shoulder, R to L. */
+const TRUNK_LAT: readonly GaitJointName[] = ['hipR', 'hipL', 'shoulderR', 'shoulderL'];
 type PairSpec = readonly [CapsuleName, readonly [number, number], CapsuleName, readonly [number, number]];
-const PAIR_SPEC: ReadonlyArray<PairSpec> = [
-  // Arms out of the trunk (the upper arm's shoulder half rides it).
-  ...(['L', 'R'] as const).flatMap(s => [
-    [`upper${s}`, [0.45, 1], 'torso', FULL], [`fore${s}`, FULL, 'torso', FULL],
-  ] as const),
+type Range = readonly [number, number];
+/** Each limb capsule and the part of it that may touch the rest of the body (a shoulder rides the chest, a hip
+ *  the pelvis). */
+const LIMB = (side: 'L' | 'R') => ({
+  upper: [`upper${side}`, [0.45, 1]], fore: [`fore${side}`, FULL],
+  thigh: [`thigh${side}`, [0.35, 1]], shin: [`shin${side}`, FULL], foot: [`foot${side}`, FULL],
+}) as const satisfies Record<string, readonly [CapsuleName, Range]>;
+const pair = (x: readonly [CapsuleName, Range], y: readonly [CapsuleName, Range]): PairSpec => [x[0], x[1], y[0], y[1]];
+const PAIR_SPEC: ReadonlyArray<PairSpec> = (() => {
+  const L = LIMB('L'), R = LIMB('R');
+  const torso = ['torso', FULL] as const, belly = ['torso', [0.35, 1]] as const, head = ['head', FULL] as const;
+  const out: PairSpec[] = [];
+  for (const s of [L, R]) {
+    // Arms out of the trunk and head.
+    out.push(pair(s.upper, torso), pair(s.fore, torso), pair(s.upper, head), pair(s.fore, head));
+    // Shins and feet out of the belly and chest (the pelvis end stays free: a body can sit on its heels). The thigh
+    // against the trunk is the hip cone's (relaxHipCones): a second limit on the same joint fought it and the feet
+    // buzzed awake.
+    out.push(pair(s.shin, belly), pair(s.foot, belly), pair(s.thigh, head), pair(s.shin, head), pair(s.foot, head));
+  }
   // Legs out of each other (the hips sit side by side at the pelvis).
-  ['thighL', [0.35, 1], 'thighR', [0.35, 1]], ['shinL', FULL, 'shinR', FULL],
-  ['thighL', [0.35, 1], 'shinR', FULL], ['shinL', FULL, 'thighR', [0.35, 1]],
-  // Shins out of the belly and chest (the pelvis end stays free: a body can sit on its heels). The thigh against the
-  // trunk is the hip cone's (relaxHipCones): a second limit on the same joint fought it and the feet buzzed awake.
-  ...(['L', 'R'] as const).map(s => [`shin${s}`, FULL, 'torso', [0.35, 1]] as const),
+  for (const [a, b] of [[L, R], [R, L]] as const) out.push(pair(a.thigh, b.shin), pair(a.foot, b.shin), pair(a.foot, b.thigh));
+  out.push(pair(L.thigh, R.thigh), pair(L.shin, R.shin), pair(L.foot, R.foot));
+  // Arms out of each other.
+  out.push(pair(L.upper, R.upper), pair(L.fore, R.fore), pair(L.upper, R.fore), pair(L.fore, R.upper));
   // Arms out of the legs.
-  ...(['L', 'R'] as const).flatMap(a => (['L', 'R'] as const).flatMap(l => [
-    [`upper${a}`, [0.45, 1], `thigh${l}`, [0.25, 1]], [`upper${a}`, [0.45, 1], `shin${l}`, FULL],
-    [`fore${a}`, FULL, `thigh${l}`, [0.25, 1]], [`fore${a}`, FULL, `shin${l}`, FULL],
-  ] as const)),
-];
+  for (const a of [L, R]) for (const l of [L, R]) for (const arm of [a.upper, a.fore]) {
+    out.push(pair(arm, l.thigh), pair(arm, l.shin), pair(arm, l.foot));
+  }
+  return out;
+})();
 
 /** Closest points between segments p0-p1 and q0-q1 (Ericson 5.1.9): the fractions s, t along each. */
 function closestSegSeg(p0: Vec3, p1: Vec3, q0: Vec3, q1: Vec3): [number, number] {
@@ -851,16 +881,53 @@ function closestSegSeg(p0: Vec3, p1: Vec3, q0: Vec3, q1: Vec3): [number, number]
 }
 const lerp3 = (a: Vec3, b: Vec3, s: number): Vec3 => [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s];
 
-/** The body's capsules and pairs, built once at bind time beside collapseBraces. `girth(q)`: the flesh radius at q. */
-export function collapseBody(names: readonly GaitJointName[], restPose: readonly Vec3[], girth: (q: Vec3) => number): CorpseBody | null {
+/** Capsule `c`'s flesh radius toward unit normal `n` (an elliptical trunk is wider across than deep). */
+function radiusToward(c: BodyCapsule, pos: (k: number) => Vec3, n: Vec3): number {
+  if (c.w === undefined || !c.lat) return c.r;
+  const ax = sub(pos(c.b), pos(c.a)), aL = len(ax);
+  if (aL < 1e-9) return c.r;
+  const axis = scale(ax, 1 / aL);
+  const raw = sub(add3(pos(c.lat[1]), pos(c.lat[3])), add3(pos(c.lat[0]), pos(c.lat[2])));
+  const side = sub(raw, scale(axis, dot3(raw, axis))), sL = len(side);
+  if (sL < 1e-9) return c.r;
+  const e1 = scale(side, 1 / sL), e2 = cross(axis, e1);
+  const x = dot3(n, e1), z = dot3(n, e2), h = Math.hypot(x, z);
+  if (h < 1e-6) return Math.min(c.r, c.w);  // straight along the axis: the end cap
+  return 1 / Math.hypot(x / h / c.w, z / h / c.r);
+}
+const add3 = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+/** The body's capsules and pairs, built once at bind time beside collapseBraces. `girth(q, dir?)`: the flesh's
+ *  half-thickness at q, along bind-space `dir` (unit), or its thinnest without one. */
+export function collapseBody(
+  names: readonly GaitJointName[], restPose: readonly Vec3[], girth: (q: Vec3, dir?: Vec3) => number,
+): CorpseBody | null {
   const caps = new Map<CapsuleName, number>(), capsules: BodyCapsule[] = [];
+  const ix = (n: GaitJointName) => names.indexOf(n);
+  const lat = TRUNK_LAT.map(ix);
   for (const [n, an, bn] of CAPSULE_SPEC) {
-    const a = names.indexOf(an), b = names.indexOf(bn);
+    const a = ix(an), b = ix(bn);
     if (a < 0 || b < 0 || !restPose[a] || !restPose[b] || len(sub(restPose[a]!, restPose[b]!)) < 1e-4) continue;
-    const r = Math.max(0.02, girth(lerp3(restPose[a]!, restPose[b]!, 0.5)));
-    caps.set(n, capsules.length); capsules.push({ a, b, r });
+    const at = (s: number) => lerp3(restPose[a]!, restPose[b]!, s);
+    let cap: BodyCapsule = { a, b, r: Math.max(0.02, girth(at(0.5))) };
+    if (n === 'torso' && lat.every(k => k >= 0 && restPose[k])) {
+      // Elliptical: the mean half-width and half-depth over the trunk's middle.
+      const L = lat as unknown as [number, number, number, number];
+      const ax = sub(restPose[b]!, restPose[a]!);
+      const axis = scale(ax, 1 / len(ax));
+      const raw = sub(add3(restPose[L[1]]!, restPose[L[3]]!), add3(restPose[L[0]]!, restPose[L[2]]!));
+      const side = sub(raw, scale(axis, dot3(raw, axis)));
+      if (len(side) > 1e-6) {
+        const e1 = scale(side, 1 / len(side)), e2 = cross(axis, e1);
+        const mean = (dir: Vec3) => [0.25, 0.5, 0.75].reduce((t, s) => t + girth(at(s), dir), 0) / 3;
+        const w = mean(e1), d = mean(e2);
+        if (w > 0.02 && d > 0.02) cap = { a, b, r: d, w, lat: L };
+      }
+    }
+    caps.set(n, capsules.length); capsules.push(cap);
   }
   const pairs: BodyPair[] = [];
+  const restAt = (k: number) => restPose[k]!;
   for (const [ni, si, nj, sj] of PAIR_SPEC) {
     const i = caps.get(ni), j = caps.get(nj);
     if (i === undefined || j === undefined) continue;
@@ -868,15 +935,29 @@ export function collapseBody(names: readonly GaitJointName[], restPose: readonly
     const p0 = lerp3(restPose[A.a]!, restPose[A.b]!, si[0]), p1 = lerp3(restPose[A.a]!, restPose[A.b]!, si[1]);
     const q0 = lerp3(restPose[B.a]!, restPose[B.b]!, sj[0]), q1 = lerp3(restPose[B.a]!, restPose[B.b]!, sj[1]);
     const [s, t] = closestSegSeg(p0, p1, q0, q1);
-    const restD = len(sub(lerp3(p0, p1, s), lerp3(q0, q1, t)));
-    const clearance = Math.min((A.r + B.r) * BODY_COLLIDE.skin, restD * BODY_COLLIDE.restShare);
-    if (clearance > 0.01) pairs.push({ i, j, si, sj, clearance });
+    const dv = sub(lerp3(p0, p1, s), lerp3(q0, q1, t)), restD = len(dv);
+    const n: Vec3 = restD > 1e-6 ? scale(dv, 1 / restD) : [0, 1, 0];
+    const sum = radiusToward(A, restAt, n) + radiusToward(B, restAt, scale(n, -1));
+    const trunk = ni === 'torso' || ni === 'head' || nj === 'torso' || nj === 'head';
+    const fit = Math.min(trunk ? BODY_COLLIDE.trunkSkin : BODY_COLLIDE.skin, restD * BODY_COLLIDE.restShare / sum);
+    if (fit * sum > 0.01) pairs.push({ i, j, si, sj, fit });
   }
   if (pairs.length === 0) return null;
   // The trunk's points (the braces hold them in shape: a push on a hip fought the hip-to-hip brace) move least.
   const invMass = restPose.map(() => 1);
   for (const n of TRUNK_POINTS) { const k = names.indexOf(n); if (k >= 0) invMass[k] = BODY_COLLIDE.torsoMass; }
   return { capsules, pairs, invMass };
+}
+
+/** How deep pair `pr` overlaps in pose `pos` (m; negative = apart), at its own fit or at `fit`. */
+export function bodyPairOverlap(body: CorpseBody, pr: BodyPair, pos: (k: number) => Vec3, fit = pr.fit): number {
+  const A = body.capsules[pr.i]!, B = body.capsules[pr.j]!;
+  const p0 = lerp3(pos(A.a), pos(A.b), pr.si[0]), p1 = lerp3(pos(A.a), pos(A.b), pr.si[1]);
+  const q0 = lerp3(pos(B.a), pos(B.b), pr.sj[0]), q1 = lerp3(pos(B.a), pos(B.b), pr.sj[1]);
+  const [u, v] = closestSegSeg(p0, p1, q0, q1);
+  const delta = sub(lerp3(p0, p1, u), lerp3(q0, q1, v)), d = len(delta);
+  const n: Vec3 = d > 1e-6 ? scale(delta, 1 / d) : [0, 1, 0];
+  return (radiusToward(A, pos, n) + radiusToward(B, pos, scale(n, -1))) * fit - d;
 }
 
 /**
@@ -903,9 +984,11 @@ export function relaxBodyCollisions(
       const [u, v] = closestSegSeg(p0, p1, q0, q1);
       const cp = lerp3(p0, p1, u), cq = lerp3(q0, q1, v);
       const delta = sub(cp, cq), d = len(delta);
-      if (d >= pr.clearance) continue;
       // A degenerate touch (axes cross exactly): push along world up, the floor's side.
       const n: Vec3 = d > 1e-6 ? scale(delta, 1 / d) : [0, 1, 0];
+      const at = (k: number) => src[k]!.pos;
+      const clearance = (radiusToward(A, at, n) + radiusToward(B, at, scale(n, -1))) * pr.fit;
+      if (d >= clearance) continue;
       const s = pr.si[0] + (pr.si[1] - pr.si[0]) * u, t = pr.sj[0] + (pr.sj[1] - pr.sj[0]) * v;
       // Each end's share of its contact point and its sign along n.
       const k = [1 - s, s, -(1 - t), -t];
@@ -913,7 +996,7 @@ export function relaxBodyCollisions(
       let den = 0;
       for (let x = 0; x < 4; x++) den += k[x]! * k[x]! * w[x]!;
       if (den < 1e-9) continue;
-      let pen = (pr.clearance - d) / den;
+      let pen = (clearance - d) / den;
       let most = 0;
       for (let x = 0; x < 4; x++) most = Math.max(most, Math.abs(k[x]! * w[x]! * pen));
       if (most > limits.maxStep) pen *= limits.maxStep / most;

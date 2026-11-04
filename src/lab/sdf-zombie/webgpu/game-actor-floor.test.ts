@@ -97,7 +97,8 @@ describe('an actor on a sector floor', () => {
     hole = [root[0], root[2]];
     for (let f = 0; f < 120; f++) a.step(1 / 60);
     const ends = a.posed().prims.flatMap(p => [p.a, p.b])
-      .filter(p => Math.hypot(p[0]! - hole![0], p[2]! - hole![1]) > 0.5);
+      // 0.4 m clear of the hole's rim (0.2 m): a solid corpse (collapse.ts relaxBodyCollisions) lies more compactly.
+      .filter(p => Math.hypot(p[0]! - hole![0], p[2]! - hole![1]) > 0.4);
     expect(ends.length).toBeGreaterThan(10);
     for (const p of ends) expect(p[1]).toBeGreaterThan(-0.3);
   });

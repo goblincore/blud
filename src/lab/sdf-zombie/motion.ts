@@ -318,7 +318,7 @@ export function makeMotionJoints(
     braces: collapseBraces(names, baseRest),
     hipCones: collapseHipCones(names, baseRest),
     footPlants: collapseFootPlants(names, baseRest),
-    corpseBody: collapseBody(names, baseRest, q => fleshGirth(body, q, BODY_GIRTH_CAP)),
+    corpseBody: collapseBody(names, baseRest, (q, dir) => fleshGirth(body, q, BODY_GIRTH_CAP, dir)),
     floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
 }
@@ -335,20 +335,23 @@ const FLOOR_LIFT_CAP = 0.14;
  * (Depth of the joint INSIDE the flesh does not work: joints sit at bone ends,
  * at the surface — the zombie's chest joint is 1 cm deep in a 12 cm chest.)
  */
-function fleshGirth(body: BuildResult, q: Vec3, cap: number): number {
+function fleshGirth(body: BuildResult, q: Vec3, cap: number, dir?: Vec3): number {
   let best = 0;
   for (const p of body.prims) {
     if (p.op === 'sub' || p.dead) continue;
     const ab = sub(p.b, p.a), L2 = dot(ab, ab);
     const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
     if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
-    best = Math.max(best, p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]));
+    // Along `dir` (bind-space axes): the prim's half-extent that way; without one, its thinnest.
+    const r = dir ? p.radius * Math.hypot(dir[0] * p.scale[0], dir[1] * p.scale[1], dir[2] * p.scale[2])
+      : p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    best = Math.max(best, r);
   }
   return Math.min(best, cap);
 }
 
 /** A corpse bone's collision radius cap (m): a bloated belly prim must not wedge the arms a foot off the body. */
-const BODY_GIRTH_CAP = 0.16;
+const BODY_GIRTH_CAP = 0.2;
 
 function floorLiftFor(body: BuildResult, rest: readonly Vec3[], foot: number | undefined): number[] {
   const girth = (q: Vec3): number => fleshGirth(body, q, FLOOR_LIFT_CAP);
