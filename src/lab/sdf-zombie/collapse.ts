@@ -802,6 +802,8 @@ export interface CorpseBody {
   /** Each rig point's flesh radius (the thickest capsule ending at it; the trunk's depth), for the world's contacts
    *  (corpse-contact.ts). CORPSE_POINT_R where no capsule ends. */
   pointR: readonly number[];
+  /** The pelvis stub below the hips and the spine above them (relaxPelvis), or null without one. */
+  spine: { pelvis: number; hips: number; chest: number } | null;
 }
 /** A rig point's flesh radius where no capsule ends at it (m). */
 export const CORPSE_POINT_R = 0.06;
@@ -955,7 +957,10 @@ export function collapseBody(
   for (const n of TRUNK_POINTS) { const k = names.indexOf(n); if (k >= 0) invMass[k] = BODY_COLLIDE.torsoMass; }
   const pointR = restPose.map(() => 0);
   for (const c of capsules) for (const k of [c.a, c.b]) pointR[k] = Math.max(pointR[k]!, c.r);
-  return { capsules, pairs, invMass, pointR: pointR.map(r => r || CORPSE_POINT_R) };
+  const sp = { pelvis: ix('pelvis'), hips: ix('hips'), chest: ix('chest') };
+  const spine = sp.pelvis >= 0 && sp.hips >= 0 && sp.chest >= 0 && restPose[sp.pelvis] && restPose[sp.hips] && restPose[sp.chest]
+    && len(sub(restPose[sp.pelvis]!, restPose[sp.hips]!)) > 1e-4 ? sp : null;
+  return { capsules, pairs, invMass, pointR: pointR.map(r => r || CORPSE_POINT_R), spine };
 }
 
 /** How deep pair `pr` overlaps in pose `pos` (m; negative = apart), at its own fit or at `fit`. */
@@ -1025,4 +1030,45 @@ export function relaxBodyCollisions(
     }
   }
   return out ?? (points as RigPoint[]);
+}
+
+// THE PELVIS STAYS UNDER THE SPINE (owner playtest 2026-11-05: "the lower torso or abdomen ... can rotate like 360
+// unnaturally ... a round orb sticking out"). The pelvis bone is a 14 cm stub from the pelvis point up to the hips
+// point, and the trunk's flesh below the belly (the pelvis blob, the gut) turns with it (rig-bind.ts THE LYING TRUNK).
+// The rig held that point by the stub and a loose brace to the chest, both along the spine: nothing kept it from
+// swinging round the hips, and 24 of 32 probe corpses came to rest with it folded 85 degrees off the spine, the gut
+// hung out at the side. Here the stub stays within `maxDeg` of the spine's line through the hips (chest to hips,
+// extended), turned back toward it about the hips with its length kept. Only the pelvis point moves (the hips carry
+// the legs, the chest the arms), `prev` with it, so no speed is added; at most `maxStep` a call.
+export const PELVIS_CONE = { maxDeg: 20, maxStep: Infinity };
+
+export function relaxPelvis(
+  points: readonly RigPoint[], body: CorpseBody | null | undefined, limits: { maxDeg: number; maxStep: number } = PELVIS_CONE,
+): RigPoint[] {
+  const sp = body?.spine;
+  if (!sp) return points as RigPoint[];
+  const P = points[sp.pelvis], H = points[sp.hips], C = points[sp.chest];
+  if (!P || !H || !C || P.pinned) return points as RigPoint[];
+  const d = sub(P.pos, H.pos), L = len(d), ax = sub(H.pos, C.pos), aL = len(ax);
+  if (L < 1e-6 || aL < 1e-6) return points as RigPoint[];
+  const axis = scale(ax, 1 / aL), u = scale(d, 1 / L);
+  const c = dot3(u, axis), cosMax = Math.cos(limits.maxDeg * Math.PI / 180);
+  if (c >= cosMax) return points as RigPoint[];
+  // The way the stub leans off the spine; straight back up it (no way): any way across it.
+  let perp = sub(u, scale(axis, c));
+  if (len(perp) < 1e-6) perp = Math.abs(axis[0]) < 0.9 ? cross(axis, [1, 0, 0]) : cross(axis, [0, 0, 1]);
+  perp = scale(perp, 1 / len(perp));
+  const sinMax = Math.sqrt(1 - cosMax * cosMax);
+  const target: Vec3 = [
+    H.pos[0] + (axis[0] * cosMax + perp[0] * sinMax) * L,
+    H.pos[1] + (axis[1] * cosMax + perp[1] * sinMax) * L,
+    H.pos[2] + (axis[2] * cosMax + perp[2] * sinMax) * L,
+  ];
+  let move = sub(target, P.pos);
+  const m = len(move);
+  if (m > limits.maxStep) move = scale(move, limits.maxStep / m);
+  const out = points.slice() as RigPoint[];
+  out[sp.pelvis] = { ...P, pos: [P.pos[0] + move[0], P.pos[1] + move[1], P.pos[2] + move[2]],
+    prev: [P.prev[0] + move[0], P.prev[1] + move[1], P.prev[2] + move[2]] };
+  return out;
 }
