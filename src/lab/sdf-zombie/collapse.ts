@@ -802,8 +802,8 @@ export interface CorpseBody {
   /** Each rig point's flesh radius (the thickest capsule ending at it; the trunk's depth), for the world's contacts
    *  (corpse-contact.ts). CORPSE_POINT_R where no capsule ends. */
   pointR: readonly number[];
-  /** The pelvis stub below the hips and the spine above them (relaxPelvis), or null without one. */
-  spine: { pelvis: number; hips: number; chest: number } | null;
+  /** The trunk's joint cones, pelvis then neck (relaxSpineCones). */
+  cones: readonly SpineCone[];
 }
 /** A rig point's flesh radius where no capsule ends at it (m). */
 export const CORPSE_POINT_R = 0.06;
@@ -957,10 +957,7 @@ export function collapseBody(
   for (const n of TRUNK_POINTS) { const k = names.indexOf(n); if (k >= 0) invMass[k] = BODY_COLLIDE.torsoMass; }
   const pointR = restPose.map(() => 0);
   for (const c of capsules) for (const k of [c.a, c.b]) pointR[k] = Math.max(pointR[k]!, c.r);
-  const sp = { pelvis: ix('pelvis'), hips: ix('hips'), chest: ix('chest') };
-  const spine = sp.pelvis >= 0 && sp.hips >= 0 && sp.chest >= 0 && restPose[sp.pelvis] && restPose[sp.hips] && restPose[sp.chest]
-    && len(sub(restPose[sp.pelvis]!, restPose[sp.hips]!)) > 1e-4 ? sp : null;
-  return { capsules, pairs, invMass, pointR: pointR.map(r => r || CORPSE_POINT_R), spine };
+  return { capsules, pairs, invMass, pointR: pointR.map(r => r || CORPSE_POINT_R), cones: spineCones(names, restPose) };
 }
 
 /** How deep pair `pr` overlaps in pose `pos` (m; negative = apart), at its own fit or at `fit`. */
@@ -1032,43 +1029,106 @@ export function relaxBodyCollisions(
   return out ?? (points as RigPoint[]);
 }
 
-// THE PELVIS STAYS UNDER THE SPINE (owner playtest 2026-11-05: "the lower torso or abdomen ... can rotate like 360
-// unnaturally ... a round orb sticking out"). The pelvis bone is a 14 cm stub from the pelvis point up to the hips
-// point, and the trunk's flesh below the belly (the pelvis blob, the gut) turns with it (rig-bind.ts THE LYING TRUNK).
-// The rig held that point by the stub and a loose brace to the chest, both along the spine: nothing kept it from
-// swinging round the hips, and 24 of 32 probe corpses came to rest with it folded 85 degrees off the spine, the gut
-// hung out at the side. Here the stub stays within `maxDeg` of the spine's line through the hips (chest to hips,
-// extended), turned back toward it about the hips with its length kept. Only the pelvis point moves (the hips carry
-// the legs, the chest the arms), `prev` with it, so no speed is added; at most `maxStep` a call.
-export const PELVIS_CONE = { maxDeg: 20, maxStep: Infinity };
+// THE TRUNK'S JOINTS HAVE A RANGE (owner playtests 2026-11-05).
+// THE PELVIS: "the lower torso or abdomen ... can rotate like 360 unnaturally ... a round orb sticking out". The pelvis
+// bone is a 14 cm stub from the pelvis point up to the hips point, and the trunk's flesh below the belly (the pelvis
+// blob, the gut) turns with it (rig-bind.ts THE LYING TRUNK). The rig held that point by the stub and a loose brace to
+// the chest, both along the spine: nothing kept it from swinging round the hips, and most probe corpses came to rest
+// with it folded 85 degrees off the spine, the gut hung out at the side.
+// THE NECK: "the neck also is a bit too floppy". The head hangs off two 16 cm neck bones held only by the head braces
+// (33% give at the default integrity): each bent 100 degrees and more and the head folded 120 degrees off the spine
+// in a slump. A human neck bends about 50-60 degrees chin to chest, 60 back and 45 to the side, over its length.
+// Each cone keeps a joint's bone (pivot -> tip) within `maxDeg` of where it points at rest, in its parent's frame
+// (the parent bone base -> pivot, turned by the body's width line), so the zombie's head keeps its forward hang. A
+// bone out of its cone is turned back about the pivot with its length kept, carrying what hangs off it (the head off
+// the neck); `prev` moves with each point, so no speed is added; at most `maxStep` of the tip a call.
+export interface SpineCone {
+  base: number; pivot: number; tip: number;
+  /** The width line (R -> L) squaring the parent's frame. */
+  latR: number; latL: number;
+  /** The bone's rest direction in the parent frame (axis, width, depth). */
+  rest: Vec3;
+  maxDeg: number;
+  /** Points rigidly turned with the tip (the head and jaw off the neck). */
+  carry: readonly number[];
+}
+export const SPINE_CONES = { pelvisDeg: 20, neckDeg: 30, maxStep: Infinity };
 
-export function relaxPelvis(
-  points: readonly RigPoint[], body: CorpseBody | null | undefined, limits: { maxDeg: number; maxStep: number } = PELVIS_CONE,
-): RigPoint[] {
-  const sp = body?.spine;
-  if (!sp) return points as RigPoint[];
-  const P = points[sp.pelvis], H = points[sp.hips], C = points[sp.chest];
-  if (!P || !H || !C || P.pinned) return points as RigPoint[];
-  const d = sub(P.pos, H.pos), L = len(d), ax = sub(H.pos, C.pos), aL = len(ax);
-  if (L < 1e-6 || aL < 1e-6) return points as RigPoint[];
-  const axis = scale(ax, 1 / aL), u = scale(d, 1 / L);
-  const c = dot3(u, axis), cosMax = Math.cos(limits.maxDeg * Math.PI / 180);
-  if (c >= cosMax) return points as RigPoint[];
-  // The way the stub leans off the spine; straight back up it (no way): any way across it.
-  let perp = sub(u, scale(axis, c));
-  if (len(perp) < 1e-6) perp = Math.abs(axis[0]) < 0.9 ? cross(axis, [1, 0, 0]) : cross(axis, [0, 0, 1]);
-  perp = scale(perp, 1 / len(perp));
-  const sinMax = Math.sqrt(1 - cosMax * cosMax);
-  const target: Vec3 = [
-    H.pos[0] + (axis[0] * cosMax + perp[0] * sinMax) * L,
-    H.pos[1] + (axis[1] * cosMax + perp[1] * sinMax) * L,
-    H.pos[2] + (axis[2] * cosMax + perp[2] * sinMax) * L,
-  ];
-  let move = sub(target, P.pos);
-  const m = len(move);
-  if (m > limits.maxStep) move = scale(move, limits.maxStep / m);
-  const out = points.slice() as RigPoint[];
-  out[sp.pelvis] = { ...P, pos: [P.pos[0] + move[0], P.pos[1] + move[1], P.pos[2] + move[2]],
-    prev: [P.prev[0] + move[0], P.prev[1] + move[1], P.prev[2] + move[2]] };
+const CONE_SPEC: ReadonlyArray<{ base: GaitJointName; pivot: GaitJointName; tip: GaitJointName; lat: readonly [GaitJointName, GaitJointName]; deg: 'pelvisDeg' | 'neckDeg'; carry: readonly GaitJointName[] }> = [
+  { base: 'chest', pivot: 'hips', tip: 'pelvis', lat: ['hipR', 'hipL'], deg: 'pelvisDeg', carry: [] },
+  { base: 'hips', pivot: 'chest', tip: 'neck', lat: ['shoulderR', 'shoulderL'], deg: 'neckDeg', carry: ['head', 'jaw'] },
+  { base: 'chest', pivot: 'neck', tip: 'head', lat: ['shoulderR', 'shoulderL'], deg: 'neckDeg', carry: ['jaw'] },
+];
+
+/** The parent frame at `pivot`: axis base -> pivot, the width line squared to it, depth = axis x width. */
+function coneFrame(pos: (k: number) => Vec3, c: { base: number; pivot: number; latR: number; latL: number }): [Vec3, Vec3, Vec3] | null {
+  const ax = sub(pos(c.pivot), pos(c.base)), aL = len(ax);
+  if (aL < 1e-6) return null;
+  const axis = scale(ax, 1 / aL), raw = sub(pos(c.latL), pos(c.latR));
+  const side = sub(raw, scale(axis, dot3(raw, axis))), sL = len(side);
+  if (sL < 1e-6) return null;
+  const w = scale(side, 1 / sL);
+  return [axis, w, cross(axis, w)];
+}
+
+function spineCones(names: readonly GaitJointName[], restPose: readonly Vec3[]): SpineCone[] {
+  const out: SpineCone[] = [];
+  const ix = (n: GaitJointName) => names.indexOf(n);
+  for (const sp of CONE_SPEC) {
+    const c = { base: ix(sp.base), pivot: ix(sp.pivot), tip: ix(sp.tip), latR: ix(sp.lat[0]), latL: ix(sp.lat[1]) };
+    if (Object.values(c).some(k => k < 0 || !restPose[k])) continue;
+    const fr = coneFrame(k => restPose[k]!, c);
+    const d = sub(restPose[c.tip]!, restPose[c.pivot]!), dl = len(d);
+    if (!fr || dl < 1e-4) continue;
+    const u = scale(d, 1 / dl);
+    out.push({ ...c, rest: [dot3(u, fr[0]), dot3(u, fr[1]), dot3(u, fr[2])], maxDeg: SPINE_CONES[sp.deg],
+      carry: sp.carry.map(ix).filter(k => k >= 0) });
+  }
   return out;
+}
+
+/** Rotate v about unit axis k by angle (Rodrigues). */
+function rotateAbout(v: Vec3, k: Vec3, angle: number): Vec3 {
+  const c = Math.cos(angle), s = Math.sin(angle), kv = cross(k, v), kd = dot3(k, v) * (1 - c);
+  return [v[0] * c + kv[0] * s + k[0] * kd, v[1] * c + kv[1] * s + k[1] * kd, v[2] * c + kv[2] * s + k[2] * kd];
+}
+
+export function relaxSpineCones(
+  points: readonly RigPoint[], body: CorpseBody | null | undefined, limits: { maxStep: number } = SPINE_CONES,
+): RigPoint[] {
+  if (!body?.cones.length) return points as RigPoint[];
+  let out: RigPoint[] | null = null;
+  for (const c of body.cones) {
+    const src = out ?? points;
+    const T = src[c.tip], Pv = src[c.pivot];
+    if (!T || !Pv || T.pinned || !src[c.base] || !src[c.latR] || !src[c.latL]) continue;
+    const fr = coneFrame(k => src[k]!.pos, c);
+    const d = sub(T.pos, Pv.pos), L = len(d);
+    if (!fr || L < 1e-6) continue;
+    const u = scale(d, 1 / L);
+    const centre: Vec3 = [
+      fr[0][0] * c.rest[0] + fr[1][0] * c.rest[1] + fr[2][0] * c.rest[2],
+      fr[0][1] * c.rest[0] + fr[1][1] * c.rest[1] + fr[2][1] * c.rest[2],
+      fr[0][2] * c.rest[0] + fr[1][2] * c.rest[1] + fr[2][2] * c.rest[2],
+    ];
+    const cosA = Math.max(-1, Math.min(1, dot3(u, centre))), off = Math.acos(cosA), max = c.maxDeg * Math.PI / 180;
+    if (off <= max) continue;
+    // Turn the bone back toward the centre, about the axis square to both (straight opposite: any axis across).
+    let k = cross(u, centre);
+    if (len(k) < 1e-6) k = cross(u, Math.abs(u[0]) < 0.9 ? [1, 0, 0] : [0, 0, 1]);
+    k = scale(k, 1 / len(k));
+    let turn = off - max;
+    // The tip moves 2 L sin(turn / 2): cap it.
+    const tipMove = 2 * L * Math.sin(turn / 2);
+    if (tipMove > limits.maxStep) turn = 2 * Math.asin(Math.min(1, limits.maxStep / (2 * L)));
+    out ??= points.slice() as RigPoint[];
+    for (const i of [c.tip, ...c.carry]) {
+      const p = out[i];
+      if (!p || p.pinned) continue;
+      const np = add3(Pv.pos, rotateAbout(sub(p.pos, Pv.pos), k, turn));
+      const mv = sub(np, p.pos);
+      out[i] = { ...p, pos: np, prev: [p.prev[0] + mv[0], p.prev[1] + mv[1], p.prev[2] + mv[2]] };
+    }
+  }
+  return out ?? (points as RigPoint[]);
 }

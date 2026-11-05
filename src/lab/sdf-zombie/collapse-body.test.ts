@@ -3,7 +3,7 @@
 // THE CORPSE IS SOLID (collapse.ts relaxBodyCollisions), pure: the zombie's capsules and pairs, the rest pose left
 // alone, a hand pushed out of the chest, legs pushed apart, the per-pass cap, no speed added.
 import { describe, expect, it } from 'vitest';
-import { BODY_COLLIDE, PELVIS_CONE, relaxBodyCollisions, relaxPelvis } from './collapse';
+import { BODY_COLLIDE, relaxBodyCollisions, relaxSpineCones, SPINE_CONES } from './collapse';
 import { makeActorMotion } from './actor';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
@@ -125,39 +125,65 @@ describe('relaxBodyCollisions', () => {
   });
 });
 
-describe('relaxPelvis', () => {
-  const offSpine = (p: readonly RigPoint[]) => {
-    const h = p[idx.hips!]!.pos, d = sub(p[idx.pelvis!]!.pos, h), a = sub(h, p[idx.chest!]!.pos);
-    return Math.acos((d[0] * a[0] + d[1] * a[1] + d[2] * a[2]) / len(d) / len(a)) * 180 / Math.PI;
+describe('relaxSpineCones', () => {
+  /** Degrees between bone pivot -> tip now and at rest (the rest of the body is left at rest, so its frame is too). */
+  const offRest = (p: readonly RigPoint[], pivot: number, tip: number) => {
+    const d = sub(p[tip]!.pos, p[pivot]!.pos), r = sub(rest[tip]!, rest[pivot]!);
+    return Math.acos(Math.min(1, (d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) / len(d) / len(r))) * 180 / Math.PI;
   };
-  /** The rest pose with the pelvis stub swung `deg` off the spine toward +x (the left hip). */
-  const swung = (deg: number) => {
+  /** The rest pose with bone pivot -> tip swung `deg` off its rest direction toward +x, keeping its length. */
+  const swung = (pivot: number, tip: number, deg: number) => {
     const pos = rest.map(v => [...v] as Vec3);
-    const h = rest[idx.hips!]!, L = len(sub(rest[idx.pelvis!]!, h)), r = deg * Math.PI / 180;
-    pos[idx.pelvis!] = [h[0] + Math.sin(r) * L, h[1] - Math.cos(r) * L, h[2]];
+    const pv = rest[pivot]!, d = sub(rest[tip]!, pv), L = len(d), u = [d[0] / L, d[1] / L, d[2] / L];
+    // Turn u toward +x in the plane of u and x.
+    const xPerp = [1 - u[0]! * u[0]!, -u[0]! * u[1]!, -u[0]! * u[2]!], xl = Math.hypot(xPerp[0]!, xPerp[1]!, xPerp[2]!);
+    const r = deg * Math.PI / 180;
+    pos[tip] = [0, 1, 2].map(k => pv[k]! + (u[k]! * Math.cos(r) + xPerp[k]! / xl * Math.sin(r)) * L) as unknown as Vec3;
     return pts(pos);
   };
+  const P = () => [idx.hips!, idx.pelvis!] as const;
+  const N = () => [idx.neck!, idx.head!] as const;
+
+  it('has a pelvis cone and two neck cones', () => {
+    expect(cb.cones.map(c => c.maxDeg)).toEqual([SPINE_CONES.pelvisDeg, SPINE_CONES.neckDeg, SPINE_CONES.neckDeg]);
+  });
 
   it('swings a pelvis folded over to one hip back to the cone, its length kept and no speed added', () => {
-    const before = swung(85);
-    const out = relaxPelvis(before, cb);
-    expect(offSpine(out)).toBeCloseTo(PELVIS_CONE.maxDeg, 3);
+    const before = swung(...P(), 85);
+    const out = relaxSpineCones(before, cb);
+    expect(offRest(out, ...P())).toBeCloseTo(SPINE_CONES.pelvisDeg, 3);
     const L0 = len(sub(rest[idx.pelvis!]!, rest[idx.hips!]!));
     expect(len(sub(out[idx.pelvis!]!.pos, out[idx.hips!]!.pos))).toBeCloseTo(L0, 6);
-    const v = sub(out[idx.pelvis!]!.pos, out[idx.pelvis!]!.prev);
-    expect(len(v)).toBeLessThan(1e-9);
+    expect(len(sub(out[idx.pelvis!]!.pos, out[idx.pelvis!]!.prev))).toBeLessThan(1e-9);
     out.forEach((p, i) => { if (i !== idx.pelvis) expect(p).toBe(before[i]); });
   });
 
   it('turns a pelvis pointing straight back up the spine out of it', () => {
-    expect(offSpine(relaxPelvis(swung(180), cb))).toBeCloseTo(PELVIS_CONE.maxDeg, 3);
+    expect(offRest(relaxSpineCones(swung(...P(), 180), cb), ...P())).toBeCloseTo(SPINE_CONES.pelvisDeg, 3);
   });
 
-  it('leaves a pelvis inside the cone alone, and caps the move per call', () => {
-    const ok = swung(15);
-    expect(relaxPelvis(ok, cb)).toBe(ok);
-    const before = swung(90);
-    const out = relaxPelvis(before, cb, { ...PELVIS_CONE, maxStep: 0.02 });
+  it('lifts a head lolled 100 degrees over at the top of the neck back to the neck range', () => {
+    const out = relaxSpineCones(swung(...N(), 100), cb);
+    expect(offRest(out, ...N())).toBeCloseTo(SPINE_CONES.neckDeg, 3);
+  });
+
+  it('carries the head with the neck when the neck base is turned back', () => {
+    const before = swung(idx.chest!, idx.neck!, 80);
+    // The head rides along, rigid on the swung neck: neck -> head keeps its rest direction relative to the neck.
+    const nk = before[idx.neck!]!.pos, hd: Vec3 = [nk[0] + 0.05, nk[1] + 0.15, nk[2]];
+    before[idx.head!] = { ...before[idx.head!]!, pos: hd, prev: hd };
+    const gap = len(sub(hd, nk));
+    const out = relaxSpineCones(before, cb);
+    expect(offRest(out, idx.chest!, idx.neck!)).toBeCloseTo(SPINE_CONES.neckDeg, 3);
+    expect(len(sub(out[idx.head!]!.pos, out[idx.neck!]!.pos))).toBeCloseTo(gap, 6);
+  });
+
+  it('leaves joints inside their cones alone, and caps the tip move per call', () => {
+    const ok = swung(...P(), 15);
+    expect(relaxSpineCones(ok, cb)).toBe(ok);
+    expect(relaxSpineCones(pts(rest), cb)).toEqual(pts(rest));
+    const before = swung(...P(), 90);
+    const out = relaxSpineCones(before, cb, { maxStep: 0.02 });
     expect(len(sub(out[idx.pelvis!]!.pos, before[idx.pelvis!]!.pos))).toBeCloseTo(0.02, 9);
   });
 });

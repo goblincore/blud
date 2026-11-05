@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { ANKLE_LIMITS, BODY_COLLIDE, CORPSE_POINT_R, FOOT_PLANT, HIP_LIMITS, PELVIS_CONE, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxPelvis, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
+import { ANKLE_LIMITS, BODY_COLLIDE, CORPSE_POINT_R, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -1418,9 +1418,9 @@ export function createZombieActor(opts: {
   const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
   /** Most one self-collision pass moves a corpse point (m; collapse.ts THE CORPSE IS SOLID). */
   const CORPSE_BODY = { ...BODY_COLLIDE, maxStep: 0.015 };
-  /** The pelvis cone (collapse.ts relaxPelvis), capped like the hip cones so a folded pelvis swings back over a few
-   *  steps instead of snapping. */
-  const CORPSE_PELVIS = { ...PELVIS_CONE, maxStep: 0.02 };
+  /** The pelvis and neck cones (collapse.ts relaxSpineCones), capped like the hip cones so a folded pelvis or neck
+   *  swings back over a few steps instead of snapping. */
+  const CORPSE_CONES = { ...SPINE_CONES, maxStep: 0.02 };
   /** This frame's bodies round this one (setBodyObstacles). */
   let nearBodies: readonly BodyObstacle[] = [];
   // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
@@ -1979,8 +1979,8 @@ export function createZombieActor(opts: {
       if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
       // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
       // hip cones, so a joint limit has the last word over a contact.
-      // The pelvis stays under the spine (collapse.ts relaxPelvis), before the contacts that lean on it.
-      if (f.collapsed) points = relaxBodyCollisions(relaxPelvis(points, f.corpseBody, CORPSE_PELVIS), f.corpseBody, CORPSE_BODY);
+      // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
+      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES), f.corpseBody, CORPSE_BODY);
       if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
@@ -2016,7 +2016,7 @@ export function createZombieActor(opts: {
         points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
-        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxPelvis(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_PELVIS), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxSpineCones(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_CONES), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
         // A CORPSE MEETS THE WORLD (corpse-contact.ts): the walls and the bodies round it, last, so a thrown body
         // stops at a wall even where its bones would pull it on through.
         points = corpseContacts(points, f.corpseBody?.pointR);
