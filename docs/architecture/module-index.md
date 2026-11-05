@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 27 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 28 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -892,6 +892,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `blow-away.ts` — BLOWN AWAY (owner playtest 2026-11-02): "the general deaths from like a shotgun mostly cause enemies to collapse straight down but there should also…
 - `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
 - `cloth-sway.ts` — CLOTH SWAY (2026-10-26; eased 2026-10-27).
+- `corpse-contact.ts` — A CORPSE MEETS THE WORLD (owner playtest 2026-11-05: "when the thrown blow back death happens it clips through walls and other enemies").
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `death-fall.ts` — AUTHORED DEATH FALLS (owner playtest 2026-11-02: the free ragdoll "still demonstrates unnatural body ragdolling"; "ideally some kind of blended…
 - `debris-ground.ts` — WHAT LOOSE DEBRIS LANDS ON (plan 2026-10-25-sector-levels-3b): the floor under a piece at its CURRENT x/z and the walls it must not pass.

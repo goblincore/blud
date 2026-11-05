@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { ANKLE_LIMITS, BODY_COLLIDE, FOOT_PLANT, HIP_LIMITS, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
+import { ANKLE_LIMITS, BODY_COLLIDE, CORPSE_POINT_R, FOOT_PLANT, HIP_LIMITS, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -72,6 +72,7 @@ import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
 import { HOUND_TUNING } from '../hound-attack';
 import type { MissingLimbs } from '../collapse';
+import { CORPSE_CONTACT, pushOutOfBodies, pushOutOfBoxes, type BodyObstacle, type ContactBox } from '../corpse-contact';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
@@ -449,6 +450,11 @@ export interface ZombieActor {
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
+  /** The bodies a corpse of this actor's can hit this frame (corpse-contact.ts), everyone's bodyObstacles(). Set
+   *  BEFORE step(), like setRingInput. Optional: a fake without it has none. */
+  setBodyObstacles?(obstacles: readonly BodyObstacle[]): void;
+  /** What a thrown corpse hits of this body: an upright cylinder while it stands, its trunk once it is down. */
+  bodyObstacles?(): BodyObstacle[];
   /** True while game-main should submit this body to crowd separation at the
    *  wider engaged radius. */
   engagedForCrowd(): boolean;
@@ -663,6 +669,9 @@ export function createZombieActor(opts: {
   seed: number;
   bounds: WanderBounds;
   furniture: readonly Aabb[];
+  /** The level's solid boxes (walls, solids, gates, barrels: ctx.world.colliders), read each corpse step: a corpse's
+   *  points are pushed out of them (corpse-contact.ts). Absent: a corpse meets only the floor. */
+  colliders?: () => readonly ContactBox[];
   /** The decision layer. Absent = the zombie's, so every existing call site
    *  and every pin is untouched by construction. */
   mind?: EnemyMind;
@@ -1409,6 +1418,8 @@ export function createZombieActor(opts: {
   const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
   /** Most one self-collision pass moves a corpse point (m; collapse.ts THE CORPSE IS SOLID). */
   const CORPSE_BODY = { ...BODY_COLLIDE, maxStep: 0.015 };
+  /** This frame's bodies round this one (setBodyObstacles). */
+  let nearBodies: readonly BodyObstacle[] = [];
   // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
   // agree: the bones, the stops, the hip cones, the ankles and the floor each nudge it a little every step, and a
   // body lying still drifted 2-7 cm a second at 7 s (the hip cones and the solver's own loop carried it sideways). So
@@ -1418,6 +1429,24 @@ export function createZombieActor(opts: {
   // bullet time; at 0.2 m/s the feet still buzzing kept 2-5 of them awake.
   const CORPSE_SLEEP = { speed: 0.35, time: 0.75 };
   let corpseStillT = 0, corpseSleeping = false, corpseSleepRevision = -1;
+  function corpseContacts(points: RigPoint[], pointR: readonly number[] | undefined): RigPoint[] {
+    const rad = (i: number) => pointR?.[i] ?? CORPSE_POINT_R;
+    const boxes = opts.colliders?.() ?? [];
+    if (boxes.length) {
+      // Only the boxes near the body (a level has hundreds).
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+      for (const p of points) for (const q of [p.pos, p.prev]) {
+        x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); z0 = Math.min(z0, q[2]);
+        x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); z1 = Math.max(z1, q[2]);
+      }
+      const m = 0.3;
+      const near = boxes.filter(b => b.max[0] > x0 - m && b.min[0] < x1 + m && b.max[1] > y0 - m && b.min[1] < y1 + m
+        && b.max[2] > z0 - m && b.min[2] < z1 + m);
+      if (near.length) points = pushOutOfBoxes(points, near, rad);
+    }
+    if (nearBodies.length) points = pushOutOfBodies(points, nearBodies, opts.id, rad);
+    return points;
+  }
   function corpseAsleep(): boolean {
     if (!corpseSleeping) return false;
     const stirred = damageRevision !== corpseSleepRevision || bound.rig.points.some(p =>
@@ -1984,6 +2013,9 @@ export function createZombieActor(opts: {
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
         if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
+        // A CORPSE MEETS THE WORLD (corpse-contact.ts): the walls and the bodies round it, last, so a thrown body
+        // stops at a wall even where its bones would pull it on through.
+        points = corpseContacts(points, f.corpseBody?.pointR);
       }
       bound = {
         ...bound,
@@ -2679,6 +2711,20 @@ export function createZombieActor(opts: {
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
+    setBodyObstacles: (obstacles: readonly BodyObstacle[]) => { nearBodies = obstacles; },
+    bodyObstacles: (): BodyObstacle[] => {
+      const pts = bound.rig.points, ix = joints.index;
+      if (!lastFrame?.collapsed) {
+        let lo = Infinity, hi = -Infinity;
+        for (const p of pts) { lo = Math.min(lo, p.pos[1]); hi = Math.max(hi, p.pos[1]); }
+        const at = state.wander.pos;
+        return [{ id: opts.id, kind: 'upright', x: at[0], z: at[2], r: CORPSE_CONTACT.uprightR, y0: lo + CORPSE_CONTACT.kneeY, y1: hi }];
+      }
+      return (['pelvis', 'chest', 'head'] as const).flatMap(n => {
+        const k = ix[n];
+        return k === undefined || !pts[k] ? [] : [{ id: opts.id, kind: 'sphere' as const, c: pts[k]!.pos, r: CORPSE_CONTACT.trunkR }];
+      });
+    },
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;

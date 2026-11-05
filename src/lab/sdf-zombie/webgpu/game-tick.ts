@@ -422,6 +422,9 @@ export function tick(ctx: GameContext, dt: number) {
     // engaged steps at a quarter rate with its time accumulated (alert, far) or not at all (idle); everything else,
     // and every body with ?cull=0 or on a room level, steps with `dt` as before.
     const lodDt = lodStepDts(ctx, dt, orders);
+    // A thrown corpse hits the bodies round it (corpse-contact.ts): each body's shape as the frame starts.
+    const bodies = ctx.world.actors.flatMap(a => a.bodyObstacles?.() ?? []);
+    for (const a of ctx.world.actors) a.setBodyObstacles?.(bodies);
     for (const a of ctx.world.actors) {
       const adt = lodDt.get(a) ?? dt;
       if (adt <= 0) continue;

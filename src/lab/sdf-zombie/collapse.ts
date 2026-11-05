@@ -797,7 +797,14 @@ export interface BodyPair {
   /** Clearance as a share of the two flesh radii along the contact (skin, or less where the rest pose is closer). */
   fit: number;
 }
-export interface CorpseBody { capsules: readonly BodyCapsule[]; pairs: readonly BodyPair[]; invMass: readonly number[]; }
+export interface CorpseBody {
+  capsules: readonly BodyCapsule[]; pairs: readonly BodyPair[]; invMass: readonly number[];
+  /** Each rig point's flesh radius (the thickest capsule ending at it; the trunk's depth), for the world's contacts
+   *  (corpse-contact.ts). CORPSE_POINT_R where no capsule ends. */
+  pointR: readonly number[];
+}
+/** A rig point's flesh radius where no capsule ends at it (m). */
+export const CORPSE_POINT_R = 0.06;
 
 export const BODY_COLLIDE = {
   iterations: 2,
@@ -946,7 +953,9 @@ export function collapseBody(
   // The trunk's points (the braces hold them in shape: a push on a hip fought the hip-to-hip brace) move least.
   const invMass = restPose.map(() => 1);
   for (const n of TRUNK_POINTS) { const k = names.indexOf(n); if (k >= 0) invMass[k] = BODY_COLLIDE.torsoMass; }
-  return { capsules, pairs, invMass };
+  const pointR = restPose.map(() => 0);
+  for (const c of capsules) for (const k of [c.a, c.b]) pointR[k] = Math.max(pointR[k]!, c.r);
+  return { capsules, pairs, invMass, pointR: pointR.map(r => r || CORPSE_POINT_R) };
 }
 
 /** How deep pair `pr` overlaps in pose `pos` (m; negative = apart), at its own fit or at `fit`. */
