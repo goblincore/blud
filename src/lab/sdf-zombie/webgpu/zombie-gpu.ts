@@ -1808,6 +1808,9 @@ export function writeViewRecord(
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),
     split,
+    // The body normal map's placement (setBodyNormal writes it to bodyNormCfg.yzw): per body, because the crowd
+    // shares one copy of the uniforms (REC_NMAP_ORIGIN).
+    nmapOrigin: [u.bodyNormCfg.value.y, u.bodyNormCfg.value.z, u.bodyNormCfg.value.w],
   }, band);
 }
 

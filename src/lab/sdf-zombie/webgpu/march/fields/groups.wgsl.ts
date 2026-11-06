@@ -3,7 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_SPLIT_A, REC_SPLIT_H, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
+import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NMAP_ORIGIN, REC_NOISE_YAW, REC_SPLIT_A, REC_SPLIT_H, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
@@ -339,6 +339,9 @@ var<private> gInstSplitN: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstSplitH: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstSplitA: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstSplitR: vec4<f32> = vec4<f32>(0.0);
+// The body normal map's placement origin (crowd-records.ts REC_NMAP_ORIGIN): per instance, so every crowd member
+// tests the map's regions round its own spawn point.
+var<private> gInstNmapOrigin: vec3<f32> = vec3<f32>(0.0);
 // The surface fire's emissive contribution, written in the surface prep and
 // read by the lighting tail, which is a separate WGSL export.
 var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
@@ -411,6 +414,7 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstEyeMask = vec4<f32>(1.0 - gore.y, 1.0 - gore.z, gore.w, 0.0);
   gInstBurn = (*inst)[base + ${REC_BURN}];
   gInstLights = (*inst)[base + ${REC_LIGHTS}];
+  gInstNmapOrigin = (*inst)[base + ${REC_NMAP_ORIGIN}].xyz;
   gInstSplitN = (*inst)[base + ${REC_SPLIT_N}];
   gInstSplitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;
   if (gInstSplitOpen) {
