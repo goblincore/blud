@@ -26,7 +26,7 @@ import { createAxeHarness } from './game-axe';
 import { createFireSeams } from './game-seams-fire';
 import { makeWeaponSlotState } from './game-weapon-slots';
 import { AXE_HEAD, chopKick, chopOpenFrac } from './axe-head';
-import { headShape } from './flame-anchors';
+import { headAlive, headShape } from './flame-anchors';
 import { FLAIL_HEAD, headNeck, traceRaySurface } from './flail-strike';
 import { AXE_HIT } from './axe-strike';
 import mainSrc from './game-main.ts?raw';
@@ -796,11 +796,11 @@ describe('the axe drives the split (the real zombie)', () => {
     expect('split' in f.a.posed()).toBe(false);
   });
 
-  it('ONLY THE ZOMBIE SPLITS, by its character and not its motion profile: a head chop on a character that moves on the zombie\'s profile keeps part A', () => {
-    for (const character of ['female', 'clown', 'bonewalker']) {
+  it('ONLY THE HEADS THE PRESETS FIT SPLIT, by character and not motion profile or family: a head chop on any other keeps part A', () => {
+    for (const character of ['female', 'clown', 'bonewalker', 'juggernaut']) {
       const f = fixture({ character });
-      // It moves as the zombie does, and is not the zombie.
-      expect(f.a.profileName(), character).toBe('zombie');
+      // It moves as the zombie does (or, the juggernaut, as the soldier does), and is neither.
+      expect(f.a.profileName(), character).toBe(character === 'juggernaut' ? 'juggernaut' : 'zombie');
       expect(f.a.characterName(), character).toBe(character);
       for (let i = 0; i < AXE_HEAD.chopsToKill; i++) expect(f.axe.chop(7, 'H', 'head'), character).toBe(1);
       // No split: the leaf holds no state, the pose carries none, and no cut face was stamped.
@@ -818,6 +818,53 @@ describe('the axe drives the split (the real zombie)', () => {
       expect(g.axe.chop(7, 'H', 'head'), character).toBe(1);
       expect(g.split.isOpen(g.a), character).toBe(true);
     }
+  });
+
+  it('THE SOLDIER SPLITS as the zombie does: chop 1 opens the middle preset with its faces, chop 2 widens to the full angle, the kill chop kills and the split stays', () => {
+    const f = fixture({ character: 'soldier' });
+    expect(f.a.characterName()).toBe('soldier');
+    const front = f.view.eye;
+    expect(chopFrom(f, front)).toBe(1);
+    const st = f.split.state(7)!;
+    expect(st).toMatchObject({ preset: 'middle', sides: 0 });
+    expect(st.target).toBeCloseTo(chopOpenFrac(1) * splitMaxAngle(st), 12);
+    const opening = f.seen.blasts[0]!;
+    expect(opening).toMatchObject({ meterCredit: 0, reaction: 'flinch', forceCollapse: false });
+    expect(opening.wounds.map(w => w.headRegion).sort()).toEqual(['split+', 'split-']);
+    expect(opening.wounds.every(w => w.headSlot === 'keep' && w.shape === 'cut' && w.severRadius === 0)).toBe(true);
+    for (const w of opening.wounds) expect(f.a.wounds()).toContain(w);
+    f.ticks(240);
+    // The pose carries the split, so every strike, trace and the renderer see the open head.
+    const w1 = f.a.posed().split!;
+    expect(w1.thetaP).toBeGreaterThan(0);
+    expect(w1.thetaM).toBeLessThan(0);
+    const max = splitMaxAngle(st);
+    expect(chopFrom(f, front, 'R')).toBe(1);
+    f.ticks(240);
+    expect(f.split.state(7)).toMatchObject({ target: max, angle: max, vel: 0 });
+    // The axe's count, not the split, is what kills him: nothing has collapsed him yet.
+    expect(f.seen.blasts.filter(b => b.forceCollapse)).toHaveLength(0);
+    for (let c = 3; c <= AXE_HEAD.chopsToKill; c++) expect(chopFrom(f, front, 'L')).toBe(1);
+    f.ticks(240);
+    expect(f.seen.blasts.filter(b => b.forceCollapse)).toHaveLength(1);
+    expect(f.split.state(7)).toMatchObject({ target: max, angle: max });
+    expect(headAlive(f.a.posed())).toBe(true);
+    expect(f.a.posed().split).toBeDefined();
+    for (const w of opening.wounds) expect(f.a.wounds()).toContain(w);
+  });
+
+  it('the soldier\'s halves part where his head is: the gap opens on his skull centre, and the neck below the hinge stays put', () => {
+    const f = fixture({ character: 'soldier' });
+    expect(f.split.force(7, 'middle', 0, 0, 1)).toBe(true);
+    const w = f.a.posed().split!;
+    const c = f.skull.centre;
+    // The old plane between the halves is empty above the hinge: the crown is open air, the closed head is flesh.
+    const crown: Vec3 = [c[0], c[1] + 0.6 * f.skull.axes[1], c[2]];
+    expect(f.closed(crown)).toBeLessThan(0);
+    expect(sdBody(crown, f.a.posed())).toBeGreaterThan(0);
+    // Under the hinge the open head's field is the closed one's.
+    const neck: Vec3 = [w.h[0], w.h[1] - 0.06, c[2]];
+    expect(sdBody(neck, f.a.posed())).toBeCloseTo(f.closed(neck), 9);
   });
 
   /** One real click with the eye at `eye`, aimed level along -z: the swing runs to its strike. Returns the strike. */

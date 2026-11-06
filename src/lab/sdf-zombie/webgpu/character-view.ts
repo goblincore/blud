@@ -656,8 +656,10 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true,
-      { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true);
+    // Breakable: the kit leaves with the anatomy under it (character-registry.ts kitSheds); armour also takes hits.
+    const breakable = entry.armoured === true || entry.kitSheds === true;
+    const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable,
+      { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable);
     kitLoad
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
