@@ -6,6 +6,7 @@ import type { BuiltBody, Primitive, Vec3 } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
 import { boxReach, shellReach, strandReach } from './extent';
+import { orientShapesField } from './orient-shape';
 
 export const PRIM_STRIDE = 4;    // vec4
 export const CLUSTER_STRIDE = 4; // vec4
@@ -529,7 +530,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     // — a cluster with no shaped prim never reads either row, so a body with
     // one pointed nose does not make its legs pay for it.
     const own = body.prims.slice(c.start, c.start + c.count);
-    const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+    // A noise-only orient (a rig-stamped point sphere, orient-shape.ts) does not count: its field is the
+    // same on the plain path, and the flag would make the whole cluster pay sdPrimO's extra load.
+    const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6 && orientShapesField(p));
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
       || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
@@ -553,7 +556,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
       const o = groupCount * CLUSTER_STRIDE;
       groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
       const gOwn = body.prims.slice(g.start, g.start + g.count);
-      const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+      const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6 && orientShapesField(p));
       // shell and box MUST be tested here too, same as the cluster-level
       // `shaped` above — and METAL joins them (hard-surface task 2): a
       // metal-ONLY prim (no taper, chamfer, bend, shell or box) is exactly

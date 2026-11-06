@@ -1302,140 +1302,155 @@
   blob arm on upperArm at=0.9622 offset=(-0.0428,-0.0128,0.0284) r=0.0042 blend=0.0015 side=l
   blob arm on foreArm at=0.1193 offset=(-0.0431,-0.0006,0.0151) r=0.0042 blend=0.0015 side=l
 
-  # ---- wrist.l: a suture along the forearm cuff (t 0.60) flip line (96/96 angles found it) ----
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0452,-0.0023,0) tip=(0.0004,-0.0005,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0449,-0.0028,-0.0056) tip=(0.0011,-0.0005,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0438,-0.0033,-0.0112) tip=(0.0018,-0.0004,-0.0054) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.042,-0.0038,-0.0165) tip=(0.0024,-0.0004,-0.0051) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0396,-0.0041,-0.0216) tip=(0.003,-0.0003,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0366,-0.0045,-0.0264) tip=(0.0036,-0.0003,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0329,-0.0047,-0.0307) tip=(0.0041,-0.0002,-0.0039) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0288,-0.0049,-0.0346) tip=(0.0046,-0.0001,-0.0033) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0242,-0.005,-0.0379) tip=(0.005,0,-0.0027) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0193,-0.005,-0.0407) tip=(0.0052,0.0001,-0.0021) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.014,-0.005,-0.0428) tip=(0.0055,0.0001,-0.0014) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0086,-0.0049,-0.0442) tip=(0.0056,0.0002,-0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.003,-0.0046,-0.045) tip=(0.0057,0.0003,0) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0027,-0.0044,-0.045) tip=(0.0056,0.0003,0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0083,-0.004,-0.0443) tip=(0.0055,0.0004,0.0013) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0138,-0.0036,-0.043) tip=(0.0053,0.0005,0.002) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.019,-0.0031,-0.041) tip=(0.005,0.0005,0.0027) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.024,-0.0026,-0.0383) tip=(0.0046,0.0006,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0286,-0.0021,-0.0351) tip=(0.0041,0.0006,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0328,-0.0015,-0.0313) tip=(0.0036,0.0006,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0364,-0.0009,-0.027) tip=(0.0031,0.0006,0.0047) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0395,-0.0003,-0.0222) tip=(0.0025,0.0006,0.0051) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0419,0.0004,-0.0172) tip=(0.0018,0.0006,0.0053) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0437,0.001,-0.0119) tip=(0.0011,0.0006,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0448,0.0016,-0.0063) tip=(0.0004,0.0006,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0452,0.0022,-0.0007) tip=(-0.0003,0.0005,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.045,0.0027,0.0049) tip=(-0.001,0.0005,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.044,0.0032,0.0105) tip=(-0.0017,0.0005,0.0054) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0423,0.0037,0.0158) tip=(-0.0023,0.0004,0.0051) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0399,0.0041,0.021) tip=(-0.003,0.0003,0.0048) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.037,0.0044,0.0258) tip=(-0.0036,0.0003,0.0044) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0334,0.0047,0.0302) tip=(-0.0041,0.0002,0.0039) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0294,0.0049,0.0341) tip=(-0.0045,0.0001,0.0034) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0249,0.005,0.0375) tip=(-0.0049,0,0.0028) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0199,0.005,0.0404) tip=(-0.0052,0,0.0022) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0147,0.005,0.0425) tip=(-0.0054,-0.0001,0.0015) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0093,0.0049,0.0441) tip=(-0.0056,-0.0002,0.0009) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0037,0.0047,0.0449) tip=(-0.0057,-0.0003,0.0001) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.002,0.0044,0.045) tip=(-0.0056,-0.0003,-0.0006) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0076,0.0041,0.0445) tip=(-0.0055,-0.0004,-0.0013) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0131,0.0037,0.0432) tip=(-0.0053,-0.0005,-0.0019) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0184,0.0032,0.0413) tip=(-0.005,-0.0005,-0.0026) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0234,0.0027,0.0387) tip=(-0.0046,-0.0006,-0.0032) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.028,0.0021,0.0355) tip=(-0.0042,-0.0006,-0.0037) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0322,0.0016,0.0318) tip=(-0.0037,-0.0006,-0.0042) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.036,0.001,0.0275) tip=(-0.0031,-0.0006,-0.0047) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0391,0.0003,0.0229) tip=(-0.0025,-0.0006,-0.005) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0416,-0.0003,0.0178) tip=(-0.0019,-0.0006,-0.0053) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0435,-0.0009,0.0125) tip=(-0.0012,-0.0006,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0447,-0.0015,0.0071) tip=(-0.0005,-0.0006,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0452,-0.0023,0) tip=(0.0004,-0.0005,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0449,-0.0028,-0.0056) tip=(0.0011,-0.0005,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0438,-0.0033,-0.0112) tip=(0.0018,-0.0004,-0.0054) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.042,-0.0038,-0.0165) tip=(0.0024,-0.0004,-0.0051) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0396,-0.0041,-0.0216) tip=(0.003,-0.0003,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0366,-0.0045,-0.0264) tip=(0.0036,-0.0003,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0329,-0.0047,-0.0307) tip=(0.0041,-0.0002,-0.0039) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0288,-0.0049,-0.0346) tip=(0.0046,-0.0001,-0.0033) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0242,-0.005,-0.0379) tip=(0.005,0,-0.0027) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0193,-0.005,-0.0407) tip=(0.0052,0.0001,-0.0021) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.014,-0.005,-0.0428) tip=(0.0055,0.0001,-0.0014) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0086,-0.0049,-0.0442) tip=(0.0056,0.0002,-0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.003,-0.0046,-0.045) tip=(0.0057,0.0003,0) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0027,-0.0044,-0.045) tip=(0.0056,0.0003,0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0083,-0.004,-0.0443) tip=(0.0055,0.0004,0.0013) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0138,-0.0036,-0.043) tip=(0.0053,0.0005,0.002) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.019,-0.0031,-0.041) tip=(0.005,0.0005,0.0027) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.024,-0.0026,-0.0383) tip=(0.0046,0.0006,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0286,-0.0021,-0.0351) tip=(0.0041,0.0006,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0328,-0.0015,-0.0313) tip=(0.0036,0.0006,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0364,-0.0009,-0.027) tip=(0.0031,0.0006,0.0047) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0395,-0.0003,-0.0222) tip=(0.0025,0.0006,0.0051) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0419,0.0004,-0.0172) tip=(0.0018,0.0006,0.0053) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0437,0.001,-0.0119) tip=(0.0011,0.0006,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0448,0.0016,-0.0063) tip=(0.0004,0.0006,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0452,0.0022,-0.0007) tip=(-0.0003,0.0005,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.045,0.0027,0.0049) tip=(-0.001,0.0005,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.044,0.0032,0.0105) tip=(-0.0017,0.0005,0.0054) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0423,0.0037,0.0158) tip=(-0.0023,0.0004,0.0051) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0399,0.0041,0.021) tip=(-0.003,0.0003,0.0048) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.037,0.0044,0.0258) tip=(-0.0036,0.0003,0.0044) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0334,0.0047,0.0302) tip=(-0.0041,0.0002,0.0039) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0294,0.0049,0.0341) tip=(-0.0045,0.0001,0.0034) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0249,0.005,0.0375) tip=(-0.0049,0,0.0028) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0199,0.005,0.0404) tip=(-0.0052,0,0.0022) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0147,0.005,0.0425) tip=(-0.0054,-0.0001,0.0015) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0093,0.0049,0.0441) tip=(-0.0056,-0.0002,0.0009) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0037,0.0047,0.0449) tip=(-0.0057,-0.0003,0.0001) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.002,0.0044,0.045) tip=(-0.0056,-0.0003,-0.0006) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0076,0.0041,0.0445) tip=(-0.0055,-0.0004,-0.0013) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0131,0.0037,0.0432) tip=(-0.0053,-0.0005,-0.0019) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0184,0.0032,0.0413) tip=(-0.005,-0.0005,-0.0026) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0234,0.0027,0.0387) tip=(-0.0046,-0.0006,-0.0032) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.028,0.0021,0.0355) tip=(-0.0042,-0.0006,-0.0037) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0322,0.0016,0.0318) tip=(-0.0037,-0.0006,-0.0042) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.036,0.001,0.0275) tip=(-0.0031,-0.0006,-0.0047) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0391,0.0003,0.0229) tip=(-0.0025,-0.0006,-0.005) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0416,-0.0003,0.0178) tip=(-0.0019,-0.0006,-0.0053) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0435,-0.0009,0.0125) tip=(-0.0012,-0.0006,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0447,-0.0015,0.0071) tip=(-0.0005,-0.0006,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0467,-0.0018,0.0053) tip=(0.0018,-0.0351,-0.0073) bend=(-0.008,-0.0004,0.0001) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.0453,-0.0017,0.0052) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0452,-0.0028,-0.0053) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0409,-0.0043,-0.0228) tip=(0.0081,-0.0346,-0.0053) bend=(-0.0065,-0.0008,-0.0047) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.0396,-0.0042,-0.0221) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0335,-0.0047,-0.0306) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0196,-0.0052,-0.0424) tip=(0.012,-0.0339,0) bend=(-0.0025,-0.0009,-0.0076) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.019,-0.0051,-0.0411) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0091,-0.0049,-0.0444) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0091,-0.0041,-0.0459) tip=(0.012,-0.0332,0.0066) bend=(0.0024,-0.0006,-0.0076) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(0.0088,-0.004,-0.0446) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(0.0188,-0.0032,-0.0414) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0343,-0.0015,-0.0321) tip=(0.0081,-0.0328,0.012) bend=(0.0064,-0.0002,-0.0048) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(0.0333,-0.0015,-0.0311) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(0.0395,-0.0003,-0.0228) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0466,0.0017,-0.0061) tip=(0.0018,-0.0329,0.0142) bend=(0.008,0.0004,-0.0001) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(0.0452,0.0017,-0.0059) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(0.0453,0.0027,0.0045) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0412,0.0043,0.0222) tip=(-0.0045,-0.0335,0.0122) bend=(0.0065,0.0008,0.0046) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(0.04,0.0042,0.0215) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(0.034,0.0047,0.0301) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0203,0.0052,0.0421) tip=(-0.0085,-0.0342,0.007) bend=(0.0026,0.0009,0.0075) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(0.0197,0.0051,0.0408) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(0.0098,0.0049,0.0443) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0083,0.0042,0.0461) tip=(-0.0086,-0.0348,0.0003) bend=(-0.0023,0.0006,0.0076) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.0081,0.0041,0.0447) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0181,0.0033,0.0417) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0338,0.0016,0.0326) tip=(-0.0049,-0.0352,-0.0051) bend=(-0.0063,0.0002,0.0049) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.0328,0.0015,0.0317) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0391,0.0004,0.0234) r=0.0042 blend=0.0015 side=l
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0465,-0.0016,0.0069) tip=(0.0014,-0.0351,-0.0073) bend=(-0.008,-0.0004,0.0002) r=0.0032 blend=0.001 side=l
-  blob arm on foreArm at=0.5429 offset=(-0.0451,-0.0016,0.0067) r=0.0042 blend=0.0015 side=l
-  blob arm on foreArm at=0.6571 offset=(-0.0454,-0.0026,-0.0037) r=0.0042 blend=0.0015 side=l
+  # ---- wrist.l: a suture along the forearm / hand flip line (96/96 angles found it) ----
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0491,-0.0024,0.0001) tip=(0.0003,-0.0005,-0.0055) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0488,-0.003,-0.0054) tip=(0.0009,-0.0005,-0.0053) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0479,-0.0035,-0.0107) tip=(0.0015,-0.0005,-0.0052) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0463,-0.0039,-0.016) tip=(0.0021,-0.0004,-0.005) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0443,-0.0043,-0.021) tip=(0.0026,-0.0003,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0416,-0.0047,-0.0257) tip=(0.0031,-0.0003,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0385,-0.0049,-0.0302) tip=(0.0036,-0.0002,-0.0041) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0349,-0.0052,-0.0342) tip=(0.004,-0.0002,-0.0037) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0309,-0.0053,-0.0379) tip=(0.0044,-0.0001,-0.0032) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0265,-0.0054,-0.0411) tip=(0.0047,0,-0.0027) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0218,-0.0055,-0.0438) tip=(0.005,0,-0.0021) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0168,-0.0054,-0.0459) tip=(0.0052,0.0001,-0.0016) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0115,-0.0053,-0.0475) tip=(0.0053,0.0002,-0.001) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0062,-0.0052,-0.0485) tip=(0.0054,0.0002,-0.0004) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0008,-0.0049,-0.0489) tip=(0.0054,0.0003,0.0002) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0046,-0.0046,-0.0487) tip=(0.0054,0.0003,0.0008) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.01,-0.0043,-0.0479) tip=(0.0052,0.0004,0.0014) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0153,-0.0039,-0.0466) tip=(0.0051,0.0004,0.0019) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0203,-0.0034,-0.0446) tip=(0.0048,0.0005,0.0025) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0251,-0.003,-0.0421) tip=(0.0045,0.0005,0.003) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0296,-0.0024,-0.0391) tip=(0.0041,0.0006,0.0035) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0338,-0.0019,-0.0357) tip=(0.0037,0.0006,0.0039) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0375,-0.0013,-0.0317) tip=(0.0033,0.0006,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0408,-0.0007,-0.0274) tip=(0.0028,0.0006,0.0046) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0436,-0.0001,-0.0228) tip=(0.0022,0.0006,0.0049) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0458,0.0005,-0.0179) tip=(0.0017,0.0006,0.0051) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0475,0.0011,-0.0127) tip=(0.0011,0.0006,0.0053) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0486,0.0017,-0.0074) tip=(0.0005,0.0006,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0491,0.0022,-0.0021) tip=(-0.0001,0.0005,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.049,0.0028,0.0034) tip=(-0.0007,0.0005,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0483,0.0033,0.0087) tip=(-0.0013,0.0005,0.0053) bend=(0.0001,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.047,0.0037,0.014) tip=(-0.0019,0.0004,0.0051) bend=(0.0001,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0451,0.0042,0.0191) tip=(-0.0024,0.0004,0.0049) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0427,0.0045,0.0239) tip=(-0.0029,0.0003,0.0046) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0398,0.0048,0.0285) tip=(-0.0034,0.0002,0.0042) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0363,0.0051,0.0327) tip=(-0.0039,0.0002,0.0038) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0325,0.0053,0.0365) tip=(-0.0043,0.0001,0.0034) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0282,0.0054,0.0399) tip=(-0.0046,0.0001,0.0029) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0236,0.0055,0.0428) tip=(-0.0049,0,0.0024) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0187,0.0054,0.0452) tip=(-0.0051,-0.0001,0.0018) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0136,0.0054,0.047) tip=(-0.0053,-0.0001,0.0012) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0082,0.0052,0.0482) tip=(-0.0054,-0.0002,0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0029,0.005,0.0488) tip=(-0.0054,-0.0003,0) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0026,0.0048,0.0489) tip=(-0.0054,-0.0003,-0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.008,0.0044,0.0483) tip=(-0.0053,-0.0004,-0.0011) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0133,0.0041,0.0472) tip=(-0.0051,-0.0004,-0.0017) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0184,0.0036,0.0454) tip=(-0.0049,-0.0005,-0.0023) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0233,0.0031,0.0432) tip=(-0.0046,-0.0005,-0.0028) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.028,0.0026,0.0403) tip=(-0.0043,-0.0005,-0.0033) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0323,0.0021,0.037) tip=(-0.0039,-0.0006,-0.0038) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0362,0.0015,0.0333) tip=(-0.0035,-0.0006,-0.0042) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0396,0.0009,0.0291) tip=(-0.003,-0.0006,-0.0045) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0426,0.0003,0.0246) tip=(-0.0024,-0.0006,-0.0048) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.045,-0.0003,0.0198) tip=(-0.0019,-0.0006,-0.0051) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0469,-0.0009,0.0147) tip=(-0.0013,-0.0006,-0.0052) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0482,-0.0015,0.0095) tip=(-0.0007,-0.0006,-0.0055) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0541,-0.0027,-0.0001) tip=(0.0004,-0.0006,-0.0058) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0538,-0.0033,-0.006) tip=(0.001,-0.0005,-0.0059) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0528,-0.0038,-0.0118) tip=(0.0017,-0.0005,-0.0057) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0511,-0.0043,-0.0176) tip=(0.0023,-0.0004,-0.0055) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0488,-0.0048,-0.0231) tip=(0.0029,-0.0004,-0.0052) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0459,-0.0051,-0.0284) tip=(0.0034,-0.0003,-0.0049) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0425,-0.0054,-0.0333) tip=(0.004,-0.0003,-0.0045) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0385,-0.0057,-0.0377) tip=(0.0044,-0.0002,-0.004) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0341,-0.0059,-0.0418) tip=(0.0049,-0.0001,-0.0035) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0292,-0.006,-0.0453) tip=(0.0052,0,-0.003) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.024,-0.006,-0.0482) tip=(0.0055,0,-0.0024) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0185,-0.006,-0.0506) tip=(0.0057,0.0001,-0.0017) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0127,-0.0059,-0.0524) tip=(0.0059,0.0002,-0.0011) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0068,-0.0057,-0.0535) tip=(0.006,0.0003,-0.0005) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0009,-0.0054,-0.0539) tip=(0.006,0.0003,0.0002) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0051,-0.0051,-0.0537) tip=(0.0059,0.0004,0.0009) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.011,-0.0047,-0.0529) tip=(0.0058,0.0004,0.0015) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0168,-0.0043,-0.0514) tip=(0.0056,0.0005,0.0021) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0224,-0.0038,-0.0492) tip=(0.0053,0.0005,0.0028) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0277,-0.0033,-0.0465) tip=(0.005,0.0006,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0327,-0.0027,-0.0432) tip=(0.0046,0.0006,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0373,-0.0021,-0.0393) tip=(0.0041,0.0006,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0414,-0.0014,-0.035) tip=(0.0036,0.0006,0.0048) bend=(0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.045,-0.0008,-0.0303) tip=(0.0031,0.0007,0.0051) bend=(0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.048,-0.0001,-0.0251) tip=(0.0025,0.0007,0.0054) bend=(0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0505,0.0006,-0.0197) tip=(0.0018,0.0007,0.0057) bend=(0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0523,0.0012,-0.014) tip=(0.0012,0.0007,0.0058) bend=(0.0002,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0536,0.0019,-0.0082) tip=(0.0006,0.0006,0.0059) bend=(0.0002,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0541,0.0025,-0.0023) tip=(-0.0001,0.0006,0.006) bend=(0.0002,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.054,0.0031,0.0037) tip=(-0.0008,0.0006,0.0059) bend=(0.0002,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0532,0.0036,0.0096) tip=(-0.0014,0.0005,0.0058) bend=(0.0001,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0518,0.0041,0.0154) tip=(-0.0021,0.0004,0.0056) bend=(0.0002,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0497,0.0046,0.021) tip=(-0.0027,0.0004,0.0054) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0471,0.005,0.0264) tip=(-0.0032,0.0003,0.005) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0438,0.0053,0.0314) tip=(-0.0038,0.0003,0.0047) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0401,0.0056,0.0361) tip=(-0.0043,0.0002,0.0042) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0358,0.0058,0.0403) tip=(-0.0047,0.0001,0.0037) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0311,0.006,0.044) tip=(-0.0051,0.0001,0.0032) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.026,0.006,0.0472) tip=(-0.0054,0,0.0026) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0206,0.006,0.0498) tip=(-0.0057,-0.0001,0.002) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0149,0.0059,0.0518) tip=(-0.0058,-0.0002,0.0014) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0091,0.0058,0.0531) tip=(-0.006,-0.0002,0.0007) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0031,0.0055,0.0538) tip=(-0.006,-0.0003,0) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0029,0.0052,0.0539) tip=(-0.0059,-0.0004,-0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0088,0.0049,0.0533) tip=(-0.0058,-0.0004,-0.0013) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0146,0.0045,0.052) tip=(-0.0057,-0.0005,-0.0019) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0203,0.004,0.0501) tip=(-0.0054,-0.0005,-0.0025) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0257,0.0035,0.0476) tip=(-0.0051,-0.0006,-0.0031) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0308,0.0029,0.0445) tip=(-0.0047,-0.0006,-0.0037) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0356,0.0023,0.0408) tip=(-0.0043,-0.0006,-0.0041) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0399,0.0017,0.0367) tip=(-0.0038,-0.0007,-0.0046) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0437,0.001,0.0321) tip=(-0.0033,-0.0007,-0.005) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0469,0.0004,0.0271) tip=(-0.0027,-0.0007,-0.0053) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0496,-0.0003,0.0218) tip=(-0.0021,-0.0007,-0.0056) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0517,-0.001,0.0162) tip=(-0.0015,-0.0007,-0.0058) bend=(-0.0002,0.0001,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0532,-0.0016,0.0104) tip=(-0.0008,-0.0006,-0.0058) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8082 to=0.8082 offset=(-0.0482,-0.0018,0.0058) tip=(-0.0083,-0.034,-0.0082) bend=(-0.0077,0.002,-0.0003) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8091 offset=(-0.0468,-0.0018,0.0056) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9178 offset=(-0.0567,-0.0034,-0.0056) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0438,-0.0042,-0.0206) tip=(-0.001,-0.0341,-0.0112) bend=(-0.0065,0.0017,-0.0043) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.0425,-0.0041,-0.02) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(-0.0454,-0.0057,-0.0342) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0263,-0.0054,-0.0405) tip=(0.007,-0.0336,-0.0105) bend=(-0.0034,0.0015,-0.0071) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.0255,-0.0052,-0.0393) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(-0.0204,-0.0063,-0.053) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8078 to=0.8078 offset=(-0.0009,-0.0049,-0.0483) tip=(0.0134,-0.0328,-0.0057) bend=(0.0007,0.0017,-0.0078) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.0009,-0.0047,-0.0469) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(0.0106,-0.0051,-0.0559) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0247,-0.0029,-0.0417) tip=(0.0164,-0.0319,0.0018) bend=(0.0045,0.002,-0.0063) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(0.024,-0.0029,-0.0405) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(0.0385,-0.0023,-0.0421) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.043,-0.0001,-0.0226) tip=(0.0149,-0.0312,0.0097) bend=(0.007,0.0025,-0.0029) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(0.0417,-0.0001,-0.022) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(0.0549,0.0012,-0.0158) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0484,0.0027,0.0032) tip=(0.0094,-0.0309,0.0157) bend=(0.0074,0.0029,0.0012) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(0.047,0.0027,0.0031) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.918 offset=(0.0549,0.0043,0.0153) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0393,0.0048,0.028) tip=(0.0017,-0.031,0.018) bend=(0.0055,0.0032,0.0049) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(0.0382,0.0046,0.0273) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(0.0385,0.0061,0.0418) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0186,0.0054,0.0445) tip=(-0.0061,-0.0316,0.0158) bend=(0.0019,0.0032,0.0071) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(0.0181,0.0052,0.0433) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.918 offset=(0.0106,0.0061,0.0558) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0077,0.0044,0.0477) tip=(-0.0116,-0.0325,0.0099) bend=(-0.0023,0.003,0.0071) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.0075,0.0043,0.0464) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(-0.0205,0.0043,0.0531) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0317,0.0021,0.0367) tip=(-0.0131,-0.0334,0.002) bend=(-0.0058,0.0026,0.0049) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.0308,0.002,0.0356) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.918 offset=(-0.0454,0.0012,0.0346) r=0.0042 blend=0.0015 side=l
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0463,-0.0008,0.0147) tip=(-0.0102,-0.034,-0.0055) bend=(-0.0076,0.0022,0.0012) r=0.0032 blend=0.001 side=l
+  blob arm on foreArm at=0.8088 offset=(-0.045,-0.0008,0.0143) r=0.0042 blend=0.0015 side=l
+  blob arm on foreArm at=0.9181 offset=(-0.0568,-0.0023,0.0058) r=0.0042 blend=0.0015 side=l
 
   # ---- knee.l: a suture along the thigh / shin flip line (96/96 angles found it) ----
   bar  leg on shin from=0.0167 to=0.0167 offset=(-0.0677,0,0.0001) tip=(0.0003,-0.0002,-0.0058) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=l
@@ -2927,140 +2942,155 @@
   blob arm on upperArm at=0.9991 offset=(-0.0412,0.0124,0.0273) r=0.0042 blend=0.0015 side=r
   blob arm on foreArm at=0.0822 offset=(-0.0436,0.0036,0.0141) r=0.0042 blend=0.0015 side=r
 
-  # ---- wrist.r: a suture along the forearm cuff (t 0.60) flip line (96/96 angles found it) ----
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0452,0.0023,0) tip=(0.0003,-0.0006,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0449,0.0017,-0.0056) tip=(0.001,-0.0006,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0439,0.0011,-0.0112) tip=(0.0017,-0.0006,-0.0054) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0422,0.0005,-0.0165) tip=(0.0024,-0.0006,-0.0051) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0398,-0.0002,-0.0216) tip=(0.003,-0.0006,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0368,-0.0008,-0.0264) tip=(0.0036,-0.0006,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0333,-0.0014,-0.0307) tip=(0.0041,-0.0006,-0.0039) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0292,-0.002,-0.0346) tip=(0.0045,-0.0006,-0.0033) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0246,-0.0026,-0.0379) tip=(0.0049,-0.0005,-0.0027) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0197,-0.0031,-0.0407) tip=(0.0052,-0.0005,-0.0021) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0145,-0.0036,-0.0428) tip=(0.0055,-0.0004,-0.0014) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.009,-0.004,-0.0442) tip=(0.0056,-0.0004,-0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0034,-0.0043,-0.045) tip=(0.0057,-0.0003,0) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0022,-0.0046,-0.045) tip=(0.0056,-0.0002,0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0079,-0.0048,-0.0443) tip=(0.0055,-0.0001,0.0013) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0134,-0.005,-0.043) tip=(0.0053,-0.0001,0.002) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0186,-0.005,-0.041) tip=(0.005,0,0.0027) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0236,-0.005,-0.0383) tip=(0.0046,0.0001,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0283,-0.0049,-0.0351) tip=(0.0042,0.0002,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0324,-0.0047,-0.0313) tip=(0.0037,0.0002,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0361,-0.0045,-0.027) tip=(0.0031,0.0003,0.0047) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0392,-0.0042,-0.0222) tip=(0.0025,0.0004,0.0051) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0417,-0.0038,-0.0172) tip=(0.0018,0.0004,0.0053) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0436,-0.0034,-0.0119) tip=(0.0012,0.0005,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0447,-0.0029,-0.0063) tip=(0.0005,0.0005,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0452,-0.0023,-0.0007) tip=(-0.0002,0.0006,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.045,-0.0018,0.0049) tip=(-0.0009,0.0006,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0441,-0.0012,0.0105) tip=(-0.0016,0.0006,0.0054) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0424,-0.0005,0.0158) tip=(-0.0023,0.0006,0.0051) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0402,0.0001,0.021) tip=(-0.0029,0.0006,0.0048) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0372,0.0007,0.0258) tip=(-0.0035,0.0006,0.0044) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0337,0.0013,0.0302) tip=(-0.004,0.0006,0.0039) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0297,0.0019,0.0341) tip=(-0.0045,0.0006,0.0034) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0252,0.0025,0.0375) tip=(-0.0049,0.0005,0.0028) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0204,0.003,0.0404) tip=(-0.0052,0.0005,0.0022) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0152,0.0035,0.0425) tip=(-0.0054,0.0004,0.0015) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0097,0.0039,0.0441) tip=(-0.0056,0.0004,0.0009) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(0.0041,0.0043,0.0449) tip=(-0.0057,0.0003,0.0001) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0015,0.0046,0.045) tip=(-0.0056,0.0002,-0.0006) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0071,0.0048,0.0445) tip=(-0.0055,0.0001,-0.0013) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0127,0.005,0.0432) tip=(-0.0053,0.0001,-0.0019) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.018,0.005,0.0413) tip=(-0.005,0,-0.0026) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.023,0.005,0.0387) tip=(-0.0047,-0.0001,-0.0032) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0277,0.0049,0.0355) tip=(-0.0042,-0.0002,-0.0037) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0319,0.0048,0.0318) tip=(-0.0037,-0.0002,-0.0042) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0357,0.0045,0.0275) tip=(-0.0032,-0.0003,-0.0047) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0389,0.0042,0.0229) tip=(-0.0026,-0.0004,-0.005) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0414,0.0039,0.0178) tip=(-0.002,-0.0004,-0.0053) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0434,0.0034,0.0125) tip=(-0.0013,-0.0005,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5733 to=0.5733 offset=(-0.0447,0.0029,0.0071) tip=(-0.0006,-0.0005,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0452,0.0023,0) tip=(0.0003,-0.0006,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0449,0.0017,-0.0056) tip=(0.001,-0.0006,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0439,0.0011,-0.0112) tip=(0.0017,-0.0006,-0.0054) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0422,0.0005,-0.0165) tip=(0.0024,-0.0006,-0.0051) bend=(-0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0398,-0.0002,-0.0216) tip=(0.003,-0.0006,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0368,-0.0008,-0.0264) tip=(0.0036,-0.0006,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0333,-0.0014,-0.0307) tip=(0.0041,-0.0006,-0.0039) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0292,-0.002,-0.0346) tip=(0.0045,-0.0006,-0.0033) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0246,-0.0026,-0.0379) tip=(0.0049,-0.0005,-0.0027) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0197,-0.0031,-0.0407) tip=(0.0052,-0.0005,-0.0021) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0145,-0.0036,-0.0428) tip=(0.0055,-0.0004,-0.0014) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.009,-0.004,-0.0442) tip=(0.0056,-0.0004,-0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0034,-0.0043,-0.045) tip=(0.0057,-0.0003,0) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0022,-0.0046,-0.045) tip=(0.0056,-0.0002,0.0007) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0079,-0.0048,-0.0443) tip=(0.0055,-0.0001,0.0013) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0134,-0.005,-0.043) tip=(0.0053,-0.0001,0.002) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0186,-0.005,-0.041) tip=(0.005,0,0.0027) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0236,-0.005,-0.0383) tip=(0.0046,0.0001,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0283,-0.0049,-0.0351) tip=(0.0042,0.0002,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0324,-0.0047,-0.0313) tip=(0.0037,0.0002,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0361,-0.0045,-0.027) tip=(0.0031,0.0003,0.0047) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0392,-0.0042,-0.0222) tip=(0.0025,0.0004,0.0051) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0417,-0.0038,-0.0172) tip=(0.0018,0.0004,0.0053) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0436,-0.0034,-0.0119) tip=(0.0012,0.0005,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0447,-0.0029,-0.0063) tip=(0.0005,0.0005,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0452,-0.0023,-0.0007) tip=(-0.0002,0.0006,0.0056) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.045,-0.0018,0.0049) tip=(-0.0009,0.0006,0.0055) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0441,-0.0012,0.0105) tip=(-0.0016,0.0006,0.0054) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0424,-0.0005,0.0158) tip=(-0.0023,0.0006,0.0051) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0402,0.0001,0.021) tip=(-0.0029,0.0006,0.0048) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0372,0.0007,0.0258) tip=(-0.0035,0.0006,0.0044) bend=(0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0337,0.0013,0.0302) tip=(-0.004,0.0006,0.0039) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0297,0.0019,0.0341) tip=(-0.0045,0.0006,0.0034) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0252,0.0025,0.0375) tip=(-0.0049,0.0005,0.0028) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0204,0.003,0.0404) tip=(-0.0052,0.0005,0.0022) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0152,0.0035,0.0425) tip=(-0.0054,0.0004,0.0015) bend=(0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0097,0.0039,0.0441) tip=(-0.0056,0.0004,0.0009) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(0.0041,0.0043,0.0449) tip=(-0.0057,0.0003,0.0001) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0015,0.0046,0.045) tip=(-0.0056,0.0002,-0.0006) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0071,0.0048,0.0445) tip=(-0.0055,0.0001,-0.0013) bend=(0,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0127,0.005,0.0432) tip=(-0.0053,0.0001,-0.0019) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.018,0.005,0.0413) tip=(-0.005,0,-0.0026) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.023,0.005,0.0387) tip=(-0.0047,-0.0001,-0.0032) bend=(-0.0001,0,0.0002) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0277,0.0049,0.0355) tip=(-0.0042,-0.0002,-0.0037) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0319,0.0048,0.0318) tip=(-0.0037,-0.0002,-0.0042) bend=(-0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0357,0.0045,0.0275) tip=(-0.0032,-0.0003,-0.0047) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0389,0.0042,0.0229) tip=(-0.0026,-0.0004,-0.005) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0414,0.0039,0.0178) tip=(-0.002,-0.0004,-0.0053) bend=(-0.0002,0,0.0001) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0434,0.0034,0.0125) tip=(-0.0013,-0.0005,-0.0055) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.6267 to=0.6267 offset=(-0.0447,0.0029,0.0071) tip=(-0.0006,-0.0005,-0.0056) bend=(-0.0002,0,0) r=0.0055 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0466,0.0029,0.0053) tip=(-0.0017,-0.0351,-0.0073) bend=(-0.008,0.0004,0.0001) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.0452,0.0028,0.0052) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0453,0.0017,-0.0053) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0411,-0.0002,-0.0228) tip=(0.0046,-0.0352,-0.0053) bend=(-0.0065,-0.0001,-0.0047) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.0399,-0.0002,-0.0221) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0338,-0.0014,-0.0306) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.02,-0.0032,-0.0424) tip=(0.0085,-0.0349,0) bend=(-0.0026,-0.0006,-0.0076) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.0194,-0.0031,-0.0411) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0095,-0.004,-0.0444) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0086,-0.005,-0.0459) tip=(0.0086,-0.0342,0.0066) bend=(0.0024,-0.0009,-0.0076) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(0.0083,-0.0049,-0.0446) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(0.0184,-0.0051,-0.0414) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.034,-0.0049,-0.0321) tip=(0.0048,-0.0335,0.012) bend=(0.0064,-0.0008,-0.0048) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(0.033,-0.0048,-0.0311) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(0.0393,-0.0042,-0.0228) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0465,-0.0029,-0.0061) tip=(-0.0015,-0.033,0.0142) bend=(0.008,-0.0004,-0.0001) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(0.0451,-0.0029,-0.0059) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(0.0453,-0.0018,0.0045) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0414,0.0001,0.0222) tip=(-0.0078,-0.0328,0.0122) bend=(0.0066,0.0001,0.0046) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(0.0402,0.0001,0.0215) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(0.0343,0.0013,0.0301) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(0.0207,0.0032,0.0421) tip=(-0.0119,-0.0332,0.007) bend=(0.0027,0.0006,0.0075) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(0.0201,0.0031,0.0408) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(0.0102,0.0039,0.0443) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0079,0.005,0.0461) tip=(-0.0121,-0.0338,0.0003) bend=(-0.0022,0.0009,0.0076) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.0076,0.0049,0.0447) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0177,0.0051,0.0417) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0335,0.0049,0.0326) tip=(-0.0083,-0.0345,-0.0051) bend=(-0.0063,0.0008,0.0049) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.0325,0.0048,0.0317) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0389,0.0043,0.0234) r=0.0042 blend=0.0015 side=r
-  bar  arm on foreArm from=0.5429 to=0.5429 offset=(-0.0464,0.003,0.0069) tip=(-0.0021,-0.0351,-0.0073) bend=(-0.008,0.0004,0.0002) r=0.0032 blend=0.001 side=r
-  blob arm on foreArm at=0.5429 offset=(-0.045,0.0029,0.0067) r=0.0042 blend=0.0015 side=r
-  blob arm on foreArm at=0.6571 offset=(-0.0454,0.0019,-0.0037) r=0.0042 blend=0.0015 side=r
+  # ---- wrist.r: a suture along the forearm / hand flip line (96/96 angles found it) ----
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0491,0.0025,0.0001) tip=(0.0003,-0.0006,-0.0055) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0488,0.0019,-0.0054) tip=(0.0009,-0.0006,-0.0053) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.048,0.0013,-0.0107) tip=(0.0015,-0.0006,-0.0052) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0465,0.0007,-0.016) tip=(0.002,-0.0006,-0.005) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0445,0.0001,-0.021) tip=(0.0026,-0.0006,-0.0048) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0419,-0.0005,-0.0257) tip=(0.0031,-0.0006,-0.0044) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0388,-0.0011,-0.0302) tip=(0.0036,-0.0006,-0.0041) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0353,-0.0017,-0.0342) tip=(0.004,-0.0006,-0.0037) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0313,-0.0022,-0.0379) tip=(0.0044,-0.0005,-0.0032) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0269,-0.0028,-0.0411) tip=(0.0047,-0.0005,-0.0027) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0222,-0.0033,-0.0438) tip=(0.005,-0.0005,-0.0021) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0172,-0.0037,-0.0459) tip=(0.0052,-0.0004,-0.0016) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.012,-0.0041,-0.0475) tip=(0.0053,-0.0004,-0.001) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0067,-0.0045,-0.0485) tip=(0.0054,-0.0003,-0.0004) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0013,-0.0048,-0.0489) tip=(0.0054,-0.0003,0.0002) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0042,-0.0051,-0.0487) tip=(0.0054,-0.0002,0.0008) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0095,-0.0053,-0.0479) tip=(0.0053,-0.0001,0.0014) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0148,-0.0054,-0.0466) tip=(0.0051,-0.0001,0.0019) bend=(0,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0199,-0.0055,-0.0446) tip=(0.0048,0,0.0025) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0247,-0.0055,-0.0421) tip=(0.0045,0.0001,0.003) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0293,-0.0054,-0.0391) tip=(0.0042,0.0001,0.0035) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0334,-0.0052,-0.0357) tip=(0.0038,0.0002,0.0039) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0372,-0.005,-0.0317) tip=(0.0033,0.0003,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0405,-0.0048,-0.0274) tip=(0.0028,0.0003,0.0046) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0433,-0.0044,-0.0228) tip=(0.0023,0.0004,0.0049) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0456,-0.0041,-0.0179) tip=(0.0017,0.0004,0.0051) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0473,-0.0036,-0.0127) tip=(0.0011,0.0005,0.0053) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0485,-0.0032,-0.0074) tip=(0.0006,0.0005,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0491,-0.0027,-0.0021) tip=(0,0.0005,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.049,-0.0021,0.0034) tip=(-0.0006,0.0006,0.0054) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0484,-0.0015,0.0087) tip=(-0.0012,0.0006,0.0053) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0471,-0.001,0.014) tip=(-0.0018,0.0006,0.0051) bend=(0.0001,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0453,-0.0004,0.0191) tip=(-0.0024,0.0006,0.0049) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0429,0.0002,0.0239) tip=(-0.0029,0.0006,0.0046) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.04,0.0008,0.0285) tip=(-0.0034,0.0006,0.0042) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0367,0.0014,0.0327) tip=(-0.0038,0.0006,0.0038) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0328,0.002,0.0365) tip=(-0.0042,0.0006,0.0034) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0286,0.0026,0.0399) tip=(-0.0046,0.0005,0.0029) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.024,0.0031,0.0428) tip=(-0.0049,0.0005,0.0024) bend=(0.0001,0,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0191,0.0036,0.0452) tip=(-0.0051,0.0004,0.0018) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.014,0.004,0.047) tip=(-0.0053,0.0004,0.0012) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0087,0.0044,0.0482) tip=(-0.0054,0.0003,0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(0.0033,0.0047,0.0488) tip=(-0.0054,0.0003,0) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0021,0.005,0.0489) tip=(-0.0054,0.0002,-0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0075,0.0052,0.0483) tip=(-0.0053,0.0001,-0.0011) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0128,0.0054,0.0472) tip=(-0.0052,0.0001,-0.0017) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.018,0.0054,0.0454) tip=(-0.0049,0,-0.0023) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0229,0.0055,0.0432) tip=(-0.0047,-0.0001,-0.0028) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0276,0.0054,0.0403) tip=(-0.0043,-0.0001,-0.0033) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0319,0.0053,0.037) tip=(-0.0039,-0.0002,-0.0038) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0358,0.0051,0.0333) tip=(-0.0035,-0.0002,-0.0042) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0393,0.0049,0.0291) tip=(-0.003,-0.0003,-0.0045) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0423,0.0046,0.0246) tip=(-0.0025,-0.0004,-0.0048) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0448,0.0042,0.0198) tip=(-0.0019,-0.0004,-0.0051) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0468,0.0038,0.0147) tip=(-0.0014,-0.0005,-0.0052) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8388 to=0.8388 offset=(-0.0481,0.0034,0.0095) tip=(-0.0008,-0.0005,-0.0055) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0541,0.0027,-0.0001) tip=(0.0003,-0.0006,-0.0058) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0538,0.0021,-0.006) tip=(0.001,-0.0006,-0.0059) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0529,0.0015,-0.0118) tip=(0.0016,-0.0007,-0.0057) bend=(-0.0002,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0513,0.0008,-0.0176) tip=(0.0022,-0.0007,-0.0055) bend=(-0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.049,0.0001,-0.0231) tip=(0.0028,-0.0007,-0.0052) bend=(-0.0001,0.0001,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0462,-0.0005,-0.0284) tip=(0.0034,-0.0007,-0.0049) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0428,-0.0012,-0.0333) tip=(0.0039,-0.0006,-0.0045) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0389,-0.0018,-0.0377) tip=(0.0044,-0.0006,-0.004) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0345,-0.0025,-0.0418) tip=(0.0048,-0.0006,-0.0035) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0297,-0.003,-0.0453) tip=(0.0052,-0.0006,-0.003) bend=(-0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0245,-0.0036,-0.0482) tip=(0.0055,-0.0005,-0.0024) bend=(-0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.019,-0.0041,-0.0506) tip=(0.0057,-0.0005,-0.0017) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0133,-0.0046,-0.0524) tip=(0.0059,-0.0004,-0.0011) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0074,-0.005,-0.0535) tip=(0.006,-0.0003,-0.0005) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0014,-0.0053,-0.0539) tip=(0.006,-0.0003,0.0002) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0046,-0.0056,-0.0537) tip=(0.0059,-0.0002,0.0009) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0105,-0.0058,-0.0529) tip=(0.0058,-0.0001,0.0015) bend=(0,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0163,-0.006,-0.0514) tip=(0.0056,-0.0001,0.0021) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0219,-0.006,-0.0492) tip=(0.0053,0,0.0028) bend=(0.0001,0,-0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0272,-0.006,-0.0465) tip=(0.005,0.0001,0.0033) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0323,-0.0059,-0.0432) tip=(0.0046,0.0002,0.0038) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0369,-0.0058,-0.0393) tip=(0.0042,0.0002,0.0043) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.041,-0.0056,-0.035) tip=(0.0036,0.0003,0.0048) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0447,-0.0053,-0.0303) tip=(0.0031,0.0004,0.0051) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0478,-0.0049,-0.0251) tip=(0.0025,0.0004,0.0054) bend=(0.0001,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0503,-0.0045,-0.0197) tip=(0.0019,0.0005,0.0057) bend=(0.0002,0,-0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0522,-0.004,-0.014) tip=(0.0013,0.0005,0.0058) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0535,-0.0035,-0.0082) tip=(0.0006,0.0006,0.0059) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0541,-0.0029,-0.0023) tip=(-0.0001,0.0006,0.006) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.054,-0.0023,0.0037) tip=(-0.0007,0.0006,0.0059) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0533,-0.0017,0.0096) tip=(-0.0014,0.0006,0.0058) bend=(0.0002,0,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.052,-0.0011,0.0154) tip=(-0.002,0.0007,0.0056) bend=(0.0002,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0499,-0.0004,0.021) tip=(-0.0026,0.0007,0.0054) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0473,0.0003,0.0264) tip=(-0.0032,0.0007,0.005) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0442,0.0009,0.0314) tip=(-0.0037,0.0006,0.0047) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0404,0.0016,0.0361) tip=(-0.0042,0.0006,0.0042) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0362,0.0022,0.0403) tip=(-0.0047,0.0006,0.0037) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0315,0.0028,0.044) tip=(-0.005,0.0006,0.0032) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0265,0.0034,0.0472) tip=(-0.0054,0.0005,0.0026) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0211,0.0039,0.0498) tip=(-0.0056,0.0005,0.002) bend=(0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0154,0.0044,0.0518) tip=(-0.0058,0.0004,0.0014) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0096,0.0048,0.0531) tip=(-0.0059,0.0004,0.0007) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(0.0037,0.0052,0.0538) tip=(-0.006,0.0003,0) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0023,0.0055,0.0539) tip=(-0.006,0.0002,-0.0006) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0083,0.0057,0.0533) tip=(-0.0059,0.0002,-0.0013) bend=(0,0.0001,0.0002) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0141,0.0059,0.052) tip=(-0.0057,0.0001,-0.0019) bend=(0,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0198,0.006,0.0501) tip=(-0.0054,0,-0.0025) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0253,0.006,0.0476) tip=(-0.0051,-0.0001,-0.0031) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0304,0.006,0.0445) tip=(-0.0048,-0.0001,-0.0037) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0352,0.0058,0.0408) tip=(-0.0043,-0.0002,-0.0041) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0395,0.0056,0.0367) tip=(-0.0038,-0.0003,-0.0046) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0433,0.0054,0.0321) tip=(-0.0033,-0.0003,-0.005) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0467,0.005,0.0271) tip=(-0.0028,-0.0004,-0.0053) bend=(-0.0001,0.0001,0.0001) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0494,0.0047,0.0218) tip=(-0.0021,-0.0005,-0.0056) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0516,0.0042,0.0162) tip=(-0.0015,-0.0005,-0.0058) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8897 to=0.8897 offset=(-0.0531,0.0037,0.0104) tip=(-0.0009,-0.0005,-0.0058) bend=(-0.0001,0.0001,0) r=0.0055 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8082 to=0.8082 offset=(-0.0481,0.003,0.0058) tip=(-0.0116,-0.033,-0.0082) bend=(-0.0075,0.0028,-0.0003) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8091 offset=(-0.0468,0.0029,0.0056) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9178 offset=(-0.0568,0.0023,-0.0056) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.044,0.0001,-0.0206) tip=(-0.0044,-0.0338,-0.0112) bend=(-0.0063,0.0023,-0.0043) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0427,0.0001,-0.02) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(-0.0457,-0.0011,-0.0342) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0267,-0.0027,-0.0405) tip=(0.0036,-0.0341,-0.0105) bend=(-0.0033,0.0019,-0.0071) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0259,-0.0026,-0.0393) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(-0.0209,-0.0042,-0.053) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8078 to=0.8078 offset=(-0.0014,-0.0048,-0.0483) tip=(0.0101,-0.034,-0.0057) bend=(0.0008,0.0016,-0.0078) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0014,-0.0046,-0.0469) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(0.0101,-0.0061,-0.0559) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0243,-0.0054,-0.0417) tip=(0.0131,-0.0334,0.0018) bend=(0.0047,0.0016,-0.0063) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(0.0236,-0.0052,-0.0405) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(0.0381,-0.0061,-0.0421) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0427,-0.0044,-0.0226) tip=(0.0117,-0.0325,0.0097) bend=(0.0072,0.0018,-0.0029) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(0.0415,-0.0043,-0.022) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(0.0547,-0.0043,-0.0158) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0484,-0.0021,0.0032) tip=(0.0063,-0.0316,0.0157) bend=(0.0076,0.0022,0.0012) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(0.047,-0.002,0.0031) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.918 offset=(0.055,-0.0012,0.0153) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.0396,0.0008,0.028) tip=(-0.0014,-0.0311,0.018) bend=(0.0058,0.0026,0.0049) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(0.0385,0.0008,0.0273) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(0.0389,0.0022,0.0418) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(0.019,0.0035,0.0445) tip=(-0.0093,-0.0309,0.0158) bend=(0.0022,0.003,0.0071) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(0.0185,0.0034,0.0433) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.918 offset=(0.0111,0.005,0.0558) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0073,0.0051,0.0477) tip=(-0.0148,-0.0312,0.0099) bend=(-0.0019,0.0032,0.0071) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0071,0.005,0.0464) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(-0.0199,0.0063,0.0531) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0314,0.0052,0.0367) tip=(-0.0164,-0.0319,0.002) bend=(-0.0055,0.0032,0.0049) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0305,0.0051,0.0356) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.918 offset=(-0.045,0.0057,0.0346) r=0.0042 blend=0.0015 side=r
+  bar  arm on foreArm from=0.8079 to=0.8079 offset=(-0.0461,0.0038,0.0147) tip=(-0.0136,-0.0328,-0.0055) bend=(-0.0074,0.0029,0.0012) r=0.0032 blend=0.001 side=r
+  blob arm on foreArm at=0.8088 offset=(-0.0448,0.0037,0.0143) r=0.0042 blend=0.0015 side=r
+  blob arm on foreArm at=0.9181 offset=(-0.0567,0.0034,0.0058) r=0.0042 blend=0.0015 side=r
 
   # ---- knee.r: a suture along the thigh / shin flip line (96/96 angles found it) ----
   bar  leg on shin from=0.0167 to=0.0167 offset=(-0.0677,0,0.0001) tip=(0.0003,-0.0002,-0.0058) bend=(-0.0001,0,0) r=0.0055 blend=0.0015 side=r

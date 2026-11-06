@@ -12,6 +12,7 @@ import { jointForBoneEnd, rotateYaw } from './gait';
 import { boneFrames, segmentQuat, type BoneFrame3 } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
 import { morphOf, morphShape, type MorphResult, type MorphWeights } from './morph';
+import { orientShapesField } from './orient-shape';
 import { SQUASH_CENTRE_AT, squashAxes, squashMove, squashPoint, squashRestPrim, squashShape } from './squash';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
@@ -29,6 +30,10 @@ interface PrimBind {
    *  bone as far as the corpse's headFollow lets go (applyRig), so a lying body's flesh lies with it. Standing
    *  (follow 0) it is unused. */
   lieFrame?: { head: number; tail: number; restDir: Vec3 };
+  /** A POINT prim's (a == b) declared bone, when it has a segment and no armFrame: the frame its skin noise and body
+   *  normal map turn with (applyRig stamps it as a noise-only pose orient, orient-shape.ts). A point prim has no axis
+   *  for restPoint to swing, so without it the noise stayed unrotated while the limb turned. */
+  noiseFrame?: { head: number; tail: number; restDir: Vec3 };
 }
 
 /** The upper-arm / forearm bone for a side, under either naming convention:
@@ -479,6 +484,9 @@ export function bindRig(body: BuildResult): BoundRig {
     const own2 = lies ? body.bones.get(p.bone!) : undefined;
     if (own2 && indexOf(own2.head) !== indexOf(own2.tail)) binding.lieFrame = { head: indexOf(own2.head),
       tail: indexOf(own2.tail), restDir: normalize(sub(own2.tail, own2.head)) };
+    const own3 = !bone && p.bone && len(sub(p.a, p.b)) === 0 ? body.bones.get(p.bone) : undefined;
+    if (own3 && indexOf(own3.head) !== indexOf(own3.tail)) binding.noiseFrame = { head: indexOf(own3.head),
+      tail: indexOf(own3.tail), restDir: normalize(sub(own3.tail, own3.head)) };
     return binding;
   };
 
@@ -721,7 +729,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     const l = Math.hypot(m[0], m[1], m[2], m[3]);
     return [m[0] / l, m[1] / l, m[2] / l, m[3] / l];
   };
-  const posePrimitive = (p: Primitive, bind: PrimBind): Primitive => {
+  const posePrimitive = (p: Primitive, bind: PrimBind, flesh = false): Primitive => {
     const q = bind.armFrame ? rotationOf(bind.armFrame)
       : bind.lieFrame && trunkFollow > 0 ? trunkRotation(bind.lieFrame) : yawRotation;
     const turned = Math.abs(1 - q[3]) > 1e-6;
@@ -732,7 +740,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     // and wide-footed when it faced sideways (the apparent room variants).
     // Isotropic capsules retain the cheap un-oriented field path.
     const a = add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset));
-    return {
+    const posed: Primitive = {
       ...p,
       a,
       b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
@@ -742,6 +750,17 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
         ? (p.orient ? { orient: qMul(q, p.orient) } : { orient: q, poseOrient: true })
         : {}),
     };
+    // A plain flesh SPHERE (the zombie's hand, knee and shoulder balls) gets its bone's rotation as a NOISE-ONLY
+    // orient: restPoint has no axis to swing on a point prim and read its skin noise unrotated while the limb
+    // turned, a crisp ring where the dominant prim flips to the forearm (2026-11-05). Rotating a sphere about its
+    // centre leaves its field alone, so the shape and the march path are untouched (orient-shape.ts; the pack keeps
+    // the cluster off sdPrimO). An anisotropic point prim (the spine and foot blobs) keeps the orient it shapes with
+    // above: turning only its noise would slide the texture over a silhouette that does not turn.
+    if (flesh && !orientedShape && !orientShapesField(posed)) {
+      const qn = bind.armFrame ? q : bind.noiseFrame ? rotationOf(bind.noiseFrame) : q;
+      if (Math.abs(1 - qn[3]) > 1e-6) { posed.orient = qn; posed.poseOrient = true; }
+    }
+    return posed;
   };
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
@@ -773,10 +792,10 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     }
     const bind = bound.binding[i]!;
     const m = morphed?.get(i);
-    if (!m) return posePrimitive(p, bind);
+    if (!m) return posePrimitive(p, bind, true);
     // Off the head, the morph moves the bind offsets (rest frame, joint-relative) before the segment rotation turns them.
     return posePrimitive(morphShape(p, m), {
-      ...bind, a: { ...bind.a, offset: add(bind.a.offset, m.da) }, b: { ...bind.b, offset: add(bind.b.offset, m.db) } });
+      ...bind, a: { ...bind.a, offset: add(bind.a.offset, m.da) }, b: { ...bind.b, offset: add(bind.b.offset, m.db) } }, true);
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
