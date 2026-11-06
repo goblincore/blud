@@ -78,6 +78,24 @@ describe('relaxBodyCollisions', () => {
     expect(len(sub(h, mid))).toBeGreaterThan(0.1);
   });
 
+  it('pushes a hand out of the top of the thigh, by the hip (blown-away deaths, 2026-11-06)', () => {
+    const pos = rest.map(v => [...v] as Vec3);
+    const hip = rest[idx.hipL!]!, knee = rest[idx.kneeL!]!;
+    const at = (s: number): Vec3 => [hip[0] + (knee[0] - hip[0]) * s, hip[1] + (knee[1] - hip[1]) * s, hip[2] + (knee[2] - hip[2]) * s];
+    // The left hand sunk into the front of the left thigh a sixth of the way down, a wrist's width in.
+    const top = at(0.15);
+    pos[idx.handL!] = [top[0], top[1], top[2] + 0.02];
+    const thigh = (p: readonly RigPoint[]) => {
+      const a = p[idx.hipL!]!.pos, b = p[idx.kneeL!]!.pos, q = p[idx.handL!]!.pos, ab = sub(b, a), aq = sub(q, a);
+      const t = Math.max(0, Math.min(1, (aq[0] * ab[0] + aq[1] * ab[1] + aq[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2)));
+      return len(sub(q, [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]));
+    };
+    const out = solve(pts(pos), 30);
+    const fore = cb.capsules.find(c => c.a === idx.elbowL && c.b === idx.handL)!;
+    const leg = cb.capsules.find(c => c.a === idx.hipL && c.b === idx.kneeL)!;
+    expect(thigh(out)).toBeGreaterThan((fore.r + leg.r) * BODY_COLLIDE.skin - 0.005);
+  });
+
   it('pushes a knee crossed through the other one apart', () => {
     const pos = rest.map(v => [...v] as Vec3);
     const kr = rest[idx.kneeR!]!;

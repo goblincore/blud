@@ -929,9 +929,11 @@ const PAIR_SPEC: ReadonlyArray<PairSpec> = (() => {
   out.push(pair(L.thigh, R.thigh), pair(L.shin, R.shin), pair(L.foot, R.foot));
   // Arms out of each other.
   out.push(pair(L.upper, R.upper), pair(L.fore, R.fore), pair(L.upper, R.fore), pair(L.fore, R.upper));
-  // Arms out of the legs.
+  // Arms out of the legs: the whole thigh, up to the hip. The 0.35 cut above is for the thigh against the trunk, the
+  // hip cone's business; it left the top third of the thigh open to the arms, and in blown-away deaths a forearm or
+  // an elbow lay up to 14 cm inside it (owner playtest 2026-11-06).
   for (const a of [L, R]) for (const l of [L, R]) for (const arm of [a.upper, a.fore]) {
-    out.push(pair(arm, l.thigh), pair(arm, l.shin), pair(arm, l.foot));
+    out.push(pair(arm, [l.thigh[0], FULL]), pair(arm, l.shin), pair(arm, l.foot));
   }
   return out;
 })();

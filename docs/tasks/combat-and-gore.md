@@ -56,8 +56,17 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
   falls, as do the soldiers. The lying-flesh fix (`rig-bind.ts` lieFrame) applies to his ragdoll too.
 - [ ] Zombie crowd: thrown corpses pass through other zombies (no body-to-body collision on the rig).
 - [x] Sliders on the wound panel: shoulder/hip cut, elbow/knee cut, soldier shoulder/elbow cut, corpse integrity, blown-away deaths
-  (scales every chance), blown-away max range, authored deaths on/off, death pose pull, pull after landing
+  (scales every chance) and one per weapon, blown-away shotgun max range, authored deaths on/off, death pose pull, pull after landing
   (also `__sdfGame.setWoundTuning`).
+- [x] **Blown-away chance per weapon** (owner 2026-11-06: "make the blown away ragdoll frequency a per weapon config like
+  double shotty"). `blow-away.ts BLOW_AWAY.weapons`: single barrel 0.85, double barrel 0.75 (was the shared 0.85: "maybe a
+  little too high"), slug 0.55, explosion 1; the volley knows a double-barrel pellet. A wound-panel slider per weapon.
+- [x] **Arms out of the thigh tops** (owner 2026-11-06: "still some arm clipping issues with the blown away stuff"). The arm
+  pairs skipped the top third of the thigh; they cover all of it now (`collapse.ts`). 48 blown-away deaths: worst arm
+  overlap 4.5 -> 4.2 cm avg, 14.1 -> 9.8 cm max; sleep and slide unchanged.
+- [ ] **An arm caught under a landing trunk** sits up to ~10 cm inside the back for a few frames (elbow on the floor, the
+  push points down into it). Tried and not a net win: putting a fast limb back as far as it came in a step, and pushing
+  a floored limb sideways from under the trunk or head (each cut the peak, but more frames and rests over 3 cm).
 - [ ] Owner: judge the five falls by eye (only measured, not seen: the browser pane does not draw while hidden); tune the
   pull sliders and how often a body is blown away.
 - [ ] More falls (a stagger back into a wall, a headshot drop straight down) and the cultist on the same set.
