@@ -36,6 +36,8 @@ export interface Piece {
   centre: THREE.Vector3;
   radius: number;
   armor: boolean;
+  /** A `tooth` island: it stands in gum, so a crater that reaches it knocks it out (the skull's own teeth are behind). */
+  tooth: boolean;
   released: boolean;
   damage: number;
 }
@@ -85,7 +87,7 @@ export function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
     const centre=bounds.getCenter(new THREE.Vector3());
     return {source:mesh,indices:list,bone,joint,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
-      armor:material?.name==='plate',released:false,damage:0};
+      armor:material?.name==='plate',tooth:material?.name==='tooth',released:false,damage:0};
   });
 }
 
@@ -120,7 +122,7 @@ export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIn
   return index.boneAlive.get(support)??true;
 }
 
-/** Soldier-only kit damage. Missing anatomy always sheds its equipment;
+/** Breakable-kit damage (character-registry.ts armoured, kitSheds). Missing anatomy always sheds its equipment;
  * clustered local impacts knock armor plates off to expose existing wounds. */
 export function createKitDamage(object:THREE.Object3D) {
   const pieces:Piece[]=[], originals=new Map<THREE.SkinnedMesh,number[]>();
@@ -232,7 +234,8 @@ export function createKitDamage(object:THREE.Object3D) {
       const retained=new Set(wounds.flatMap(w=>w.eventId===undefined?[]:[w.eventId]));
       seen=new Set([...seen].filter(id=>retained.has(id)));
       const impacts=wounds.filter(w=>w.eventId!==undefined&&!seen.has(w.eventId)&&!w.injuryIgnored&&w.type!=='burn').map(w=>{
-        seen.add(w.eventId!); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
+        seen.add(w.eventId!);
+        return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),radius:w.radius,weight:w.type==='blast'?3:1};
       });
       const changed=new Set<THREE.SkinnedMesh>();
       // Plate mode: a spark per plate impact, wherever the actor says it was.
@@ -257,8 +260,10 @@ export function createKitDamage(object:THREE.Object3D) {
             piece.damage+=hit.weight; events.push({kind:'armor-hit',point:hit.point,limb:piece.limb});
           }
         }
+        // Kit teeth float in front of the exposed skull once their gum is shot away (owner, 2026-11-02): out they come.
+        const toothOut=piece.tooth && impacts.some(hit=>worldBounds(piece).distanceToPoint(new THREE.Vector3(...hit.point))<=hit.radius);
         support??=kitSupportIndex(body);
-        if(!kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
+        if(toothOut || !kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
           const point=bake(piece,seat); changed.add(piece.source);
           if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
         }

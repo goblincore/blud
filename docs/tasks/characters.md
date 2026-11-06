@@ -25,6 +25,13 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Third pass 2026-11-02** (owner): the exposed skull dirtied (baked hollows, blood, clinging flesh, black
   sockets), a snout under the muzzle so no flesh floats, red-pupil eyes from the skull's modelled eyeballs; loose low
   arms that swing (`IMP_PROWL`); a throw with a long cock, a whip and a follow-through (`THROW_TUNING`).
+- [x] **Teeth and cables 2026-11-02** (owner): the exposed skull's jaw swung open, thrust and narrowed and its tooth
+  row drawn out so the kit's teeth stand on bone (`build_imp_skull.py` `JAW_*`, `SNOUT_ROW`; `IMP_FIT` re-solved, the
+  cranium unmoved, still under the hide); the chest hose split at a coupling so its outer run sheds with a shot-off
+  arm (`make_conduits.py`, `characters/imp-kit.test.ts`). Second look (owner: fist and cable stayed on a shot-off arm;
+  the teeth still float): the imp's kit never shed at all, only armoured kits did. New registry flag `kitSheds`
+  (imp only) runs the kit damage without the armour; a crater that reaches a `tooth` island knocks it out, so the
+  skull's own teeth show. Every other sculpted kit (venus, teratoma, ogre, ...) still stays on a severed limb.
 - [ ] Owner review. Open: the cut horn knob on each temple; metal skull parts
   on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
   ball (a tinted tracer, like the bile); kit optimisation.
