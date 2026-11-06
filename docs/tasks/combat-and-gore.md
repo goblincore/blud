@@ -244,6 +244,10 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
     lands; a sever takes a lip only where it would stand in removed flesh. For the owner: a slug's decapitation
     leaves no raised rim at the neck (nothing floats there now); the bonewalker and the described schoolgirl draw no
     mesh eyes again; a pellet decapitation still leaves the neck's base standing.
+  - [~] **Other enemies (spike 2026-11-02, branch `claude/reverent-blackwell-4b31ca`).** The soldier now splits under
+    the zombie's conditions (axe, precise slug, the pop), with a per-head hold for his cap. Every other character is
+    surveyed as works / needs / blocked in the [roll-out note](../../docs/dev-notes/2026-11-02-head-split-roll-out.md).
+    Open: a slug that splits the soldier's head adds no injury to his tally.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and

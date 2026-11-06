@@ -57,8 +57,9 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'spine',  at: 0.50, radius: 0.150, scale: [1.15, 1, 0.80], blendK: 0.02, limb: 'torso' },
     { bone: 'spine',  at: 0.15, radius: 0.142, scale: [1.02, 1, 0.95], blendK: 0.02, limb: 'torso' },
     { bone: 'pelvis', at: 0.40, radius: 0.145, scale: [1.10, 0.9, 0.92], blendK: 0.02, limb: 'torso' },
-    // The waist across the hip bones, which the thigh tops used to cover (2026-11-05; see zombie.blob).
-    { bone: 'pelvis', at: 0.95, capTo: 0.95, radius: 0.066, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [0.115, 0, 0], tip: [-0.23, 0, 0] },
+    // The flanks over the hip bones, which the thigh tops used to cover (2026-11-05; see zombie.blob).
+    { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [0.11, 0, 0], rigid: true },
+    { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [-0.11, 0, 0], rigid: true },
 
     // Arms — shoulder blob, then upper and forearm capsules, then a fist. Blended wide, so the shoulder reads as one
     // mound with the arm and torso (2026-11-05; see zombie.blob).

@@ -91,6 +91,9 @@ export interface CharacterEntry {
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
+  /** The kit comes off with the anatomy under it: a shot-off arm takes its hoses and fist, a head shot that reaches a
+   *  tooth row knocks it out (webgpu/kit-damage.ts). Implied by `armoured`. Absent: the kit stays on the bones. */
+  kitSheds?: boolean;
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -469,6 +472,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   imp: {
     name: 'imp', src: impBlobSrc,
     kit: '/assets/lab/imp-kit.gltf',
+    kitSheds: true,
     // Starved ribs, spine knuckles, sinew cords and veins on the torso, arms and legs (characters/imp.detail, baked;
     // never marched).
     bodyNormal: { url: '/assets/lab/imp-body-n.png', meta: '/assets/lab/imp-body-n.json', strength: 1 },

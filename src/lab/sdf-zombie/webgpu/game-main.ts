@@ -170,7 +170,7 @@ import { createGpuFrameAttributor } from './gpu-frame-summary';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
-import { createWarmBackgroundTracker } from './warm-background';
+import { createWarmBackgroundTracker, withHidden } from './warm-background';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -2456,6 +2456,13 @@ async function main() {
       // simulating; they are simply not submitted until the program is ready.
       ctx.boot.warmBackground.gibDraw() === 'draw' ? chunkObjects() : []);
     ctx.telemetry.telemetry.end('crowd-set-bodies', setBodiesTiming);
+    // Leaving the pieces out of setBodies does not stop them marching: they sit in
+    // the scene on SDF_LAYER, so the merged pass draws them anyway, and in `failed`
+    // that draw is the synchronous compile. They must be out of the render.
+    const renderSdfLayer = () => {
+      if (ctx.boot.warmBackground.gibDraw() === 'draw') ctx.render.sdfLayer.render(scene, camera);
+      else withHidden(chunkObjects(), () => ctx.render.sdfLayer.render(scene, camera));
+    };
     const sdfRenderTiming = ctx.telemetry.telemetry.begin();
     if (ctx.goo.enabled && ctx.goo.layer) {
       // Fire/gib profiling: the goo layer's callback IS the SDF submit, so
@@ -2463,13 +2470,13 @@ async function main() {
       const gooTiming = ctx.telemetry.telemetry.begin();
       ctx.goo.layer.render(camera, () => {
         const inner = ctx.telemetry.telemetry.begin();
-        ctx.render.sdfLayer.render(scene, camera);
+        renderSdfLayer();
         ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
       });
       ctx.telemetry.telemetry.end('crowd-goo-outer', gooTiming);
     } else {
       const inner = ctx.telemetry.telemetry.begin();
-      ctx.render.sdfLayer.render(scene, camera);
+      renderSdfLayer();
       ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
     }
     ctx.telemetry.telemetry.end('crowd-sdf-render', sdfRenderTiming);
@@ -3960,7 +3967,7 @@ async function main() {
       }
       // THE GIB / CHUNK MARCH VARIANT (2026-09-18) now compiles in the
       // BACKGROUND set (2026-09-19): detached pieces march through the SHARED
-      // chunk material, whose ~240 KB shader no boot object uses. It used to be
+      // chunk material, whose ~364 KB shader no boot object uses. It used to be
       // warmed here behind the loader because the first dismemberment built it
       // SYNCHRONOUSLY mid-game (47.8 s + a second stall, cold). The protection
       // stays; only the WAITING moves — `startBackgroundCompiles` rebuilds this
@@ -3969,25 +3976,14 @@ async function main() {
       //
       // DEFERRED ROUTE keeps the old behind-the-loader warm: its G-buffer router
       // draws the chunk mesh directly, so the setBodies skip does not cover it.
-      // Constant rng: the shared rngStreams must not advance here.
       let warmChunkView: ChunkGpuView | null = null;
       if (!ctx.boot.backgroundMode) {
         try {
-          const a0 = ctx.world.actors[0];
-          const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
-          const warmFirst = warmPrims[0];
-          if (a0 && ctx.bake.material && warmFirst) {
-            const warmOrigin: Vec3 = [0, 1, 0];
-            const warmState = makeChunk(
-              warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
-            );
-            warmChunkView = createChunkGpuView(
-              warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
-              ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-            );
-            warmChunkView.object.layers.set(SDF_LAYER);
-            scene.add(warmChunkView.object);
-          }
+          warmChunkView = createWarmChunkView(
+            ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+          );
+          warmChunkView.object.layers.set(SDF_LAYER);
+          scene.add(warmChunkView.object);
         } catch (err) {
           console.warn('[warm] gib-variant warm view could not be built — first gib will compile live', err);
         }
@@ -4092,6 +4088,27 @@ async function main() {
   };
 
   /**
+   * The throwaway view the chunk program is compiled through. It needs NO ACTOR
+   * (first-chunk freeze, 2026-11-02): it used to borrow the first actor's prims
+   * and uniforms, so a level that boots with nobody in it (the sector fixture)
+   * compiled nothing and settled the gib job `failed`; its first chunk then built
+   * this ~364 KB shader synchronously, a 27 s rAF gap on a cold Metal cache. The
+   * shared material swaps every value per draw, so a default look and the fallback
+   * volume texture key the same pipeline as a real piece.
+   */
+  const createWarmChunkView = (options: Parameters<typeof createChunkGpuView>[7]): ChunkGpuView => {
+    const warmOrigin: Vec3 = [0, 1, 0];
+    const warmPrims = [{
+      limb: 'torso', cluster: 0, op: 'add', a: [-0.02, 1, 0], b: [0.02, 1, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0.03,
+    } as unknown as Primitive];
+    // Constant rng: the shared rngStreams must not advance here.
+    const warmState = makeChunk('torso', warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5);
+    return createChunkGpuView(
+      warmState, warmPrims, defaultUniforms(blankFaceTexture()), undefined, undefined, ctx.bake.material, [], options,
+    );
+  };
+
+  /**
    * Compiles the gib/chunk march variant in BOTH contexts it draws in (the
    * march MRT and the gib-shutter half-float layer) after the loader. Uses the
    * same throwaway view the boot warm used; removed and disposed when done.
@@ -4100,18 +4117,7 @@ async function main() {
   const compileGibVariantInBackground = async (): Promise<boolean> => {
     let warmChunkView: ChunkGpuView | null = null;
     try {
-      const a0 = ctx.world.actors[0];
-      const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
-      const warmFirst = warmPrims[0];
-      if (!a0 || !ctx.bake.material || !warmFirst) return false;
-      const warmOrigin: Vec3 = [0, 1, 0];
-      const warmState = makeChunk(
-        warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
-      );
-      warmChunkView = createChunkGpuView(
-        warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
-        undefined,
-      );
+      warmChunkView = createWarmChunkView(undefined);
       warmChunkView.object.layers.set(SDF_LAYER);
       // HIDDEN except across each compile's synchronous prologue, as the crowd
       // compile below does. The warm chunk is real geometry (the first actor's

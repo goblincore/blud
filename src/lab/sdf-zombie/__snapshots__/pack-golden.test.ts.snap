@@ -84,4 +84,4 @@ exports[`packBody byte pin > venus.blob packs the pinned bytes 1`] = `"af4195ee3
 
 exports[`packBody byte pin > warbull.blob packs the pinned bytes 1`] = `"c6403051978c3781"`;
 
-exports[`packBody byte pin > zombie.blob packs the pinned bytes 1`] = `"e763c9241d78eba5"`;
+exports[`packBody byte pin > zombie.blob packs the pinned bytes 1`] = `"2ec24b11bd6691a1"`;

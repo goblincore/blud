@@ -527,6 +527,69 @@ function ankleAngles(t: Vec3, lt: number, s: Vec3, r: Vec3, f: Vec3, fwdSign: nu
   return { pitch: Math.atan2(tf, ts), yaw: Math.asin(Math.max(-1, Math.min(1, tr))) };
 }
 
+// THE FOOT TURNS WITH THE SHIN (owner playtest 2026-11-05: "the ankle seems way too floppy still"). The toe was a
+// free point hung off the ankle by the foot bone: when a tumbling body swung its shin round, the ankle went with it
+// and the toe kept its own way, so the foot lagged and flipped. Traced stage by stage over 24 deaths, the rig step
+// itself turned the foot against the shin 7.4 deg a step (496 steps over 15 deg), and neither a hold toward the rest
+// aim nor damping inside the ankle's range (relaxAnkles: even a rigid hold) changed it, as the next step undid them.
+// (A pull toward the rest aim and damping inside the range, tried at 0.05-1 hold and 0.3-1 damping, barely moved it,
+// and the stronger settings kept 7-12 of 36 corpses from settling.) So after the rig step each toe is turned about its ankle by the shin's own turn that step (the shortest arc from
+// the shin before to the shin after), `share` of the way: the foot rides the shin as a child bone rides its parent,
+// and the ankle springs then flex it within its range. Moves prev with pos (no speed added). A toe on its floor, or
+// pinned, is left alone: the floor props it.
+export const FOOT_CARRY = {
+  share: 0.85,
+  /** Only a shin turning more than this in the step (rad; 2 deg, 120 deg/s) carries its foot: the carry is for a
+   *  tumbling body. On a resting leg propped up it fought the ankle springs and the knee stop and the corpse never
+   *  fell asleep. */
+  minTurn: 2 * Math.PI / 180,
+};
+
+/** Rotate v by the shortest arc taking unit a to unit b. */
+function arcRotate(v: Vec3, a: Vec3, b: Vec3): Vec3 {
+  const c = dot3(a, b);
+  if (c > 1 - 1e-9) return v;
+  let k = cross(a, b), kl = len(k);
+  if (kl < 1e-9) { k = cross(a, Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 0, 1]); kl = len(k); return rotateAbout(v, scale(k, 1 / kl), Math.PI); }
+  return rotateAbout(v, scale(k, 1 / kl), Math.atan2(kl, c));
+}
+
+export function carryFeet(
+  before: readonly RigPoint[], after: readonly RigPoint[], cones: readonly HipCone[],
+  floor: (i: number, p: RigPoint) => number, limits: { share: number; minTurn: number } = FOOT_CARRY,
+): RigPoint[] {
+  if (limits.share <= 0) return after as RigPoint[];
+  let out: RigPoint[] | null = null;
+  for (const c of cones) {
+    const a = c.ankle;
+    if (!a) continue;
+    const k0 = before[c.knee], f0 = before[c.foot], t0 = before[a.toe];
+    const k1 = (out ?? after)[c.knee], f1 = (out ?? after)[c.foot], t1 = (out ?? after)[a.toe];
+    if (!k0 || !f0 || !t0 || !k1 || !f1 || !t1 || t1.pinned) continue;
+    // Resting on its floor by the grip's own measure (FLOOR_GRIP.contact): a toe carried by this and held by the grip
+    // was turned and put back every step, and the corpse never fell asleep.
+    if (t1.pos[1] <= floor(a.toe, t1) + FLOOR_GRIP.contact) continue;
+    const s0 = sub(f0.pos, k0.pos), s1 = sub(f1.pos, k1.pos), l0 = len(s0), l1 = len(s1);
+    if (l0 < 1e-6 || l1 < 1e-6) continue;
+    // Eased in from minTurn to twice it, so a shin turning about that fast is not carried one step and left the next.
+    const shinTurn = Math.acos(Math.max(-1, Math.min(1, dot3(s0, s1) / (l0 * l1))));
+    const ramp = limits.minTurn <= 0 ? 1 : Math.max(0, Math.min(1, (shinTurn - limits.minTurn) / limits.minTurn));
+    if (ramp <= 0) continue;
+    // Where the toe would be had the foot kept its angle to the shin, at its current length.
+    const off0 = sub(t0.pos, f0.pos), lt = len(sub(t1.pos, f1.pos));
+    const turned = arcRotate(off0, scale(s0, 1 / l0), scale(s1, 1 / l1)), lturn = len(turned);
+    if (lturn < 1e-6) continue;
+    const want = add3(f1.pos, scale(turned, lt / lturn));
+    let d = scale(sub(want, t1.pos), limits.share * ramp);
+    // Never into the floor.
+    const g = floor(a.toe, t1);
+    if (t1.pos[1] + d[1] < g) d = [d[0], g - t1.pos[1], d[2]];
+    out ??= after.slice();
+    out[a.toe] = { ...t1, pos: add3(t1.pos, d), prev: add3(t1.prev, d) };
+  }
+  return out ?? (after as RigPoint[]);
+}
+
 /** One soft pass of the ankle springs (and swing dampers) on the cones that carry one. */
 export function relaxAnkles(
   points: readonly RigPoint[],
@@ -1131,4 +1194,86 @@ export function relaxSpineCones(
     }
   }
   return out ?? (points as RigPoint[]);
+}
+
+// THE FLOOR GRIPS (owner playtest 2026-11-05: corpses "slide around a lot and spin in circles and never stop once they
+// hit the ground"). The floor's friction (motion.ts applyFloorContact) bleeds the SPEED of a point pushed below it,
+// but most of a lying corpse's motion is not speed: its limits (braces, cones, contacts, ankles) disagree by a few
+// millimetres and each moves points with no speed added, so the body crept: the pelvis slid 20-27 cm and the hips
+// turned 30-46 deg between 2 and 6 s after landing, in every probe build since before the joint work.
+// The grip takes the step's move of the points resting on their floor as ONE body (their mean slide, and their mean
+// turn about the vertical through their middle) and takes it back off EVERY point: under `stick` (`stickTurn` for the
+// turn) all of it, over it that much (sliding friction), with the speed it carried. The shape's own corrections pass
+// through: gripping each contact point on its own at the slide's 3 mm also held a leg lying out of range where the hip
+// cone could not move it (crossed legs at rest went from 8 to 13 of 48). Each point still gets a weaker grip of its own
+// (`pointStick`), under the cones' passes. Pinned points are the foot plant's.
+export const FLOOR_GRIP = {
+  /** The body slide per step it sticks under, and loses when it slides (m). 3 mm a step is 0.18 m/s: a creep sticks,
+   *  a thrown body drags to a stop (about 11 m/s^2, a hard floor). */
+  stick: 0.003,
+  /** The same for its turn about the vertical (rad per step): 0.5 deg, 30 deg/s. */
+  stickTurn: 0.5 * Math.PI / 180,
+  /** A point this close above its floor (its lift included) is resting on it (m). */
+  contact: 0.01,
+  /** Fewer resting points than this is not a body on the floor (a thrown one touching down). */
+  minContacts: 3,
+  /** Then each resting point on its own: a move under this sticks, over it loses this (m). Small, under the hip
+   *  cone's 5 mm passes, so a limb lying out of range can still be moved back. Probe, 96 deaths, 2-6 s after landing:
+   *  the whole-body grip alone left the pelvis sliding 3-13 cm and 8/48 resting crossed-legged; with this, 0-3 cm and
+   *  14/48 (each point gripped on its own at 3 mm: 1-3 cm and 13/48, plus 4 jumps over 15 cm). */
+  pointStick: 0.0015,
+};
+
+export function floorGrip(
+  before: readonly RigPoint[], after: readonly RigPoint[], floor: (i: number, p: RigPoint) => number,
+  limits: typeof FLOOR_GRIP = FLOOR_GRIP,
+): RigPoint[] {
+  const on: number[] = [];
+  for (let i = 0; i < after.length; i++) {
+    const a = after[i]!;
+    if (before[i] && !a.pinned && a.pos[1] <= floor(i, a) + limits.contact) on.push(i);
+  }
+  if (on.length < limits.minContacts) return after as RigPoint[];
+  const body = gripBody(before, after, on, limits);
+  return limits.pointStick > 0 ? gripPoints(before, body, on, limits.pointStick) : body;
+}
+
+/** Each resting point's own leftover move under `stick` is undone; over it, it loses `stick`. */
+function gripPoints(before: readonly RigPoint[], after: RigPoint[], on: readonly number[], stick: number): RigPoint[] {
+  const out = after.slice();
+  for (const i of on) {
+    const a = out[i]!, b = before[i]!;
+    const dx = a.pos[0] - b.pos[0], dz = a.pos[2] - b.pos[2], m = Math.hypot(dx, dz);
+    const keep = m <= stick ? 0 : (m - stick) / m;
+    out[i] = { ...a, pos: [b.pos[0] + dx * keep, a.pos[1], b.pos[2] + dz * keep] };
+  }
+  return out;
+}
+
+function gripBody(before: readonly RigPoint[], after: readonly RigPoint[], on: readonly number[], limits: typeof FLOOR_GRIP): RigPoint[] {
+  // The contacts' middle (where they ended) and their mean slide.
+  let cx = 0, cz = 0, mx = 0, mz = 0;
+  for (const i of on) { const a = after[i]!.pos, b = before[i]!.pos; cx += a[0]; cz += a[2]; mx += a[0] - b[0]; mz += a[2] - b[2]; }
+  cx /= on.length; cz /= on.length; mx /= on.length; mz /= on.length;
+  // Their mean turn about the vertical through the middle (least squares: sum r x d / sum r^2).
+  let num = 0, den = 0;
+  for (const i of on) {
+    const a = after[i]!.pos, b = before[i]!.pos;
+    const rx = b[0] - (cx - mx), rz = b[2] - (cz - mz), dx = a[0] - b[0] - mx, dz = a[2] - b[2] - mz;
+    num += rz * dx - rx * dz; den += rx * rx + rz * rz;
+  }
+  const turn = den > 1e-9 ? num / den : 0;
+  const slide = Math.hypot(mx, mz);
+  const keepSlide = slide <= limits.stick ? 0 : (slide - limits.stick) / slide;
+  const keepTurn = Math.abs(turn) <= limits.stickTurn ? 0 : (Math.abs(turn) - limits.stickTurn) / Math.abs(turn);
+  const bx = mx * (1 - keepSlide), bz = mz * (1 - keepSlide), bt = turn * (1 - keepTurn);
+  if (Math.abs(bx) < 1e-12 && Math.abs(bz) < 1e-12 && Math.abs(bt) < 1e-12) return after as RigPoint[];
+  // Take back the slide, then the turn about the middle, from every free point (pos only: the speed goes with it).
+  const c = Math.cos(-bt), s = Math.sin(-bt);
+  return after.map(p => {
+    if (p.pinned) return p;
+    const x = p.pos[0] - bx - cx, z = p.pos[2] - bz - cz;
+    // Turning about +y by angle t: x' = x cos t + z sin t, z' = -x sin t + z cos t.
+    return { ...p, pos: [cx + x * c + z * s, p.pos[1], cz - x * s + z * c] as Vec3 };
+  });
 }
