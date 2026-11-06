@@ -1961,7 +1961,7 @@ export function createZombieActor(opts: {
       const rigBefore = bound.rig, restingRig = f.collapsed && corpseAsleep() ? rigBefore : null;
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
-          bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined,
+          bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed,
           ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
           // The arm guards sit where an UPRIGHT torso would be: a corpse with self-collision drops them (collapse.ts THE CORPSE IS SOLID).
           torsoGuards: wantsTorsoGuards(opts.profile) && !(f.collapsed && f.corpseBody) ? bound.rig.torsoGuards : undefined }, sdt,
@@ -2024,7 +2024,7 @@ export function createZombieActor(opts: {
       bound = {
         ...bound,
         // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
-        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
       // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.

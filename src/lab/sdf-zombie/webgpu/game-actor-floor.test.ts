@@ -79,7 +79,9 @@ describe('an actor on a sector floor', () => {
     for (let f = 0; f < 240; f++) for (const a of all) a.step(1 / 60);
     for (const a of all) expect(a.debug().phase).not.toBe('standing');
     const lo = (a: typeof flat) => Math.min(...a.posed().prims.map(p => Math.min(p.a[1]!, p.b[1]!)));
-    expect(lo(pit)).toBeLessThan(lo(flat) - 0.3);
+    // 25 cm: a corpse's elbow stop rolls with its chest (rig-bind.ts live hinge), so the forearm no longer dangles
+    // backward into the pit; the arm hangs 29.5 cm below the flat corpse's lowest point instead of over 30.
+    expect(lo(pit)).toBeLessThan(lo(flat) - 0.25);
     expect(wall.posed().prims.map(p => [...p.a, ...p.b])).toEqual(flat.posed().prims.map(p => [...p.a, ...p.b]));
   });
 

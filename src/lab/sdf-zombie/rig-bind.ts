@@ -233,8 +233,16 @@ export function bindRig(body: BuildResult): BoundRig {
     const restUpper = normalize(sub(upper.tail, upper.head));
     const restPole = normalize(sub(bodyForward, vscale(restUpper, dot(bodyForward, restUpper))));
     if (len(restPole) < 1e-8) continue; // no forward flexion axis for this rest arm
+    // The live hinge (joint audit 2026-11-05), as the knee's: the shoulder-to-shoulder line, so the stop rolls with
+    // the chest. The pole carried by the yaw alone pointed off the true front on a corpse lying or twisted, and the
+    // stop let elbows fold backward (in 44-48 of 48 probe deaths for a moment). No plane limit: the upper arm rolls
+    // far. Corpses only (axisWhenDown): the live arm's swings and grips were tuned on the yaw pole.
+    const shL = armBoneName(body, 'upper', 'l'), shR = armBoneName(body, 'upper', 'r');
+    const sl = shL ? body.bones.get(shL)?.head : undefined, sr = shR ? body.bones.get(shR)?.head : undefined;
+    const hinge = sl && sr && indexOf(sl) !== indexOf(sr) ? { axis: [indexOf(sl), indexOf(sr)] as const,
+      axisSign: dot(cross(restUpper, sub(sr, sl)), restPole) < 0 ? -1 : 1, axisWhenDown: true } : {};
     rig.bends.push({ root: indexOf(upper.head), mid: indexOf(upper.tail),
-      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180, ...hinge });
   }
   // Knee stops — the same hinge, but the shin folds BACKWARD (pole =
   // -bodyForward). Without it the collapse's hip↔foot rope only caps the
@@ -253,7 +261,7 @@ export function bindRig(body: BuildResult): BoundRig {
     // The live hinge: the hip-to-hip line, so the stop rolls with the pelvis (rig.ts RigBendConstraint.axis).
     const hips = [body.bones.get('thigh.l')?.head, body.bones.get('thigh.r')?.head];
     const hinge = hips[0] && hips[1] ? { axis: [indexOf(hips[0]), indexOf(hips[1])] as const,
-      axisSign: dot(cross(restUpper, sub(hips[1], hips[0])), restPole) < 0 ? -1 : 1, planeSlack: KNEE_PLANE_SLACK } : {};
+      axisSign: dot(cross(restUpper, sub(hips[1], hips[0])), restPole) < 0 ? -1 : 1, planeSlack: KNEE_PLANE_SLACK, plants: true } : {};
     rig.bends.push({ root: indexOf(thigh.head), mid: indexOf(thigh.tail),
       end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180, ...hinge });
   }

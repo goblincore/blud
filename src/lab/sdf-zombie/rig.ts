@@ -29,6 +29,12 @@ export interface RigBendConstraint {
   /** With `axis`: how far (rad) the lower bone may leave the hinge plane. The rig has no twist, so this stands in for
    *  the hip's (shoulder's) rotation; absent = no plane limit (only the half-plane stops). */
   planeSlack?: number;
+  /** The end may be planted (a foot, collapse.ts plantFeet): a pinned end moves the mid instead (plantedKnee) and
+   *  lets go when it cannot. Absent, a pinned end skips the stop (a held hand). */
+  plants?: boolean;
+  /** Use `axis` only while the body is down (RigState.collapsed): an elbow's stop rolls with a corpse's chest, and a
+   *  live arm keeps the stop its swings were tuned on. */
+  axisWhenDown?: boolean;
 }
 
 /** A limb segment (two rig points) the head capsule keeps out. */
@@ -70,6 +76,8 @@ export interface RigState {
   /** Most one bend-stop pass moves a bone's end (m); absent, the stop puts it straight back in range. A corpse sets
    *  it (game-actor.ts CORPSE_BEND_STEP_M): see constrainRigBends. */
   bendStepCap?: number;
+  /** The body is down (a corpse): the bends marked axisWhenDown use their live hinge. */
+  collapsed?: boolean;
   bends?: RigBendConstraint[];
   /** Heading of the authored body frame; independent of flinch/rest targets. */
   bodyYaw?: number;
@@ -140,14 +148,14 @@ export function constrainRigBends(
   let points = state.points;
   for (const bend of state.bends ?? []) {
     const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
-    if (end.pinned && !bend.axis) continue;
+    if (end.pinned && !(bend.plants && bend.axis)) continue;
     const upper = sub(mid.pos, root.pos), fore = sub(end.pos, mid.pos);
     const foreLength = len(fore);
     if (len(upper) < 1e-8 || foreLength < 1e-8) continue;
     // Recoil can move the animation target itself through the wrong side.
     // The stop belongs to the authored arm, never to that transient target.
     // Carry its pole through body yaw and then the upper arm's residual swing.
-    const pole = livePole(points, bend, upper) ?? (() => {
+    const pole = livePole(points, bend, upper, state.collapsed) ?? (() => {
       const yaw = qFromAxisAngle([0, 1, 0], state.bodyYaw ?? 0);
       return normalize(qRotate(qFromTo(qRotate(yaw, bend.restUpper), normalize(upper)), qRotate(yaw, bend.restPole)));
     })();
@@ -307,8 +315,8 @@ function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint, stepC
 
 /** The pole from the live hinge axis (RigBendConstraint.axis), or null without one (or when it is degenerate: the
  *  upper bone along the axis). */
-function livePole(points: readonly RigPoint[], bend: RigBendConstraint, upper: Vec3): Vec3 | null {
-  if (!bend.axis) return null;
+function livePole(points: readonly RigPoint[], bend: RigBendConstraint, upper: Vec3, collapsed?: boolean): Vec3 | null {
+  if (!bend.axis || (bend.axisWhenDown && !collapsed)) return null;
   const a = points[bend.axis[0]], b = points[bend.axis[1]];
   if (!a || !b) return null;
   const pole = scale(cross(upper, sub(b.pos, a.pos)), bend.axisSign ?? 1);
