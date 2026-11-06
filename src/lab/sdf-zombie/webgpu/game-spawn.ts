@@ -396,6 +396,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     ? floaterSpaceFor(ctx, ctx.world.level.def.sectors, sectorGround as SectorGround, FLOATER_BODIES[name]!) : null;
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
+    // A corpse hits the level's boxes (corpse-contact.ts); read each step, since gates open and barrels go.
+    colliders: () => ctx.world.colliders,
     ...(sectorGround ? { ground: sectorGround } : {}),
     ...(floatSpace ? { floater: floatSpace } : {}),
     ...(sectorGround && ctx.world.level.def?.sectors

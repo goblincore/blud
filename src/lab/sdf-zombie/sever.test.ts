@@ -4,6 +4,9 @@ import { gibAll, gibAllPieces, severDistal, severLimb } from './sever';
 import { cutChains, type ChainCut } from './connectivity';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
+import { characterEntry } from './character-registry';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
 import { packBody } from './pack';
 import { sdBody } from './validate';
 import { worldHitToWound, woundWorldPos } from './damage';
@@ -275,5 +278,32 @@ describe('bone rides the chunk (gore r3 refinement 6)', () => {
     const body = build();
     const r = severLimb(body, 'armL');
     expect(Array.isArray(r.chunk.bones)).toBe(true);
+  });
+});
+
+// THE NECK STUB (owner, 2026-11-02): "the head flies off with the neck nub
+// which looks weird. it should just be like the head without the neck
+// nubbin". Nearly every head cluster opens with its `neck` bone's prims, and
+// a full head sever carried them off on the head.
+describe('severLimb head: no neck stub on the flying head', () => {
+  for (const name of ['zombie', 'soldier', 'goblin', 'clown'] as const) {
+    it(`${name}: the head piece carries no neck prims or neck bones`, () => {
+      const doc = parseBlob(characterEntry(name).src);
+      const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+      const r = severLimb(b, 'head');
+      expect(r.chunk.prims.length).toBeGreaterThan(0);
+      expect(r.chunk.prims.filter(p => p.bone === 'neck')).toEqual([]);
+      expect(r.chunk.bones.filter(p => p.bone === 'neck')).toEqual([]);
+      expect(r.chunk.prims.some(p => p.bone === 'skull')).toBe(true);
+      // The source map still lines up prim for prim.
+      r.chunk.sourceIndices!.forEach((src, k) => expect(b.prims[src]!.bone).toBe(r.chunk.prims[k]!.bone));
+      expect(r.body.clusters.find(c => c.limb === 'head')!.alive).toBe(false);
+    });
+  }
+
+  it('an arm sever is unchanged (only the head drops its neck)', () => {
+    const b = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const arm = b.clusters.find(c => c.limb === 'armL')!;
+    expect(severLimb(b, 'armL').chunk.prims).toHaveLength(b.prims.slice(arm.start, arm.start + arm.count).filter(p => !p.dead).length);
   });
 });

@@ -881,9 +881,11 @@ describe('the axe drives the split (the real zombie)', () => {
   it('the axe gate\'s body chop, 0.19 m from the neck root (the flail\'s head region), is a BODY chop: its own cut at the hit, the body\'s meter, no split, no head count', () => {
     const f = fixture();
     const posed = f.a.posed(), torso = posed.clusters.find(c => c.limb === 'torso')!.center, neck = headNeck(posed.prims)!.root;
-    // scripts/axe-gate.mjs A / D / T: the eye at standing height, 0.9 m from the torso centre, chopping at it.
-    const dy = 1.62 - torso[1];
-    f.view.eye = [torso[0], 1.62, torso[2] + Math.sqrt(0.9 * 0.9 - dy * dy)];
+    // scripts/axe-gate.mjs A / D / T: the eye about standing height, 0.9 m from the torso centre, chopping at it. The
+    // eye sits on the line from the centre out through the chest 0.15 m under the neck root, so the chop lands inside
+    // the head region however low the torso's centre sits (the waist flesh pulls it down).
+    const via: Vec3 = [torso[0], neck[1] - 0.15, torso[2] + 0.15], out = sub(via, torso);
+    f.view.eye = add(torso, scale(out, 0.9 / len(out)));
     expect(f.axe.chop(7, 'H', 'torso')).toBe(1);
     const point = f.axe.debug().last!.points[0]!;
     // Inside the flail's head region by its neck-root clause, a third of a metre from the head.

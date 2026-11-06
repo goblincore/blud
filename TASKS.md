@@ -24,6 +24,9 @@
   Step 3 done (2026-10-25): the bake runs on the GPU by default (gibbet 568 s -> 3.4 s; `--cpu` forces the reference),
   bake parity in CI, all ten maps re-baked on the GPU and committed (gamer's and teratoma's were stale: torso axis moved).
   Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
+
+- [~] **Damage model: elbow/knee cuts, corpse integrity, no neck stub** (owner, 2026-11-02; branch `claude/character-damage-ragdoll-9ca95f`) — [combat and gore](docs/tasks/combat-and-gore.md#limb-toughness-corpse-integrity-the-neck-stub--2026-11-02). Built and tested; owner look and slider tuning pending.
+
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 - [~] **Imp built 2026-10-24, second pass 2026-11-02 (proportions, claw feet, demon skull when shot); owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).

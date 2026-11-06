@@ -393,10 +393,13 @@ describe('soldier actor combat wiring', () => {
     expect(spawnSlug([0, 0, 0], [0, 0, 1]).shot?.weapon).toBe('slug');
   });
 
-  it('repeated focused thigh pellets detach the leg and cause a disabling fall', () => {
+  it('repeated focused thigh pellets take the leg at the knee and cause a disabling fall', () => {
     const { actor } = soldier();
     for (let i = 0; i < 8; i++) hitLimb(actor, 'thigh.l');
-    expect(actor.body.clusters.find(c => c.limb === 'legL')!.alive).toBe(false);
+    // The injury sever cuts at the knee (midJointCut): the thigh stays on as a stump.
+    expect(actor.body.clusters.find(c => c.limb === 'legL')!.alive).toBe(true);
+    expect(actor.body.prims.find(p => p.bone === 'thigh.l')!.dead).toBeFalsy();
+    expect(soldierInjury(actor.body, []).missing.legL).toBe(true);
     actor.step(1 / 60);
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
@@ -415,8 +418,7 @@ describe('soldier actor combat wiring', () => {
     expect(release).not.toHaveBeenCalled();
     expect(wound.radius).toBeLessThanOrEqual(.09);
     expect(wound.severRadius).toBe(.13);
-    actor.hitSlug(at(), [0, 0, -1]);
-    actor.hitSlug(at(), [0, 0, -1]);
+    for (let i = 0; i < 2 && actor.posed().prims.some(p => p.bone === prim.bone && !p.dead); i++) actor.hitSlug(at(), [0, 0, -1]);
     expect(soldierInjury(actor.body, []).missing[limb]).toBe(true);
     actor.step(1 / 60);
     expect(actor.motionFrame()!.collapsed).toBe(false);
@@ -479,7 +481,9 @@ describe('soldier actor combat wiring', () => {
     const release = vi.fn();
     const { actor } = soldier([], release);
     for (let i = 0; i < 8; i++) hitLimb(actor, bone!);
-    expect(actor.body.clusters.find(c => c.limb === limb)!.alive).toBe(false);
+    // Taken at the elbow, wherever the hits landed: the upper arm stays on.
+    expect(soldierInjury(actor.body, []).missing[limb as 'armL' | 'armR']).toBe(true);
+    expect(actor.body.prims.find(p => p.bone === `upperarm.${limb === 'armR' ? 'r' : 'l'}`)!.dead).toBeFalsy();
     expect(release.mock.calls.length > 0).toBe(limb === 'armR');
   });
 

@@ -2,6 +2,68 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Limb toughness, corpse integrity, the neck stub — 2026-11-02
+
+Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2026-11-02-limb-toughness-corpse-integrity-design.md) ·
+[plan](../superpowers/plans/2026-11-02-limb-toughness-corpse-integrity.md). Owner look pending.
+
+- [x] **Arms and legs come off at the elbow or knee; the shoulder and hip resist** (owner: a whole arm "is a long tube").
+  `connectivity.ts JOINT_TOUGHNESS`, read from bone names: shoulder/hip 0.6, elbow/knee 1.7, others 1. Measured (zombie,
+  synthetic hits): a shoulder now survives 12 pellets and 31 of 32 first slugs (was ~1 hit); elbow and knee come off in 1-2 hits
+  as before; half of all mid-upper-arm or mid-thigh hits reach the elbow or knee within 6 pellets (was never). The hip never cuts
+  from the front. In the arena, one slug took a zombie's forearm at the elbow. The soldier family keeps factors of 1 (its own injury
+  budget). Decoration prims that make fake joints are listed in `connectivity-toughness.test.ts` (bride, goblin-home, minotaur legR).
+- [x] **Soldiers too** (owner: the soldier and juggernaut still lost the whole arm). The soldier injury rules severed a whole limb
+  by points; they now cut at the elbow or knee (`midJointCut`). The soldier family has its own, lower factors
+  (`SOLDIER_TOUGHNESS` shoulder 0.3, elbow 0.55, the owner's picks) and two sliders of its own.
+- [x] **A lost forearm counts as a lost arm** (`missingLimbs`): the bride drops her sword when her forearm goes.
+- [x] **Corpses keep their shape** (`collapse.ts` braces, `CORPSE_INTEGRITY` 0.7, per-profile `corpseIntegrity`). Zombie head to
+  pelvis settles at 0.61-0.72 m (rest 0.71; was 0.11, the head in the pelvis). Joints lie at their flesh thickness, the skull lets
+  go of its look cone over the fall, and the fall starts with a lean along the killing shot. Integrity 0 is the old fall exactly.
+  Arena: integrity 0 a crumpled heap, 0.7 and 1 a body lying full length.
+- [x] **A severed head flies without its neck stub** (`severLimb`): unit-tested on zombie, soldier, goblin and clown; not yet seen
+  in the game (the zombie's own decap is the swell-and-pop).
+- [x] **Bullet-time ragdoll loop** (owner capture: corpses floated, balanced and thrashed for seconds at 0.2x). Two causes. The
+  verlet kept velocity as last step's displacement, so a shorter step carried the old speed and every hit's shove (a fixed
+  displacement) was 5x harder at 0.2x: `stepRig` now rescales by `dt / stepDt` and damps per 1/60 s, and `impulseAt` is a
+  60 Hz shove (`rig-timestep.test.ts`). And the corpse braces read their corrections as speed, which fought the floor and pumped
+  a lying body back up to 2 m: they now move `prev` with `pos`. Arena, bullet time, integrity 0.7: down in 0.7 s and stays down.
+- [x] **Blown-away deaths** (owner: "off their feet flying on their back"). `blow-away.ts`: the killing volley (rounds within
+  0.12 s) rolls a chance: explosion 1, slug 0.55, a shotgun group up to 0.6 at 12+ pellets, never a pure leg volley. A throw
+  launches every joint off the floor along the shot, the top faster, at light damping for 0.7 s. Arena, 2.2 m double barrel:
+  flies 2-2.7 m and lands in ~0.8 s at 1x and at 0.2x. Not for the soldier family or the cultist (their own deaths).
+  **By range** (owner: "point blank should happen often, further less"): full chance (shotgun 0.85) inside 2.5 m, gone at 7 m.
+- [x] **Authored deaths** (owner: the free ragdoll still looked unnatural, wanted "a blended solution where we can have control
+  but still some dynamic physics"). `death-fall.ts`: every humanoid but a soft target (the cultist) plays one of five keyed
+  falls the rig springs toward, the soldier family included (a soldier downed alive keeps his writhe): **blown** (thrown
+  along the shot, legs up, onto his back; from the blow-away roll), **backward**, **crumple** (knees, then face down),
+  **spin** (turns, drops on his side), **sit** (sits hard, slumps back). Hit spot weights the pick (legs: crumple/sit/spin).
+  Gravity, the floor and late hits still act; after landing the pull eases so the corpse settles. Arena: blown flies
+  1.7-1.8 m and lands at 0.8 s at 1x and 0.2x; every corpse at rest moves < 3 mm. Bone angles in a key are ABSOLUTE: a
+  knee or elbow bent the wrong way fought the rig's bend limits forever (the arms swung 0.5 m); a test guards it.
+- [x] **Corpse fixes from the owner's playtest of the falls** (2026-11-02):
+  - *Spazzing corpse*: a hit on a landed corpse was sprung back to the authored pose, so the pelvis swung 36 cm. Now
+    `corpseHoldStep` leashes it: limbs move freely within 30 cm for 0.5 s, the trunk slides as one rigid piece, then the
+    body re-anchors where it lies. A double barrel shoves a corpse about 17 cm at half the standing shove.
+  - *Stiff, not lying down*: after the last key the limbs drape onto the floor (hands went from 44 cm to 7 cm off it).
+  - *Midsection orb*: torso flesh turned only with the yaw, so on a lying body each ellipsoid stood up off the belly.
+    Torso prims (spine, pelvis) and hand/foot prims now turn with their bone as the corpse's headFollow lets go
+    (`rig-bind.ts` lieFrame). That also fixed the soldier's hand orb drifting 15 cm off his wrist.
+  - Diagnostics: `__sdfGame.actorRigJoints(id)`, `__sdfGame.actorPrims(id)`.
+- [x] **The zombie keeps the physics death** (owner 2026-11-02: the five falls repeat in a crowd, and blown-back zombies
+  clip through each other). `MotionProfile.physicsDeath` is set on the zombie, so he gets the free ragdoll and its
+  blow-away throw. The bodies built on his profile (butcher, goblin and the rest) set it false and keep the authored
+  falls, as do the soldiers. The lying-flesh fix (`rig-bind.ts` lieFrame) applies to his ragdoll too.
+- [ ] Zombie crowd: thrown corpses pass through other zombies (no body-to-body collision on the rig).
+- [x] Sliders on the wound panel: shoulder/hip cut, elbow/knee cut, soldier shoulder/elbow cut, corpse integrity, blown-away deaths
+  (scales every chance), blown-away max range, authored deaths on/off, death pose pull, pull after landing
+  (also `__sdfGame.setWoundTuning`).
+- [ ] Owner: judge the five falls by eye (only measured, not seen: the browser pane does not draw while hidden); tune the
+  pull sliders and how often a body is blown away.
+- [ ] More falls (a stagger back into a wall, a headshot drop straight down) and the cultist on the same set.
+- [ ] Head splitting for every enemy: soldier done on branch `claude/reverent-blackwell-4b31ca` (its own session), with a roll-out note.
+- Known, not ours: `pack-golden.test.ts` chair and gamer byte pins fail locally on main too.
+
 ## Gore at scale and the blast-to-gib link — owner notes 2026-10-29
 
 - [ ] **Gore at scale.** Not urgent now, but rockets and groups of enemies will mean far more blood and gibs at once.

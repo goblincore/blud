@@ -27,9 +27,12 @@ import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
-import { constrainRigBends, stepRig } from '../rig';
-import { relaxRopeConstraints, toughnessFor } from '../collapse';
+import { constrainRigBends, stepRig, type RigPoint } from '../rig';
+import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
+import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
+import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
+import { BLOW_THROW } from '../blow-away';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
@@ -43,7 +46,7 @@ import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint, midJointCut, JOINT_TOUGHNESS, SOLDIER_TOUGHNESS } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
 import { createFloater, type FloaterSpace } from './floater-move';
@@ -51,8 +54,8 @@ import {
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
-  makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
-  applyFloorContact, FALL_DROP_M, MOTION_TUNING, STANDING_RIG, releasedRestScale,
+  makeMotionJoints, makeMotionState, stepMotion, planSubSteps, SUBSTEP_TUNING,
+  applyFloorContact, corpseLift, FALL_DROP_M, MOTION_TUNING, STANDING_RIG, releasedRestScale,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
@@ -61,7 +64,7 @@ import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
-import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
@@ -69,6 +72,7 @@ import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
 import { HOUND_TUNING } from '../hound-attack';
 import type { MissingLimbs } from '../collapse';
+import { CORPSE_CONTACT, pushOutOfBodies, pushOutOfBoxes, type BodyObstacle, type ContactBox } from '../corpse-contact';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
@@ -76,7 +80,8 @@ import { soldierVisualWounds } from '../soldier-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
-import { add, normalize, qMul, qRotate, sub } from '../vec';
+import { add, cross, normalize, qMul, qRotate, sub } from '../vec';
+import { planSlump, slumpVelocities } from '../slump-death';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
 import {
@@ -129,6 +134,8 @@ export const SOFT_TUNING = { hitsToKill: 2, severRange: 6 } as const;
  *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
 const BLAST_KNOCK_MPS = 1.2;
 const BLAST_KNOCK_DECAY = 7;
+/** A death this soon after the last volley (sim s) is that volley's kill: it may blow him away (blow-away.ts). */
+const KILL_VOLLEY_SEC = 0.5;
 
 /**
  * THE BLAST SIGNAL'S DIRECTION MUST BE A UNIT VECTOR, and handing it a VELOCITY
@@ -337,6 +344,8 @@ export interface ZombieActor {
   crowd?: { type: import('./crowd-type').CrowdType; slot: number };
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
+  /** Diagnostic: the rig's joints (world) by name, as the last step solved them. */
+  readonly rigJoints: () => { names: readonly string[]; points: Vec3[] };
   /**
    * The body the march is ACTUALLY drawing this frame: `posed()` in ordinary
    * play, or the rupture-displaced body while the window is running. The face
@@ -441,6 +450,11 @@ export interface ZombieActor {
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
+  /** The bodies a corpse of this actor's can hit this frame (corpse-contact.ts), everyone's bodyObstacles(). Set
+   *  BEFORE step(), like setRingInput. Optional: a fake without it has none. */
+  setBodyObstacles?(obstacles: readonly BodyObstacle[]): void;
+  /** What a thrown corpse hits of this body: an upright cylinder while it stands, its trunk once it is down. */
+  bodyObstacles?(): BodyObstacle[];
   /** True while game-main should submit this body to crowd separation at the
    *  wider engaged radius. */
   engagedForCrowd(): boolean;
@@ -655,6 +669,9 @@ export function createZombieActor(opts: {
   seed: number;
   bounds: WanderBounds;
   furniture: readonly Aabb[];
+  /** The level's solid boxes (walls, solids, gates, barrels: ctx.world.colliders), read each corpse step: a corpse's
+   *  points are pushed out of them (corpse-contact.ts). Absent: a corpse meets only the floor. */
+  colliders?: () => readonly ContactBox[];
   /** The decision layer. Absent = the zombie's, so every existing call site
    *  and every pin is untouched by construction. */
   mind?: EnemyMind;
@@ -758,7 +775,7 @@ export function createZombieActor(opts: {
   /** The one re-pose: applyRig, then the head deform (if any), then the pop's swell (if one is running), then the
    *  head split (if open). Every pose site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
-    const p = applyRig(current, bound, bodyYaw);
+    const p = applyRig(current, corpseDrawn(), bodyYaw);
     const d0 = headDeform ? headDeform(p) : p;
     const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
     const s = headSplit?.(d) ?? null;
@@ -830,6 +847,8 @@ export function createZombieActor(opts: {
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
+  /** This body dies on the free physics ragdoll, not an authored fall (MotionProfile.physicsDeath: the zombie). */
+  const physicsDeath = !!(opts.profile ?? ZOMBIE_PROFILE).physicsDeath;
   /** Gun craters on this body take the wet red lip, and on its head the low lip (gunWetLip, headLip). */
   const goreBody = isGoreBody(opts.profile);
   let softKilled = false;
@@ -839,6 +858,32 @@ export function createZombieActor(opts: {
   let deathPlan: DeathPlan | null = null;
   let deathDir: Vec3 = [0, 0, 0];
   let deathThrown = false;
+  /** BLOWN AWAY (blow-away.ts): the rounds of the latest volley, how long ago it landed (sim s), and whether
+   *  this death has rolled and thrown. A thrown corpse goes limp at once, like the soft target's. */
+  let volley: KillVolley = EMPTY_VOLLEY;
+  let volleyAge = Infinity;
+  let blowAwayRolled = false;
+  /** A slump's feet hold a straight leg (a forward pitch pulling them taut is the rump up in the air); they let go
+   *  only when the knee is folded out of range or would go under the floor (rig.ts). */
+  const SLUMP_PLANT = { ...FOOT_PLANT, stretch: 1.01 };
+  /** This corpse slumps forward over planted feet (slump-death.ts): the feet plant only for it. */
+  let slumping = false;
+  /** The killing volley struck the head (picks the fall; death-fall.ts). */
+  let volleyHead = false;
+  /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
+   *  still rolls the blow-away chance (blow-away.ts); a hit now plays the 'blown' fall instead of a free throw. */
+  const deathFall = (): DeathFallChoice => {
+    blowAwayRolled = true;
+    const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+    const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
+    const choice = pickDeathFall({ blown: t ? t.base / BLOW_THROW.gun.base : null, struck }, blowRng);
+    return Math.hypot(volley.dirWorld[0], volley.dirWorld[2]) > 1e-6 && volleyAge < KILL_VOLLEY_SEC
+      ? { ...choice, impact: [...volley.dirWorld] as Vec3 } : choice;
+  };
+  let blownAway = false;
+  /** Sim seconds since the blow-away throw. */
+  let blownT = 0;
+  const blowRng: Rng = makeRng((opts.seed ^ 0xb10aa7a7) >>> 0);
   let dyingT = 0;
   let burstLeft = 0;
   let burstClock = 0;
@@ -1045,13 +1090,16 @@ export function createZombieActor(opts: {
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
     const gone = (l: LimbId) => bornWith.has(l) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
-    // A leg with ANY distal cut has lost its foot (severDistal kills the prim
-    // and everything outward), so it can no longer bear weight: count it as
-    // missing for the gait/collapse. Otherwise two shot-off shins left the
-    // torso standing on air (the cluster stays alive on a mid-limb cut).
-    const legGone = (l: LimbId) => gone(l)
+    // A limb with ANY distal cut has lost its foot or hand (severDistal kills
+    // the prim and everything outward), so it can no longer bear weight or
+    // hold anything: count it as missing for the gait, collapse and carry.
+    // Otherwise two shot-off shins left the torso standing on air, and (with
+    // the elbow the usual cut since joint toughness, 2026-11-02) a forearm cut
+    // left the prop in a hand that was gone. The cluster stays alive on a
+    // mid-limb cut, so the stump still renders.
+    const limbGone = (l: LimbId) => gone(l)
       || current.prims.some(p => p.limb === l && p.dead && p.op !== 'sub');
-    return { legL: legGone('legL'), legR: legGone('legR'), armL: gone('armL'), armR: gone('armR') };
+    return { legL: limbGone('legL'), legR: limbGone('legR'), armL: limbGone('armL'), armR: limbGone('armR') };
   }
 
   /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
@@ -1125,7 +1173,7 @@ export function createZombieActor(opts: {
         ...next,
         // jawGape carries over so a limb severed mid-swing does not shut the
         // bride's jaw for a frame (absent on every other body).
-        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, headFollow: bound.rig.headFollow, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -1304,12 +1352,21 @@ export function createZombieActor(opts: {
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
+    // The injury rules sever an arm or leg by points, not by where the shots cut: that takes it at the
+    // elbow/knee (midJointCut), the same short piece a cut there makes — the shoulder stays hard.
+    const injuryCuts = (injury?.sever ?? []).map(limb => (limb === 'head' || limb === 'torso' ? null : midJointCut(current, limb)) ?? limb);
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)),
+      ...injuryCuts.filter((c): c is LimbId => typeof c === 'string')])];
     for (const limb of fullCuts) {
       if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
+    for (const cut of injuryCuts) {
+      if (typeof cut === 'string' || fullCuts.includes(cut.limb)) continue;
+      detach(cut.limb, severDistal(current, cut));
+    }
+    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS)) {
+      if (injuryCuts.some(c => typeof c !== 'string' && c.limb === cut.limb)) continue;
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
@@ -1337,6 +1394,122 @@ export function createZombieActor(opts: {
     return false;
   }
 
+  // FIXED CORPSE STEPS (owner playtest 2026-11-03, "breakdancing": a corpse
+  // kicking itself upright, worst in bullet time). The ragdoll's limits (bone
+  // lengths, the knee and hip stops, the floor) are position shoves of a fixed
+  // size per STEP, and the floor turns a shove into the floor into a bounce. A
+  // short step makes the same shove a faster speed: at quarter speed the probe
+  // corpses hit 145-465 m/s and threw their legs 4-16 m up (at full speed under
+  // 0.4 m/s, 1.3 m); half speed, which a 120 Hz screen gives every frame, was
+  // already 72-133 m/s. The hit-stop is worse again: stepRig carries a step's
+  // displacement scaled by dt / stepDt (up to 20x), so the first step after a
+  // near-zero one multiplied the shoves into a kick. So once the body is down
+  // it always steps 1/60 s (the rate it was tuned at), banking the frame time
+  // for the next step, and repose() draws it between its last two steps.
+  const CORPSE_STEP = 1 / 60;
+  /** Most one knee or elbow stop pass moves a corpse's foot or hand per step (rig.ts THE CAPPED STOP). Five passes a
+   *  step (stepRig's four, the last word below): at most 5 cm, 3 m/s. 24 probe deaths dying mid-stride: 372 joint
+   *  jumps over 15 cm a step without it, 56 with it (with the hip and ankle caps, collapse.ts, 19), and 42 of 48
+   *  legs left bent instead of 9. */
+  const CORPSE_BEND_STEP_M = 0.01;
+  /** CORPSE_STEP_CAPS: the same for the hip cones and the ankle springs (collapse.ts). Uncapped, a hip cone threw a knee
+   *  25-34 cm in a step (and in a slump fought the planted knee every step), and an ankle pulled a toe 13 cm and the
+   *  bones dragged the foot after it: the still corpse that kicked a leg up to vertical. */
+  const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
+  /** Most one self-collision pass moves a corpse point (m; collapse.ts THE CORPSE IS SOLID). */
+  const CORPSE_BODY = { ...BODY_COLLIDE, maxStep: 0.015 };
+  /** The pelvis and neck cones (collapse.ts relaxSpineCones), capped like the hip cones so a folded pelvis or neck
+   *  swings back over a few steps instead of snapping. */
+  const CORPSE_CONES = { ...SPINE_CONES, maxStep: 0.02 };
+  /** This frame's bodies round this one (setBodyObstacles). */
+  let nearBodies: readonly BodyObstacle[] = [];
+  // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
+  // agree: the bones, the stops, the hip cones, the ankles and the floor each nudge it a little every step, and a
+  // body lying still drifted 2-7 cm a second at 7 s (the hip cones and the solver's own loop carried it sideways). So
+  // a corpse whose every joint has moved under `speed` for `time` falls asleep: its rig keeps its pose, with no
+  // speed, until something stirs it (a shot, a blast, a sever: the damage revision; or any impulse: a point whose
+  // pos and prev part). 24 probe deaths each way: 21-24 asleep a median 2.7-3.1 s after the blow, at 60 Hz and in full
+  // bullet time; at 0.2 m/s the feet still buzzing kept 2-5 of them awake.
+  const CORPSE_SLEEP = { speed: 0.35, time: 0.75 };
+  let corpseStillT = 0, corpseSleeping = false, corpseSleepRevision = -1;
+  function corpseContacts(points: RigPoint[], pointR: readonly number[] | undefined): RigPoint[] {
+    const rad = (i: number) => pointR?.[i] ?? CORPSE_POINT_R;
+    const boxes = opts.colliders?.() ?? [];
+    if (boxes.length) {
+      // Only the boxes near the body (a level has hundreds).
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+      for (const p of points) for (const q of [p.pos, p.prev]) {
+        x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); z0 = Math.min(z0, q[2]);
+        x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); z1 = Math.max(z1, q[2]);
+      }
+      const m = 0.3;
+      const near = boxes.filter(b => b.max[0] > x0 - m && b.min[0] < x1 + m && b.max[1] > y0 - m && b.min[1] < y1 + m
+        && b.max[2] > z0 - m && b.min[2] < z1 + m);
+      if (near.length) points = pushOutOfBoxes(points, near, rad);
+    }
+    if (nearBodies.length) points = pushOutOfBodies(points, nearBodies, opts.id, rad);
+    return points;
+  }
+  function corpseAsleep(): boolean {
+    if (!corpseSleeping) return false;
+    const stirred = damageRevision !== corpseSleepRevision || bound.rig.points.some(p =>
+      p.pos[0] !== p.prev[0] || p.pos[1] !== p.prev[1] || p.pos[2] !== p.prev[2]);
+    if (stirred) { corpseSleeping = false; corpseStillT = 0; }
+    return corpseSleeping;
+  }
+  /** After a corpse step: counts the time every joint has stayed slow, and puts the body to sleep once it is enough. */
+  function noteCorpseMotion(before: readonly RigPoint[], dt: number): void {
+    const now = bound.rig.points;
+    let most = 0;
+    for (let i = 0; i < now.length; i++) {
+      const a = now[i]!.pos, b = before[i]?.pos ?? a;
+      most = Math.max(most, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    }
+    corpseStillT = most <= CORPSE_SLEEP.speed * dt ? corpseStillT + dt : 0;
+    if (corpseStillT < CORPSE_SLEEP.time) return;
+    corpseSleeping = true;
+    corpseSleepRevision = damageRevision;
+    bound = { ...bound, rig: { ...bound.rig, points: now.map(p => ({ ...p, prev: p.pos })) } };
+  }
+  let corpseBank = 0;
+  /** The corpse's points one fixed step back, and how far on toward the latest the drawn pose sits. */
+  let corpseBefore: readonly RigPoint[] | null = null;
+  let corpseBlend = 1;
+  function corpseDrawn(): BoundRig {
+    const before = corpseBefore, now = bound.rig.points;
+    if (!before || corpseBlend >= 1 || before.length !== now.length) return bound;
+    const t = corpseBlend;
+    const points = now.map((p, i) => {
+      const b = before[i]!.pos;
+      return { ...p, pos: [b[0] + (p.pos[0] - b[0]) * t, b[1] + (p.pos[1] - b[1]) * t, b[2] + (p.pos[2] - b[2]) * t] as Vec3 };
+    });
+    return { ...bound, rig: { ...bound.rig, points } };
+  }
+  /** The body's forward, level: the way the left knee bends (the knee hinge's pole reversed, rig.ts livePole), so
+   *  it follows the body as it stands now. Null on a body without a hinged knee. */
+  function kneeForward(): Vec3 | null {
+    const knee = joints.index.kneeL;
+    const bend = knee === undefined ? undefined : bound.rig.bends?.find(b => b.mid === knee);
+    if (!bend?.axis) return null;
+    const p = bound.rig.points;
+    const back = cross(sub(p[bend.mid]!.pos, p[bend.root]!.pos), sub(p[bend.axis[1]]!.pos, p[bend.axis[0]]!.pos));
+    const s = -(bend.axisSign ?? 1);
+    const l = Math.hypot(back[0], back[2]);
+    return l < 1e-6 ? null : [back[0] * s / l, 0, back[2] * s / l];
+  }
+  function subSteps(dt: number): number[] {
+    if (!(lastFrame?.collapsed ?? false)) {
+      corpseBank = 0;
+      corpseBefore = null;
+      corpseBlend = 1;
+      return planSubSteps(dt);
+    }
+    corpseBank = Math.min(corpseBank + Math.max(0, dt), SUBSTEP_TUNING.maxCatchup);
+    const n = Math.floor(corpseBank / CORPSE_STEP + 1e-9);
+    corpseBank = Math.max(0, corpseBank - n * CORPSE_STEP);
+    return Array.from({ length: n }, () => CORPSE_STEP);
+  }
+
   let bakePaused = false;
   let damageRevision = 0;
   /** UPDATE LOD: the damage revision step() last saw, and its own sim seconds since it changed. */
@@ -1360,7 +1533,11 @@ export function createZombieActor(opts: {
     // pose without the attack, and the photographed frame would not show it.)
     const swingPin = forcedSwing;
     forcedSwing = null;
-    for (const sdt of planSubSteps(dt)) {
+    const steps = subSteps(dt);
+    // The drawn corpse sits the banked share of a step past the one before the latest (corpseDrawn).
+    if (lastFrame?.collapsed) corpseBlend = corpseBank / CORPSE_STEP;
+    for (const sdt of steps) {
+      if (lastFrame?.collapsed) corpseBefore = bound.rig.points;
       // Heavy-hit choreography (see the state block): knock the ROOT before
       // the motion step so this sub-step's targets ride the moved root.
       // Bounds-clamped like stepWander's own integration, so a knock cannot
@@ -1637,6 +1814,7 @@ export function createZombieActor(opts: {
           enabled: true,
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
+          ...(DEATH_FALL.on && !softTarget && !physicsDeath ? { deathFall } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
@@ -1751,29 +1929,52 @@ export function createZombieActor(opts: {
         const hv = hand !== undefined ? vel[hand]! : [0, 0, 0] as Vec3;
         if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
       }
+      volleyAge += sdt;
+      if (blownAway) blownT += sdt;
+      // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
+      if (f.collapsed && !blowAwayRolled) {
+        blowAwayRolled = true;
+        // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
+        const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+        if (t) {
+          blownAway = true;
+          const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+          const vel = addSpin(bound.rig.points, deathThrowVelocities(bound.rig.points, volley.dirWorld, t, hemI), (blowRng() - 0.5) * 2.4);
+          bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        } else if ((!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage) {
+          // Not thrown: a share slump forward over their knees instead (slump-death.ts).
+          const plan = planSlump(blowRng);
+          const forward = plan && kneeForward();
+          if (plan && forward) {
+            slumping = true;
+            const vel = addSpin(bound.rig.points, slumpVelocities(bound.rig.points, forward, plan), plan.spin);
+            // The feet stand where they are from the first step: a standing leg is near its full length, past where
+            // plantFeet would ever plant it.
+            const feet = new Set(joints.footPlants.map(pl => pl.foot));
+            bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt)
+              .map((p, i) => feet.has(i) ? { ...p, pinned: true, prev: p.pos } : p) } };
+          }
+        }
+      }
+      // A sleeping corpse (CORPSE SLEEP) steps as usual below and keeps the pose it had.
+      if (!f.collapsed) { corpseSleeping = false; corpseStillT = 0; }
+      const rigBefore = bound.rig, restingRig = f.collapsed && corpseAsleep() ? rigBefore : null;
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+          bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed,
           ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
-          torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
+          // The arm guards sit where an UPRIGHT torso would be: a corpse with self-collision drops them (collapse.ts THE CORPSE IS SOLID).
+          torsoGuards: wantsTorsoGuards(opts.profile) && !(f.collapsed && f.corpseBody) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
-          damping: 0.06,
+          damping: blownAway && blownT < BLOW_AIR_SEC ? BLOW_AIR_DAMPING : 0.06,
           iterations: 4,
           // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
           // ramp dragged the thrown body back upright and ate the throw.
-          restStiffness: STANDING_RIG.restStiffness * (softKilled && f.collapsed ? 0 : f.restPull),
+          restStiffness: STANDING_RIG.restStiffness * ((softKilled || blownAway || slumping) && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
-      // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
-      // game rig never pins tips (only the lab's stepActorMotion does), so the
-      // hand tip reached its grip-line target only through the soft rest pull:
-      // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
-      // Point JUST that tip along its motion target, as actor.ts does. Every
-      // other tip (and every other character) keeps the unpinned verlet.
-      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
-        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
-      }
       // SECTOR LEVELS (plan 3b): a corpse meets the floor under each point (an arm over a ledge hangs
       // down it). The rise is judged PER POINT, against where that point was: a floor more than
       // FALL_DROP_M above it is a wall, not a floor, and the point keeps the floor it had (the one
@@ -1791,14 +1992,65 @@ export function createZombieActor(opts: {
         return f.floorY <= reach ? f.floorY : from[1];
       } : undefined;
 
+      // The foot turns with the shin (collapse.ts THE FOOT TURNS WITH THE SHIN): straight after the rig step.
+      if (f.collapsed && f.hipCones.length) {
+        const lift = corpseLift(f);
+        points = carryFeet(rigBefore.points, points, f.hipCones,
+          (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : f.floorY) + (lift?.[i] ?? 0),
+          FOOT_CARRY);
+      }
+      // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+      if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
+      // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
+      // hip cones, so a joint limit has the last word over a contact.
+      // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
+      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES), f.corpseBody, CORPSE_BODY);
+      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
+      // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
+      // game rig never pins tips (only the lab's stepActorMotion does), so the
+      // hand tip reached its grip-line target only through the soft rest pull:
+      // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
+      // Point JUST that tip along its motion target, as actor.ts does. Every
+      // other tip (and every other character) keeps the unpinned verlet.
+      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
+        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
+      }
+
       if (f.collapsed) {
-        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor);
+        const lift = corpseLift(f), floorY = f.floorY;
+        // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles), capped per step (CORPSE_STEP_CAPS).
+        points = relaxAnkles(points, f.hipCones, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0),
+          { ...ANKLE_LIMITS, maxStep: CORPSE_ANKLE_STEP_M });
+        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
+        // One more brace pass after the floor moved points, then the floor again
+        // so the last word keeps the corpse out of the ground.
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxSpineCones(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_CONES), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
+        // A CORPSE MEETS THE WORLD (corpse-contact.ts): the walls and the bodies round it, last, so a thrown body
+        // stops at a wall even where its bones would pull it on through.
+        points = corpseContacts(points, f.corpseBody?.pointR);
       }
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
+      // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.
+      {
+        const lift = corpseLift(f), floorY = f.floorY;
+        const feet = slumping && f.footPlants.length
+          ? plantFeet(bound.rig.points, f.footPlants, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0), sdt, SLUMP_PLANT, true)
+          : releaseFeet(bound.rig.points, joints.footPlants);
+        if (feet !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: feet } };
+        // The floor grips what rests on it (collapse.ts THE FLOOR GRIPS): last, over the whole step's move.
+        if (f.collapsed && !restingRig) {
+          const gripped = floorGrip(rigBefore.points, bound.rig.points,
+            (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0));
+          if (gripped !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: gripped } };
+        }
+      }
+      if (restingRig) bound = { ...bound, rig: restingRig };
+      else if (f.collapsed) noteCorpseMotion(rigBefore.points, sdt);
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
@@ -2255,6 +2507,15 @@ export function createZombieActor(opts: {
     }
     damageRevision++; bakePaused = false;
     const bySlug = wound.shot?.weapon === 'slug';
+    if (wound.type !== 'burn') {
+      if (volleyAge > VOLLEY_SEC) { volley = EMPTY_VOLLEY; volleyHead = false; }
+      if (posed.prims[wound.primIdx]?.limb === 'head') volleyHead = true;
+      const struck = posed.prims[wound.primIdx]?.limb;
+      const origin = wound.shot?.weapon === 'shotgun' ? wound.shot.origin : undefined;
+      const rangeM = origin ? Math.hypot(hitWorld[0] - origin[0], hitWorld[1] - origin[1], hitWorld[2] - origin[2]) : Infinity;
+      volley = addToVolley(volley, bySlug ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet', dirWorld, struck === 'torso' || struck === 'head', rangeM);
+      volleyAge = 0;
+    }
     if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
@@ -2330,7 +2591,9 @@ export function createZombieActor(opts: {
     // Scaled BY WOUND KIND: a slug stamps a blast-profile wound and must
     // shove like one, not like a single pellet (the defect this task was
     // opened for).
-    const push = IMPULSE[wound.type];
+    // A corpse lying in its authored death goes limp under the hit (death-fall.ts corpseHoldStep) with no spring to
+    // bring it back, so the full shove slid it most of a metre per double barrel.
+    const push = IMPULSE[wound.type] * (state.corpseHold ? CORPSE_SHOVE : 1);
     bound = impulseAt(bound, hitWorld, [
       dirWorld[0] * push,
       dirWorld[1] * push,
@@ -2357,6 +2620,7 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
+    rigJoints: () => ({ names: joints.names, points: bound.rig.points.map(p => [...p.pos] as Vec3) }),
     drawnBody: () => drawnPose(),
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0, refPrims: posed.prims };
@@ -2465,6 +2729,20 @@ export function createZombieActor(opts: {
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
+    setBodyObstacles: (obstacles: readonly BodyObstacle[]) => { nearBodies = obstacles; },
+    bodyObstacles: (): BodyObstacle[] => {
+      const pts = bound.rig.points, ix = joints.index;
+      if (!lastFrame?.collapsed) {
+        let lo = Infinity, hi = -Infinity;
+        for (const p of pts) { lo = Math.min(lo, p.pos[1]); hi = Math.max(hi, p.pos[1]); }
+        const at = state.wander.pos;
+        return [{ id: opts.id, kind: 'upright', x: at[0], z: at[2], r: CORPSE_CONTACT.uprightR, y0: lo + CORPSE_CONTACT.kneeY, y1: hi }];
+      }
+      return (['pelvis', 'chest', 'head'] as const).flatMap(n => {
+        const k = ix[n];
+        return k === undefined || !pts[k] ? [] : [{ id: opts.id, kind: 'sphere' as const, c: pts[k]!.pos, r: CORPSE_CONTACT.trunkR }];
+      });
+    },
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;

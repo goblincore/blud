@@ -7,7 +7,7 @@ import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
 import { buildBody } from './build-body';
 import { applyDeathState, hasDeathState } from './death-state';
-import { cutLimbs } from './connectivity';
+import { cutChains, cutLimbs } from './connectivity';
 import { BlobError } from './blob-ast';
 
 const build = (src: string) => { const d = parseBlob(src); return buildBody(compileBlob(d, compileFace(d))); };
@@ -72,7 +72,11 @@ describe('cloth decals cut nothing', () => {
     const i = b.prims.findIndex(p => p.limb === 'armR' && p.bone === 'upperArm.r');
     const w = { primIdx: i, local: [0, 0, 0] as [number, number, number], radius: 0.07, type: 'blast' as const, ageSec: 0, severRadius: 0.13, decal: true };
     const torsoC = b.clusters.find(c => c.limb === 'torso')!.center;
-    expect(cutLimbs(b, [w], torsoC)).toContain('armR');
+    // Joint toughness (2026-11-02): a mid-upper-arm hit no longer takes the
+    // arm at the shoulder; it may cut at the elbow instead. Either way the
+    // decal on a sleeve still cuts.
+    const cut = [...cutLimbs(b, [w], torsoC), ...cutChains(b, [w]).map(c => c.limb)];
+    expect(cut).toContain('armR');
   });
   it('the hood-down roll does not appear once the head (and its hood) is gone', () => {
     const b = build(cultistSrc);

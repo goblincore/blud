@@ -161,6 +161,10 @@ function bakedFace(file: string): FaceSheet {
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
+    // Sutures along the seams the body was sewn together at: shoulders, neck, waist, hips (characters/zombie.detail
+    // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
+    // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.
+    bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
   },
   goblin: {

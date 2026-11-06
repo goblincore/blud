@@ -727,3 +727,63 @@ throws fireballs. What it taught:
   `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
   the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds
   with the upper arm), the inner one stays on the chest. Pinned by `characters/imp-kit.test.ts`.
+
+## Joints in motion: the zombie's shoulder and hips (2026-11-05)
+
+Owner playtest of the ragdoll: the shoulder "seems to pop out", the thigh tubes "go up too high on the side", the
+pelvis "looks like a full flesh diaper". Both came from flesh that never turns with its limb.
+
+- **A blob at a joint rides the joint POINT, not the limb.** The zombie's shoulder ball (on the clavicle, at the
+  shoulder) and the top cap of its thigh tube (starting 2 cm down the thigh, at the hip) both bind to the joint's
+  rig point. When the limb swings, the limb's tube moves away and the ball stays: a ball-and-stick socket, a ball
+  hanging under a raised arm, a round lump beside the pelvis when a leg swings out. A rest-pose turntable shows none
+  of it. Look at the joint posed: raise the arm forward, out and overhead, and the leg forward and out. A CPU-field
+  render of the posed body (`applyRig` on a `bindRig` with the limb's points turned, marched with `sdBody`) is enough
+  to see it.
+- **Fixes that held.** Shoulder: the same ball, blended over 30 mm instead of 7-10 mm (and the upper arm 15 mm), so
+  ball, arm and torso read as one mound in every pose. Hips: start the thigh tube lower on the thigh (0.18, its top
+  at the pelvis ball's middle) so its top moves with the leg, blend it 30 mm into the pelvis ball, taper it toward
+  the knee, and give the flank to the TRUNK: a capsule across the pelvis bone's top (`tip=`) at the old width.
+- **Moving flesh off a joint can expose the wound skeleton.** The thigh tops were covering the iliac crests; with them
+  lowered, validateBody's breach check named the bone prims. Cover them with trunk flesh, not by moving the bone.
+- **The flesh at a joint is also the sever's armour.** `connectivity.ts` cuts at chain joints and limb roots by
+  covering a disc at the joint's girth with wound spheres placed on the flesh SURFACE. A thicker or tapered upper arm
+  (a deltoid riding the arm, tried) pushed that surface out, so 30 slugs no longer took the shoulder
+  (`connectivity-toughness.test.ts`), while a fatter shoulder end caught more of a pellet storm and lost the arm
+  (`game-actor.test.ts`). A second prim at a joint is a second chain joint, and the sever cut the whole limb tube off
+  at it. After any joint edit, run those two files, `connectivity.test.ts` and the arm clip tests (which index arm
+  prims by position and read tapered prims' radius per sample).
+- **The zombie is authored twice.** `zombie.blob` and `body.ts` `ZOMBIE` must match (`zombie-blob.test.ts`), and
+  several actor tests build from `body.ts`, not the `.blob`.
+
+## Seams and sutures: the zombie's reconstituted flesh (2026-11-05)
+
+Owner: the walking zombie "has like visible seams currently, not sure from where". Make them sutures.
+
+- **Where the seams come from.** The skin noise (the shading normal's fbm, the grain, the mottle) and the body
+  normal map are all read at `restPoint`: the hit mapped into its DOMINANT prim's rest frame. Where the dominant prim
+  flips and the two prims have moved differently since rest, the two sides read the texture centimetres apart, and it
+  tears along the flip line. Zero at rest, so turntables never show it; shoot `BLOB_POSE=walk`. Measured on the
+  zombie: 10 mm at the shoulder for a 30 deg arm swing, 42 mm at the hip for a 25 deg stride, 62 mm at the neck for a
+  20 deg nod. **Point prims (`blob ... at=`) were the loudest**: restPoint gives them no axis to swing, so their noise
+  never turned with the limb (the hand of a reaching arm, the shoulder mound, the knee ball). Fixed at the root: applyRig
+  stamps a plain point sphere's bone rotation as a NOISE-ONLY orient (`orient-shape.ts`). A sphere turned about its
+  centre is the same field, so silhouettes and the march path are untouched and the pack keeps its cluster off
+  sdPrimO. Anisotropic point prims (the spine and foot blobs) keep the orient they shape with, which is the yaw
+  standing: turning only their noise would slide the texture over a silhouette that does not turn.
+- **Baking the noise would not fix it.** The map is read through the same `anchor`, so baked noise tears on the same
+  lines, at 1-2 mm texels instead of resolution-free. Keep the noise live; bake structure.
+- **Put the sutures ON the flip lines** (`scripts/zombie-detail-gen.ts`): rays round a junction axis, bisect where
+  `nearestPrim` leaves one prim set for the other. Emit every stitch once per cluster that meets there (torso AND
+  arm), each copy projected onto that cluster's own skin, because each map region bakes only its own cluster.
+- **Normal map, not mesh.** The seams straddle two bones that move apart, which a rigidly skinned kit shears; they sit
+  where the zombie severs, so mesh would need shed logic per part; flush mesh drowns in skin noise and lifted it floats.
+- **Scale.** Welts 8 mm either side of the cut, thread r 3.2 mm arching 6.5 mm proud, a stitch every 3 cm. The first
+  pass at two thirds of that read as a fine ladder at 1 m and as speckle beyond. At 2.4 m they are still a glint of
+  relief; relief alone has a range limit (a colour channel for the thread would push it).
+- **A point prim read the map rotated** until it got its bone's rotation: a wrist suture on its flip line smeared long
+  bars across the back of the reaching hand, so the wrist was briefly a cuff up the forearm. With the pose orient the
+  wrist suture sits on the forearm / hand flip line and the foreArm region runs past the hand. If a point prim is
+  ever anisotropic AND sits under detail, check it posed: its noise frame is the one it shapes with.
+- **Limb regions can be bands.** A hit no region claims wears no map, so bake only the bands round the seams; one
+  region reaches across a joint for the same cluster (foreArm t -0.15 covers the elbow's upper-arm side).

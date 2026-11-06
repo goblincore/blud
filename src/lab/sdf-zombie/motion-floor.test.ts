@@ -126,9 +126,12 @@ describe('no floorAt: frames are exactly the frames before floorY existed', () =
   });
 });
 
+// Re-recorded 2026-11-02: the authored death falls (death-fall.ts) replaced the zombie's ragdoll and the soldier's dead pose;
+// again the same day for the limb drape and the corpse hold (a landed corpse re-anchors where it lies), and again when
+// the zombie went back to the physics death (MotionProfile.physicsDeath).
 const RECORDED = {
   zombie: '5f646a5a:182431',
-  soldier: 'bde1cc7d:237075',
+  soldier: '38c76e24:235942',
 };
 
 describe('floorAt: the body stands on the floor under it', () => {

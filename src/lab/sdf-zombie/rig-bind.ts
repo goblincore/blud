@@ -12,6 +12,7 @@ import { jointForBoneEnd, rotateYaw } from './gait';
 import { boneFrames, segmentQuat, type BoneFrame3 } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
 import { morphOf, morphShape, type MorphResult, type MorphWeights } from './morph';
+import { orientShapesField } from './orient-shape';
 import { SQUASH_CENTRE_AT, squashAxes, squashMove, squashPoint, squashRestPrim, squashShape } from './squash';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
@@ -25,6 +26,14 @@ interface PrimBind {
   b: EndpointBind;
   /** Arm endpoint insets rotate with their bone, including at full extension. */
   armFrame?: { head: number; tail: number; restDir: Vec3 };
+  /** A torso prim's trunk bone (spine, pelvis), or a hand's or a foot's own bone: its offset and shape turn with the
+   *  bone as far as the corpse's headFollow lets go (applyRig), so a lying body's flesh lies with it. Standing
+   *  (follow 0) it is unused. `lat` (a trunk prim): the width line it rolls with, R -> L, and that line at rest. */
+  lieFrame?: { head: number; tail: number; restDir: Vec3; lat?: readonly [number, number]; restLat?: Vec3 };
+  /** A POINT prim's (a == b) declared bone, when it has a segment and no armFrame: the frame its skin noise and body
+   *  normal map turn with (applyRig stamps it as a noise-only pose orient, orient-shape.ts). A point prim has no axis
+   *  for restPoint to swing, so without it the noise stayed unrotated while the limb turned. */
+  noiseFrame?: { head: number; tail: number; restDir: Vec3 };
 }
 
 /** The upper-arm / forearm bone for a side, under either naming convention:
@@ -160,6 +169,11 @@ const PENDULUM_CHAIN: readonly string[] = ['hem2', 'hem3'];
  *  this keeps it where his hands and the attack's jiggle put it, with a little give. */
 export const HEM_HELD_SCALE = 0.7;
 
+/** ZOMBIE KNEE SPIKE (2026-11-02, owner: the free-ragdoll knee "always looks weird"). How far (rad) a shin may leave
+ *  its knee's hinge plane: the rig has no twist, so this stands in for the hip's rotation. Measured before it: knees
+ *  buckled 60-80° sideways. */
+export const KNEE_PLANE_SLACK = 20 * Math.PI / 180;
+
 export function bindRig(body: BuildResult): BoundRig {
   // Deduplicate joints: a bone's tail and its child's head are the same point.
   const positions: Vec3[] = [];
@@ -224,8 +238,16 @@ export function bindRig(body: BuildResult): BoundRig {
     const restUpper = normalize(sub(upper.tail, upper.head));
     const restPole = normalize(sub(bodyForward, vscale(restUpper, dot(bodyForward, restUpper))));
     if (len(restPole) < 1e-8) continue; // no forward flexion axis for this rest arm
+    // The live hinge (joint audit 2026-11-05), as the knee's: the shoulder-to-shoulder line, so the stop rolls with
+    // the chest. The pole carried by the yaw alone pointed off the true front on a corpse lying or twisted, and the
+    // stop let elbows fold backward (in 44-48 of 48 probe deaths for a moment). No plane limit: the upper arm rolls
+    // far. Corpses only (axisWhenDown): the live arm's swings and grips were tuned on the yaw pole.
+    const shL = armBoneName(body, 'upper', 'l'), shR = armBoneName(body, 'upper', 'r');
+    const sl = shL ? body.bones.get(shL)?.head : undefined, sr = shR ? body.bones.get(shR)?.head : undefined;
+    const hinge = sl && sr && indexOf(sl) !== indexOf(sr) ? { axis: [indexOf(sl), indexOf(sr)] as const,
+      axisSign: dot(cross(restUpper, sub(sr, sl)), restPole) < 0 ? -1 : 1, axisWhenDown: true } : {};
     rig.bends.push({ root: indexOf(upper.head), mid: indexOf(upper.tail),
-      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180, ...hinge });
   }
   // Knee stops — the same hinge, but the shin folds BACKWARD (pole =
   // -bodyForward). Without it the collapse's hip↔foot rope only caps the
@@ -241,8 +263,12 @@ export function bindRig(body: BuildResult): BoundRig {
     const back = vscale(bodyForward, -1);
     const restPole = normalize(sub(back, vscale(restUpper, dot(back, restUpper))));
     if (len(restPole) < 1e-8) continue;
+    // The live hinge: the hip-to-hip line, so the stop rolls with the pelvis (rig.ts RigBendConstraint.axis).
+    const hips = [body.bones.get('thigh.l')?.head, body.bones.get('thigh.r')?.head];
+    const hinge = hips[0] && hips[1] ? { axis: [indexOf(hips[0]), indexOf(hips[1])] as const,
+      axisSign: dot(cross(restUpper, sub(hips[1], hips[0])), restPole) < 0 ? -1 : 1, planeSlack: KNEE_PLANE_SLACK, plants: true } : {};
     rig.bends.push({ root: indexOf(thigh.head), mid: indexOf(thigh.tail),
-      end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+      end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180, ...hinge });
   }
 
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
@@ -436,6 +462,15 @@ export function bindRig(body: BuildResult): BoundRig {
   // sized from the head's own big spheres, that the arm segments may not enter.
   if (head) rig.headKeepOut = buildHeadKeepOut(body, positions, head, indexOf, armBoneName);
 
+  /** The rig points of the width line a trunk prim rolls with, [L, R]: the shoulders (upper arms' heads) for the
+   *  spine and chest bones, the hips (thighs' heads) for the pelvis bone. Null when the body has no such pair. */
+  const trunkWidthLine = (b: BuildResult, pelvis: boolean): [number, number] | null => {
+    const names = pelvis ? [b.bones.get('thigh.l'), b.bones.get('thigh.r')]
+      : [armBoneName(b, 'upper', 'l'), armBoneName(b, 'upper', 'r')].map(n => n ? b.bones.get(n) : undefined);
+    if (!names[0] || !names[1]) return null;
+    const l = indexOf(names[0].head), r = indexOf(names[1].head);
+    return l === r ? null : [l, r];
+  };
   const bindPrim = (p: Primitive): PrimBind => {
     // `rigid`: both ends ride the DECLARED bone as one piece — offsets from
     // its head joint, turned by its segment rotation (the same frame an arm
@@ -454,6 +489,26 @@ export function bindRig(body: BuildResult): BoundRig {
     const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
       restDir: normalize(sub(bone.tail, bone.head)) };
+    const lies = !bone && p.bone && ((p.limb === 'torso' && !/\.[lr]$/.test(p.bone)) || /^(hand|foot)/i.test(p.bone));
+    const own2 = lies ? body.bones.get(p.bone!) : undefined;
+    if (own2 && indexOf(own2.head) !== indexOf(own2.tail)) {
+      binding.lieFrame = { head: indexOf(own2.head), tail: indexOf(own2.tail), restDir: normalize(sub(own2.tail, own2.head)) };
+      // THE TRUNK ROLLS WITH ITS SHOULDERS (owner playtest 2026-11-05: in a blown-away death "the shoulder arm often
+      // separate[s] from the body"). The lying trunk turned by the bone's shortest swing, which knows where the spine
+      // points but not its roll about it: a corpse rolled onto its side or twisted mid-tumble kept its wide chest
+      // flesh rolled the old way while the shoulder points the arms hang from went with the body. Probe, 48 deaths:
+      // the shoulder point stood 8-13 cm outside the torso flesh at some moment in every one (1.6 cm standing), up to
+      // 9.5 cm at rest. A trunk prim now turns with its whole frame: its bone and the width line it rides (the
+      // shoulders, or the hips for the pelvis bone).
+      const lat = p.limb === 'torso' ? trunkWidthLine(body, own2 === body.bones.get('pelvis')) : null;
+      if (lat) {
+        const restLat = sub(positions[lat[0]]!, positions[lat[1]]!);
+        if (len(restLat) > 1e-6) binding.lieFrame = { ...binding.lieFrame, lat: [lat[1], lat[0]], restLat: normalize(sub(positions[lat[0]]!, positions[lat[1]]!)) };
+      }
+    }
+    const own3 = !bone && p.bone && len(sub(p.a, p.b)) === 0 ? body.bones.get(p.bone) : undefined;
+    if (own3 && indexOf(own3.head) !== indexOf(own3.tail)) binding.noiseFrame = { head: indexOf(own3.head),
+      tail: indexOf(own3.tail), restDir: normalize(sub(own3.tail, own3.head)) };
     return binding;
   };
 
@@ -665,7 +720,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // head centre, after its morph and before the gape and the head's turn. Null (no weight, weight 0) leaves the old path exactly.
   const squash = bound.head ? squashAxes(weights?.squash) : null;
   const rigid = bound.head
-    ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape, morphed, squash) : null;
+    ? headTransform(bound.head, pos, bodyYaw, headFollowOf(bound.rig), bound.rig.jawGape, morphed, squash) : null;
   // Every rib/vertebra on an axial segment uses the same rotation. Derive it
   // once per applyRig call; a cache lasting across calls would retain a stale
   // pose after Verlet, yaw changes, or a collapse. Check restDir too because
@@ -682,8 +737,24 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     return q;
   };
   const yawRotation: Quat = [0, Math.sin(bodyYaw / 2), 0, Math.cos(bodyYaw / 2)];
-  const posePrimitive = (p: Primitive, bind: PrimBind): Primitive => {
-    const q = bind.armFrame ? rotationOf(bind.armFrame) : yawRotation;
+  // THE LYING TRUNK (owner playtest 2026-11-02: "an orb around his midsection"): torso flesh turned only with the
+  // yaw, so on a corpse lying flat each ellipsoid kept standing up and its offset kept pointing at the sky — a ball
+  // of flesh above the belly. As the corpse's head lets go (headFollow) the trunk prims turn with their bone instead.
+  // A hand's orb had the same fault: it hung off the tip in the standing frame and drifted 15 cm off a dead soldier's
+  // wrist ("his orb hands seem detached").
+  const trunkFollow = headFollowOf(bound.rig);
+  const trunkRotation = (frame: NonNullable<PrimBind['lieFrame']>): Quat => {
+    const b = (frame.lat && frame.restLat && frameRotation(frame.restDir, frame.restLat,
+      sub(pos[frame.tail]!.pos, pos[frame.head]!.pos), sub(pos[frame.lat[1]]!.pos, pos[frame.lat[0]]!.pos))) || rotationOf(frame);
+    if (trunkFollow >= 1) return b;
+    const a = yawRotation, sgn = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1;
+    const m: Quat = [0, 1, 2, 3].map(k => a[k]! * (1 - trunkFollow) + b[k]! * sgn * trunkFollow) as unknown as Quat;
+    const l = Math.hypot(m[0], m[1], m[2], m[3]);
+    return [m[0] / l, m[1] / l, m[2] / l, m[3] / l];
+  };
+  const posePrimitive = (p: Primitive, bind: PrimBind, flesh = false): Primitive => {
+    const q = bind.armFrame ? rotationOf(bind.armFrame)
+      : bind.lieFrame && trunkFollow > 0 ? trunkRotation(bind.lieFrame) : yawRotation;
     const turned = Math.abs(1 - q[3]) > 1e-6;
     const orientedShape = p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]
       || p.box || p.shell || p.strand || p.orient;
@@ -692,7 +763,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     // and wide-footed when it faced sideways (the apparent room variants).
     // Isotropic capsules retain the cheap un-oriented field path.
     const a = add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset));
-    return {
+    const posed: Primitive = {
       ...p,
       a,
       b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
@@ -702,6 +773,17 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
         ? (p.orient ? { orient: qMul(q, p.orient) } : { orient: q, poseOrient: true })
         : {}),
     };
+    // A plain flesh SPHERE (the zombie's hand, knee and shoulder balls) gets its bone's rotation as a NOISE-ONLY
+    // orient: restPoint has no axis to swing on a point prim and read its skin noise unrotated while the limb
+    // turned, a crisp ring where the dominant prim flips to the forearm (2026-11-05). Rotating a sphere about its
+    // centre leaves its field alone, so the shape and the march path are untouched (orient-shape.ts; the pack keeps
+    // the cluster off sdPrimO). An anisotropic point prim (the spine and foot blobs) keeps the orient it shapes with
+    // above: turning only its noise would slide the texture over a silhouette that does not turn.
+    if (flesh && !orientedShape && !orientShapesField(posed)) {
+      const qn = bind.armFrame ? q : bind.noiseFrame ? rotationOf(bind.noiseFrame) : q;
+      if (Math.abs(1 - qn[3]) > 1e-6) { posed.orient = qn; posed.poseOrient = true; }
+    }
+    return posed;
   };
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
@@ -733,10 +815,10 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     }
     const bind = bound.binding[i]!;
     const m = morphed?.get(i);
-    if (!m) return posePrimitive(p, bind);
+    if (!m) return posePrimitive(p, bind, true);
     // Off the head, the morph moves the bind offsets (rest frame, joint-relative) before the segment rotation turns them.
     return posePrimitive(morphShape(p, m), {
-      ...bind, a: { ...bind.a, offset: add(bind.a.offset, m.da) }, b: { ...bind.b, offset: add(bind.b.offset, m.db) } });
+      ...bind, a: { ...bind.a, offset: add(bind.a.offset, m.da) }, b: { ...bind.b, offset: add(bind.b.offset, m.db) } }, true);
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
@@ -853,8 +935,58 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  * rest direction to the clamped solve — the residual only ever expresses the
  * in-cone look-at tilt it can see.
  */
+/** The rotation taking the rest frame (bone direction, width line) to the live one, or null when either width line
+ *  runs along its bone. The width line only fixes the roll about the bone. */
+function frameRotation(restDir: Vec3, restLat: Vec3, dir: Vec3, lat: Vec3): Quat | null {
+  const basis = (d: Vec3, l: Vec3): [Vec3, Vec3, Vec3] | null => {
+    const x = normalize(d), k = dot(l, x), y0 = sub(l, vscale(x, k)), ly = len(y0);
+    if (len(d) < 1e-9 || ly < 1e-6) return null;
+    const y = vscale(y0, 1 / ly);
+    return [x, y, cross(x, y)];
+  };
+  const r = basis(restDir, restLat), w = basis(dir, lat);
+  if (!r || !w) return null;
+  // M = W R^T, as rows m[i][j] = sum_k W_k[i] R_k[j].
+  const m = [0, 1, 2].map(i => [0, 1, 2].map(j => w[0][i]! * r[0][j]! + w[1][i]! * r[1][j]! + w[2][i]! * r[2][j]!));
+  const tr = m[0]![0]! + m[1]![1]! + m[2]![2]!;
+  let q: Quat;
+  if (tr > 0) {
+    const sq = Math.sqrt(tr + 1) * 2;
+    q = [(m[2]![1]! - m[1]![2]!) / sq, (m[0]![2]! - m[2]![0]!) / sq, (m[1]![0]! - m[0]![1]!) / sq, 0.25 * sq];
+  } else if (m[0]![0]! > m[1]![1]! && m[0]![0]! > m[2]![2]!) {
+    const sq = Math.sqrt(1 + m[0]![0]! - m[1]![1]! - m[2]![2]!) * 2;
+    q = [0.25 * sq, (m[0]![1]! + m[1]![0]!) / sq, (m[0]![2]! + m[2]![0]!) / sq, (m[2]![1]! - m[1]![2]!) / sq];
+  } else if (m[1]![1]! > m[2]![2]!) {
+    const sq = Math.sqrt(1 + m[1]![1]! - m[0]![0]! - m[2]![2]!) * 2;
+    q = [(m[0]![1]! + m[1]![0]!) / sq, 0.25 * sq, (m[1]![2]! + m[2]![1]!) / sq, (m[0]![2]! - m[2]![0]!) / sq];
+  } else {
+    const sq = Math.sqrt(1 + m[2]![2]! - m[0]![0]! - m[1]![1]!) * 2;
+    q = [(m[0]![2]! + m[2]![0]!) / sq, (m[1]![2]! + m[2]![1]!) / sq, 0.25 * sq, (m[1]![0]! - m[0]![1]!) / sq];
+  }
+  const l = Math.hypot(q[0], q[1], q[2], q[3]);
+  return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+}
+
+/** How far the skull follows the rig rather than its standing look cone:
+ *  1 for a fallen soldier (headFollowsRig), else the corpse's ramp. */
+function headFollowOf(rig: RigState): number {
+  return rig.headFollowsRig ? 1 : Math.min(1, Math.max(0, rig.headFollow ?? 0));
+}
+
+/** The skull direction: clamped to the look cone at 0, the rig's own at 1,
+ *  blended between (a corpse's head lets go of the cone as it falls instead
+ *  of snapping, and the painted face rides the same blend). */
+function followDir(dir: Vec3, rest: Vec3, follow: number): Vec3 {
+  if (follow >= 1) return dir;
+  const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  if (follow <= 0) return clamped;
+  const m = add(scale3(clamped, 1 - follow), scale3(dir, follow));
+  return len(m) < 1e-9 ? dir : normalize(m);
+}
+const scale3 = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
+
 function headTransform(
-  h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false, jawGape = 0,
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = 0, jawGape = 0,
   morphed: ReadonlyMap<number, MorphResult> | null = null, squash: Vec3 | null = null,
 ): {
   origin: Vec3;
@@ -900,14 +1032,14 @@ const EMPTY_SET: ReadonlySet<number> = new Set();
 /** The rigid head's pose this frame: the unit's origin, its clamped rotation and the clamped gape (headTransform's first half;
  *  kitFrames poses the kit's jaw bone from the SAME numbers). */
 function headPose(
-  h: HeadRigid, pos: readonly RigPoint[], bodyYaw: number, followRig: boolean, jawGape: number,
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw: number, followRig: number, jawGape: number,
 ): { origin: Vec3; q: Quat; gape: number } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
   const dir = normalize(sub(tip, pivot));
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = followRig ? dir : clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const clamped = followDir(dir, rest, followRig);
   // qMul(a, b) applies b first: the body turn, then the in-cone residual.
   const q = segmentQuat(h.restDir, clamped, bodyYaw);
 
@@ -951,7 +1083,7 @@ export function kitFrames(body: BuildResult, bound: BoundRig, bodyYaw: number): 
   const frames = boneFrames(body, bound, bodyYaw);
   const h = bound.head, jawBone = body.bones.get('jaw'), skull = body.bones.get('skull');
   if (!h?.jaw || !jawBone || !skull || !frames.has('jaw')) return frames;
-  const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, bound.rig.headFollowsRig ?? false, bound.rig.jawGape ?? 0);
+  const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, headFollowOf(bound.rig), bound.rig.jawGape ?? 0);
   const s = squashAxes(bound.rig.morphs?.squash);
   let hinge = h.jaw.rest;
   let shift: Vec3 = [0, 0, 0];
@@ -988,8 +1120,7 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   // rotation the skull masses were posed with): explicit body yaw first,
   // then the in-cone residual off the TURNED rest direction.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = bound.rig.headFollowsRig ? normalize(sub(tip, pivot)) : clampDir(
-    normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const clamped = followDir(normalize(sub(tip, pivot)), rest, headFollowOf(bound.rig));
   return segmentQuat(h.restDir, clamped, bodyYaw);
 }
 
@@ -1023,7 +1154,8 @@ export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
     ...bound,
     rig: constrainRigBends({
       ...bound.rig,
-      points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
+      // `delta` is a 1/60 s shove: this step's displacement for the same speed (rig.ts stepDt).
+      points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, vscale(delta, (bound.rig.stepDt ?? 1 / 60) * 60)) } : p),
     }),
   };
 }
