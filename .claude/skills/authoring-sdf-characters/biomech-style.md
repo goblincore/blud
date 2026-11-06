@@ -711,3 +711,31 @@ throws fireballs. What it taught:
   `reachSwing` against the legs, scaled by the walk's blend so standing still holds them; the throw's and claw's arcs
   add on top unchanged. The throw has its own beats (`THROW_TUNING`: a 42% cock, a 10% whip, a follow-through down and
   across to 70%, `SWING_ARCS.throw.followPitch/Yaw`).
+
+## Joints in motion: the zombie's shoulder and hips (2026-11-05)
+
+Owner playtest of the ragdoll: the shoulder "seems to pop out", the thigh tubes "go up too high on the side", the
+pelvis "looks like a full flesh diaper". Both came from flesh that never turns with its limb.
+
+- **A blob at a joint rides the joint POINT, not the limb.** The zombie's shoulder ball (on the clavicle, at the
+  shoulder) and the top cap of its thigh tube (starting 2 cm down the thigh, at the hip) both bind to the joint's
+  rig point. When the limb swings, the limb's tube moves away and the ball stays: a ball-and-stick socket, a ball
+  hanging under a raised arm, a round lump beside the pelvis when a leg swings out. A rest-pose turntable shows none
+  of it. Look at the joint posed: raise the arm forward, out and overhead, and the leg forward and out. A CPU-field
+  render of the posed body (`applyRig` on a `bindRig` with the limb's points turned, marched with `sdBody`) is enough
+  to see it.
+- **Fixes that held.** Shoulder: the same ball, blended over 30 mm instead of 7-10 mm (and the upper arm 15 mm), so
+  ball, arm and torso read as one mound in every pose. Hips: start the thigh tube lower on the thigh (0.18, its top
+  at the pelvis ball's middle) so its top moves with the leg, blend it 30 mm into the pelvis ball, taper it toward
+  the knee, and give the flank to the TRUNK: a capsule across the pelvis bone's top (`tip=`) at the old width.
+- **Moving flesh off a joint can expose the wound skeleton.** The thigh tops were covering the iliac crests; with them
+  lowered, validateBody's breach check named the bone prims. Cover them with trunk flesh, not by moving the bone.
+- **The flesh at a joint is also the sever's armour.** `connectivity.ts` cuts at chain joints and limb roots by
+  covering a disc at the joint's girth with wound spheres placed on the flesh SURFACE. A thicker or tapered upper arm
+  (a deltoid riding the arm, tried) pushed that surface out, so 30 slugs no longer took the shoulder
+  (`connectivity-toughness.test.ts`), while a fatter shoulder end caught more of a pellet storm and lost the arm
+  (`game-actor.test.ts`). A second prim at a joint is a second chain joint, and the sever cut the whole limb tube off
+  at it. After any joint edit, run those two files, `connectivity.test.ts` and the arm clip tests (which index arm
+  prims by position and read tapered prims' radius per sample).
+- **The zombie is authored twice.** `zombie.blob` and `body.ts` `ZOMBIE` must match (`zombie-blob.test.ts`), and
+  several actor tests build from `body.ts`, not the `.blob`.

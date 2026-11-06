@@ -75,7 +75,9 @@ describe('corpse integrity: the zombie', () => {
     // must match the pre-brace measurement of the fold (head in the pelvis).
     const b = fall(body, 3, 0);
     expect(b.last).toEqual(a);
-    expect(b.d(b.idx.head!, b.idx.pelvis!, b.last)).toBeLessThan(0.3);
+    // 0.45: the waist and lowered thigh flesh (zombie.blob, 2026-11-05) lift the braceless fold a little (head to
+    // pelvis 0.40 m); it is still the fold braces exist to stop (rest 0.71 m).
+    expect(b.d(b.idx.head!, b.idx.pelvis!, b.last)).toBeLessThan(0.45);
   });
 
   it('higher integrity keeps more of the shape', () => {

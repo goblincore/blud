@@ -37,17 +37,36 @@ body
   blob torso on spine  at=0.50 r=0.150 wide=1.15 deep=0.80 blend=0.02
   blob torso on spine  at=0.15 r=0.142 wide=1.02 deep=0.95 blend=0.02
   blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
+  # The waist across the hip bones (2026-11-05): the flanks over the iliac crests (bones r2 below, their tips at
+  # x +-0.145, y 1.089) were covered by the thigh tubes' tops, which sat on the hip points and stayed put as the
+  # leg swung (see the thigh line). The flank is the trunk's: one capsule across the pelvis bone's top, x +-0.115
+  # at y ~1.05, r 0.066, reaching x 0.18 as the thigh tops did, so the standing silhouette keeps its width and the
+  # crests sit 18 mm inside it.
+  bar  torso on pelvis from=0.95 to=0.95 offset=(0.115,0,0) tip=(-0.23,0,0) r=0.066 blend=0.03
 
   # Arms — shoulder blob, then upper and forearm capsules, then a fist.
-  blob arm on clavicle at=0.90 r=0.072 blend=0.010 mirror
-  bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.007 mirror
+  # THE SHOULDER IS ONE MOUND (owner playtest 2026-11-05: the shoulder "seems to pop out visually"). The shoulder
+  # ball rides the shoulder POINT, so the arm never turns it, and it was blended into the upper arm over 7-10 mm: a
+  # raised arm came up out of a ball that stayed put, with a crease round its root and the ball hanging out under
+  # it (CPU-field renders of the arm raised forward, out and overhead). Blended over 30 mm (15 mm the arm's own) the
+  # ball, the arm and the torso read as one mound in every pose. The sizes stay: the ball is the arm's root for the
+  # sever (connectivity.ts), and a thicker or tapered upper arm (a deltoid riding the arm, tried) moved the flesh
+  # surface the wounds land on, so 30 slugs no longer took the shoulder while 40 pellets did.
+  blob arm on clavicle at=0.90 r=0.072 blend=0.030 mirror
+  bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.015 mirror
   bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
   blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
 
   # Legs — thigh, shin, ankle, foot.
-  # from=0.04348: 0.02 m down the (now 0.46) thigh, where 0.05 of 0.40 put it — the hip's flesh must not
-  # move: the iliac crest bone below sits 4 mm inside it (validateBody's breach check).
-  bar  leg on thigh from=0.04348 to=0.95 r=0.082 blend=0.0175 mirror
+  # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis
+  # "looks like a full flesh diaper"). The hips are rigged at the pelvis TAIL, y 1.06, ~14 cm above a person's hip
+  # joint, and the thigh tube started 2 cm down the thigh: its round 0.082 top sat at waist height beside the pelvis
+  # ball, on the hip POINT, so it never turned with the leg. A leg raised or swung out left that ball behind as a
+  # bulge, and from the front the pelvis ball and two thigh tops read as one round mass (CPU-field renders of the
+  # leg raised 60/100 deg and out 45). The tube now starts 0.18 down the thigh (~8 cm, its top at the pelvis ball's
+  # middle), so its top turns with the leg; the pelvis ball fills the joint through a wider blend; it tapers toward
+  # the knee as a thigh does (0.082 -> 0.072, eyeballed).
+  bar  leg on thigh from=0.18 to=0.95 r=0.082 r2=0.072 blend=0.03 mirror
   bar  leg on shin  from=0.05 to=0.92 r=0.062 blend=0.015 mirror
   # The ankle knob. It used to BE the foot (r 0.070, flattened 0.6, stretched 1.5 forward), which
   # is why the legs read as stumps; now a round joint the foot hangs off.

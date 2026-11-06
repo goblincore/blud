@@ -1104,7 +1104,9 @@ describe('arms never clip through the torso', () => {
         const q = [0, 1, 2].map(i => p.a[i]! + (p.b[i]! - p.a[i]!) * (k / 8)) as unknown as Vec3;
         let d = Infinity;
         for (const t of torso) d = Math.min(d, sdPrimitive(q, t));
-        worst = Math.max(worst, p.radius - d);
+        // A tapered prim (radiusB) is that thick HERE, not its root's thickness all along.
+        const r = p.radius + ((p.radiusB ?? p.radius) - p.radius) * (k / 8);
+        worst = Math.max(worst, r - d);
       }
     }
     return worst;
