@@ -20,6 +20,7 @@ import { characterEntry } from '../character-registry';
 import { woundWorldPos, type Wound } from '../damage';
 import { headPopDebris } from '../head-pop';
 import { decapitationRule } from '../head-burst';
+import { splitsHead } from '../head-split';
 import { HEAD_LEAF } from './game-head-damage';
 import { LIGHT_PRESETS } from '../material';
 import { hitFeedback } from '../player-hit-feedback';
@@ -529,10 +530,12 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
     // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
     // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
+    // Every head the split fits (head-split.ts splitsHead) pops when a slug finds it split wide; only the zombie's
+    // slug decapitation pops as well (the soldier's keeps the flying head).
     ...(name === 'zombie' ? {
       onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
     } : {}),
-    ...(characterEntry(name).profile.soft || name === 'zombie' ? {
+    ...(characterEntry(name).profile.soft || splitsHead(name) ? {
       onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
         const at = head.origin;
         ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
