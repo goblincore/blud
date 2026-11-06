@@ -6,6 +6,7 @@ import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';
 import { sdStrand, strandLipschitz } from './strand';
 import { splitField, type SplitWarp } from './head-split';
+import { orientShapesField } from './orient-shape';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -154,8 +155,10 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // the choice between sdPrim and sdPrimO to a cluster flag purely as a
   // texture-fetch optimisation — sdPrimO on an identity quat runs sdPrim's
   // exact op sequence, so this per-prim branch is bit-identical to both.
+  // A noise-only orient (a rig-stamped point sphere, orient-shape.ts) leaves the field as it is: the pack keeps
+  // its cluster on the plain sdPrim path, so the mirror skips the rotation too.
   const o = prim.orient;
-  if (o && Math.abs(1 - o[3]) > 1e-6) {
+  if (o && Math.abs(1 - o[3]) > 1e-6 && orientShapesField(prim)) {
     const mid = vscale(add(prim.a, prim.b), 0.5);
     const u: Vec3 = [-o[0], -o[1], -o[2]]; // conjugate: negate the vector part
     const w = o[3];

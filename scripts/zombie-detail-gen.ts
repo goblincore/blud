@@ -5,14 +5,14 @@
 // nothing here is ever raymarched, so the stitches are free at runtime).
 //
 //   npx tsx scripts/zombie-detail-gen.ts && npx tsx scripts/bake-body-normal.ts zombie 768 400 \
-//     --limb clavicle.l:0.3:1.1:0.12:104 --limb upperArm.l:-0.05:0.3:0.10:72 --limb foreArm.l:-0.15:0.74:0.10:180 \
-//     --limb clavicle.r:0.3:1.1:0.12:104 --limb upperArm.r:-0.05:0.3:0.10:72 --limb foreArm.r:-0.15:0.74:0.10:180 \
+//     --limb clavicle.l:0.3:1.1:0.12:104 --limb upperArm.l:-0.05:0.3:0.10:72 --limb foreArm.l:-0.15:1.25:0.10:284 \
+//     --limb clavicle.r:0.3:1.1:0.12:104 --limb upperArm.r:-0.05:0.3:0.10:72 --limb foreArm.r:-0.15:1.25:0.10:284 \
 //     --limb thigh.l:-0.2:0.35:0.14:168 --limb shin.l:-0.15:0.15:0.11:100 \
 //     --limb thigh.r:-0.2:0.35:0.14:168 --limb shin.r:-0.15:0.15:0.11:100 --limb neck:-0.3:0.9:0.09:128
 //   (about 30 s on the GPU; run `npm install` first if it says it is baking on the CPU). The limb regions are BANDS
 //   round the seams only: a hit no region claims (mid upper arm, mid shin) simply wears no map. The foreArm region
-//   carries both the elbow (t < 0 reaches back over the upper arm's end; same cluster) and the wrist cuff, and
-//   stops short of the hand (see the wrist below); the shin
+//   carries both the elbow (t < 0 reaches back over the upper arm's end; same cluster) and the wrist, and runs
+//   past the hand (its sphere ends at t ~1.21) so both sides of the wrist suture wear it; the shin
 //   region carries the knee from both sides the same way. Texels are ~1-1.6 mm.
 //
 // THE TEMPLATE is scripts/twinhead-detail-gen.ts (probe the skin, sit each element a set number of mm proud, bind it
@@ -309,26 +309,23 @@ for (const sd of ['l', 'r'] as const) {
   }, [torsoT, legT]);
   // ELBOW, WRIST, KNEE: one cluster each, so one copy. Not in the owner's list, but in a walk these are the LOUDEST
   // seams on the body (crisp bright rings round the reaching forearms in blob:shot BLOB_POSE=walk): the hand and the
-  // shoulder mound are point prims (`blob ... at=`), and restPoint gives a point prim no axis to swing, so a raised
-  // arm's hand reads the noise unrotated against a forearm that turned with the arm. A body sewn from parts is
-  // sewn at every joint.
+  // shoulder mound are point prims (`blob ... at=`), and restPoint used to give a point prim no axis to swing, so a
+  // raised arm's hand read the noise unrotated against a forearm that turned with the arm. applyRig now stamps a
+  // point prim's bone rotation as a noise-only orient (src/lab/sdf-zombie/orient-shape.ts), which closes the ring
+  // on an unsutured body; the stitches stay because a body sewn from parts is sewn at every joint.
   const fa = bones.get(`foreArm.${sd}`)!, fu = norm(sub(fa.tail, fa.head));
   const isBar = (i: number) => len(sub(built.prims[i]!.b, built.prims[i]!.a)) > 1e-4;
   suture(`elbow.${sd}`, {
     label: 'upper arm / forearm', body: only(arm), inA: i => !built.prims[i]!.bone.startsWith('foreArm'),
     o: fa.head, u: fu, t0: -0.10, t1: 0.10, R: 0.16, phis: 96,
   }, [armT2(sd)]);
-  // The WRIST is the exception: not on its flip line but a CUFF up the forearm, at t 0.60 of the bone. The hand is a
-  // point prim, so in a raised arm its rest point does not turn with the arm, and every hand pixel reads the map at a
-  // rest point rotated round the hand's centre: a wrist suture on the flip line (t ~0.85) smeared long bars across the
-  // back of the reaching hand. Those rest points stay on the hand's sphere (centre t 1.0, r 0.062 of a 0.30 bone, so
-  // t >= 0.79), so a cuff whose stitches end by t ~0.68, in a foreArm region that ends at 0.74, is one the hand can
-  // never read. The wrist's own flip line stays unsewn (the follow-up is giving point prims their bone's rotation).
-  const faLen = len(sub(fa.tail, fa.head));
+  // WRIST: the forearm capsule into the hand ball, on its flip line (t ~0.85). It sat on a cuff up the forearm (t 0.60)
+  // while the hand, a point prim, read the map through an unrotated rest frame and smeared the stitches into bars
+  // across the back of a reaching hand. The hand turns with the forearm now (applyRig's point-prim pose orient), so
+  // its rest points stay put and the suture can sit on the seam it hides.
   suture(`wrist.${sd}`, {
-    label: 'forearm cuff (t 0.60)', body: only(arm), inA: () => true,
-    at: p => dot(sub(p, fa.head), fu) / faLen < 0.60,
-    o: fa.head, u: fu, t0: 0.40 * faLen, t1: 0.75 * faLen, R: 0.16, phis: 96,
+    label: 'forearm / hand', body: only(arm), inA: isBar,
+    o: fa.head, u: fu, t0: 0.60 * len(sub(fa.tail, fa.head)), t1: 1.05 * len(sub(fa.tail, fa.head)), R: 0.16, phis: 96,
   }, [armT2(sd)]);
   const sn = bones.get(`shin.${sd}`)!;
   suture(`knee.${sd}`, {

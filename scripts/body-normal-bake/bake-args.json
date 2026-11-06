@@ -16,5 +16,9 @@
     "--limb", "thigh.l:0:1:0.15:80", "--limb", "shin.l:0:1:0.12:80", "--limb", "foot.l:0:1:0.09:64", "--limb", "thigh.r:0:1:0.15:80", "--limb", "shin.r:0:1:0.12:80", "--limb", "foot.r:0:1:0.09:64"],
   "teratoma": ["512", "256"],
   "twinhead": ["512", "256", "--limb", "upperarm.l:0:1:0.17:96", "--limb", "forearm.l:0:0.5:0.13:48", "--limb", "upperarm.r:0:1:0.17:96", "--limb", "forearm.r:0:0.5:0.13:48"],
-  "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"]
+  "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"],
+  "zombie": ["768", "400", "--limb", "clavicle.l:0.3:1.1:0.12:104", "--limb", "upperArm.l:-0.05:0.3:0.10:72", "--limb", "foreArm.l:-0.15:1.25:0.10:284",
+    "--limb", "clavicle.r:0.3:1.1:0.12:104", "--limb", "upperArm.r:-0.05:0.3:0.10:72", "--limb", "foreArm.r:-0.15:1.25:0.10:284",
+    "--limb", "thigh.l:-0.2:0.35:0.14:168", "--limb", "shin.l:-0.15:0.15:0.11:100", "--limb", "thigh.r:-0.2:0.35:0.14:168",
+    "--limb", "shin.r:-0.15:0.15:0.11:100", "--limb", "neck:-0.3:0.9:0.09:128"]
 }
