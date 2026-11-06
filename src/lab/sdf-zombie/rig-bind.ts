@@ -27,8 +27,8 @@ interface PrimBind {
   armFrame?: { head: number; tail: number; restDir: Vec3 };
   /** A torso prim's trunk bone (spine, pelvis), or a hand's or a foot's own bone: its offset and shape turn with the
    *  bone as far as the corpse's headFollow lets go (applyRig), so a lying body's flesh lies with it. Standing
-   *  (follow 0) it is unused. */
-  lieFrame?: { head: number; tail: number; restDir: Vec3 };
+   *  (follow 0) it is unused. `lat` (a trunk prim): the width line it rolls with, R -> L, and that line at rest. */
+  lieFrame?: { head: number; tail: number; restDir: Vec3; lat?: readonly [number, number]; restLat?: Vec3 };
 }
 
 /** The upper-arm / forearm bone for a side, under either naming convention:
@@ -457,6 +457,15 @@ export function bindRig(body: BuildResult): BoundRig {
   // sized from the head's own big spheres, that the arm segments may not enter.
   if (head) rig.headKeepOut = buildHeadKeepOut(body, positions, head, indexOf, armBoneName);
 
+  /** The rig points of the width line a trunk prim rolls with, [L, R]: the shoulders (upper arms' heads) for the
+   *  spine and chest bones, the hips (thighs' heads) for the pelvis bone. Null when the body has no such pair. */
+  const trunkWidthLine = (b: BuildResult, pelvis: boolean): [number, number] | null => {
+    const names = pelvis ? [b.bones.get('thigh.l'), b.bones.get('thigh.r')]
+      : [armBoneName(b, 'upper', 'l'), armBoneName(b, 'upper', 'r')].map(n => n ? b.bones.get(n) : undefined);
+    if (!names[0] || !names[1]) return null;
+    const l = indexOf(names[0].head), r = indexOf(names[1].head);
+    return l === r ? null : [l, r];
+  };
   const bindPrim = (p: Primitive): PrimBind => {
     // `rigid`: both ends ride the DECLARED bone as one piece — offsets from
     // its head joint, turned by its segment rotation (the same frame an arm
@@ -477,8 +486,21 @@ export function bindRig(body: BuildResult): BoundRig {
       restDir: normalize(sub(bone.tail, bone.head)) };
     const lies = !bone && p.bone && ((p.limb === 'torso' && !/\.[lr]$/.test(p.bone)) || /^(hand|foot)/i.test(p.bone));
     const own2 = lies ? body.bones.get(p.bone!) : undefined;
-    if (own2 && indexOf(own2.head) !== indexOf(own2.tail)) binding.lieFrame = { head: indexOf(own2.head),
-      tail: indexOf(own2.tail), restDir: normalize(sub(own2.tail, own2.head)) };
+    if (own2 && indexOf(own2.head) !== indexOf(own2.tail)) {
+      binding.lieFrame = { head: indexOf(own2.head), tail: indexOf(own2.tail), restDir: normalize(sub(own2.tail, own2.head)) };
+      // THE TRUNK ROLLS WITH ITS SHOULDERS (owner playtest 2026-11-05: in a blown-away death "the shoulder arm often
+      // separate[s] from the body"). The lying trunk turned by the bone's shortest swing, which knows where the spine
+      // points but not its roll about it: a corpse rolled onto its side or twisted mid-tumble kept its wide chest
+      // flesh rolled the old way while the shoulder points the arms hang from went with the body. Probe, 48 deaths:
+      // the shoulder point stood 8-13 cm outside the torso flesh at some moment in every one (1.6 cm standing), up to
+      // 9.5 cm at rest. A trunk prim now turns with its whole frame: its bone and the width line it rides (the
+      // shoulders, or the hips for the pelvis bone).
+      const lat = p.limb === 'torso' ? trunkWidthLine(body, own2 === body.bones.get('pelvis')) : null;
+      if (lat) {
+        const restLat = sub(positions[lat[0]]!, positions[lat[1]]!);
+        if (len(restLat) > 1e-6) binding.lieFrame = { ...binding.lieFrame, lat: [lat[1], lat[0]], restLat: normalize(sub(positions[lat[0]]!, positions[lat[1]]!)) };
+      }
+    }
     return binding;
   };
 
@@ -713,8 +735,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // A hand's orb had the same fault: it hung off the tip in the standing frame and drifted 15 cm off a dead soldier's
   // wrist ("his orb hands seem detached").
   const trunkFollow = headFollowOf(bound.rig);
-  const trunkRotation = (frame: { head: number; tail: number; restDir: Vec3 }): Quat => {
-    const b = rotationOf(frame);
+  const trunkRotation = (frame: NonNullable<PrimBind['lieFrame']>): Quat => {
+    const b = (frame.lat && frame.restLat && frameRotation(frame.restDir, frame.restLat,
+      sub(pos[frame.tail]!.pos, pos[frame.head]!.pos), sub(pos[frame.lat[1]]!.pos, pos[frame.lat[0]]!.pos))) || rotationOf(frame);
     if (trunkFollow >= 1) return b;
     const a = yawRotation, sgn = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1;
     const m: Quat = [0, 1, 2, 3].map(k => a[k]! * (1 - trunkFollow) + b[k]! * sgn * trunkFollow) as unknown as Quat;
@@ -893,6 +916,38 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  * rest direction to the clamped solve — the residual only ever expresses the
  * in-cone look-at tilt it can see.
  */
+/** The rotation taking the rest frame (bone direction, width line) to the live one, or null when either width line
+ *  runs along its bone. The width line only fixes the roll about the bone. */
+function frameRotation(restDir: Vec3, restLat: Vec3, dir: Vec3, lat: Vec3): Quat | null {
+  const basis = (d: Vec3, l: Vec3): [Vec3, Vec3, Vec3] | null => {
+    const x = normalize(d), k = dot(l, x), y0 = sub(l, vscale(x, k)), ly = len(y0);
+    if (len(d) < 1e-9 || ly < 1e-6) return null;
+    const y = vscale(y0, 1 / ly);
+    return [x, y, cross(x, y)];
+  };
+  const r = basis(restDir, restLat), w = basis(dir, lat);
+  if (!r || !w) return null;
+  // M = W R^T, as rows m[i][j] = sum_k W_k[i] R_k[j].
+  const m = [0, 1, 2].map(i => [0, 1, 2].map(j => w[0][i]! * r[0][j]! + w[1][i]! * r[1][j]! + w[2][i]! * r[2][j]!));
+  const tr = m[0]![0]! + m[1]![1]! + m[2]![2]!;
+  let q: Quat;
+  if (tr > 0) {
+    const sq = Math.sqrt(tr + 1) * 2;
+    q = [(m[2]![1]! - m[1]![2]!) / sq, (m[0]![2]! - m[2]![0]!) / sq, (m[1]![0]! - m[0]![1]!) / sq, 0.25 * sq];
+  } else if (m[0]![0]! > m[1]![1]! && m[0]![0]! > m[2]![2]!) {
+    const sq = Math.sqrt(1 + m[0]![0]! - m[1]![1]! - m[2]![2]!) * 2;
+    q = [0.25 * sq, (m[0]![1]! + m[1]![0]!) / sq, (m[0]![2]! + m[2]![0]!) / sq, (m[2]![1]! - m[1]![2]!) / sq];
+  } else if (m[1]![1]! > m[2]![2]!) {
+    const sq = Math.sqrt(1 + m[1]![1]! - m[0]![0]! - m[2]![2]!) * 2;
+    q = [(m[0]![1]! + m[1]![0]!) / sq, 0.25 * sq, (m[1]![2]! + m[2]![1]!) / sq, (m[0]![2]! - m[2]![0]!) / sq];
+  } else {
+    const sq = Math.sqrt(1 + m[2]![2]! - m[0]![0]! - m[1]![1]!) * 2;
+    q = [(m[0]![2]! + m[2]![0]!) / sq, (m[1]![2]! + m[2]![1]!) / sq, 0.25 * sq, (m[1]![0]! - m[0]![1]!) / sq];
+  }
+  const l = Math.hypot(q[0], q[1], q[2], q[3]);
+  return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+}
+
 /** How far the skull follows the rig rather than its standing look cone:
  *  1 for a fallen soldier (headFollowsRig), else the corpse's ramp. */
 function headFollowOf(rig: RigState): number {

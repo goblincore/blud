@@ -37,12 +37,14 @@ body
   blob torso on spine  at=0.50 r=0.150 wide=1.15 deep=0.80 blend=0.02
   blob torso on spine  at=0.15 r=0.142 wide=1.02 deep=0.95 blend=0.02
   blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
-  # The waist across the hip bones (2026-11-05): the flanks over the iliac crests (bones r2 below, their tips at
-  # x +-0.145, y 1.089) were covered by the thigh tubes' tops, which sat on the hip points and stayed put as the
-  # leg swung (see the thigh line). The flank is the trunk's: one capsule across the pelvis bone's top, x +-0.115
-  # at y ~1.05, r 0.066, reaching x 0.18 as the thigh tops did, so the standing silhouette keeps its width and the
-  # crests sit 18 mm inside it.
-  bar  torso on pelvis from=0.95 to=0.95 offset=(0.115,0,0) tip=(-0.23,0,0) r=0.066 blend=0.03
+  # The flanks over the hip bones (2026-11-05): the iliac crests (bones r2 below, their tips at x +-0.145, y 1.089)
+  # were covered by the thigh tubes' tops, which sat on the hip points and stayed put as the leg swung (see the thigh
+  # line). The flank is the trunk's: a blob over each crest, x +-0.11 at y ~1.05, r 0.07, reaching x 0.18 as the thigh
+  # tops did, so the standing silhouette keeps its width and the crests sit 17 mm inside. `rigid`: on the pelvis bone,
+  # not on the nearest rig point, which here is each hip joint, swinging with its leg; the baked gib mesh rides the
+  # trunk, and the pelvis piece then stood 20 cm outside the walking body. Two blobs, not one capsule across the
+  # pelvis drawn with tip=: that stretched the pelvis piece 13x (gib-asset-deform-regression.test.ts).
+  blob torso on pelvis at=0.95 offset=(0.11,0,0) r=0.070 blend=0.03 both rigid
 
   # Arms — shoulder blob, then upper and forearm capsules, then a fist.
   # THE SHOULDER IS ONE MOUND (owner playtest 2026-11-05: the shoulder "seems to pop out visually"). The shoulder
