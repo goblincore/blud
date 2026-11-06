@@ -2511,9 +2511,10 @@ export function createZombieActor(opts: {
       if (volleyAge > VOLLEY_SEC) { volley = EMPTY_VOLLEY; volleyHead = false; }
       if (posed.prims[wound.primIdx]?.limb === 'head') volleyHead = true;
       const struck = posed.prims[wound.primIdx]?.limb;
-      const origin = wound.shot?.weapon === 'shotgun' ? wound.shot.origin : undefined;
+      const gun = wound.shot?.weapon === 'shotgun' ? wound.shot : undefined;
+      const origin = gun?.origin;
       const rangeM = origin ? Math.hypot(hitWorld[0] - origin[0], hitWorld[1] - origin[1], hitWorld[2] - origin[2]) : Infinity;
-      volley = addToVolley(volley, bySlug ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet', dirWorld, struck === 'torso' || struck === 'head', rangeM);
+      volley = addToVolley(volley, bySlug ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet', dirWorld, struck === 'torso' || struck === 'head', rangeM, gun?.barrels ?? 1);
       volleyAge = 0;
     }
     if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }

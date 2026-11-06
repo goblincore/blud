@@ -34,7 +34,12 @@ describe('gameplay knobs start at the shipped values', () => {
     expect(v.elbowToughness).toBe(JOINT_TOUGHNESS.mid);
     expect(v.corpseIntegrity).toBe(CORPSE_INTEGRITY.value);
     expect(v.blowAway).toBe(BLOW_AWAY.scale);
-    expect(v.blowAwayRange).toBe(BLOW_AWAY.farM);
+    expect(v.blowAwayShotgun).toBe(BLOW_AWAY.weapons.shotgun.chance);
+    expect(v.blowAwayDouble).toBe(BLOW_AWAY.weapons.doubleShotgun.chance);
+    expect(v.blowAwaySlug).toBe(BLOW_AWAY.weapons.slug.chance);
+    expect(v.blowAwayExplosion).toBe(BLOW_AWAY.weapons.explosion.chance);
+    expect(v.blowAwayRange).toBe(BLOW_AWAY.weapons.shotgun.farM);
+    expect(v.blowAwayRange).toBe(BLOW_AWAY.weapons.doubleShotgun.farM);
     expect(v.soldierShoulder).toBe(SOLDIER_TOUGHNESS.root);
     expect(v.soldierElbow).toBe(SOLDIER_TOUGHNESS.mid);
     expect(v.deathAnimated).toBe(DEATH_FALL.on ? 1 : 0);
