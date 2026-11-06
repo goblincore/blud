@@ -739,3 +739,30 @@ pelvis "looks like a full flesh diaper". Both came from flesh that never turns w
   prims by position and read tapered prims' radius per sample).
 - **The zombie is authored twice.** `zombie.blob` and `body.ts` `ZOMBIE` must match (`zombie-blob.test.ts`), and
   several actor tests build from `body.ts`, not the `.blob`.
+
+## Seams and sutures: the zombie's reconstituted flesh (2026-11-05)
+
+Owner: the walking zombie "has like visible seams currently, not sure from where". Make them sutures.
+
+- **Where the seams come from.** The skin noise (the shading normal's fbm, the grain, the mottle) and the body
+  normal map are all read at `restPoint`: the hit mapped into its DOMINANT prim's rest frame. Where the dominant prim
+  flips and the two prims have moved differently since rest, the two sides read the texture centimetres apart, and it
+  tears along the flip line. Zero at rest, so turntables never show it; shoot `BLOB_POSE=walk`. Measured on the
+  zombie: 10 mm at the shoulder for a 30 deg arm swing, 42 mm at the hip for a 25 deg stride, 62 mm at the neck for a
+  20 deg nod. **Point prims (`blob ... at=`) are the loudest**: restPoint gives them no axis to swing, so their noise
+  never turns with the limb (the hand of a reaching arm, the shoulder mound, the spine's chest and belly blobs).
+- **Baking the noise would not fix it.** The map is read through the same `anchor`, so baked noise tears on the same
+  lines, at 1-2 mm texels instead of resolution-free. Keep the noise live; bake structure.
+- **Put the sutures ON the flip lines** (`scripts/zombie-detail-gen.ts`): rays round a junction axis, bisect where
+  `nearestPrim` leaves one prim set for the other. Emit every stitch once per cluster that meets there (torso AND
+  arm), each copy projected onto that cluster's own skin, because each map region bakes only its own cluster.
+- **Normal map, not mesh.** The seams straddle two bones that move apart, which a rigidly skinned kit shears; they sit
+  where the zombie severs, so mesh would need shed logic per part; flush mesh drowns in skin noise and lifted it floats.
+- **Scale.** Welts 8 mm either side of the cut, thread r 3.2 mm arching 6.5 mm proud, a stitch every 3 cm. The first
+  pass at two thirds of that read as a fine ladder at 1 m and as speckle beyond. At 2.4 m they are still a glint of
+  relief; relief alone has a range limit (a colour channel for the thread would push it).
+- **A point prim reads the map rotated.** A wrist suture on its flip line smeared long bars across the back of the
+  reaching hand: the hand's rest points turn about the hand's centre. Keep a point prim's whole sphere out of any
+  region with detail (the wrist is a CUFF up the forearm, the foreArm region ends before the hand).
+- **Limb regions can be bands.** A hit no region claims wears no map, so bake only the bands round the seams; one
+  region reaches across a joint for the same cluster (foreArm t -0.15 covers the elbow's upper-arm side).
