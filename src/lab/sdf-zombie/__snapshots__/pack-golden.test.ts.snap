@@ -1,87 +1,87 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`packBody byte pin > bloatmaw.blob packs the pinned bytes 1`] = `"d3bfa32fc00f58b8"`;
+exports[`packBody byte pin > bloatmaw.blob packs the pinned bytes 1`] = `"a68ff401ee06b974"`;
 
-exports[`packBody byte pin > bonewalker.blob packs the pinned bytes 1`] = `"c4bf4c30d7e3ecf5"`;
+exports[`packBody byte pin > bonewalker.blob packs the pinned bytes 1`] = `"6b21ba743c616592"`;
 
 exports[`packBody byte pin > box-fixture.blob packs the pinned bytes 1`] = `"936e8b25726287ac"`;
 
-exports[`packBody byte pin > bride.blob packs the pinned bytes 1`] = `"caad05abaac0384a"`;
+exports[`packBody byte pin > bride.blob packs the pinned bytes 1`] = `"e92372617e51ed47"`;
 
-exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"bc130a8d5268e68f"`;
+exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"7626d2c2fae43b9a"`;
 
-exports[`packBody byte pin > butcher.blob packs the pinned bytes 1`] = `"1536a8164d9c26fb"`;
+exports[`packBody byte pin > butcher.blob packs the pinned bytes 1`] = `"f39b4fde4822fb18"`;
 
-exports[`packBody byte pin > chair.blob packs the pinned bytes 1`] = `"8cf1065a59e66798"`;
+exports[`packBody byte pin > chair.blob packs the pinned bytes 1`] = `"615ffe63abf0b16a"`;
 
-exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
+exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"089ef86f25134853"`;
 
-exports[`packBody byte pin > clown-alt.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
+exports[`packBody byte pin > clown-alt.blob packs the pinned bytes 1`] = `"089ef86f25134853"`;
 
 exports[`packBody byte pin > cultist.blob packs the pinned bytes 1`] = `"81c1aa0af79478a3"`;
 
 exports[`packBody byte pin > cultist-cowled.blob packs the pinned bytes 1`] = `"e337e1e693a6ae46"`;
 
-exports[`packBody byte pin > cyberdemon.blob packs the pinned bytes 1`] = `"50614ab404febdd5"`;
+exports[`packBody byte pin > cyberdemon.blob packs the pinned bytes 1`] = `"0f1d9eba62c2fa79"`;
 
-exports[`packBody byte pin > cyclops.blob packs the pinned bytes 1`] = `"6cb3ef51a960588d"`;
+exports[`packBody byte pin > cyclops.blob packs the pinned bytes 1`] = `"63861e20bc7269b8"`;
 
-exports[`packBody byte pin > deadeye.blob packs the pinned bytes 1`] = `"798ebae80782b07a"`;
+exports[`packBody byte pin > deadeye.blob packs the pinned bytes 1`] = `"9aee2dbcc1d38e33"`;
 
-exports[`packBody byte pin > dragon.blob packs the pinned bytes 1`] = `"24e7478ac58de203"`;
+exports[`packBody byte pin > dragon.blob packs the pinned bytes 1`] = `"960ff4695564269d"`;
 
-exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"fda78400265bcccd"`;
+exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"87643d14c154f1a3"`;
 
-exports[`packBody byte pin > flayer.blob packs the pinned bytes 1`] = `"523ae5937ba479b7"`;
+exports[`packBody byte pin > flayer.blob packs the pinned bytes 1`] = `"a5596ecc875872a0"`;
 
-exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"96f9fbb9d21e2150"`;
+exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"64c9e5ca53823321"`;
 
-exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"5b1bfc98c92f308e"`;
+exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"a3290ff3dd9bd4ac"`;
 
-exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"4231c10f4f44e193"`;
+exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"90ece0d7affa2661"`;
 
-exports[`packBody byte pin > gnasher.blob packs the pinned bytes 1`] = `"279b0d25f06c916e"`;
+exports[`packBody byte pin > gnasher.blob packs the pinned bytes 1`] = `"57026330db1bd6fd"`;
 
-exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"76d8bdc77b234246"`;
+exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"4e4a308e2d3066d8"`;
 
-exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"41ba4e6df21e9e19"`;
+exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"73582c1d7a565154"`;
 
-exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1`] = `"1de7c04211ea2913"`;
+exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1`] = `"0e895464be89ab99"`;
 
-exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd36ac3cfef903ac"`;
+exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd86a47957784971"`;
 
-exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"4daec4595c2d7da2"`;
+exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"ee09e397f85a38cb"`;
 
-exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"3700a0d4b0a5fdf5"`;
+exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"e943b18546481ef3"`;
 
-exports[`packBody byte pin > imp.blob packs the pinned bytes 1`] = `"fdeee91af6cabf4e"`;
+exports[`packBody byte pin > imp.blob packs the pinned bytes 1`] = `"713c0d8443ec8666"`;
 
-exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
+exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"fb79d702e6b9c410"`;
 
-exports[`packBody byte pin > minotaur.blob packs the pinned bytes 1`] = `"baab8ed56c086fd3"`;
+exports[`packBody byte pin > minotaur.blob packs the pinned bytes 1`] = `"7c26ed583a086900"`;
 
-exports[`packBody byte pin > mouse.blob packs the pinned bytes 1`] = `"bb3bb08caa3c321f"`;
+exports[`packBody byte pin > mouse.blob packs the pinned bytes 1`] = `"c013fa83bfe86fc7"`;
 
-exports[`packBody byte pin > ogre.blob packs the pinned bytes 1`] = `"df158cc09b144274"`;
+exports[`packBody byte pin > ogre.blob packs the pinned bytes 1`] = `"486aee6455496158"`;
 
-exports[`packBody byte pin > schoolgirl.blob packs the pinned bytes 1`] = `"a2563be4ee2842a6"`;
+exports[`packBody byte pin > schoolgirl.blob packs the pinned bytes 1`] = `"b73a387271e4fcc8"`;
 
-exports[`packBody byte pin > schoolgirl-alt.blob packs the pinned bytes 1`] = `"913fca3546a77934"`;
+exports[`packBody byte pin > schoolgirl-alt.blob packs the pinned bytes 1`] = `"48c3879e03b60fcd"`;
 
-exports[`packBody byte pin > schoolgirl-described.blob packs the pinned bytes 1`] = `"04e7757775635ddc"`;
+exports[`packBody byte pin > schoolgirl-described.blob packs the pinned bytes 1`] = `"210c5e0e542ae47e"`;
 
-exports[`packBody byte pin > soldier.blob packs the pinned bytes 1`] = `"6f693a91653eaac3"`;
+exports[`packBody byte pin > soldier.blob packs the pinned bytes 1`] = `"3e8b76bb82c4c8ff"`;
 
 exports[`packBody byte pin > strand-fixture.blob packs the pinned bytes 1`] = `"a3dd2bb96f38d4b9"`;
 
-exports[`packBody byte pin > teratoma.blob packs the pinned bytes 1`] = `"722a623817bc33d3"`;
+exports[`packBody byte pin > teratoma.blob packs the pinned bytes 1`] = `"4c547c2cf2892f07"`;
 
 exports[`packBody byte pin > thin-fixture.blob packs the pinned bytes 1`] = `"3bd8a1982310efc6"`;
 
-exports[`packBody byte pin > twinhead.blob packs the pinned bytes 1`] = `"b5ff117c5016b078"`;
+exports[`packBody byte pin > twinhead.blob packs the pinned bytes 1`] = `"d10ab84cda37367d"`;
 
-exports[`packBody byte pin > venus.blob packs the pinned bytes 1`] = `"2e0f2c8390c1b4c9"`;
+exports[`packBody byte pin > venus.blob packs the pinned bytes 1`] = `"af4195ee33077eca"`;
 
-exports[`packBody byte pin > warbull.blob packs the pinned bytes 1`] = `"f9a2b1a4424c020a"`;
+exports[`packBody byte pin > warbull.blob packs the pinned bytes 1`] = `"c6403051978c3781"`;
 
-exports[`packBody byte pin > zombie.blob packs the pinned bytes 1`] = `"76c6bea706383efc"`;
+exports[`packBody byte pin > zombie.blob packs the pinned bytes 1`] = `"2ec24b11bd6691a1"`;

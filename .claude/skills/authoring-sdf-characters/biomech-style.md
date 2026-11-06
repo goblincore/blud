@@ -765,8 +765,12 @@ Owner: the walking zombie "has like visible seams currently, not sure from where
   flips and the two prims have moved differently since rest, the two sides read the texture centimetres apart, and it
   tears along the flip line. Zero at rest, so turntables never show it; shoot `BLOB_POSE=walk`. Measured on the
   zombie: 10 mm at the shoulder for a 30 deg arm swing, 42 mm at the hip for a 25 deg stride, 62 mm at the neck for a
-  20 deg nod. **Point prims (`blob ... at=`) are the loudest**: restPoint gives them no axis to swing, so their noise
-  never turns with the limb (the hand of a reaching arm, the shoulder mound, the spine's chest and belly blobs).
+  20 deg nod. **Point prims (`blob ... at=`) were the loudest**: restPoint gives them no axis to swing, so their noise
+  never turned with the limb (the hand of a reaching arm, the shoulder mound, the knee ball). Fixed at the root: applyRig
+  stamps a plain point sphere's bone rotation as a NOISE-ONLY orient (`orient-shape.ts`). A sphere turned about its
+  centre is the same field, so silhouettes and the march path are untouched and the pack keeps its cluster off
+  sdPrimO. Anisotropic point prims (the spine and foot blobs) keep the orient they shape with, which is the yaw
+  standing: turning only their noise would slide the texture over a silhouette that does not turn.
 - **Baking the noise would not fix it.** The map is read through the same `anchor`, so baked noise tears on the same
   lines, at 1-2 mm texels instead of resolution-free. Keep the noise live; bake structure.
 - **Put the sutures ON the flip lines** (`scripts/zombie-detail-gen.ts`): rays round a junction axis, bisect where
@@ -777,8 +781,9 @@ Owner: the walking zombie "has like visible seams currently, not sure from where
 - **Scale.** Welts 8 mm either side of the cut, thread r 3.2 mm arching 6.5 mm proud, a stitch every 3 cm. The first
   pass at two thirds of that read as a fine ladder at 1 m and as speckle beyond. At 2.4 m they are still a glint of
   relief; relief alone has a range limit (a colour channel for the thread would push it).
-- **A point prim reads the map rotated.** A wrist suture on its flip line smeared long bars across the back of the
-  reaching hand: the hand's rest points turn about the hand's centre. Keep a point prim's whole sphere out of any
-  region with detail (the wrist is a CUFF up the forearm, the foreArm region ends before the hand).
+- **A point prim read the map rotated** until it got its bone's rotation: a wrist suture on its flip line smeared long
+  bars across the back of the reaching hand, so the wrist was briefly a cuff up the forearm. With the pose orient the
+  wrist suture sits on the forearm / hand flip line and the foreArm region runs past the hand. If a point prim is
+  ever anisotropic AND sits under detail, check it posed: its noise frame is the one it shapes with.
 - **Limb regions can be bands.** A hit no region claims wears no map, so bake only the bands round the seams; one
   region reaches across a joint for the same cluster (foreArm t -0.15 covers the elbow's upper-arm side).

@@ -24,7 +24,12 @@ import { ROW_CLUSTER_RANGE, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_PRIM_A, R
 // rows never written — the FPV hands view packs its own field) return the
 // caller's fallback, which is the old noiseLocal anchor. Degenerate capsules
 // (a == b point prims, e.g. the nose ball) skip the swing and map by
-// translation plus the orient frame alone.
+// translation plus the orient frame alone — which is why applyRig stamps a
+// plain point sphere's BONE rotation as a noise-only orient (orient-shape.ts,
+// 2026-11-05): without it a hand ball read its noise unrotated while the
+// forearm turned. prevPosed below and the body-normal tangent frame
+// (body/blocks/post/body-normal.wgsl.ts) read the same quat rows, so they
+// follow with no change of their own.
 export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>, band: i32) -> vec3<f32> {
   if (best < 0) { return fallback; }
   let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A} + band), 0);
