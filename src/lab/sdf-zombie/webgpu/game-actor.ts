@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { ANKLE_LIMITS, BODY_COLLIDE, CORPSE_POINT_R, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
+import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
@@ -1975,22 +1975,6 @@ export function createZombieActor(opts: {
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
-      // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
-      if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
-      // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
-      // hip cones, so a joint limit has the last word over a contact.
-      // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
-      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES), f.corpseBody, CORPSE_BODY);
-      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
-      // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
-      // game rig never pins tips (only the lab's stepActorMotion does), so the
-      // hand tip reached its grip-line target only through the soft rest pull:
-      // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
-      // Point JUST that tip along its motion target, as actor.ts does. Every
-      // other tip (and every other character) keeps the unpinned verlet.
-      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
-        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
-      }
       // SECTOR LEVELS (plan 3b): a corpse meets the floor under each point (an arm over a ledge hangs
       // down it). The rise is judged PER POINT, against where that point was: a floor more than
       // FALL_DROP_M above it is a wall, not a floor, and the point keeps the floor it had (the one
@@ -2007,6 +1991,30 @@ export function createZombieActor(opts: {
         if (Number.isFinite(was) && was <= reach) return was;
         return f.floorY <= reach ? f.floorY : from[1];
       } : undefined;
+
+      // The foot turns with the shin (collapse.ts THE FOOT TURNS WITH THE SHIN): straight after the rig step.
+      if (f.collapsed && f.hipCones.length) {
+        const lift = corpseLift(f);
+        points = carryFeet(rigBefore.points, points, f.hipCones,
+          (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : f.floorY) + (lift?.[i] ?? 0),
+          FOOT_CARRY);
+      }
+      // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+      if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
+      // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
+      // hip cones, so a joint limit has the last word over a contact.
+      // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
+      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES), f.corpseBody, CORPSE_BODY);
+      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
+      // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
+      // game rig never pins tips (only the lab's stepActorMotion does), so the
+      // hand tip reached its grip-line target only through the soft rest pull:
+      // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
+      // Point JUST that tip along its motion target, as actor.ts does. Every
+      // other tip (and every other character) keeps the unpinned verlet.
+      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
+        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
+      }
 
       if (f.collapsed) {
         const lift = corpseLift(f), floorY = f.floorY;
@@ -2034,6 +2042,12 @@ export function createZombieActor(opts: {
           ? plantFeet(bound.rig.points, f.footPlants, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0), sdt, SLUMP_PLANT, true)
           : releaseFeet(bound.rig.points, joints.footPlants);
         if (feet !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: feet } };
+        // The floor grips what rests on it (collapse.ts THE FLOOR GRIPS): last, over the whole step's move.
+        if (f.collapsed && !restingRig) {
+          const gripped = floorGrip(rigBefore.points, bound.rig.points,
+            (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0));
+          if (gripped !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: gripped } };
+        }
       }
       if (restingRig) bound = { ...bound, rig: restingRig };
       else if (f.collapsed) noteCorpseMotion(rigBefore.points, sdt);

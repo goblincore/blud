@@ -38,6 +38,8 @@ describe('head keep-out at rest', () => {
 
   it('the zombie gets a guard sphere per torso ellipsoid, each watching both arms', () => {
     const bound = bindRig(buildCharacterBody(characterEntry('zombie'), [0, 0, 0], []));
+    // Four: the flank blobs over the hip bones (zombie.blob, 2026-11-05) ride the pelvis bone `rigid`, framed like an
+    // arm prim, and get no guard.
     expect(bound.rig.torsoGuards).toHaveLength(4);
     for (const g of bound.rig.torsoGuards!) expect(g.limbs).toHaveLength(4);   // upper + fore, both sides
   });
