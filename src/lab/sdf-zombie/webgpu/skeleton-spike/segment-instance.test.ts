@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/skeleton-spike/segment-instance.test.ts
 //
-// SHARED SEGMENT BATCH BUILDS (2026-10-28): pins the three r186 keying the shared builds rest on (two batches of a
+// SHARED SEGMENT BATCH BUILDS (2026-10-28): pins the three r187 keying the shared builds rest on (two batches of a
 // material give ONE render-object cache key, the nodeBuilderCache key; two InstancedMeshes give two) and the
 // instance-row helpers. Constructible under vitest: RenderObject is built on stubs, no device.
 
@@ -17,8 +17,8 @@ import {
 /** The render object's cache key three keys a node build by (NodeManager.getForRenderCacheKey: initialCacheKey). */
 const buildKey = (object: THREE.Mesh, material: THREE.Material): unknown => {
   const renderer = { backend: { isWebGPUBackend: true }, contextNode: { id: 1, version: 0 }, _currentSourceMaterial: null };
-  const nodes = { getCacheKey: () => 0 };
-  const ro = new RenderObject(nodes, null, renderer, object, material, new THREE.Scene(), new THREE.PerspectiveCamera(), null, { id: 7 }, null);
+  const nodes = { getCacheKey: () => 0, getCustomProgramCacheKey: () => '' };
+  const ro = new RenderObject(nodes, null, renderer, object, material, new THREE.Scene(), new THREE.PerspectiveCamera(), new THREE.EventDispatcher(), { id: 7 }, null);
   return (ro as { initialCacheKey: unknown }).initialCacheKey;
 };
 const segmentGeometry = (detail: number) => {
@@ -34,7 +34,7 @@ const batchOf = (base: THREE.BufferGeometry, material: THREE.Material, n: number
   return new THREE.Mesh(g, material);
 };
 
-describe('segment batches share one node build per material (three r186 keying)', () => {
+describe('segment batches share one node build per material (three r187 keying)', () => {
   it('two batches of different segment geometries on one material: one key, at any instance count', () => {
     const material = new MeshBasicNodeMaterial();
     useSegmentInstance(material);
@@ -43,10 +43,13 @@ describe('segment batches share one node build per material (three r186 keying)'
     expect(b.count).toBe(1);
     expect(buildKey(a, material)).toBe(buildKey(b, material));
   });
-  it('the InstancedMesh it replaces: a key per mesh (its uuid), so a build, a module and a pipeline per batch', () => {
+  it('r187 no longer keys an InstancedMesh by uuid; a plain mesh with count > 1 still is, so a batch keeps count 1', () => {
     const material = new MeshBasicNodeMaterial();
     const a = new THREE.InstancedMesh(segmentGeometry(0), material, 16), b = new THREE.InstancedMesh(segmentGeometry(3), material, 16);
-    expect(buildKey(a, material)).not.toBe(buildKey(b, material));
+    expect(buildKey(a, material)).toBe(buildKey(b, material));
+    const c = new THREE.Mesh(segmentGeometry(0), material), d = new THREE.Mesh(segmentGeometry(3), material);
+    c.count = d.count = 2;
+    expect(buildKey(c, material)).not.toBe(buildKey(d, material));
   });
   it('useSegmentInstance is idempotent and leaves the material otherwise as it was', () => {
     const material = new MeshBasicNodeMaterial();

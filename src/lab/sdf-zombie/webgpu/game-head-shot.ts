@@ -17,12 +17,13 @@
 // 'slug') is the slug's own line, and has a reach: a landing point past BURST.maxHs of the head's ellipsoid is the
 // neck's or a shoulder's, and is not judged.
 //
-// ONLY THE ZOMBIE: the character (ZombieActor.characterName), not the motion profile. Every character without a
-// profile of its own moves on the zombie's, and none of them has the split's presets or the pop.
+// ONLY THE HEADS THE SPLIT FITS (head-split.ts splitsHead: the zombie and the soldier): the character
+// (ZombieActor.characterName), not the motion profile. Every character without a profile of its own moves on the
+// zombie's, and none of them has the split's presets. The pop needs the actor's onHeadPop as well (game-spawn.ts).
 //
 //   ordinary   hit() answers false and the caller stamps the round's own wound (ZombieActor.hit / hitSlug). Every
 //              pellet, an imprecise slug, a slug from too far, a round that is not on head flesh (the neck's base
-//              is the torso's), any character but the zombie, a head that is popping, everything with
+//              is the torso's), any character the split does not fit, a head that is popping, everything with
 //              burstTuning.on off.
 //   split      THE SLUG SPLIT. The head opens through the head split leaf (game-head-split.ts open), exactly as the
 //              axe's chop opens it, straight to burstTuning.splitOpen of the preset's angle. The split's plane holds
@@ -31,7 +32,9 @@
 //              the plane's normal and the point this leaf hands it). That point is on the head's middle line
 //              (head-burst.ts slugSplitPoint), so the slug from the front opens BOTH halves. The split's cut faces
 //              are the slug's wound: they are blasted with a slug's shove and a slug's share of the collapse meter,
-//              and they bleed as the axe's do. The zombie lives. If the split refuses after all (the body is
+//              and they bleed as the axe's do. The zombie lives, and so does the soldier: a blast that is not an
+//              explosion's is no injury of his (game-actor.ts recordSoldierInjury), so the split adds none to his
+//              regional tally, where an ordinary slug in the head would add a slug's. If the split refuses after all (the body is
 //              tearing apart), the round is ordinary.
 //   pop        A slug from within range on a head that is ALREADY split wide (burstTuning.popSplitMin of its angle
 //              or more; a head only cracked takes it as an ordinary wound). It need not be precise
@@ -57,7 +60,7 @@ import { COLLAPSE_TUNING } from '../collapse';
 import { headQuatOf } from '../rig-bind';
 import { rotate, type HeadFrame, type Quat } from '../head-deform';
 import { BURST, aimOffsetOf, aimRangeOf, burstTuning, classifyBurst, headShotRule, hsOf, onHeadPrim, slugSplitPoint, type HeadShotRule } from '../head-burst';
-import { splitMaxAngle } from '../head-split';
+import { splitMaxAngle, splitsHead } from '../head-split';
 import type { HeadSplitLeaf } from './game-head-split';
 import { headAlive } from './flame-anchors';
 
@@ -122,7 +125,7 @@ export function createHeadShot(ctx: GameContext, deps: HeadShotDeps): HeadShotLe
 
   return {
     hit(a, point, dir, shot, kind = 'slug') {
-      if (!burstTuning.on || a.characterName() !== 'zombie') return false;
+      if (!burstTuning.on || !splitsHead(a.characterName())) return false;
       const posed = a.posed();
       if (!headAlive(posed) || a.headPopping()) return false;
       // A split head's prims are the closed head's: the hit is judged where it lands on them.

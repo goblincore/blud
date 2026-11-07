@@ -12,7 +12,7 @@ import { worldHitToWound } from '../damage';
 import { rotateYaw } from '../gait';
 import { translateBody } from '../translate';
 
-function fixture() {
+function fixture(material = 'plate') {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute([
     -.19, 1.33, 0, -.09, 1.33, 0, -.09, 1.43, 0, -.19, 1.43, 0,
@@ -24,7 +24,7 @@ function fixture() {
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(Array.from({length: 8}, ()=>[1,0,0,0]).flat(), 4));
   const l = new THREE.Bone(); l.name='upperarml';
   const r = new THREE.Bone(); r.name='upperarmr';
-  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({name:'plate'}));
+  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({name:material}));
   mesh.bind(new THREE.Skeleton([l,r]));
   const root = new THREE.Group(); root.add(mesh);
   root.updateMatrixWorld(true);
@@ -132,6 +132,19 @@ describe('damaged kit pieces', () => {
     damage.update(b,[],0,0);
     expect(damage.debris.children).toHaveLength(0);
     expect(mesh.geometry.index!.count).toBe(12);
+    damage.dispose();
+  });
+  it('knocks out a tooth its crater reaches, at the first hit, and leaves one it misses', () => {
+    const {mesh,damage}=fixture('tooth');
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const miss={...worldHitToWound([b.prims[index]!],[-.14,1.38,.10],.055,'pellet'),primIdx:index,eventId:1};
+    expect(damage.update(b,[miss],0,0)).toEqual([]);
+    expect(mesh.geometry.index!.count).toBe(12);
+    const hit={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:2};
+    expect(damage.update(b,[miss,hit],0,0)).toEqual([]); // no spark: a tooth is not armour
+    expect(damage.debris.children).toHaveLength(1);
+    expect(mesh.geometry.index!.count).toBe(6);
     damage.dispose();
   });
   it('detects a fresh hit against the currently posed world-space plate',()=>{

@@ -419,7 +419,13 @@ def test_default_skill_is_hard_spawns(tmp_path):
 
 def test_skill_1_keeps_the_imp_and_drops_the_shotgun_guy(tmp_path):
     spawns = {s["id"]: s["kind"] for s in convert(tmp_path, skill=1)["spawns"]}
-    assert set(spawns) == {"s1", "s3"} and spawns["s3"] == "zombie"
+    assert set(spawns) == {"s1", "s3"}
+    assert spawns["s3"] == doom_map.IMP_VARIANTS[doom_map.fnv1a32("s3") % 2]   # the default mix
+
+
+def test_imp_choice(tmp_path):
+    for kind in doom_map.IMP_VARIANTS:
+        assert {s["id"]: s["kind"] for s in convert(tmp_path, skill=1, imp=kind)["spawns"]}["s3"] == kind
 
 
 def test_pickups_skip_multiplayer_and_stand_on_their_floor(tmp_path):

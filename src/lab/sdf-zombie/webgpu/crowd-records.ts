@@ -7,7 +7,7 @@ import { DATA_ROWS } from './march.wgsl';
 import type { SplitWarp } from '../head-split';
 import { SPLIT_ABLATE, splitAblate } from './split-ablate';
 
-export const REC_VEC4S = 21;
+export const REC_VEC4S = 22;
 export const MAX_CROWD_INSTANCES = 64;
 
 export const REC_COUNTS = 0;        // primCount, clusterCount, carveCount, maxBlendK
@@ -47,6 +47,11 @@ export const REC_SPLIT_N = 17;     // plane normal n.xyz, w = thetaP (the + side
 export const REC_SPLIT_H = 18;     // hinge point h.xyz, w = d0 (the plane offset: s(q) = n.q - d0)
 export const REC_SPLIT_A = 19;     // hinge axis a.xyz, w = thetaM (the - side's angle, <= 0)
 export const REC_SPLIT_R = 20;     // x = r (the region sphere's radius about h), yzw spare
+/** BODY NORMAL MAP placement (body-normal.wgsl.ts): xyz = where the body was spawned (bodyNormCfg.yzw), w spare.
+ *  Per-body for the same reason as REC_GORE: the crowd copies ONE source view's uniforms onto the whole type
+ *  (game-main.ts copyUniformValues), so with the origin in bodyNormCfg every crowd member but the source tested
+ *  the map's regions at the source's spawn point and drew the sutures as stray lines or not at all (2026-11-06). */
+export const REC_NMAP_ORIGIN = 21; // xyz origin, w spare
 
 function createRecordNode(attribute: THREE.StorageBufferAttribute, count: number) {
   return storage(attribute, 'vec4', count).toReadOnly();
@@ -73,6 +78,8 @@ export interface RecordSource {
   lights?: readonly number[];
   /** The head split of the posed body this record draws (`posed.split`). Omitted or null = closed. */
   split?: SplitWarp | null;
+  /** Body normal map placement origin (REC_NMAP_ORIGIN). Omitted = the world origin. */
+  nmapOrigin?: ArrayLike<number>;
 }
 
 export interface CrowdRecords {
@@ -118,6 +125,7 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       const em = s.eyeMask;
       put4(b + REC_GORE * 4, [s.gore, em ? 1 - (em[0] ?? 1) : 0, em ? 1 - (em[1] ?? 1) : 0, em ? (em[2] ?? 0) : 0]);
       put4(b + REC_BURN * 4, [s.burn, s.burnSec, s.charAmount, 0]);
+      put4(b + REC_NMAP_ORIGIN * 4, s.nmapOrigin ?? [0, 0, 0], 0);
       const l = s.lights;
       const lo = b + REC_LIGHTS * 4;
       floats[lo] = l?.[0] ?? -1; floats[lo + 1] = l?.[1] ?? -1;

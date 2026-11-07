@@ -20,7 +20,7 @@ import soldierSrc from './characters/soldier.blob?raw';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import zombieSrc from './characters/zombie.blob?raw';
 import { sdPrimitive } from './validate';
-import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
+import { add, dot, len, normalize, qFromAxisAngle, qRotate, scale as vscale, sub } from './vec';
 import type { Primitive, Vec3 } from './types';
 import type { BuildResult } from './build-body';
 import type { Quat } from './vec';
@@ -49,6 +49,35 @@ describe('bindRig', () => {
 
   it('constrains adjacent joints at their rest separation', () => {
     for (const c of bound.rig.constraints) expect(c.rest).toBeGreaterThan(0);
+  });
+});
+
+describe('applyRig: a lying corpse\'s flesh lies with it', () => {
+  // A rigid topple of the whole rig onto its back: every point turned 90 degrees about X round the pelvis. Returns how
+  // far the worst prim on a matching bone sits from where the same rigid turn puts it.
+  const offender = (src: string, bone: RegExp, headFollow: number): number => {
+    const body = buildBody(compileBlob(parseBlob(src)), DEFAULT_BUILD_OPTS);
+    const bound = bindRig(body);
+    const pelvis = bound.rig.points[jointNamesForBody(body).indexOf('pelvis')]!.pos;
+    const q = qFromAxisAngle([1, 0, 0], -Math.PI / 2);
+    const turn = (v: readonly number[]) => add(pelvis as never, qRotate(q, sub(v as never, pelvis as never)));
+    const out = applyRig(body, { ...bound, rig: { ...bound.rig, headFollow,
+      points: bound.rig.points.map(p => ({ ...p, pos: turn(p.pos) })) } });
+    const gaps = body.prims.flatMap((p, i) => (p.bone && bone.test(p.bone) ? [len(sub(out.prims[i]!.a, turn(p.a)))] : []));
+    expect(gaps.length).toBeGreaterThan(0);
+    return Math.max(...gaps);
+  };
+
+  it('the torso prims turn with the spine once the corpse lets go (the midsection orb)', () => {
+    expect(offender(zombieSrc, /^(spine|pelvis)$/, 1)).toBeLessThan(1e-6);
+  });
+
+  it('a soldier\'s hand orb turns with his hand (it floated off the wrist)', () => {
+    expect(offender(soldierSrc, /^hand\./, 1)).toBeLessThan(1e-6);
+  });
+
+  it('standing (follow 0) they keep the old yaw-only frame', () => {
+    expect(offender(zombieSrc, /^(spine|pelvis)$/, 0)).toBeGreaterThan(0.05);
   });
 });
 

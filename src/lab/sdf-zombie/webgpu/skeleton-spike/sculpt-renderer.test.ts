@@ -20,7 +20,7 @@ import { meshEyePlacements } from './mesh-eyes';
 import { SCULPT_VARIANTS, sculptPaintOf, sculptRecipe, type SculptVariant } from './sculpt-variant';
 import { createBoneMeshCache, startBoneMeshCache, SKULL_ASSET_WAIT_MS } from './sculpt-cache';
 import { AnatomicalSkullKit, type SkullFitPlan } from './anatomical-skull';
-import { BALL_HEADS, HUMANOIDS, ballHeadFit } from './skull-cast';
+import { ANATOMICAL_SKULL_ASSET, BALL_HEADS, HUMANOIDS, OWN_SKULLS, ballHeadFit } from './skull-cast';
 import { createSkeletonSeams } from '../game-seams-skeleton';
 import type { GameContext } from '../game-context';
 import { batchDraws } from './segment-instance';
@@ -52,7 +52,7 @@ const calls = (nodes: readonly Graph[]) => new Set(nodes.flatMap(n => (n.functio
 /** A split material's colour as three builds it: `held` the values declared ahead of the branch on the clip (real
  *  variables), `branch` what the branch stacks. */
 const colourOf = (m: MeshBasicNodeMaterial) => {
-  const fn = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+  const fn = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
   const was = getCurrentStack(), outer = stack();
   try {
     setCurrentStack(outer); fn.jsFunc();
@@ -196,7 +196,7 @@ describe('createBoneMeshCache', () => {
   const noKit = () => Promise.reject(new Error('no asset in this test'));
   // A stand-in for the loaded plates: the cache only keeps it. It fits no head (head() answers null), so every key
   // asked of a cache that holds it is the sculpted bone's.
-  const kit = { head: () => null, size: 0, totals: { verts: 0, tris: 0 }, supports: () => false, dispose: () => {} } as unknown as AnatomicalSkullKit;
+  const kit = { head: () => null, fitOf: () => null, size: 0, totals: { verts: 0, tris: 0 }, supports: () => false, dispose: () => {} } as unknown as AnatomicalSkullKit;
   const loaded = () => Promise.resolve(kit);
 
   it('no skull parameter is the sculpted skull, full: the recipe, the fine head, and nothing said; the plates are loaded for the characters that draw them', async () => {
@@ -275,29 +275,33 @@ describe('createBoneMeshCache', () => {
   });
   it('?skull=anatomical loads the plates and draws the other bones under classic', async () => {
     const { lines, say } = said();
-    let loads = 0;
-    const cache = await createBoneMeshCache('?skull=anatomical', say, () => { loads++; return Promise.resolve(kit); });
+    const loads: string[] = [];
+    const cache = await createBoneMeshCache('?skull=anatomical', say, (_, asset) => { loads.push(asset.name); return Promise.resolve(kit); });
     expect(cache.skullKit).toBe(kit);
     expect(cache.sculpt).toBe(sculptRecipe('classic'));
-    expect(loads).toBe(1);
+    // The plates once, the human skull's first; and the imp's own skull beside them.
+    expect(loads).toEqual(['anatomical', 'imp']);
     // The wait for the asset is timed onto the kit.
     expect(kit.loadMs).toBeGreaterThanOrEqual(0);
     expect(lines).toEqual([]);
   });
   it('the plates are loaded only by a page on which somebody draws them: not under the sculpted skull on every character', async () => {
-    const loadsOf = async (search: string) => { let loads = 0; (await createBoneMeshCache(search, said().say, () => { loads++; return Promise.resolve(kit); })).dispose(); return loads; };
-    for (const search of ['?skull=sculpt', '?skull=procedural', '?sculpt=full', '?sculpt=classic', '?skull=anatomical&sculpt=paint', '?skull=sculpt&skullfit=snug']) expect(await loadsOf(search), search).toBe(0);
-    // The default page draws them on the eight ball-headed humanoids; ?skull=anatomical on every humanoid.
-    for (const search of ['', '?level=night-train', '?skull=nonsense', '?skullfit=tight', '?skull=anatomical', '?skull=anatomical&skullfit=snug']) expect(await loadsOf(search), search).toBe(1);
+    const loadsOf = async (search: string) => { const loads: string[] = []; (await createBoneMeshCache(search, said().say, (_, asset) => { loads.push(asset.name); return Promise.resolve(kit); })).dispose(); return loads; };
+    for (const search of ['?skull=sculpt', '?skull=procedural', '?sculpt=full', '?sculpt=classic', '?skull=anatomical&sculpt=paint', '?skull=sculpt&skullfit=snug']) expect(await loadsOf(search), search).toEqual([]);
+    // The default page draws them on the eight ball-headed humanoids; ?skull=anatomical on every humanoid. Each asset
+    // once: the plates, and the imp's own skull.
+    for (const search of ['', '?level=night-train', '?skull=nonsense', '?skullfit=tight', '?skull=anatomical', '?skull=anatomical&skullfit=snug']) expect(await loadsOf(search), search).toEqual(['anatomical', 'imp']);
   });
   it('the kit is loaded with the resolver\'s plan: who draws the plates, each under its fit', async () => {
     const plans: Record<string, ReturnType<typeof ballHeadFit>[]> = {};
     for (const search of ['', '?skull=anatomical', '?skullfit=tight']) {
-      (await createBoneMeshCache(search, said().say, (plan) => { plans[search] = ['cultist', 'female', 'zombie', 'soldier', 'ogre'].map(plan); return Promise.resolve(kit); })).dispose();
+      (await createBoneMeshCache(search, said().say, (plan, asset) => { plans[`${search}|${asset.name}`] = ['cultist', 'female', 'zombie', 'soldier', 'ogre', 'imp'].map(plan); return Promise.resolve(kit); })).dispose();
     }
-    expect(plans['']).toEqual([ballHeadFit('cultist'), ballHeadFit('female'), null, null, null]);
-    expect(plans['?skull=anatomical']).toEqual([{ fit: 'envelope' }, { fit: 'envelope' }, { fit: 'envelope' }, { fit: 'envelope' }, null]);
-    expect(plans['?skullfit=tight']).toEqual([{ fit: 'tight' }, { fit: 'tight' }, null, null, null]);
+    expect(plans['|anatomical']).toEqual([ballHeadFit('cultist'), ballHeadFit('female'), null, null, null, null]);
+    expect(plans['?skull=anatomical|anatomical']).toEqual([{ fit: 'envelope' }, { fit: 'envelope' }, { fit: 'envelope' }, { fit: 'envelope' }, null, null]);
+    expect(plans['?skullfit=tight|anatomical']).toEqual([{ fit: 'tight' }, { fit: 'tight' }, null, null, null, null]);
+    // The imp's own skull's plan names the imp alone, under its own fit, whatever ?skullfit= says.
+    for (const search of ['', '?skull=anatomical', '?skullfit=tight']) expect(plans[`${search}|imp`], search).toEqual([null, null, null, null, null, OWN_SKULLS.imp!.spec]);
   });
   it('plates that do not load: the boot goes on, every character on its sculpted bone, and one line says so in any build', async () => {
     for (const [search, variant] of [['?skull=anatomical', 'full'], ['', 'full'], ['?level=night-train', 'full'], ['?skullfit=snug', 'full']] as const) {
@@ -305,7 +309,11 @@ describe('createBoneMeshCache', () => {
       const cache = await createBoneMeshCache(search, (line, always) => { said2.push([line, always]); }, noKit);
       expect(cache.skullKit, search).toBeNull();
       expect(cache.sculpt, search).toBe(sculptRecipe(variant));
-      expect(said2, search).toHaveLength(1);
+      // One line for the plates, one for the imp's own skull.
+      expect(said2, search).toHaveLength(2);
+      expect(said2[1]![0]).toContain('the imp skull');
+      expect(said2[1]![0]).toContain('imp draws its sculpted bone');
+      expect(said2[1]![1]).toBe(true);
       expect(said2[0]![0]).toContain('did not load');
       expect(said2[0]![0]).toContain('no asset in this test');
       expect(said2[0]![0]).toContain('sculpted bone');
@@ -320,9 +328,39 @@ describe('createBoneMeshCache', () => {
     expect(performance.now() - began).toBeLessThan(1000);
     expect(cache.skullKit).toBeNull();
     expect(cache.sculpt).toBe(sculptRecipe('full'));
-    expect(said2).toEqual([[expect.stringContaining('no answer in 30 ms'), true]]);
+    expect(said2).toEqual([[expect.stringContaining('no answer in 30 ms'), true], [expect.stringContaining('no answer in 30 ms'), true]]);
     expect(SKULL_ASSET_WAIT_MS).toBeGreaterThanOrEqual(2000);
     cache.dispose();
+  });
+  it('THE IMP\'S OWN SKULL IS ITS OWN KIT: looked up by character, beside the plates; one that does not load leaves the imp on its sculpted bone and nobody else', async () => {
+    const kitOf = (plan: SkullFitPlan, asset: typeof ANATOMICAL_SKULL_ASSET) => new AnatomicalSkullKit([], new THREE.Texture(), new THREE.Vector2(1, 1), plan, asset);
+    const both = await createBoneMeshCache('', said().say, (plan, asset) => Promise.resolve(kitOf(plan, asset)));
+    expect(both.skullKits.map(k => k.asset.name)).toEqual(['anatomical', 'imp']);
+    expect(both.skullKit).toBe(both.skullKits[0]);
+    expect(both.skullKitOf('imp')!.asset).toBe(OWN_SKULLS.imp!.asset);
+    expect(both.skullKitOf('imp')!.fitOf('imp')).toBe(OWN_SKULLS.imp!.spec);
+    expect(both.skullKitOf('cultist')!.asset).toBe(ANATOMICAL_SKULL_ASSET);
+    for (const name of ['zombie', 'ogre']) expect(both.skullKitOf(name), name).toBeNull();
+    both.dispose();
+    // The imp's asset fails: the plates still draw on the eight, the imp on its sculpted bone; one line says so.
+    const { lines, say } = said();
+    const noImp = await createBoneMeshCache('', say, (plan, asset) => asset.name === 'imp' ? Promise.reject(new Error('404')) : Promise.resolve(kitOf(plan, asset)));
+    expect(noImp.skullKits.map(k => k.asset.name)).toEqual(['anatomical']);
+    expect(noImp.skullKitOf('imp')).toBeNull();
+    expect(noImp.skullKitOf('cultist')).toBe(noImp.skullKit);
+    expect(noImp.sculpt).toBe(sculptRecipe('full'));
+    expect(lines).toEqual([expect.stringMatching(/the imp skull \(\/assets\/lab\/imp-skull\.glb\) did not load \(404\): imp draws its sculpted bone/)]);
+    noImp.dispose();
+    // The plates fail and the imp's loads: the imp alone draws a modelled skull, and the page's recipe is unchanged.
+    const onlyImp = await createBoneMeshCache('?skull=anatomical', () => {}, (plan, asset) => asset.name === 'imp' ? Promise.resolve(kitOf(plan, asset)) : Promise.reject(new Error('404')));
+    expect(onlyImp.skullKits.map(k => k.asset.name)).toEqual(['imp']);
+    expect(onlyImp.skullKitOf('cultist')).toBeNull();
+    expect(onlyImp.sculpt).toBe(sculptRecipe('full'));
+    onlyImp.dispose();
+    // Under the sculpted skull on every character the imp's asset is not asked for.
+    const asked: string[] = [];
+    (await createBoneMeshCache('?skull=sculpt', () => {}, (plan, asset) => { asked.push(asset.name); return Promise.resolve(kitOf(plan, asset)); })).dispose();
+    expect(asked).toEqual([]);
   });
   it('an unknown value is passed over and said once', async () => {
     for (const [search, want] of [['?skull=plates', 'full'], ['?sculpt=nonsense', 'full'], ['?skull=sculpt&sculpt=nonsense', 'full']] as const) {

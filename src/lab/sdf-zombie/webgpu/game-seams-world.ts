@@ -146,6 +146,8 @@ export function createWorldSeams(ctx: GameContext) {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
         hit: a.hit, hitSlug: a.hitSlug,
+        /** Sever a limb outright, or from that chain position (game-actor debugSever): the shot-off-arm repro. */
+        sever: a.debugSever,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
         visualWoundList: () => [...a.visualWounds()],
@@ -504,6 +506,13 @@ export function createWorldSeams(ctx: GameContext) {
      *  this is safe to poll between stepped frames. */
     /** Life-state prims (`when=`, death-state.ts) of one actor: index,
      *  when, dead — for checking the hood swap from a driver. */
+    /** Diagnostic: one actor's rig joints (world) by name. */
+    actorRigJoints: (id: number) => ctx.world.actors.find(q => q.id === id)?.rigJoints() ?? null,
+    /** Diagnostic: one actor's posed prims (limb, ends, radius, op, bone, dead). */
+    actorPrims: (id: number) => ctx.world.actors.find(q => q.id === id)?.posed().prims.map((p, i) => ({
+      i, limb: p.limb, op: p.op, bone: (p as { bone?: string }).bone ?? null, dead: !!p.dead,
+      a: p.a.map(v => Math.round(v * 100) / 100), b: p.b.map(v => Math.round(v * 100) / 100), r: Math.round(p.radius * 1000) / 1000,
+    })) ?? null,
     actorLifePrims: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id);
       return a ? a.posed().prims.flatMap((p, i) => p.when ? [{ i, when: p.when, dead: !!p.dead }] : []) : null;

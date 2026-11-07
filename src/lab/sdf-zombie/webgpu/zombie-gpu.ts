@@ -1453,7 +1453,7 @@ export function createMarchMaterial(
     spotPos: u.spotPos,
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
-    // KEYS BIND BY NAME HERE, not by position. three 0.186 resolves every
+    // KEYS BIND BY NAME HERE, not by position. three 0.187 resolves every
     // WGSL input through parameters[inputNode.name]
     // (nodes/code/FunctionCallNode.js, generate — proven GPU-free in
     // wgslfn-binding.test.ts), so a key's ORDER in this object cannot
@@ -1808,6 +1808,9 @@ export function writeViewRecord(
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),
     split,
+    // The body normal map's placement (setBodyNormal writes it to bodyNormCfg.yzw): per body, because the crowd
+    // shares one copy of the uniforms (REC_NMAP_ORIGIN).
+    nmapOrigin: [u.bodyNormCfg.value.y, u.bodyNormCfg.value.z, u.bodyNormCfg.value.w],
   }, band);
 }
 

@@ -12,6 +12,8 @@
 //    uniform limit) is named by its node id in the WGSL, so the vertex modules differ by that one name and the
 //    program cache (Pipelines.programs, keyed by shader CODE) and the pipeline cache missed as well: a module and a
 //    pipeline per batch.
+// (r187 dropped the uuid for an InstancedMesh, the first point above; it still adds it for `object.count > 1`. The
+// second point has not been rechecked on r187.)
 // So a batch is a plain THREE.Mesh on an InstancedBufferGeometry instead (RenderObject.getDrawParameters takes the
 // draw's instance count from `geometry.instanceCount`; the mesh's own `count` stays 1, so its uuid stays out of the
 // key), and the instance matrix is a NAMED per-instance attribute like iLights: one InstancedInterleavedBuffer of 16

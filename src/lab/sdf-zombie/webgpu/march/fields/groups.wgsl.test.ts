@@ -40,7 +40,9 @@ describe('crowd instance state', () => {
     // The WGSL record stride IS REC_VEC4S (21 since the head split): a hard-coded
     // stride would misread every body after slot 0.
     expect(INSTANCE_STATE).toContain(`let base = slot * ${REC_VEC4S};`);
-    expect(INSTANCE_STATE).toContain('let base = slot * 21;');
+    expect(INSTANCE_STATE).toContain('let base = slot * 22;');
+    // The body normal map origin is per instance (crowd-records.ts REC_NMAP_ORIGIN): the crowd shares the uniforms.
+    expect(INSTANCE_STATE).toContain('gInstNmapOrigin = (*inst)[base + 21].xyz;');
     expect(globals).toContain('var<private> gInstLights: vec4<f32>');
     expect(INSTANCE_STATE).toContain('gInstLights = (*inst)[base + 16];');
   });

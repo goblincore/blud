@@ -172,6 +172,8 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     })),
     /** The gibbet's bile globs in flight (bile.ts): the in-game check of its squirt. */
     bile: () => ctx.weapon.bile.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
+    /** The imp's fireballs in flight (fireball.ts): the in-game check of its throw. */
+    fireballs: () => ctx.weapon.fireballs.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
     /** Enemy rounds in flight (soldier pellets, cultist/pistol/chaingun rounds), the LIVE objects so an
      *  in-page sampler can follow each round by identity frame to frame (sdf-game-doom-gate's
      *  through-a-wall check). Read only. */

@@ -427,8 +427,9 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     expect(packedProf('schoolgirl.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
     // 27: + ankle-reshaped, heel and sole per side since the zombie's feet (2026-09-29), all flesh.
+    // Re-pinned 2026-11-05: the flank blob over each hip bone (zombie.blob) is two more plain flesh prims.
     expect(packedProf('zombie.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
   });
 });
 
@@ -538,6 +539,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //   gibbet      3  three unequal eyes clustered off-centre on the dangling head
   //   chair       2  the sitter's eyes, dull embers deep in the sockets
   //   gamer       1  the fire button on his joystick (the headset's slit is kit `led`)
+  //   imp         2  two red embers deep in the sockets
   //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
   //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
   //                  has no glow prim any more; the base goblin never had one.)
@@ -560,6 +562,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'gibbet.blob': 3,
     'chair.blob': 2,
     'gamer.blob': 1,
+    'imp.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

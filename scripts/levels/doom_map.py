@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
     BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, GUN_DOOR_SPECIALS, MOVING_LIFT_SPECIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
-    SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
+    IMP, IMP_VARIANTS, SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     MOODS, material_for_flat, material_for_texture, mood_for_texture, sector_special,
 )
 
@@ -353,10 +353,12 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
 
 
 def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, skill: int = 4, zombieman: str = "mix",
-            overrides: dict | None = None, zone_split_m2: float = ZONE_SPLIT_M2) -> tuple[dict, dict]:
+            imp: str = "mix", overrides: dict | None = None,
+            zone_split_m2: float = ZONE_SPLIT_M2) -> tuple[dict, dict]:
     """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
     `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
-    "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS. `overrides` is a
+    "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS; `imp` likewise
+    from IMP_VARIANTS (an imp or a zombie). `overrides` is a
     loaded doom_overrides file (None: none); a bad one raises doom_overrides.OverrideError."""
     if not (math.isfinite(units_per_m) and units_per_m > 0):
         raise ValueError(f"units_per_m must be a positive number, not {units_per_m}")
@@ -367,6 +369,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         raise ValueError(f"skill must be one of {sorted(SKILL_BITS)}")
     if zombieman != "mix" and zombieman not in ZOMBIEMAN_VARIANTS:
         raise ValueError(f"zombieman must be mix or one of {ZOMBIEMAN_VARIANTS}")
+    if imp != "mix" and imp not in IMP_VARIANTS:
+        raise ValueError(f"imp must be mix or one of {IMP_VARIANTS}")
     verts, sectors, sides, lines, things = parse_map(map_lumps(read_wad(Path(wad_path).read_bytes()), map_name))
     start = next((t for t in things if t["type"] == PLAYER1_START), None)
     if start is None:
@@ -594,7 +598,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         if not is_barrel and not t["flags"] & skill_bit:     # barrels are scenery: every skill
             not_this_skill += 1
             continue
-        is_spawn = t["type"] == ZOMBIEMAN or t["type"] in THING_SPAWNS
+        is_spawn = t["type"] in (ZOMBIEMAN, IMP) or t["type"] in THING_SPAWNS
         if not is_spawn and not is_barrel and t["type"] not in THING_PICKUPS:
             skipped[t["type"]] = skipped.get(t["type"], 0) + 1
             continue
@@ -610,6 +614,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             sid = f"s{ti}"
             if t["type"] == ZOMBIEMAN:
                 kind = ZOMBIEMAN_VARIANTS[fnv1a32(sid) % len(ZOMBIEMAN_VARIANTS)] if zombieman == "mix" else zombieman
+            elif t["type"] == IMP:
+                kind = IMP_VARIANTS[fnv1a32(sid) % len(IMP_VARIANTS)] if imp == "mix" else imp
             else:
                 kind = THING_SPAWNS[t["type"]]
             spawns.append({"id": sid, "kind": kind, "pos": pos, "yaw": round(math.radians(90 - t["angle"]), 6)})
@@ -1022,6 +1028,7 @@ def main() -> None:
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
     ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")
     ap.add_argument("--zombieman", choices=("mix",) + ZOMBIEMAN_VARIANTS, default="mix", help="what zombiemen become (default: a mix)")
+    ap.add_argument("--imp", choices=("mix",) + IMP_VARIANTS, default="mix", help="what imps become (default: a mix)")
     ap.add_argument("--overrides", type=Path, default=None, help="hand-written edits (default scripts/levels/overrides/<map>.json if it exists)")
     ap.add_argument("--no-overrides", action="store_true", help="convert the WAD only")
     ap.add_argument("--zone-split", type=float, default=ZONE_SPLIT_M2, help=f"split a zone over this floor area, m^2 at the reference scale (default {ZONE_SPLIT_M2:g})")
@@ -1031,7 +1038,7 @@ def main() -> None:
         ap.error(f"--overrides {a.overrides}: no such file")
     overrides = doom_overrides.load(ov_path) if ov_path is not None and ov_path.exists() else None
     try:
-        level, stats = convert(a.wad, a.map, a.units_per_m or MAP_UNITS_PER_M.get(a.map.upper(), UNITS_PER_M), skill=a.skill, zombieman=a.zombieman, overrides=overrides, zone_split_m2=a.zone_split)
+        level, stats = convert(a.wad, a.map, a.units_per_m or MAP_UNITS_PER_M.get(a.map.upper(), UNITS_PER_M), skill=a.skill, zombieman=a.zombieman, imp=a.imp, overrides=overrides, zone_split_m2=a.zone_split)
     except doom_overrides.OverrideError as e:
         sys.exit(f"{ov_path}: {e}")
     a.out.mkdir(parents=True, exist_ok=True)

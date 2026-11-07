@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 59 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 60 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 23 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 29 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -136,10 +136,10 @@ Early-Z depth prepass for the march.
 - `webgpu/earlyz/batch-split.ts` — EARLY-Z BATCH SPLIT (spec 2026-10-01 D5).
 - `webgpu/earlyz/box-exit.wgsl.ts` — EARLY-Z ANALYTIC EXIT (spec 2026-10-01 D4).
 - `webgpu/earlyz/conservative-depth-material.ts` — D3: a `frag_depth, greater` shader PROMISES the written depth is at or beyond the fragment's raster depth; breaking it is undefined behaviour.
-- `webgpu/earlyz/conservative-depth-patch.ts` — CONSERVATIVE DEPTH FOR THREE r186 (spec 2026-10-01 §4 A, D8).
+- `webgpu/earlyz/conservative-depth-patch.ts` — CONSERVATIVE DEPTH FOR THREE r187 (spec 2026-10-01 §4 A, D8).
 - `webgpu/earlyz/earlyz-boot.ts` — EARLY-Z boot + per-frame glue (spec 2026-10-01).
 - `webgpu/earlyz/flag.ts` — COMPILE-TIME switch for the early-Z march (spec 2026-10-01 D1), read ONCE at module load in the `march/limbs-flag.ts` pattern.
-- `webgpu/earlyz/pipeline-watch.ts` — FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r186).
+- `webgpu/earlyz/pipeline-watch.ts` — FRONT-PIPELINE FAILURE SIGNAL (final review, Important 2; three r187).
 - `webgpu/earlyz/seed-depth.wgsl.ts` — EARLY-Z LEVEL-DEPTH SEED (spec 2026-10-01 D6).
 - `webgpu/earlyz/seed-gate.ts` — WHEN MAY THE LEVEL-DEPTH SEED DRAW?
 - `webgpu/earlyz/type-order.ts` — EARLY-Z DRAW ORDER (spec 2026-10-01 D7, amended by the plan).
@@ -699,6 +699,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
 - `webgpu/seed-upload.ts` — SEED ROW UPLOAD (meat pool and seed upload pass, 2026-10-29): a shutter motion seed (shutter-game-layer.ts, gib-shutter-layer.ts: an RGBA32F…
+- `webgpu/serial-compile.ts` — ONE compileAsync AT A TIME.
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
@@ -896,13 +897,17 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
 - `adrenaline.ts` — ADRENALINE (owner 2026-10-27: "a subtle bullet time that automatically kicks in when you hit an enemy with your shot ...
 - `blast-fx.ts` — THE EXPLOSION PASS SWITCH (owner 2026-10-29: the blast's distortion "is just applied with no regard to depth", and with dynamite that lands off the…
+- `blow-away.ts` — BLOWN AWAY (owner playtest 2026-11-02): "the general deaths from like a shotgun mostly cause enemies to collapse straight down but there should also…
 - `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
 - `cloth-sway.ts` — CLOTH SWAY (2026-10-26; eased 2026-10-27).
+- `corpse-contact.ts` — A CORPSE MEETS THE WORLD (owner playtest 2026-11-05: "when the thrown blow back death happens it clips through walls and other enemies").
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
+- `death-fall.ts` — AUTHORED DEATH FALLS (owner playtest 2026-11-02: the free ragdoll "still demonstrates unnatural body ragdolling"; "ideally some kind of blended…
 - `debris-ground.ts` — WHAT LOOSE DEBRIS LANDS ON (plan 2026-10-25-sector-levels-3b): the floor under a piece at its CURRENT x/z and the walls it must not pass.
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
+- `fireball.ts` — The imp's FIREBALL (characters/imp.blob) and its THROW.
 - `gore-spread.ts` — GORE SPREAD: the queue that moves a gun hit's gore one tick past the hit frame, a few jobs a tick (gore spread pass, 2026-10-29).
 - `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
 - `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
@@ -912,7 +917,9 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `march.glsl.ts` — Shader source as strings.
 - `meat-pool.ts` — MEAT POOL: the bookkeeping behind the torn meat mesh pool (meat pool pass, 2026-10-29).
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
+- `orient-shape.ts` — Whether a prim's orient quat changes its FIELD, or only its noise frame.
 - `pellet-falloff.ts` — PELLET DAMAGE FALLOFF (owner 2026-10-27: "add logic where the pellets do less damage after a certain range — damage falloff; close range = full…
 - `seed-band.ts` — SEED DIRTY BAND: which rows of a shutter motion seed changed since the last upload (meat pool and seed upload pass, 2026-10-29).
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
+- `slump-death.ts` — THE FORWARD SLUMP (owner playtest 2026-11-03: "it's not possible for the zombie to die like his knees bend and he falls over, back bent, rear in the…
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…

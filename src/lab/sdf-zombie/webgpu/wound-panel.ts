@@ -40,7 +40,9 @@ export type WoundTuningKey =
   | 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio'
   | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
   | 'coilTightness' | 'springiness' | 'organAmp'
-  | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice';
+  | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice'
+  | 'shoulderToughness' | 'elbowToughness' | 'soldierShoulder' | 'soldierElbow' | 'corpseIntegrity' | 'blowAway' | 'blowAwayShotgun' | 'blowAwayDouble' | 'blowAwaySlug' | 'blowAwayExplosion'
+  | 'blowAwayRange' | 'slump' | 'deathAnimated' | 'deathPull' | 'deathSettle';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -64,6 +66,28 @@ const _WOUND_KEYS = [
   { key: 'meatClot', label: 'meat clots', min: 0, max: 2.5, step: 0.05, value: 1 },
   { key: 'meatGlint', label: 'meat glints', min: 0, max: 2, step: 0.05, value: 1 },
   { key: 'meatCrevice', label: 'meat crevice', min: 0, max: 1.5, step: 0.05, value: 1 },
+  // JOINT TOUGHNESS + CORPSE INTEGRITY (spec 2026-11-02). Live: the next sever
+  // check / the next fall read them. The values MUST match the shipped
+  // connectivity.ts JOINT_TOUGHNESS and collapse.ts CORPSE_INTEGRITY (pinned
+  // by wound-panel.test.ts). 'shoulder' scales the shoulder AND hip, 'elbow'
+  // the elbow AND knee; below 1 is harder to cut.
+  { key: 'shoulderToughness', label: 'shoulder/hip cut (→ easier)', min: 0.3, max: 1.5, step: 0.05, value: 0.6 },
+  { key: 'elbowToughness', label: 'elbow/knee cut (→ easier)', min: 0.5, max: 3, step: 0.05, value: 1.7 },
+  { key: 'soldierShoulder', label: 'soldier shoulder/hip cut (→ easier)', min: 0.05, max: 1.5, step: 0.05, value: 0.3 },
+  { key: 'soldierElbow', label: 'soldier elbow/knee cut (→ easier)', min: 0.1, max: 3, step: 0.05, value: 0.55 },
+  { key: 'corpseIntegrity', label: 'corpse integrity', min: 0, max: 1, step: 0.05, value: 0.7 },
+  // BLOWN AWAY per weapon (blow-away.ts BLOW_AWAY.weapons; pinned by wound-panel.test.ts): each is that weapon's
+  // chance at full strength (a shotgun's at its full pellet count, point blank); 'blown-away deaths' scales them all.
+  { key: 'blowAway', label: 'blown-away deaths (all)', min: 0, max: 2, step: 0.05, value: 1 },
+  { key: 'blowAwayShotgun', label: 'blown away: single barrel', min: 0, max: 1, step: 0.05, value: 0.85 },
+  { key: 'blowAwayDouble', label: 'blown away: double barrel', min: 0, max: 1, step: 0.05, value: 0.75 },
+  { key: 'blowAwaySlug', label: 'blown away: slug', min: 0, max: 1, step: 0.05, value: 0.55 },
+  { key: 'blowAwayExplosion', label: 'blown away: explosion', min: 0, max: 1, step: 0.05, value: 1 },
+  { key: 'blowAwayRange', label: 'blown-away shotgun max range (m)', min: 3, max: 15, step: 0.5, value: 7 },
+  { key: 'slump', label: 'forward slump deaths', min: 0, max: 1, step: 0.05, value: 0.4 },
+  { key: 'deathAnimated', label: 'authored deaths (0 = ragdoll)', min: 0, max: 1, step: 1, value: 1 },
+  { key: 'deathPull', label: 'death pose pull (← looser)', min: 0.1, max: 1, step: 0.05, value: 1 },
+  { key: 'deathSettle', label: 'pull after landing (← limper)', min: 0, max: 1, step: 0.05, value: 0.35 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];

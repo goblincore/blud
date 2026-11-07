@@ -60,6 +60,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
+import impBlobSrc from './characters/imp.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -90,6 +91,9 @@ export interface CharacterEntry {
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
+  /** The kit comes off with the anatomy under it: a shot-off arm takes its hoses and fist, a head shot that reaches a
+   *  tooth row knocks it out (webgpu/kit-damage.ts). Implied by `armoured`. Absent: the kit stays on the bones. */
+  kitSheds?: boolean;
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -157,6 +161,10 @@ function bakedFace(file: string): FaceSheet {
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
+    // Sutures along the seams the body was sewn together at: shoulders, neck, waist, hips (characters/zombie.detail
+    // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
+    // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.
+    bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
   },
   goblin: {
@@ -455,6 +463,21 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // returns zero offsets for a missing chain, so it degrades quietly to the
     // root sway/bob and the arm reach. See the .blob header and the report.
     profile: motionProfileFor('bloatmaw'),
+  },
+  // The fireball-throwing demon (imp.blob's header): a gaunt hunched biped on the
+  // butcher's digitigrade skeleton, its flesh in the .blob, sinew and veins in the
+  // baked body normal map, and the hard parts (talons and burning hand sockets,
+  // teeth and horns, a forge-heart and its fuel lines, foot claws) Blender kit
+  // (assets-source/imp-kit/). No face sheet: the face is prims and kit.
+  imp: {
+    name: 'imp', src: impBlobSrc,
+    kit: '/assets/lab/imp-kit.gltf',
+    kitSheds: true,
+    // Starved ribs, spine knuckles, sinew cords and veins on the torso, arms and legs (characters/imp.detail, baked;
+    // never marched).
+    bodyNormal: { url: '/assets/lab/imp-body-n.png', meta: '/assets/lab/imp-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('imp'),
   },
   // The cacodemon-style floater (teratoma.blob's header): a flesh ball in the
   // .blob, its folds and veins in the baked body normal map, and the hard parts

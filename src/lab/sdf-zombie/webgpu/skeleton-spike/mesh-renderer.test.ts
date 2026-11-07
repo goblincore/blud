@@ -34,8 +34,9 @@ import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
 import { SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, packSplitInstance, skullJagAt } from './mesh-split';
-import { AnatomicalSkullKit, SKULL_PIECES } from './anatomical-skull';
+import { AnatomicalSkullKit, SKULL_OPENINGS, SKULL_PIECES } from './anatomical-skull';
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
+import { OWN_SKULLS } from './skull-cast';
 import { skullSplitRayHit, type SkullStrikes } from './skull-split-hit';
 import { intactSkull } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
@@ -649,7 +650,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
      *  values declared ahead of the branch on the clip (real variables: an intent is written where it is first read),
      *  `branch` what the branch stacks. */
     const colourOf = (m: MeshBasicNodeMaterial) => {
-      const body = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+      const body = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
       const was = getCurrentStack(), outer = stack();
       try {
         setCurrentStack(outer); body.jsFunc();
@@ -696,6 +697,44 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       expect([...allCalls([...eyeMats][0]!)].sort()).toEqual(['boneShade', 'meshEyeEmission', 'meshEyeSurface', 'meshSplitClip', 'meshSplitInside']);
       expect([[...eyeMats][0]!.name, matOf(renderer, eyes(renderer, shut)[0]!).name]).toEqual([SEGMENT_MATERIALS.eyeSplit, SEGMENT_MATERIALS.eye]);
       expect(new Set(Object.values(SEGMENT_MATERIALS)).size).toBe(6);
+      renderer.dispose(); cache.dispose();
+    });
+    it('a character with a skull of its own (the imp) draws its kit\'s plates under that kit\'s own normal map, beside the human plates, its eyes in its own orbits', () => {
+      const human = new THREE.Texture(), mine = new THREE.Texture();
+      const humanKit = new AnatomicalSkullKit(anatomicalSkullSource(), human, new THREE.Vector2(1, 1));
+      // The human plates stand in for the imp's: the contract is the same fourteen pieces.
+      const impKit = new AnatomicalSkullKit(anatomicalSkullSource(), mine, new THREE.Vector2(1, 1), 'envelope', OWN_SKULLS.imp!.asset, SKULL_OPENINGS, 0.008);
+      const cache = new SegmentMeshCache(undefined, undefined, [humanKit, impKit]);
+      const impHead = createSkeletonSources(body, bound, { character: 'imp' }).find(s => s.segment === 'head')!;
+      expect(cache.skullKitOf('imp')).toBe(impKit);
+      expect(cache.skullKitOf('zombie')).toBe(humanKit);
+      expect(cache.get(impHead).geometry).toBe(impKit.head(impHead)!.mesh.geometry);
+      expect(impKit.head(impHead)!.mesh.geometry.userData.skullAsset).toBe('imp');
+      const renderer = createSegmentMeshRenderer(cache, 0, undefined, () => {});
+      const zombie = { id: 1 }, imp = { id: 2 };
+      renderer.update([[headSrc], [impHead]], [zombie, imp]);
+      const [z, i] = [zombie, imp].map(o => segs(renderer, o).map(d => matOf(renderer, d)));
+      expect(z!.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plate]);
+      expect(i!.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plate]);
+      expect(i![0]).not.toBe(z![0]);
+      const nodes = (m: MeshBasicNodeMaterial) => reach([m.colorNode!]);
+      expect([samples(nodes(z![0]!), human), samples(nodes(z![0]!), mine)]).toEqual([true, false]);
+      expect([samples(nodes(i![0]!), mine), samples(nodes(i![0]!), human)]).toEqual([true, false]);
+      // The imp's skull is a plain one: no eye at the sculpted bone's human seats (sculpt-variant.ts
+      // PLAIN_SKULL_CHARACTERS), its kit's modelled eyes in its kit's orbits instead, carried by the fit.
+      const seats = impKit.head(impHead)!.eyes!;
+      expect(seats).toHaveLength(2);
+      expect(seats[0]!.center[0]).toBeLessThan(seats[1]!.center[0]);
+      for (const e of seats) expect(e.radius).toBeGreaterThan(0);
+      expect(eyes(renderer, imp)).toHaveLength(2);
+      // Without the modelled eyes (a kit with no `eyes` in its manifest), none.
+      const bare = new AnatomicalSkullKit(anatomicalSkullSource(), mine, new THREE.Vector2(1, 1), 'envelope', OWN_SKULLS.imp!.asset);
+      expect(bare.head(impHead)!.eyes).toBeNull();
+      bare.dispose();
+      // A shot at the imp's head breaks the imp's plates, named by its own kit's pieces.
+      const centre = impHead.toWorld(impKit.head(impHead)!.pieces[0]!.pivot) as Vec3;
+      const ray = renderer.skullRay(imp, [impHead], [centre[0], centre[1], centre[2] + 1], [0, 0, -1], 2);
+      expect(ray && SKULL_PIECES.includes(ray.plate as never)).toBe(true);
       renderer.dispose(); cache.dispose();
     });
 

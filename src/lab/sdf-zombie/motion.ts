@@ -46,11 +46,12 @@
 // motion pipeline — it reads the posed prims.
 //
 import { soldierFallPose } from './soldier-fall';
+import { canDeathFall, corpseHoldStep, DEATH_FALL, deathFallPose, deathFallPull, type CorpseHold, type DeathFallChoice } from './death-fall';
 import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
+import { add, dot, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -69,9 +70,9 @@ import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
 import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
 import type { SoldierStaggerLevel } from './soldier-stagger';
-import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
+import type { BraceLimit, CollapsePhase, CorpseBody, FootPlant, HipCone, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
-  COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
+  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBody, collapseBraces, collapseFootPlants, collapseHipCones, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
@@ -145,6 +146,10 @@ export const MOTION_TUNING = {
    *  the chunk stepper's |vy| < 0.35 m/s cutoff, in per-frame units. */
   restCutoff: 0.35 / 60,
 } as const;
+
+/** The topple's chest shove at integrity 1 (m, one frame's displacement:
+ *  0.02 m at 60 Hz is a 1.2 m/s lean). Scaled by integrity. */
+const TOPPLE_SHOVE = 0.02;
 
 /** How fast a body's feet height (MotionState.floorY) follows the floor under it, m/s: the
  *  player's eye-step rate (game-player.ts), so a body never pops up a step, and a step down eases
@@ -259,6 +264,18 @@ export interface MotionJoints {
   pelvis: Vec3;
   /** One-sided collapse joint limits, constant for the body. */
   ropes: readonly RopeLimit[];
+  /** Two-sided corpse-integrity braces (collapse.ts), constant for the body. */
+  braces: readonly BraceLimit[];
+  /** Corpse hip limits (collapse.ts relaxHipCones), constant for the body. */
+  hipCones: readonly HipCone[];
+  /** Corpse foot plants (collapse.ts plantFeet), constant for the body. */
+  footPlants: readonly FootPlant[];
+  /** Corpse self-collision capsules (collapse.ts relaxBodyCollisions), constant for the body; null without limbs. */
+  corpseBody: CorpseBody | null;
+  /** Per rig point: how much higher than the foot joint it rests on the
+   *  floor (m) — its flesh depth over the foot's. A corpse lies ON its torso,
+   *  not with every joint at ankle height. */
+  floorLift: readonly number[];
 }
 
 /**
@@ -298,7 +315,48 @@ export function makeMotionJoints(
     groundY: index.footL === undefined || index.footR === undefined ? 0 : Math.min(baseRest[index.footL]![1], baseRest[index.footR]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
+    braces: collapseBraces(names, baseRest),
+    hipCones: collapseHipCones(names, baseRest),
+    footPlants: collapseFootPlants(names, baseRest),
+    corpseBody: collapseBody(names, baseRest, (q, dir) => fleshGirth(body, q, BODY_GIRTH_CAP, dir)),
+    floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
+}
+
+/** The tallest a joint's flesh may lift it off the floor (m): one big
+ *  ellipsoid (a bloated belly) must not prop the corpse up on a point. */
+const FLOOR_LIFT_CAP = 0.14;
+
+/**
+ * The flesh a joint lies on: the THINNEST-axis half-thickness of the thickest
+ * live add prim whose bulk reaches the joint (a torso ellipsoid is flattest
+ * front to back, which is how a corpse lies), less the foot joint's own, so
+ * the foot keeps resting exactly where it did. Clamped to [0, FLOOR_LIFT_CAP].
+ * (Depth of the joint INSIDE the flesh does not work: joints sit at bone ends,
+ * at the surface — the zombie's chest joint is 1 cm deep in a 12 cm chest.)
+ */
+function fleshGirth(body: BuildResult, q: Vec3, cap: number, dir?: Vec3): number {
+  let best = 0;
+  for (const p of body.prims) {
+    if (p.op === 'sub' || p.dead) continue;
+    const ab = sub(p.b, p.a), L2 = dot(ab, ab);
+    const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
+    if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
+    // Along `dir` (bind-space axes): the prim's half-extent that way; without one, its thinnest.
+    const r = dir ? p.radius * Math.hypot(dir[0] * p.scale[0], dir[1] * p.scale[1], dir[2] * p.scale[2])
+      : p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    best = Math.max(best, r);
+  }
+  return Math.min(best, cap);
+}
+
+/** A corpse bone's collision radius cap (m): a bloated belly prim must not wedge the arms a foot off the body. */
+const BODY_GIRTH_CAP = 0.2;
+
+function floorLiftFor(body: BuildResult, rest: readonly Vec3[], foot: number | undefined): number[] {
+  const girth = (q: Vec3): number => fleshGirth(body, q, FLOOR_LIFT_CAP);
+  const footGirth = foot === undefined ? 0 : girth(rest[foot]!);
+  return rest.map(q => Math.max(0, girth(q) - footGirth));
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +394,10 @@ export interface MotionState {
   fallFatal?: boolean;
   fallImpact?: Vec3;
   fallStrength?: number;
+  /** The authored death fall this body is playing (death-fall.ts); null = the soldier's own fall pose. */
+  fallKind?: DeathFallChoice | null;
+  /** A landed authored death's hold: the shape it re-anchored to and a hit's limp spell (death-fall.ts). */
+  corpseHold?: CorpseHold;
   plantL: PlantState;
   plantR: PlantState;
   /** A quadruped's FRONT paw plants ('foreleg' arm style only; absent on
@@ -434,6 +496,9 @@ export interface MotionConfig {
    *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
    *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
   pose?: readonly Vec3[];
+  /** AUTHORED DEATHS (death-fall.ts): asked once, on the first frame a killed body is down, for the fall it plays.
+   *  Absent = a neutral pick from the gait seed. */
+  deathFall?: () => DeathFallChoice;
   /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
    *  the wider of the two wins. Undefined or 0 changes nothing. */
   jawGape?: number;
@@ -534,6 +599,24 @@ export interface MotionFrame {
   gravity: Vec3;
   /** One-sided joint limits to relax after stepRig. Empty while standing. */
   ropes: RopeLimit[];
+  /** Corpse-integrity braces to relax after the ropes (collapse.ts
+   *  relaxBraces). Empty while standing and for the soldier's structural fall. */
+  braces: readonly BraceLimit[];
+  /** Hip limits to relax with the braces (collapse.ts relaxHipCones); empty exactly when braces are. */
+  hipCones: readonly HipCone[];
+  /** Foot plants for a collapsed body (collapse.ts plantFeet); empty while it stands. */
+  footPlants: readonly FootPlant[];
+  /** Self-collision for a collapsed body (collapse.ts relaxBodyCollisions); null while it stands. */
+  corpseBody: CorpseBody | null;
+  /** The integrity to relax them at: the profile's corpseIntegrity, else the
+   *  live CORPSE_INTEGRITY knob. */
+  integrity: number;
+  /** Per rig point floor lift over floorY (MotionJoints.floorLift); the
+   *  wiring passes it to applyFloorContact while collapsed. */
+  floorLift: readonly number[];
+  /** 0..1: how far the skull has let go of its standing look cone and lies
+   *  with the neck (rig.headFollow). Ramps in over the fall's release. */
+  headFollow: number;
   phase: CollapsePhase;
   /** True while falling/settled. */
   collapsed: boolean;
@@ -1031,7 +1114,7 @@ export function stepMotion(
       const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
-      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence + (r.swing ? r.swing[side] * blend : 0);
       const pitch = attack
         ? basePitch + (side === 'L' ? attack.reach.pitchL : attack.reach.pitchR)
         : basePitch;
@@ -1548,19 +1631,45 @@ export function stepMotion(
     }
   }
 
-  const structural = isSoldierFamily(profile) && collapsed;
+  // AUTHORED DEATHS (death-fall.ts): every humanoid but a soft target or a physics-death body (the zombie) lies down along a keyed fall the
+  // rig springs toward, the way the soldier family always has.
+  const animatedDeath = !isSoldierFamily(profile) && DEATH_FALL.on && !profile.soft && !profile.physicsDeath
+    && canDeathFall(joints.names);
+  const structural = (isSoldierFamily(profile) || animatedDeath) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
-  const floorY = worldGround - (structural ? .13 : MOTION_TUNING.floorPad);
+  const floorY = worldGround - (structural && !animatedDeath ? .13 : MOTION_TUNING.floorPad);
   const fallPose = structural ? (state.fallPose ?? points.map(p => [...p.pos] as Vec3)) : undefined;
-  const fallFatal = !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
+  const fallFatal = animatedDeath || !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
   const fallImpact = state.fallImpact ?? sig.shot?.dirWorld ?? (state.recoil.joint !== null ? state.recoil.dirWorld : rotateYaw([0,0,-1], bodyYaw));
   const fallStrength = state.fallStrength ?? (sig.shot?.type === 'blast' ? 1 : sig.shot ? .4 : .8);
-  if (structural) {
+  // The fall is chosen on the first down frame of a body already dead; a soldier downed alive keeps his own
+  // pose (and its dead version if a later hit kills him), so his writhe never jumps to another fall.
+  const fallKind: DeathFallChoice | null | undefined = !structural ? undefined
+    : state.fallKind !== undefined ? state.fallKind
+    : fallFatal && DEATH_FALL.on && canDeathFall(joints.names)
+      ? (cfg.deathFall?.() ?? { kind: fallStrength >= 1 ? 'blown' : 'backward', strength: 1, side: (state.gait.seed & 1) ? 1 : -1 })
+      : null;
+  let corpse: ReturnType<typeof corpseHoldStep> = null;
+  if (structural && fallKind) {
+    const missing = new Set<GaitJointName>();
+    if (sig.missing.armL) (['elbowL', 'handL', 'handTipL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.armR) (['elbowR', 'handR', 'handTipR'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legL) (['kneeL', 'footL', 'toeL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legR) (['kneeR', 'footR', 'toeR'] as const).forEach(n => missing.add(n));
+    if (!sig.headAlive) missing.add('head');
+    const fall = deathFallPose(fallKind, {
+      base: joints.base, names: joints.names, start: fallPose!, pivot, shift, yaw: bodyYaw,
+      floor: floorY, limbFloor: worldGround - MOTION_TUNING.floorPad, impact: fallKind.impact ?? fallImpact, missing,
+    }, collapse.state.fallAge);
+    corpse = corpseHoldStep(fallKind, collapse.state.fallAge, state.corpseHold, !!sig.shot, dt, points.map(p => p.pos), fall, joints.names);
+    (corpse?.targets ?? fall).forEach((p, i) => { targets[i] = [...p] as Vec3; });
+  } else if (structural) {
     const fall = soldierFallPose(joints.base, joints.names, fallPose!, pivot, shift, bodyYaw, collapse.state.fallAge,
       floorY, sig.missing.legL || sig.wounded.legL, !fallFatal, fallImpact, fallStrength, sig.missing.armL);
     fall.forEach((p, i) => { targets[i] = p; });
   }
+  const fallPull = corpse?.pull ?? (fallKind ? deathFallPull(fallKind.kind, collapse.state.fallAge) : 1);
   // Sector levels: the structural pose lies every target on the ROOT's plane, held at rest pull 1.
   // A target over a floor lower than that (a ledge's lip, a pit) is released to fall to it; with
   // the pelvis over it the whole body goes (the torso is the load-bearing mass).
@@ -1588,8 +1697,22 @@ export function stepMotion(
     });
   }
 
+  // THE TOPPLE (corpse integrity, spec 2026-11-02 §4): a braced torso no
+  // longer folds as it lands, so with nothing to tip it, it can come straight
+  // down and balance on its pelvis. The fall's first frame leans the chest
+  // along the shot that killed it, else a direction drawn from the seed.
+  const integrity = profile.corpseIntegrity ?? CORPSE_INTEGRITY.value;
+  if (collapsed && state.collapse.phase === 'standing' && !structural && integrity > 0 && idx.chest !== undefined) {
+    const shot = sig.shot?.dirWorld;
+    const a = ((state.gait.seed * 2654435761) >>> 0) / 4294967296 * Math.PI * 2;
+    let dir: Vec3 = shot && Math.hypot(shot[0], shot[2]) > 1e-3 ? [shot[0], 0, shot[2]] : [Math.cos(a), 0, Math.sin(a)];
+    dir = normalize(dir);
+    kicks.push({ joint: 'chest', delta: scale(dir, TOPPLE_SHOVE * integrity) });
+  }
+
   const nextState: MotionState = {
-    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
+    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength, fallKind: fallKind ?? null } : {}),
+    ...(corpse ? { corpseHold: corpse.hold } : {}),
     wander, gait: gait.state, stagger: stagger.state,
     ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
@@ -1648,12 +1771,22 @@ export function stepMotion(
         const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return pins.length ? { posePins: pins } : {};
       })(),
-      restPull: structural ? 1 : collapse.restPull,
+      restPull: structural ? (fallKind ? fallPull : 1) : collapse.restPull,
       ...(restRelease ? { restRelease } : {}),
-      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0] : [0, -1.5, 0]) : collapsed
+      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0]
+        // A loosened fall (DEATH_FALL.pull/settle below 1) hands the weight back to gravity.
+        : [0, fallKind ? MOTION_TUNING.collapseGravity + (-1.5 - MOTION_TUNING.collapseGravity) * Math.min(1, fallPull) : -1.5, 0]) : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
+      braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
+      hipCones: collapsed && !structural && integrity > 0 ? joints.hipCones : [],
+      footPlants: collapsed && !structural ? joints.footPlants : [],
+      corpseBody: collapsed && !structural ? joints.corpseBody : null,
+      integrity,
+      floorLift: joints.floorLift,
+      // An authored death fall lies the skull with the neck at once (the soldier's headFollowsRig).
+      headFollow: structural && fallKind ? 1 : collapsed && !structural ? Math.min(1, collapse.state.fallAge / COLLAPSE_TUNING.fallReleaseTime) : 0,
       phase: collapse.phase,
       collapsed,
       meter: collapse.state.meter,
@@ -1686,18 +1819,27 @@ const HEM_IDLE = 0.4;
  * bounce below MOTION_TUNING.restCutoff dies outright (the chunk stepper's
  * |vy| < 0.35 kill). `groundY` should be joints.groundY - floorPad. Pure.
  */
+/** A collapsed frame's per-point floor lift (MotionFrame.floorLift), or none
+ *  at integrity 0 (the single plane, as before braces). */
+export function corpseLift(f: Pick<MotionFrame, 'floorLift' | 'integrity'>): readonly number[] | undefined {
+  return f.integrity > 0 && f.floorLift.length ? f.floorLift : undefined;
+}
+
 export function applyFloorContact(
   points: readonly RigPoint[],
   groundY: number,
   restitution: number = COLLAPSE_TUNING.groundRestitution,
   friction: number = COLLAPSE_TUNING.groundFriction,
   floorAt?: (x: number, z: number, from: Vec3) => number,
+  /** Per point, how far above the floor it rests (a corpse's flesh
+   *  thickness: corpseLift). Added to whichever floor applies. */
+  lift?: readonly number[],
 ): RigPoint[] {
-  return points.map(p => {
+  return points.map((p, i) => {
     if (p.pinned) return p;
     // Sector levels: the contact plane under THIS point (an arm over a ledge hangs down it); `from`
     // is where the point was last frame, so the caller can judge its rise.
-    const g = floorAt ? floorAt(p.pos[0], p.pos[2], p.prev) : groundY;
+    const g = (floorAt ? floorAt(p.pos[0], p.pos[2], p.prev) : groundY) + (lift?.[i] ?? 0);
     if (p.pos[1] >= g) return p;
     const vy = p.pos[1] - p.prev[1]; // per-frame fall displacement
     const bounce = vy < 0 ? -vy * restitution : 0;

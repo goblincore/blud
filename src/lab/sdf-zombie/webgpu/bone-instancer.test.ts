@@ -109,8 +109,8 @@ describe('material/light split (M2 task 2)', () => {
     const surfMat = surf.object.material as unknown as { mrtNode: { outputNodes: Record<string, unknown> } | null; colorNode: unknown; positionNode: unknown; normalNode: unknown };
     expect(Object.keys(surfMat.mrtNode!.outputNodes).sort())
       .toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
-    const params = surfMat.mrtNode!.outputNodes.surfaceParams as { node: { nodes: Array<{ node: { value: number } }> } };
-    expect(params.node.nodes.map(n => n.node.value)).toEqual([0, 0, 0, 1]);
+    const params = surfMat.mrtNode!.outputNodes.surfaceParams as { nodes: Array<{ value: number }> };
+    expect(params.nodes.map(n => n.value)).toEqual([0, 0, 0, 1]);
     expect(surfMat.colorNode).toBeNull();
     // The bone positionNode and normalNode are retained in BOTH modes.
     expect(surfMat.positionNode).toBeTruthy();

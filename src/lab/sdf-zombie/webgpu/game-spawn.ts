@@ -20,6 +20,7 @@ import { characterEntry } from '../character-registry';
 import { woundWorldPos, type Wound } from '../damage';
 import { headPopDebris } from '../head-pop';
 import { decapitationRule } from '../head-burst';
+import { splitsHead } from '../head-split';
 import { HEAD_LEAF } from './game-head-damage';
 import { LIGHT_PRESETS } from '../material';
 import { hitFeedback } from '../player-hit-feedback';
@@ -29,8 +30,9 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
+import { spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
@@ -395,6 +397,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     ? floaterSpaceFor(ctx, ctx.world.level.def.sectors, sectorGround as SectorGround, FLOATER_BODIES[name]!) : null;
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
+    // A corpse hits the level's boxes (corpse-contact.ts); read each step, since gates open and barrels go.
+    colliders: () => ctx.world.colliders,
     ...(sectorGround ? { ground: sectorGround } : {}),
     ...(floatSpace ? { floater: floatSpace } : {}),
     ...(sectorGround && ctx.world.level.def?.sectors
@@ -425,6 +429,16 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
         ctx.weapon.bile.push(spawnBile(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A THROWER (the imp): claws up close and, at range, a fireball thrown overhand from the right fist's socket
+    // (MotionProfile.spit) at the player's chest (fireball.ts), enemy-mind.ts makeImpMind.
+    ...(characterEntry(name).profile.throws === 'fireball' ? {
+      mind: makeImpMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
@@ -519,10 +533,12 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
     // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
     // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
+    // Every head the split fits (head-split.ts splitsHead) pops when a slug finds it split wide; only the zombie's
+    // slug decapitation pops as well (the soldier's keeps the flying head).
     ...(name === 'zombie' ? {
       onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
     } : {}),
-    ...(characterEntry(name).profile.soft || name === 'zombie' ? {
+    ...(characterEntry(name).profile.soft || splitsHead(name) ? {
       onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
         const at = head.origin;
         ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });

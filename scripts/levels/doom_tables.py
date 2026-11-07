@@ -106,15 +106,17 @@ def sector_special(kind: int) -> tuple[str, float]:
 
 # Doom thing types -> ours (spec 2026-10-24 §9). Zombiemen become a biomech variant (§9.1).
 ZOMBIEMAN = 3004
-# shotgun guy, imp (for now). Doom 2's roster on today's cast, nearest role (the gaps: hand-off "MAP28 spike"):
+# shotgun guy; imps are IMP below. Doom 2's roster on today's cast, nearest role (the gaps: hand-off "MAP28 spike"):
 # chaingunner, mancubus, arachnotron, mastermind = juggernaut (chaingun); demon, spectre, hell knight, baron = butcher
 # (a melee; not the warbull, whose march costs twice a butcher's: 23 of them made MAP28's worst frames); revenant = flayer;
 # archvile = cultist; cyberdemon = warbull; cacodemon, pain elemental = teratoma (the floater). Lost souls (3006) stay out:
 # nothing small flies.
-THING_SPAWNS = {9: "soldier", 3001: "zombie", 65: "juggernaut", 67: "juggernaut", 3002: "butcher", 58: "butcher",
+THING_SPAWNS = {9: "soldier", 65: "juggernaut", 67: "juggernaut", 3002: "butcher", 58: "butcher",
                 66: "flayer", 69: "butcher", 3003: "butcher", 64: "cultist", 68: "juggernaut", 7: "juggernaut", 16: "warbull",
                 3005: "teratoma", 71: "teratoma"}
 ZOMBIEMAN_VARIANTS = ("deadeye", "butcher", "flayer")
+IMP = 3001                                               # imps become an imp or a zombie
+IMP_VARIANTS = ("imp", "zombie")
 THING_PICKUPS = {
     2001: "shotgun",
     2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets

@@ -215,52 +215,55 @@ describe('pellet hits flow through the existing damage pipeline', () => {
       .toBeLessThan(0.8); // torso-local offset, not a world-fixed hole
   });
 
-  it('a pellet storm on one shoulder takes the arm off and reports a world-placed piece', () => {
-    const { actor, severs } = makeActor(2);
-    // Find which side the arm hangs on from the posed clusters, then pour
-    // pellets into that shoulder joint region until it goes.
-    // Aim at the SHOULDER JOINT — the arm's highest endpoint, where the
-    // attachment neck cutLimbs samples actually runs — and scatter the way
-    // the spread cone does. Measured on the rest body (scratch probe): a
-    // tight ±3 cm cluster never severs (one carve sphere covers one side of
-    // the section disc); the CONE'S NATURAL SPREAD is what cuts — ±9 cm
-    // severs within 14 pellets.
-    const armL = actor.posed().clusters.find(c => c.limb === 'armL')!;
-    let shoulder: Vec3 = [0, 0, 0];
-    let bestY = -Infinity;
-    for (let i = armL.start; i < armL.start + armL.count; i++) {
-      const p = actor.posed().prims[i]!;
+  /** The armL joint to pour pellets into: its highest live endpoint (the
+   *  shoulder) or the upperArm→foreArm joint (the elbow), re-read each shot
+   *  because the body wanders while we pour. */
+  function armJoint(actor: ReturnType<typeof makeActor>['actor'], which: 'shoulder' | 'elbow'): Vec3 {
+    const posed = actor.posed();
+    const cl = posed.clusters.find(c => c.limb === 'armL')!;
+    let best: Vec3 = [0, 0, 0];
+    let y = -Infinity;
+    for (let i = cl.start; i < cl.start + cl.count; i++) {
+      const p = posed.prims[i]!;
       if (p.op === 'sub' || p.dead) continue;
-      for (const e of [p.a, p.b]) {
-        if (e[1] > bestY) { bestY = e[1]; shoulder = [...e] as Vec3; }
+      if (which === 'elbow') {
+        if (p.bone === 'foreArm.l') return [...(p.a[1] > p.b[1] ? p.a : p.b)] as Vec3;
+        continue;
       }
+      for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; best = [...e] as Vec3; }
     }
+    return best;
+  }
+
+  /** 40 point-blank pellets scattered the way the spread cone does (±9 cm;
+   *  a tight ±3 cm cluster only ever carves one side of a joint's section). */
+  function pour(actor: ReturnType<typeof makeActor>['actor'], which: 'shoulder' | 'elbow', until: () => boolean): number {
     const rng = mulberry32(20260826);
     let fired = 0;
-    while (
-      actor.posed().clusters.find(c => c.limb === 'armL')!.alive && fired < 40
-    ) {
-      // Re-aim every shot: the body wanders while we pour.
-      const cl = actor.posed().clusters.find(c => c.limb === 'armL')!;
-      let top: Vec3 = shoulder;
-      let y = -Infinity;
-      for (let i = cl.start; i < cl.start + cl.count; i++) {
-        const p = actor.posed().prims[i]!;
-        if (p.op === 'sub' || p.dead) continue;
-        for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; top = [...e] as Vec3; }
-      }
-      shoulder = top;
-      const j: Vec3 = [
-        shoulder[0] + (rng() - 0.5) * 2 * 0.09,
-        shoulder[1] + (rng() - 0.5) * 2 * 0.09,
-        shoulder[2] + (rng() - 0.5) * 2 * 0.09,
-      ];
-      actor.hit(j, [0, -0.1, -1]);
+    while (!until() && fired < 40) {
+      const at = armJoint(actor, which);
+      actor.hit([at[0] + (rng() - 0.5) * 0.18, at[1] + (rng() - 0.5) * 0.18, at[2] + (rng() - 0.5) * 0.18], [0, -0.1, -1]);
       fired++;
     }
-    const gone = !actor.posed().clusters.find(c => c.limb === 'armL')!.alive;
-    expect(gone, `arm still attached after ${fired} point-blank pellets`).toBe(true);
-    expect(severs.some(s => s.limb === 'armL')).toBe(true);
+    return fired;
+  }
+
+  // JOINT TOUGHNESS (owner, 2026-11-02): a whole arm off the shoulder flies as
+  // a long tube, so the shoulder resists; the arm comes off at the ELBOW and
+  // leaves a broken upper arm on the torso. (Before: this storm took the
+  // whole arm within 14 pellets.)
+  it('a pellet storm on one shoulder leaves the arm on the torso', () => {
+    const { actor } = makeActor(2);
+    pour(actor, 'shoulder', () => false);
+    expect(actor.posed().clusters.find(c => c.limb === 'armL')!.alive).toBe(true);
+  });
+
+  it('a pellet storm on one elbow takes the forearm off and reports a world-placed piece', () => {
+    const { actor, severs } = makeActor(2);
+    const fired = pour(actor, 'elbow', () => severs.some(s => s.limb === 'armL'));
+    expect(severs.some(s => s.limb === 'armL'), `forearm still attached after ${fired} point-blank pellets`).toBe(true);
+    // A distal cut: the upper arm stays on the torso.
+    expect(actor.posed().clusters.find(c => c.limb === 'armL')!.alive).toBe(true);
     const piece = severs.find(s => s.limb === 'armL')!;
     // The piece is placed where the RENDERED arm hung — near the body's own
     // extent, not back at the spawn/origin-space rest pose.
@@ -1101,7 +1104,9 @@ describe('arms never clip through the torso', () => {
         const q = [0, 1, 2].map(i => p.a[i]! + (p.b[i]! - p.a[i]!) * (k / 8)) as unknown as Vec3;
         let d = Infinity;
         for (const t of torso) d = Math.min(d, sdPrimitive(q, t));
-        worst = Math.max(worst, p.radius - d);
+        // A tapered prim (radiusB) is that thick HERE, not its root's thickness all along.
+        const r = p.radius + ((p.radiusB ?? p.radius) - p.radius) * (k / 8);
+        worst = Math.max(worst, r - d);
       }
     }
     return worst;

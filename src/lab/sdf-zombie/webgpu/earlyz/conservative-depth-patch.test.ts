@@ -20,12 +20,12 @@ function fakeProto() {
 
 describe('conservative depth patch (spec §4 A)', () => {
   it('runs against the three revision the patch was written for', () => {
-    expect(THREE.REVISION, 'patch written for r186: re-verify getFragDepth before upgrading').toBe('186');
+    expect(THREE.REVISION, 'patch written for r187: re-verify getFragDepth before upgrading').toBe('187');
   });
 
   it('emits the greater builtin only for an opted-in material', () => {
     const p = fakeProto();
-    expect(installConservativeDepthPatch(p as never, '186')).toEqual({ installed: true, reason: null });
+    expect(installConservativeDepthPatch(p as never, '187')).toEqual({ installed: true, reason: null });
     const before = conservativeDepthPatchHits();
     p.material = { conservativeDepth: 'greater' };
     expect(p.getFragDepth()).toBe('output.depth');
@@ -37,40 +37,41 @@ describe('conservative depth patch (spec §4 A)', () => {
   });
   it('only the exact value greater opts in', () => {
     const p = fakeProto();
-    installConservativeDepthPatch(p as never, '186');
+    installConservativeDepthPatch(p as never, '187');
     const before = conservativeDepthPatchHits();
     p.material = { conservativeDepth: 'less' };
     expect(p.getFragDepth()).toBe('output.depth');
     expect(p.calls.at(-1)).toBe('frag_depth');
     expect(conservativeDepthPatchHits()).toBe(before);
   });
-  it('refuses any three revision but 186 and leaves the prototype untouched', () => {
+  it('refuses any three revision but 187 and leaves the prototype untouched', () => {
     const p = fakeProto();
     const original = p.getFragDepth;
-    expect(installConservativeDepthPatch(p as never, '187')).toEqual({
-      installed: false, reason: 'three r187; the patch is written for r186',
+    expect(installConservativeDepthPatch(p as never, '188')).toEqual({
+      installed: false, reason: 'three r188; the patch is written for r187',
     });
     expect((p as { __earlyzPatched?: boolean }).__earlyzPatched).toBeUndefined();
     expect(p.getFragDepth).toBe(original);
   });
   it('is idempotent', () => {
     const p = fakeProto();
-    installConservativeDepthPatch(p as never, '186');
+    installConservativeDepthPatch(p as never, '187');
     const patched = p.getFragDepth;
-    installConservativeDepthPatch(p as never, '186');
+    installConservativeDepthPatch(p as never, '187');
     expect(p.getFragDepth).toBe(patched);
     p.material = { conservativeDepth: 'greater' };
     p.getFragDepth();
     expect(p.calls.filter((c) => c === CONSERVATIVE_DEPTH_BUILTIN).length).toBe(1);
   });
-  it('against the real r186 builder the struct member reads @builtin( frag_depth, greater )', () => {
-    expect(THREE.REVISION).toBe('186');
+  it('against the real r187 builder the struct member reads @builtin( frag_depth, greater )', () => {
+    expect(THREE.REVISION).toBe('187');
     expect(installConservativeDepthPatch().installed).toBe(true);
     const b = Object.create(WGSLNodeBuilder.prototype) as {
       builtins: Record<string, Map<string, unknown>>; shaderStage: string; material: unknown;
       getFragDepth(): string; getBuiltins(stage: string): string;
     };
     b.builtins = {};
+    (b as unknown as { context: unknown }).context = {};
     b.shaderStage = 'fragment';
     b.material = { conservativeDepth: 'greater' };
     expect(b.getFragDepth()).toBe('output.depth');
@@ -78,7 +79,7 @@ describe('conservative depth patch (spec §4 A)', () => {
   });
 });
 
-/** Run a real MeshBasicNodeMaterial through three 0.186's real WGSL node builder (no GPU). */
+/** Run a real MeshBasicNodeMaterial through three 0.187's real WGSL node builder (no GPU). */
 function buildFragmentWgsl(opts: { optIn: boolean }): string {
   const material = new THREE.MeshBasicNodeMaterial();
   material.colorNode = vec4(1, 0, 0, 1) as never;
@@ -87,6 +88,7 @@ function buildFragmentWgsl(opts: { optIn: boolean }): string {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
   const stubCanvas = { getContext: () => null, addEventListener() { /* stub */ }, style: {}, width: 100, height: 100 };
   const renderer = new THREE.WebGPURenderer({ canvas: stubCanvas as unknown as HTMLCanvasElement });
+  (renderer as unknown as { _bindings: unknown })._bindings = { getSharedBindGroup: (g: unknown) => g };
   const builder = new WGSLNodeBuilder(mesh, renderer) as unknown as {
     scene: unknown; material: unknown; camera: unknown; context: { material: unknown };
     build(): unknown; fragmentShader: string;
@@ -99,7 +101,7 @@ function buildFragmentWgsl(opts: { optIn: boolean }): string {
   return builder.fragmentShader;
 }
 
-describe('end to end through the real r186 node builder', () => {
+describe('end to end through the real r187 node builder', () => {
   const count = (hay: string, needle: string) => hay.split(needle).length - 1;
 
   it('an opted-in material emits frag_depth, greater once, clamped to the raster depth', () => {

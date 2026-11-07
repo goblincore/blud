@@ -3,7 +3,9 @@
 // Bodies stand on the floor under them (sector levels 3a, Task 4), at the actor: a body built
 // standing on a 1 m floor and handed that ground walks exactly like the same body on y = 0, lifted
 // 1 m: not 2 m (the spawn floor is in the built body AND in MotionState.floorY), and not sinking.
-import { describe, expect, it } from 'vitest';
+import { setDeathFall } from '../death-fall';
+import { SLUMP, setSlump } from '../slump-death';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
@@ -31,6 +33,11 @@ function actorAt(start: Vec3, ground?: LevelGround) {
 }
 
 describe('an actor on a sector floor', () => {
+  // Per-point corpse floors are the free ragdoll's (authored deaths off, death-fall.ts); a fall follows the soldier's pit rule.
+  // No forward slumps (slump-death.ts): a slump's knees plant on the ledge and only its top hangs over.
+  const slump = SLUMP.chance;
+  beforeAll(() => { setDeathFall({ on: false }); setSlump({ chance: 0 }); });
+  afterAll(() => { setDeathFall({ on: true }); setSlump({ chance: slump }); });
   it('walks exactly like the flat body, lifted by the floor', () => {
     const [x, , z] = spawnPoints(ROOMS[0]!)[0]!;
     const flat = actorAt([x, 0, z]);
@@ -72,7 +79,9 @@ describe('an actor on a sector floor', () => {
     for (let f = 0; f < 240; f++) for (const a of all) a.step(1 / 60);
     for (const a of all) expect(a.debug().phase).not.toBe('standing');
     const lo = (a: typeof flat) => Math.min(...a.posed().prims.map(p => Math.min(p.a[1]!, p.b[1]!)));
-    expect(lo(pit)).toBeLessThan(lo(flat) - 0.3);
+    // 25 cm: a corpse's elbow stop rolls with its chest (rig-bind.ts live hinge), so the forearm no longer dangles
+    // backward into the pit; the arm hangs 29.5 cm below the flat corpse's lowest point instead of over 30.
+    expect(lo(pit)).toBeLessThan(lo(flat) - 0.25);
     expect(wall.posed().prims.map(p => [...p.a, ...p.b])).toEqual(flat.posed().prims.map(p => [...p.a, ...p.b]));
   });
 
@@ -90,7 +99,8 @@ describe('an actor on a sector floor', () => {
     hole = [root[0], root[2]];
     for (let f = 0; f < 120; f++) a.step(1 / 60);
     const ends = a.posed().prims.flatMap(p => [p.a, p.b])
-      .filter(p => Math.hypot(p[0]! - hole![0], p[2]! - hole![1]) > 0.5);
+      // 0.4 m clear of the hole's rim (0.2 m): a solid corpse (collapse.ts relaxBodyCollisions) lies more compactly.
+      .filter(p => Math.hypot(p[0]! - hole![0], p[2]! - hole![1]) > 0.4);
     expect(ends.length).toBeGreaterThan(10);
     for (const p of ends) expect(p[1]).toBeGreaterThan(-0.3);
   });
