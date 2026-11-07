@@ -52,8 +52,8 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 56 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
-| [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
+| [Levels and world](#levels-and-world) | 57 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Actors and crowd (render)](#actors-and-crowd-render) | 20 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
@@ -550,6 +550,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
 - `webgpu/kit-remains-ground.ts` — What a gibbed body's kit and gun land on (kit-remains.ts): the sector debris ground on a sector level; on a room level the same walls the gib chunks…
 - `webgpu/kit-remains.ts` — WHO HOLDS A KIT AFTER ITS BODY IS GONE.
+- `webgpu/kit-template.ts` — ONE PARSE PER KIT (2026-11-01): a kit file is fetched and parsed once; each body gets a clone of the parsed scene.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
 - `webgpu/level-batch.ts` — LEVEL BATCHING, THE PURE CORE (draw-count pass, 2026-10-28).
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
@@ -596,6 +597,7 @@ Per-actor GPU records, crowd atlas, character views, wounds on screen.
 - `webgpu/character-effects.ts` — Character effect scene drawn after the SDF composite, plus the muzzle flash object posed from shot age.
 - `webgpu/character-view.ts` — THE BODY: how a character looks, how it animates, and (from task 4) what happens to it when it is hit.
 - `webgpu/crowd-atlas.ts` — The shared prim texture of a crowd type: `stride` prims wide (validate.ts primStride — BASE_PRIM_STRIDE for every body up to 128 prims), DATA_ROWS…
+- `webgpu/crowd-capacity.ts` — HOW MANY BODIES A CROWD TYPE HOLDS (2026-11-01).
 - `webgpu/crowd-records.ts` — One record per march instance, read by the kernel through a read-only storage buffer (`inst` param).
 - `webgpu/crowd-rect.ts` — Stage a-2 (3): the conservative screen rectangle one crowd type's quad must rasterise.
 - `webgpu/crowd-spawn.ts` — Pure spawn-placement math for the crowd bench seam (perf task 7f).

@@ -16,6 +16,7 @@
 // placeholder in the factory; the codemod supplies the real value at the
 // binding's original line. Every call still hands out fresh containers.
 
+import type { TileStream } from './tile-bin-compute';
 import type { CrowdDispatch, CrowdType } from './crowd-type';
 import type { ZombieGpuView } from './zombie-gpu';
 
@@ -44,6 +45,10 @@ export interface CrowdState {
   fallbackReason: string | null;
   /** One `CrowdType` per character registry name; lazily created on first spawn. */
   types: Map<string, CrowdType>;
+  /** Bodies each type is built for, by type key (crowd-capacity.ts); null builds them all at full size. */
+  capacities: ReadonlyMap<string, number> | null;
+  /** The entry stream the types bin into, one after another (tile-bin-compute.ts). */
+  tileStream: TileStream | null;
   /** The first attached view per type — the source of per-type uniform values. */
   sourceView: Map<CrowdType, ZombieGpuView>;
   /** Each attached view's type (the crowd key for its nearest-to-the-player body). */
@@ -66,6 +71,8 @@ export function makeCrowdState(): CrowdState {
     on: false,
     fallbackReason: null,
     types: new Map<string, CrowdType>(),
+    capacities: null,
+    tileStream: null,
     sourceView: new Map<CrowdType, ZombieGpuView>(),
     typeOfView: new WeakMap<ZombieGpuView, CrowdType>(),
     volumeBound: new Set<CrowdType>(),

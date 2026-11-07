@@ -34,6 +34,7 @@ import { spawnBile } from '../bile';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
+import { crowdCapacities, crowdSizeOn } from './crowd-capacity';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
 import { actorSpawnCentre, clampSpawnInside, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
@@ -586,8 +587,12 @@ export function spawnAll(ctx: GameContext, errs: string[]): void {
   // cultist, juggernaut and warbull slots keep their kind (level-def
   // SpawnKind).
   const list = ctx.world.level.spawnList();
+  const castName = (kind: string) => (kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : kind);
+  // Only the first cast of a boot counts: a rebuilt cast is the same cast, and these types already exist.
+  if (!ctx.crowd.capacities && ctx.world.level.def && !ctx.world.level.def.arena && crowdSizeOn(location.search))
+    ctx.crowd.capacities = crowdCapacities(list.map(s => ({ name: castName(s.kind), roomId: s.room.id })));
   for (const s of list) {
-    const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
+    const name = castName(s.kind);
     ctx.world.actors.push(spawnEnemy(ctx, name, s.room, s.pos, errs));
   }
   // ?stress=N (sector levels): N more of the level's own kinds near its spawns, for culling at scale (stress-spawns.ts).
