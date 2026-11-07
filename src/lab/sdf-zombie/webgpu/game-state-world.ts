@@ -31,6 +31,8 @@ import type { SectorFxRuntime } from './game-sector-light';
 import type { ZoneCullRuntime } from './game-zone-cull';
 import type { GameBarrels } from './game-barrels';
 import type { GameDoors } from './game-doors';
+import type { GameSwitches } from './game-switches';
+import type { GameLifts } from './game-lifts';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -94,6 +96,10 @@ export interface WorldState {
   barrels: GameBarrels | null;
   /** Sector levels: the level's doors (game-doors.ts), or null without any. */
   doors: GameDoors | null;
+  /** Sector levels: the level's gun switches (game-switches.ts), or null without any. */
+  switches: GameSwitches | null;
+  /** Sector levels: the level's lifts (game-lifts.ts), or null without any. */
+  lifts: GameLifts | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -166,6 +172,8 @@ export function makeWorldState(): WorldState {
     sectorFx: null,
     barrels: null,
     doors: null,
+    switches: null,
+    lifts: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -211,6 +219,8 @@ export const WORLD_BINDINGS = {
   sectorFx: 'world.sectorFx',
   barrels: 'world.barrels',
   doors: 'world.doors',
+  switches: 'world.switches',
+  lifts: 'world.lifts',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

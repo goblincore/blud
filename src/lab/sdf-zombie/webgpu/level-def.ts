@@ -38,8 +38,9 @@ export const DEFAULT_PALETTE: LevelPalette = {
 
 export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art' | 'sectors';
 export type WallSide = 'n' | 's' | 'e' | 'w';
-export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
-export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
+export type KeyItem = 'key-red' | 'key-yellow' | 'key-blue';
+export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight' | KeyItem;
+export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight', 'key-red', 'key-yellow', 'key-blue'];
 
 /** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }

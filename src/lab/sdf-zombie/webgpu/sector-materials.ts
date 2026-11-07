@@ -19,7 +19,7 @@ import type { XZ } from './sector-def';
 
 export type SurfaceRole = 'floor' | 'ceil' | 'wall';
 export type StoneKind = 'stoneWall' | 'stoneFloor' | 'stoneCeil';
-export type SurfaceKind = PanelKind | StoneKind;
+export type SurfaceKind = PanelKind | StoneKind | 'fireWall' | 'fireBlue';
 
 /** Family → procedural kind (panel-textures.ts). */
 export const FAMILY_KINDS: Readonly<Record<string, PanelKind>> = {
@@ -36,6 +36,12 @@ export const FAMILY_KINDS: Readonly<Record<string, PanelKind>> = {
   fluorescent: 'fluorescent',
   'exit-sign': 'exitSign',
 };
+/** The hell families (owner playtest 2026-11-01, MAP28). `?hellmat=0` draws each as its old kind. */
+export type FireKind = 'fireWall' | 'fireBlue';
+export const HELL_KINDS: Readonly<Record<string, PanelKind | FireKind>> = { redrock: 'redRock', flesh: 'fleshWall', firewall: 'fireWall', fireblue: 'fireBlue' };
+const PRE_HELL: Readonly<Record<string, PanelKind>> = { redrock: 'concreteSlab', flesh: 'rustBrick', firewall: 'lightPanel', fireblue: 'lightPanel' };
+export const hellMatOn = (search: URLSearchParams): boolean => search.get('hellmat') !== '0';
+export const isFire = (k: SurfaceKind): k is FireKind => k === 'fireWall' || k === 'fireBlue';
 /** What an emitter family draws with `?emitters=0`: its kind before item 2g (the converter's old families). */
 const PRE_EMITTER: Readonly<Record<string, PanelKind>> = {
   'screen-bank': 'techPanel', viewscreen: 'techPanel', fluorescent: 'lightPanel', 'exit-sign': 'door',
@@ -44,8 +50,9 @@ const PRE_EMITTER: Readonly<Record<string, PanelKind>> = {
 const STONE: Record<SurfaceRole, StoneKind> = { floor: 'stoneFloor', ceil: 'stoneCeil', wall: 'stoneWall' };
 
 /** The surface a role wearing `family` draws; `on` false (?sectormat=0) is the old single stone set. */
-export function surfaceKind(family: string, role: SurfaceRole, on = true, emitters = true): SurfaceKind {
+export function surfaceKind(family: string, role: SurfaceRole, on = true, emitters = true, hell = true): SurfaceKind {
   if (on && !emitters && PRE_EMITTER[family]) return PRE_EMITTER[family];
+  if (on && HELL_KINDS[family]) return hell ? HELL_KINDS[family] : PRE_HELL[family]!;
   return (on && FAMILY_KINDS[family]) || STONE[role];
 }
 
@@ -101,6 +108,12 @@ export const SURFACE_LOOKS: Readonly<Record<SurfaceKind, SurfaceLook>> = {
     emit: { gain: 'fluoroGain', floor: 0.5 }, fit: { u: 1, v: 2, cu: 0.25, cv: 0.5 } },
   exitSign: { tileM: 1, roughness: 1, metalness: 0.1, normalScale: 1.0, gain: 1.0, glow: 0,
     emit: { gain: 'signGain', floor: 0.8 }, fit: { u: 1, v: 0.5, cu: 1, cv: 1 } },
+  redRock: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.5, gain: 1.0, glow: 0 },
+  // Wet: low roughness catches the torch and the fill light on the folds.
+  fleshWall: { tileM: 3, roughness: 0.7, metalness: 0, normalScale: 1.5, gain: 1.0, glow: 0 },
+  // Fire walls wear the red rock's maps under their own glow (game-sector-mesh.ts).
+  fireWall: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.3, gain: 0.6, glow: 0 },
+  fireBlue: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.3, gain: 0.6, glow: 0 },
   // The sliding door leaf (game-doors.ts): no wall family maps to it; one map per leaf (tileM unused).
   // Metal: the scratches catch the torch as steel, not as a pale dielectric veil.
   slideDoor: { tileM: 4, roughness: 1, metalness: 0.45, normalScale: 0.9, gain: 0.85, glow: 0 },

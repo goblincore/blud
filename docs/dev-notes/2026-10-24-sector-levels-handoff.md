@@ -449,6 +449,100 @@ key if the later-volley misses ever matter.
   or A/B one frozen frame by uniforms (`abframe.mjs`, `__sdfGame.step(6, 0)` to flush the smear).
 - setPose's yaw: forward is `(sin yaw, -cos yaw)`. `strip.mjs`'s comment has the x sign backwards.
 
+## MAP28 look pass (2026-11-01)
+
+Owner playtest of the keys build: played through most of the level and reached the end using the keys. Notes: the lava doesn't
+read as lava and isn't intense enough; spaces are dull and feel the same; the original has a room made of flesh; enemies are a
+separate pass, with nothing yet to replace the Spider Mastermind.
+
+**Lava** (`sector-glow.wgsl.ts` SECTOR_LAVA; `?lava=0` is the old flow). The old one was the nukage flow in orange at glowGain
+0.35: a flat tan sheet. Now dark basalt plates over seams in HDR (red to orange to white, feeding the bloom), a slow noise
+widening seams into molten stretches, thin red veins in the crust. Its colour no longer takes glowGain. The baked bounce is
+LAVA_BOUNCE (1.5) times the other kinds' and the pool light is deeper and POOL_LAVA_POWER (1.3) stronger. A first try at bounce
+3.2 and power 2 washed the whole room in flat orange; light from below needs falloff, so keep these low. Frame cost not measured;
+two cell-noise layers per lava pixel. Judged from headless shots only so far.
+
+**Why spaces feel the same (measured from the MAP28 file):** all 10 fill lights are the same warm white, there is no per-level or
+per-zone palette, and the walls are concrete (50 of 116 sectors), metal or rust. Doom's rooms differ by texture set and light
+level; only the level survives the conversion.
+
+**Room moods** (`doom_tables.py` MOODS, TEXTURE_MOODS; `sector-moods.ts`; `?moods=0`). Each zone's wall textures vote for a mood:
+ember (red rock), cold (grey stone, marble), dust (tan, brown), sepia (wood), flesh, fire, blue fire. The mood sets a new sector
+`tint`, which multiplies the ambient level (colour and how dark), and the colour of the zone's fill light. A sector whose own walls
+are flesh stays flesh in any zone. The level now runs cold stone, red rock, blue fire, then flesh toward the exit. Doom 2 maps
+only: E1M1 keeps its tech-base look and is byte-identical. The tint is an extra uniform array, only on levels that have one.
+
+**New materials** (`sector-materials.ts` HELL_KINDS; `?hellmat=0` draws the old kinds): `redRock` and `fleshWall` are new panel
+kinds; `fireWall` and `fireBlue` wear red rock's maps under the lava seams, rising, at FIRE_WALL_GAIN 0.32. BFALL (blood falls) is
+flesh.
+
+**Flesh** (`sector-flesh.wgsl.ts`): wet folds with sinew and a little fat in the panel, thin veins with a slow pulse travelling up
+them in the shader, and walls that BREATHE: up to 6 cm along the normal on a slow beat, varied by world noise (`?breathe=0`).
+Collision does not move. A flesh wall is cut into a 0.6 m grid so it has vertices to move, pinned at its edges so corners and floors
+stay shut. The pin rides in `emitFS.x` because the batch is at WebGPU's 8 vertex buffers, so flesh walls lose the fluorescent and
+sign bake (MAP28 has none). First tries: veins at 0.9x scale and 0.62 red read as neon tentacles, and speckled fat as mould.
+
+**Open:** fire walls read more electric than flame. Red rock, grey stone and wood floors and ceilings still use the old families.
+Set pieces (ribs, sphincter doors) are not started. Judged from headless shots; the breathing was only confirmed by frame difference.
+Frame cost NOT measured: the machine was too busy for clean numbers (one boot took 178 s, fence readings swung from 5 to 130 ms on
+the same spot in the same build). Measure with `frameSplit` before calling it cheap: extra cost is cell noise per lava, fire and
+vein pixel, the tint lookup per sector pixel, and flesh's extra vertices.
+
+## Keys, gun switches and lifts (2026-11-01)
+
+MAP28 is now played the way Doom plays it: yellow key, back up the lift, yellow door, red key, down through the gun-switch
+hall, red door, exit. Headless, on foot with all 111 enemies under god mode, that took 232 s against the old 33 s walk.
+The owner has since played it through to the end. `?locks=0` is the old open level; `?lifts=0` leaves each lift at its top.
+
+**Correction to the spike below.** It said Doom's route strictly needs only gun switches and keys. It also needs a lift: the
+drop from s80 to s0 is one way and the lift at s82 is the only way back up, so with locks on, a player taking the yellow
+key could never reach the yellow door. The first walk found this, so one kind of lift was built too (below).
+
+**What the level file gained** (`sector-def.ts`, checked in `sector-json.ts`):
+
+| Field | What it does | Run by |
+|---|---|---|
+| pickups `key-red` / `key-yellow` / `key-blue` | a key by colour; `Inventory.keys` | `pickups.ts` |
+| door `key` | now enforced: shut to everyone until the player brings it; afterwards a normal door | `sector-doors.ts` |
+| door `opensOn`, `sealed` | an event opens the door and holds it open; `sealed`: nothing else opens it | `sector-doors.ts` |
+| top-level `switches` `{id, line, event}` | a player's shot hitting that line fires the event, once | `sector-switches.ts`, `game-switches.ts` |
+| top-level `lifts` `{id, sector, top, speed?, wait?}` | the sector's floor in the file is the low position; it rests at `top` | `sector-lifts.ts`, `game-lifts.ts` |
+
+Rules worth keeping: a locked door is inert (no trigger, no occupant rule, enemy requests spent), so enemies wait at it.
+Enemy rounds never press a switch: only the player's round path in `game-tick.ts` reports its line. A lift has no use key:
+the player walking to within 1.5 m of it from below calls it, it waits 4 s, and standing on it sends it up. Enemies never
+call one. **Lift floors are live:** the parser rests `sector.floor` at `top`, and only the static mesh sees the low position
+(`withLiftsLow`), because navigation is built before the meshes. The first version raised the floor after the meshes, and
+navigation then saw every lift at the bottom: no route across s82 and enemies stuck under it.
+
+**Look (all our own, procedural):** a keyed door's leaves carry its key's colour for good; a locked door's lamp is the key's
+colour, violet for a switch-only door. The switch is a metal plate with a square lamp, red then green. A key is a bright
+upright card. A lift has an amber strip round its top edge. All placeholders. A notice line says `NEEDS THE RED KEY` or `IT
+OPENS FROM SOMEWHERE ELSE`; the status line lists held keys.
+
+**Converter** (`doom_map.py`, `doom_tables.py`): keys from cards and skulls alike; sp46 becomes a switch when its target is a
+door entity. Two shapes now pass the door test: a rectangle set into a room (s16, its jambs opening onto the room beyond one
+face) and parallel faces up to 0.3 m out of square (s76). Only sp62 lifts move: walk-over lifts, E1M1's sp88 included, stay
+static, and E1M1's output is byte-identical.
+
+**Which doors gate the route (measured):** the exit needs s76 (gun) and s16 (red); the red key needs s113 (yellow). Those are real.
+
+| Stays an open hole | Why | Cost |
+|---|---|---|
+| s43 (yellow, skewed quad) | faces not parallel | not on the route to the exit; a second yellow lock is lost |
+| s71 (gun, a ring round s70) | not a doorway; its switch is left out | whatever it shuts in is out from the start |
+| s47, s75, s109, s115 (walk-over or manual) | not rectangular enough | they are simply open |
+
+Walk-over remote doors (sp2, sp3) still open on approach; door-18 keeps its hand line from s4 and also opens on its switch.
+
+**`doom_route.py` is now a play-through:** every (sector, things held) state, so a key below a one-way drop reads as not
+reached, and `dead_ends` lists where a player can get stuck for good. MAP28: exit reached, 0 dead ends; without lift-82 the
+exit is not reached. With locks on, Doom 2's 32 maps: 15 fail the converter, 3 finish (MAP07, MAP28, MAP31), and **MAP13 no
+longer does**: it finishes only with `?locks=0` until its other specials exist.
+
+**Not verified:** damage on, as far as the headless runs go (`?god=0`); real 60 Hz (headless caps at 30); enemies riding a lift; lift-28 in
+play (only lift-82 was walked); the doom gate (paused). The lift's frame cost was not measured separately; the full walk showed no errors.
+
 ## MAP28 spike (2026-11-01)
 
 **Short answer.** Doom 2 MAP28 converts, boots, and can be walked from start to exit with its 111 enemies. Level geometry

@@ -18,6 +18,11 @@
 // DoorField is the live part every consumer reads (sector-ground.ts owns one per ground): per door
 // its open fraction, per line the door it is a face of. The game (game-doors.ts) writes `open`.
 //
+// LOCKS (2026-11-01, the gun switches and keys): a door with a `key` is shut to everyone until the player brings that
+// key; a `sealed` door until its `opensOn` event, which also holds any door with one open from then on. A locked door
+// is inert: nothing asks it open, not even a body pressed against it, and enemies wait at it. Once the player has
+// opened a keyed door it runs like any other.
+//
 // Navigation ignores doors (the grid is built once, doors shut): enemies route through doorways and
 // are held at the leaves by doorTravel until the door opens for them.
 //
@@ -210,17 +215,61 @@ export function createDoorField(map: SectorMap): DoorField {
 }
 
 /** A body the doors see: its ground position, its motion (m/s) and its disc radius. */
-export interface DoorBody { x: number; z: number; vx: number; vz: number; r: number }
+export interface DoorBody { x: number; z: number; vx: number; vz: number; r: number; player?: boolean }
 export interface DoorEvent { door: number; phase: DoorPhase }
+
+/** Which doors are locked now and which an event holds open; `on` false (`?locks=0`) starts every door unlocked. */
+export interface DoorLocks {
+  /** Per door, 1 while locked. */
+  readonly locked: Uint8Array;
+  /** Per door, 1 once its `opensOn` event fired: wanted for good. */
+  readonly latched: Uint8Array;
+  /** What the player holds. */
+  held(key: string): boolean;
+}
+
+export function createDoorLocks(defs: readonly SectorDoorDef[], held: (key: string) => boolean, on = true): DoorLocks {
+  return {
+    locked: Uint8Array.from(defs, def => (on && (def.key || def.sealed) ? 1 : 0)),
+    latched: new Uint8Array(defs.length),
+    held,
+  };
+}
+
+/** A level event: every door that opens on it unlocks and stays wanted. Returns the doors it opened. */
+export function fireDoorEvent(defs: readonly SectorDoorDef[], locks: DoorLocks, event: string): number[] {
+  const out: number[] = [];
+  defs.forEach((def, d) => {
+    if (def.opensOn !== event || locks.latched[d]) return;
+    locks.locked[d] = 0;
+    locks.latched[d] = 1;
+    out.push(d);
+  });
+  return out;
+}
 
 /** One tick of every door: each is wanted when a body triggers it or `requests[d]` is set (a blocked
  *  travel this tick; cleared here), occupied when a body stands in its doorway. Writes `field.open`.
+ *  With `locks`, a locked door does nothing: the player unlocks a keyed one by walking at it holding the key, and
+ *  walking at one that stays shut pushes its index on `refused`.
  *  Returns the phase changes (a sound hook), in door order. */
 export function stepDoors(field: DoorField, states: DoorState[], dt: number, bodies: readonly DoorBody[],
-  requests: Uint8Array): DoorEvent[] {
+  requests: Uint8Array, locks?: DoorLocks, refused?: number[]): DoorEvent[] {
   const events: DoorEvent[] = [];
   field.defs.forEach((def, d) => {
-    let want = requests[d] === 1, occupied = false;
+    if (locks?.locked[d]) {
+      requests[d] = 0;
+      const pl = bodies.find(b => b.player);
+      const wants = !!pl && wantsDoor(def, pl.x, pl.z, pl.vx, pl.vz);
+      if (!def.sealed && def.key && locks.held(def.key) && pl && (wants || occupiesDoor(def, pl.x, pl.z, pl.r))) {
+        locks.locked[d] = 0;
+      } else {
+        if (wants) refused?.push(d);
+        field.open[d] = states[d]!.open;
+        return;
+      }
+    }
+    let want = requests[d] === 1 || locks?.latched[d] === 1, occupied = false;
     for (const b of bodies) {
       if (!want && wantsDoor(def, b.x, b.z, b.vx, b.vz)) want = true;
       if (!occupied && occupiesDoor(def, b.x, b.z, b.r)) occupied = true;

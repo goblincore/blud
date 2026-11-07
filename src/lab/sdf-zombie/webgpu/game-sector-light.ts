@@ -44,6 +44,8 @@ export interface SectorFxRuntime {
   glowTime: FloatUniform;
   /** Multiplies the glow floors' colour (DEFAULT_GLOW_GAIN unless ?glowgain or the seam set it). */
   glowGain: FloatUniform;
+  /** Per sector, the room's mood (sector tint); null on a level without moods (game-sector-mesh.ts sets it). */
+  tints: ReturnType<typeof uniformArray<'vec3'>> | null;
   /** Multiplies the baked glow bounce (DEFAULT_BOUNCE_GAIN unless ?bouncegain or the seam set it). */
   bounceGain: FloatUniform;
   /** Multiplies the emitters' baked bounce (DEFAULT_EMIT_BOUNCE_GAIN unless ?emitbounce or the seam set it). */
@@ -68,6 +70,7 @@ export function createSectorFx(sectorCount: number, search: URLSearchParams, red
     ceilWhisper: floatUniform(cfg.on ? 0 : CEIL_WHISPER),
     glowTime: floatUniform(0),
     glowGain: floatUniform(gainParam(search.get('glowgain'), DEFAULT_GLOW_GAIN)),
+    tints: null,
     bounceGain: floatUniform(gainParam(search.get('bouncegain'), DEFAULT_BOUNCE_GAIN)),
     emitBounceGain: floatUniform(gainParam(search.get('emitbounce'), DEFAULT_EMIT_BOUNCE_GAIN)),
     reducedFlashes,

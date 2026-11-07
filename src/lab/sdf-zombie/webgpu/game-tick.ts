@@ -267,6 +267,7 @@ export function tick(ctx: GameContext, dt: number) {
   // DOORS (sector levels): after the player's step (its motion triggers them), before the actors step (their travel
   // reads this tick's leaves). A handful of doors, a few dot products each.
   ctx.world.doors?.step(dt);
+  ctx.world.lifts?.step(dt);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.
@@ -934,7 +935,7 @@ export function tick(ctx: GameContext, dt: number) {
         const st = ctx.telemetry.telemetry.begin();
         const h = sectorWorldHit(ctx, from, p.pos);
         ctx.telemetry.telemetry.end('hit:sector', st);
-        if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
+        if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; ctx.world.switches?.shot(h.line); }
       }
       // BARRELS (plan 3b Task 14): the cut segment's first standing drum cuts it as the wall does, at the contact
       // point on the drum's surface — everything below (chunks, actors) tests the segment up to the drum, so a body

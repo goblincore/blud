@@ -14,6 +14,10 @@ import { doorLampGain, doorSpillGain } from './game-doors';
 export function createDoorSeams(ctx: GameContext) {
   return {
     doors: () => ctx.world.doors?.snapshot() ?? [],
+    /** The gun switches: id, line, event, pressed; empty without any (or under `?locks=0`). */
+    switches: () => ctx.world.switches?.field.defs.map((d, i) => ({ ...d, pressed: ctx.world.switches!.field.pressed[i] === 1 })) ?? [],
+    lifts: () => ctx.world.lifts?.snapshot() ?? [],
+    pressSwitch: (id: string) => ctx.world.switches?.press(id) ?? false,
     forceDoor: (id: string, open: number, phase?: DoorPhase) => ctx.world.doors?.force(id, open, phase) ?? false,
     /** The leaf meshes: name, zone room, culling, whether the level pre-warm can see them (in the level group). */
     doorMeshes: () => ctx.world.doors?.meshes.map(m => ({ name: m.name, room: m.userData.room as number, frustumCulled: m.frustumCulled,

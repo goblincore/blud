@@ -254,11 +254,100 @@ def test_a_keyed_door_writes_its_key_and_a_misshapen_one_stays_open():
     lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
              {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
     sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
-    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    doors, left = doom_map._door_entities({1}, {1: {26}}, {}, lines, verts, sectors)
     assert left == [] and doors[0]["key"] == "blue" and doors[0]["zones"] == [0, 1] and doors[0]["width"] == 2.0
     verts[2] = [0.5, 2.6]                                   # one face longer: not a doorway
-    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    doors, left = doom_map._door_entities({1}, {1: {26}}, {}, lines, verts, sectors)
     assert doors == [] and left == [1]
+
+
+def test_a_gun_switch_target_is_sealed_unless_a_line_of_its_own_opens_it():
+    verts = [[0.0, 0.0], [0.0, 2.0], [0.5, 2.0], [0.5, 0.0]]
+    lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
+             {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, _ = doom_map._door_entities({1}, {1: {46}}, {1: 7}, lines, verts, sectors)
+    assert doors[0]["opensOn"] == "switch.tag-7" and doors[0]["sealed"] is True
+    doors, _ = doom_map._door_entities({1}, {1: {46, 31}}, {1: 7}, lines, verts, sectors)
+    assert doors[0]["opensOn"] == "switch.tag-7" and "sealed" not in doors[0]
+
+
+def test_a_door_set_into_a_room_takes_its_long_faces():
+    # MAP28's s16: faces into rooms 0 and 2, the short jambs open onto room 2 as well.
+    verts = [[0.0, 0.0], [2.0, 0.0], [2.0, 0.5], [0.0, 0.5]]
+    lines = [{"v": [1, 0], "front": 1, "back": 0}, {"v": [3, 2], "front": 1, "back": 2},
+             {"v": [0, 3], "front": 1, "back": 2}, {"v": [2, 1], "front": 1, "back": 2}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, left = doom_map._door_entities({1}, {1: {33}}, {}, lines, verts, sectors)
+    assert left == [] and doors[0]["faces"] == [0, 1] and doors[0]["key"] == "red" and doors[0]["width"] == 2.0
+
+
+def test_parallel_faces_a_little_out_of_square_make_a_door_and_far_out_do_not():
+    verts = [[0.0, 0.0], [0.0, 2.0], [1.0, 2.2], [1.0, 0.0]]
+    lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
+             {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, left = doom_map._door_entities({1}, {1: {1}}, {}, lines, verts, sectors)
+    assert left == [] and doors[0]["depth"] == 1.0 and doors[0]["width"] == 2.1
+    verts[2] = [1.0, 2.5]
+    assert doom_map._door_entities({1}, {1: {1}}, {}, lines, verts, sectors) == ([], [1])
+
+
+def _locked_row(door):
+    """Rooms 0 | door 1 | room 2, square; a key pickup and a switch can sit in any of them."""
+    return {"vertices": [[0, 0], [0, 4], [4, 4], [4, 0], [5, 0], [5, 4], [9, 4], [9, 0]],
+            "sectors": [{"floor": 0, "ceil": 3} for _ in range(3)],
+            "lines": [{"v": [0, 3], "front": 0}, {"v": [3, 2], "front": 0, "back": 1}, {"v": [2, 1], "front": 0}, {"v": [1, 0], "front": 0},
+                      {"v": [3, 4], "front": 1}, {"v": [4, 5], "front": 1, "back": 2}, {"v": [5, 2], "front": 1},
+                      {"v": [4, 7], "front": 2}, {"v": [7, 6], "front": 2}, {"v": [6, 5], "front": 2}],
+            "start": {"pos": [2, 0, 2]}, "doors": [{"sector": 1, **door}],
+            "triggers": [{"event": "level.end", "min": [7, 0, 2], "max": [8, 2, 3]}], "pickups": []}
+
+
+def test_the_route_needs_the_key_on_the_near_side():
+    lvl = _locked_row({"key": "red"})
+    assert not doom_route.flood(lvl)["exit_reached"]
+    assert doom_route.flood(lvl, locks=False)["exit_reached"]
+    lvl["pickups"] = [{"item": "key-red", "pos": [6, 0, 2]}]    # behind its own lock
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["pickups"] = [{"item": "key-red", "pos": [1, 0, 1]}]
+    r = doom_route.flood(lvl)
+    assert r["exit_reached"] and r["still_locked"] == []
+
+
+def test_the_route_needs_the_switch_of_a_sealed_door():
+    lvl = _locked_row({"sealed": True, "opensOn": "switch.a"})
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["switches"] = [{"id": "s", "line": 9, "event": "switch.a"}]   # in the far room
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["switches"] = [{"id": "s", "line": 2, "event": "switch.a"}]
+    assert doom_route.flood(lvl)["exit_reached"]
+
+
+def test_a_key_below_a_one_way_drop_with_its_door_back_up_is_a_dead_end():
+    # Start room 0 (high) | locked door 1 | room 2 holds the exit; room 3, down a drop from 0, holds the key.
+    lvl = _locked_row({"key": "red"})
+    lvl["vertices"] += [[0, -4], [4, -4]]
+    lvl["sectors"].append({"floor": -3, "ceil": 3})
+    lvl["lines"][0] = {"v": [0, 3], "front": 0, "back": 3}
+    lvl["lines"] += [{"v": [0, 8], "front": 3}, {"v": [8, 9], "front": 3}, {"v": [9, 3], "front": 3}]
+    lvl["pickups"] = [{"item": "key-red", "pos": [2, 0, -2]}]
+    r = doom_route.flood(lvl)
+    assert not r["exit_reached"] and (3, ("key-red",)) in r["dead_ends"]
+    # A lift in the way back makes it a play-through: the drop room rides up.
+    lvl["sectors"][3]["floor"] = -3
+    lvl["lifts"] = [{"sector": 3, "top": 0.0}]
+    assert doom_route.flood(lvl)["exit_reached"]
+
+
+def test_a_moving_lift_writes_its_low_floor_and_top():
+    assert 62 in doom_tables.MOVING_LIFT_SPECIALS and 88 not in doom_tables.MOVING_LIFT_SPECIALS   # E1M1's stays static
+
+
+def test_key_things_become_key_pickups():
+    assert {doom_tables.THING_PICKUPS[t] for t in (5, 40)} == {"key-blue"}
+    assert {doom_tables.THING_PICKUPS[t] for t in (6, 39)} == {"key-yellow"}
+    assert {doom_tables.THING_PICKUPS[t] for t in (13, 38)} == {"key-red"}
 
 
 def test_floor_lower_target_is_lowered(tmp_path):

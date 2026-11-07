@@ -39,10 +39,10 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, exp, float, fwidth, materialColor, max, min, positionWorld, texture, uniform, uniformArray, uv, vec3, vec4, wgslFn } from 'three/tsl';
+import { attribute, exp, float, fwidth, materialColor, max, min, normalLocal, positionLocal, positionWorld, texture, uniform, uniformArray, uv, vec2, vec3, vec4, wgslFn } from 'three/tsl';
 import { blankPanel, fillPanel, generatePanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
 import { runPool, type PoolWorker } from './panel-pool';
-import { emittersOn, flatFit, isStone, lineSeedTiles, polyBox, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { hellMatOn, isFire, emittersOn, flatFit, isStone, lineSeedTiles, polyBox, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import { createEmitterBounce, emitterReach, emitterSurfaces, type EmitBake, type EmitterBounce } from './sector-emitters';
 import { DEFAULT_PUSH_BAKE, pushBakeGains } from './emit-push';
 import { FLUORO_RGB, SIGN_RGB } from '../../../game/level/emitter-layout';
@@ -54,7 +54,8 @@ import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
 import { BOUNCE_CUTOFF_M, createGlowBounce, glowSources, nearAny, refineFaces, refineNear, wallRows, wallStrip, type GlowBounce, type Reach, type RGB } from './sector-bounce';
 import { sectorPolygons, wallQuads } from './sector-geometry';
-import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
+import { FLESH_BREATH, FLESH_VEINS, breatheOn, FLESH_ROW_M, fleshPin } from './sector-flesh.wgsl';
+import { GLOW_KIND_INDEX, LAVA_BOUNCE, lavaOn, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_LAVA, SECTOR_LAVA_CELLS } from './sector-glow.wgsl';
 
 /** Flats get interior vertices (refineFaces) this close to an emitter's box, at most this far apart:
  *  where the bake changes fastest (E1M1: 4855 triangles plain, ~ +40 % with these). */
@@ -81,7 +82,7 @@ class Batch {
   /** One triangle of sector `sector`; flipped if its normal disagrees with `want`. Each vertex's glow
    *  bounce is baked with its ray starting inside its own sector: off a wall along the wall's normal,
    *  off a floor or ceiling toward the triangle's centre. */
-  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number, wall = false, muv: number[][] = uv) {
+  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number, wall = false, muv: number[][] = uv, pin?: readonly number[]) {
     const [a, b, c] = p as [number[], number[], number[]];
     const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!, uz = b[2]! - a[2]!;
     const vx = c[0]! - a[0]!, vy = c[1]! - a[1]!, vz = c[2]! - a[2]!;
@@ -106,7 +107,7 @@ class Batch {
           bakeStats.ms += performance.now() - t0; bakeStats.vertices++;
         }
       }
-      this.bnc.push(g[0]!, g[1]!, g[2]!); this.esc.push(g[3]!, g[4]!, g[5]!); this.efs.push(g[6]!, g[7]!);
+      this.bnc.push(g[0]!, g[1]!, g[2]!); this.esc.push(g[3]!, g[4]!, g[5]!); this.efs.push(pin ? pin[i]! : g[6]!, g[7]!);
     }
   }
   geometry(): THREE.BufferGeometry {
@@ -147,6 +148,7 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
  *  mips (albedo + normal RGBA, roughness one channel). */
 const panelCache = new Map<PanelKind, PanelTextureSet>();
 const PANEL_SEEDS: Record<PanelKind, number> = {
+  redRock: 167, fleshWall: 173,
   techPanel: 101, metalSheet: 103, door: 107, rustBrick: 109, lightPanel: 113, concreteSlab: 127, metalPlate: 131, floorTile: 137,
   screenBank: 139, viewscreen: 149, fluorescent: 151, exitSign: 157, slideDoor: 163,
 };
@@ -213,7 +215,31 @@ const GRIME = {
 };
 let mottle: THREE.DataTexture | null = null;
 
-interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null; roughness: THREE.Texture | null; emit: EmitterKind | null }
+interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null; roughness: THREE.Texture | null; emit: EmitterKind | null;
+  /** Fire and flesh walls: the shader's own glow on top of the surface, and flesh's breathing. */
+  hell?: SurfaceKind; breathe?: boolean }
+
+/** A wall of fire is seen whole and close, unlike a floor: well under the lava's own brightness. */
+const FIRE_WALL_GAIN = 0.32;
+
+/** The glow, lava, fire and flesh fns, one node per WGSL fn (WGSL has no nested fn: helpers ride along as includes). */
+type GlowFns = Record<'glow' | 'lava' | 'breath' | 'veins', WgslFnNode>;
+let glowFnsCache: GlowFns | null = null;
+function glowFns(): GlowFns {
+  if (!glowFnsCache) {
+    const inc = (fn: WgslFnNode) => fn as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
+    const hash = wgslFn(SECTOR_GLOW_HASH);
+    const noise = wgslFn(SECTOR_GLOW_NOISE, [inc(hash)]);
+    const cells = wgslFn(SECTOR_LAVA_CELLS, [inc(hash)]);
+    glowFnsCache = {
+      glow: wgslFn(SECTOR_GLOW, [inc(noise)]),
+      lava: wgslFn(SECTOR_LAVA, [inc(noise), inc(cells)]),
+      breath: wgslFn(FLESH_BREATH, [inc(noise)]),
+      veins: wgslFn(FLESH_VEINS, [inc(noise), inc(cells)]),
+    };
+  }
+  return glowFnsCache;
+}
 
 /** The emitter glow fns, one node per WGSL fn shared by every material (the builder emits a shared
  *  include once per shader). */
@@ -250,11 +276,14 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
   // The sector's self-lit level (sector-light.ts via game-sector-light.ts), times the albedo.
   // +0.5 before the cast: the interpolated index may arrive as 2.9999998, which truncates to 2.
   const lvl = fx.levels.element(attribute('sectorIndex', 'float').add(0.5).toInt());
+  // The room's mood (sector tint): only levels with moods carry the array.
+  const ambient = fx.tints ? vec3(lvl).mul(fx.tints.element(attribute('sectorIndex', 'float').add(0.5).toInt())) : vec3(lvl);
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   // The pools' baked bounce (sector-bounce.ts), scaled with the pools' own brightness (glowGain).
   const bounce = attribute('glowBounce', 'vec3').mul(fx.bounceGain.mul(fx.glowGain));
   // The emitters' baked bounce (sector-emitters.ts) under their own gain seams and emitBounceGain.
-  const fs = attribute('emitFS', 'vec2');
+  // A breathing wall's emitFS.x is its pin, not a bake (the 8-buffer limit leaves no room for its own attribute).
+  const fs = src.breathe ? vec2(0, 0) : attribute('emitFS', 'vec2');
   const emitBounce = attribute('emitScreen', 'vec3').mul(fx.emitGains.screenGain)
     .add(vec3(...FLUORO_RGB).mul(fs.x.mul(fx.emitGains.fluoroGain)))
     .add(vec3(...SIGN_RGB).mul(fs.y.mul(fx.emitGains.signGain)))
@@ -276,7 +305,25 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     nm.colorNode = vec4(albedo, 1);
     nm.roughnessNode = texture(src.roughness).r.mul(src.look.roughness).mul(m.mul(GRIME.roughHi - GRIME.roughLo).add(GRIME.roughLo)).clamp(0.04, 1);
   }
-  const lit = albedo.mul(vec3(lvl).add(bounce).add(emitBounce)).add(base);
+  const lit = albedo.mul(ambient.add(bounce).add(emitBounce)).add(base);
+  if (src.hell) {
+    const fns = glowFns();
+    // World-projected metres on the wall: u along it, v up it.
+    const tile = attribute('mottleUv', 'vec2').mul(src.look.tileM);
+    if (src.hell === 'fleshWall') {
+      const veins = fns.veins({ p: tile, t: fx.glowTime }) as unknown as ReturnType<typeof vec3>;
+      nm.emissiveNode = lit.add(veins);
+      if (src.breathe) {
+        const swell = fns.breath({ wpos: positionWorld, t: fx.glowTime }) as unknown as ReturnType<typeof float>;
+        nm.positionNode = positionLocal.add(normalLocal.mul(swell.mul(attribute('emitFS', 'vec2').x)));
+      }
+    } else {
+      // A wall of fire: the lava seams, rising.
+      const flame = (fns.lava({ wpos: vec3(tile.x.mul(2.4), 0, tile.y.mul(1.3).sub(fx.glowTime.mul(0.5))), t: fx.glowTime }) as unknown as ReturnType<typeof vec3>).mul(FIRE_WALL_GAIN);
+      nm.emissiveNode = lit.add(src.hell === 'fireBlue' ? flame.bgr : flame);
+    }
+    return nm;
+  }
   if (src.emit && src.glowMap && src.look.emit) {
     // An emitter: the animated glow (sim clock, per-sector seed, calm under ?flashes=reduced), its gain
     // seam, and max(level / full, k) so it stays lit in a dark sector and dims with a flickering one.
@@ -316,9 +363,11 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const search = new URLSearchParams(location.search);
   const fx = createSectorFx(map.sectors.length, search, reducedFlashes(search));
   ctx.world.sectorFx = fx;
+  if (map.sectors.some(s => s.tint)) fx.tints = uniformArray(map.sectors.map(s => new THREE.Vector3(...(s.tint ?? [1, 1, 1]))), 'vec3');
+  const hellOn = hellMatOn(search), breathing = breatheOn(search);
   // The bounce rays test the real lines; the mesh uses the refined copy (same sectors, more vertices).
   const sources = glowSources(map);
-  const bounce = sources.length > 0 ? createGlowBounce(map, sources) : null;
+  const bounce = sources.length > 0 ? createGlowBounce(map, sources, lavaOn(search) ? LAVA_BOUNCE : 1) : null;
   const matsOn = sectorMaterialsOn(search);
   const emitOn = emittersOn(search);
   // The emitters as light sources (none with ?emitters=0 or ?sectormat=0: the old kinds do not glow).
@@ -363,7 +412,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     for (const [role, y0, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
       const glow = role === 'floor' && s.glow !== null;
-      const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn, emitOn);
+      const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn, emitOn, hellOn);
       const look = SURFACE_LOOKS[kind];
       const tile = look.tileM;
       const b = glow ? glowBatch(s.glow!) : batch(s.zone, role, kind);
@@ -383,7 +432,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const zone = map.sectors[q.sector]!.zone;
     const dx = q.b[0] - q.a[0], dz = q.b[1] - q.a[1], len = Math.hypot(dx, dz);
     const want: [number, number, number] = [-dz / len, 0, dx / len];
-    const kind = surfaceKind(q.mat, 'wall', matsOn, emitOn);
+    const kind = surfaceKind(q.mat, 'wall', matsOn, emitOn, hellOn);
     const look = SURFACE_LOOKS[kind];
     const tile = look.tileM;
     const [u0, u1] = wallU(kind, q.a, q.along, dx, dz, len, tile);
@@ -399,6 +448,22 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const wuv = (side: number, y: number): number[] => fit
       ? wallFit(fit, q.along[side]!, q.along[2], y, q.y0, q.y1, seedTiles)
       : [us[side]!, y / tile];
+    if (kind === 'fleshWall' && breathing) {
+      // A breathing wall needs vertices to move: a grid, pinned at its edges so corners and floors stay shut.
+      const nu = Math.max(1, Math.ceil(len / FLESH_ROW_M)), nv = Math.max(1, Math.ceil((q.y1 - q.y0) / FLESH_ROW_M));
+      const at = (iu: number, iv: number) => {
+        const f = iu / nu, y = q.y0 + (q.y1 - q.y0) * (iv / nv);
+        return { pos: [q.a[0] + dx * f, y, q.a[1] + dz * f], uv: [u0 + (u1 - u0) * f, y / tile], muv: [m0 + (m1 - m0) * f, y / tile],
+          pin: fleshPin(f * len, len, y - q.y0, q.y1 - q.y0) };
+      };
+      for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nv; iv++) {
+        const c = [at(iu, iv), at(iu + 1, iv), at(iu + 1, iv + 1), at(iu, iv + 1)];
+        for (const tr of [[c[0]!, c[1]!, c[2]!], [c[0]!, c[2]!, c[3]!]]) {
+          b.tri(tr.map(v => v.pos), tr.map(v => v.uv), want, q.sector, true, tr.map(v => v.muv), tr.map(v => v.pin));
+        }
+      }
+      continue;
+    }
     for (const t of wallStrip(cols[0], cols[1])) {
       b.tri(t.map(([side, r]) => [ends[side]![0], cols[side]![r]!, ends[side]![1]]),
         t.map(([side, r]) => wuv(side, cols[side]![r]!)), want, q.sector, true,
@@ -419,13 +484,14 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
       const m = kind === 'stoneFloor' ? set.floor : kind === 'stoneCeil' ? set.perimeterAccent : set.wall;
       src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null, roughness: null, emit: null };
     } else {
-      const t = panelSet(kind);
+      const t = panelSet(isFire(kind) ? 'redRock' : kind);
       // No roughnessMap: panel roughness is one channel, read as .r by the roughnessNode. The deferred
       // path (?renderer=deferred, deferred-mesh.ts) copies roughnessMap only, so it draws panels at the
       // flat look.roughness, and drops the grime nodes (colorNode, emissiveNode) like every node term.
       const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
         roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
-      src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: look.emit && kind in EMITTER_FN ? kind as EmitterKind : null };
+      src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: look.emit && kind in EMITTER_FN ? kind as EmitterKind : null,
+        ...(isFire(kind) || kind === 'fleshWall' ? { hell: kind, breathe: kind === 'fleshWall' && breathing } : {}) };
     }
     surfaces.set(kind, src);
     return src;
@@ -451,14 +517,16 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     + `${bakeStats.vertices} vertices baked in ${bakeStats.ms.toFixed(0)} ms, ${tris} triangles, ${meshMap.lines.length} lines (map ${map.lines.length})`);
 
   if (glowBatches.size > 0) {
-    // WGSL has no nested fn: the noise helpers ride along as includes (game-void.ts's pattern).
-    const include = (fn: ReturnType<typeof wgslFn>) => fn as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
-    const glowFn = wgslFn(SECTOR_GLOW, [include(wgslFn(SECTOR_GLOW_NOISE, [include(wgslFn(SECTOR_GLOW_HASH))]))]);
+    const { glow: glowFn, lava: lavaFn } = glowFns();
+    const newLava = lavaOn(search);
     const group = new THREE.Group();
     group.name = 'sector-glow';
     for (const [kind, b] of glowBatches) {
       const mat = new MeshBasicNodeMaterial();
-      mat.colorNode = vec4((glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>).mul(fx.glowGain), 1);
+      // Lava is its own surface in HDR, not scaled by glowGain (0.35 was picked for nukage's flat colour).
+      mat.colorNode = kind === 'lava' && newLava
+        ? vec4(lavaFn({ wpos: positionWorld, t: fx.glowTime }) as unknown as ReturnType<typeof vec3>, 1)
+        : vec4((glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>).mul(fx.glowGain), 1);
       mat.fog = false;
       const mesh = new THREE.Mesh(b.geometry(), mat);
       mesh.name = `sector-glow-${kind}`;

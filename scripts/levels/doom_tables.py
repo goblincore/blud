@@ -20,14 +20,30 @@ TEXTURE_FAMILIES = [
     ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("COMPUTE", "screen-bank"), ("COMPTALL", "screen-bank"),
     ("PLANET", "viewscreen"), ("EXITSIGN", "exit-sign"), ("BROWN", "rust"), ("BRN", "rust"),
     ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "fluorescent"),
+    ("ROCKRED", "redrock"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
     ("LITEBLU", "light-panel"),  # blue-lit strips: the plain light panel, not a cold-white troffer
-    # Doom 2's hell set (MAP28). We own no rock, flesh, wood or fire look yet, so each takes the nearest of ours:
-    # rock and marble are concrete, flesh and wood the rusted brick, bronze metal, fire walls the lit panel.
+    # Doom 2's hell set (MAP28). Red rock, flesh and fire have their own looks (owner playtest 2026-11-01); we own no
+    # wood or grey rock look yet, so those take the nearest of ours: rock and marble are concrete, wood the rusted brick.
     ("ZIMMER", "concrete"), ("ROCK", "concrete"), ("ASHWALL", "concrete"), ("TANROCK", "concrete"), ("CRACKLE", "concrete"), ("MARB", "concrete"),
-    ("SK", "rust"), ("SP_FACE", "rust"), ("SP_HOT", "rust"), ("WOOD", "rust"), ("SW1WOOD", "rust"), ("SW2SKIN", "rust"),
+    ("SK", "flesh"), ("SP_FACE", "flesh"), ("SW2SKIN", "flesh"), ("SP_HOT", "firewall"), ("WOOD", "rust"), ("SW1WOOD", "rust"),
     ("BRONZE", "metal"), ("MIDBARS", "metal"),
-    ("FIRE", "light-panel"), ("BFALL", "light-panel"), ("SFALL", "light-panel"), ("SPCDOOR", "door"),
+    ("FIRE", "firewall"), ("FIREBLU", "fireblue"), ("BFALL", "flesh"), ("SFALL", "light-panel"), ("SPCDOOR", "door"),
+]
+# ROOM MOODS (owner playtest 2026-11-01: "everything feels the same"). Doom's rooms differ by texture set: the mood a zone's
+# wall textures vote for sets its ambient tint (`tint`, how dark included) and its fill light's colour.
+MOODS = {
+    "ember": {"tint": [1.15, 0.5, 0.3], "light": [1.0, 0.36, 0.18]},   # red rock: hot and dim
+    "cold": {"tint": [0.62, 0.72, 1.0], "light": [0.55, 0.7, 1.0]},      # grey stone and marble
+    "dust": {"tint": [0.85, 0.68, 0.44], "light": [1.0, 0.8, 0.52]},     # tan rock, brown
+    "sepia": {"tint": [0.82, 0.54, 0.28], "light": [1.0, 0.62, 0.3]},    # wood
+    "flesh": {"tint": [0.95, 0.42, 0.42], "light": [1.0, 0.22, 0.28]},    # meat
+    "fire": {"tint": [1.0, 0.46, 0.14], "light": [1.0, 0.42, 0.1]},
+    "bluefire": {"tint": [0.26, 0.4, 1.0], "light": [0.25, 0.45, 1.0]},
+}
+TEXTURE_MOODS = [
+    ("ROCKRED", "ember"), ("ZIMMER", "cold"), ("ASHWALL", "cold"), ("MARB", "cold"), ("CRACKLE", "ember"), ("TANROCK", "dust"), ("BROWN", "dust"),
+    ("WOOD", "sepia"), ("SK", "flesh"), ("SP_FACE", "flesh"), ("BFALL", "flesh"), ("FIRE", "fire"), ("SP_HOT", "fire"), ("FIREBLU", "bluefire"),
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
 
@@ -38,6 +54,8 @@ EXIT_SPECIALS = {11, 51, 52, 124}
 # and which need a key (written as the door's `key`; the game has no keys yet).
 BLAZE_DOOR_SPECIALS = {105, 106, 108, 109, 111, 112, 114, 115, 117, 118}
 DOOR_KEY_SPECIALS = {26: "blue", 32: "blue", 27: "yellow", 34: "yellow", 28: "red", 33: "red"}
+# Gun switches: a one-sided line that opens the tagged door when a player's shot hits it (written as `switches`).
+GUN_DOOR_SPECIALS = {46}
 
 # Remotely triggered line specials (the line's tag names the target sectors). Step 1 is static, so each
 # class is applied once when converting; moving them is plan 2.
@@ -49,6 +67,9 @@ FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
 FLOOR_RAISE_SPECIALS = {18, 20, 22, 47, 68, 69, 95, 119, 128, 129, 130, 131, 132}
 # Reserved: lifts are static until the doors/lifts plan (a lift at its top is a known gap).
 LIFT_SPECIALS = {10, 21, 62, 88, 120, 121, 122, 123}
+# The lifts that move (written as `lifts`): Doom's repeatable switch lift, the one MAP28's way back up uses. Walk-over
+# lifts (E1M1's 88 among them) stay static at their top.
+MOVING_LIFT_SPECIALS = {62}
 
 # Sector types -> (special, hurtPerSec). Doom hurts every 32 tics (~0.91 s); we use per second.
 SECTOR_TYPES = {
@@ -76,6 +97,10 @@ def material_for_texture(name: str) -> str:
     return _family(name.upper(), TEXTURE_FAMILIES, "tech")
 
 
+def mood_for_texture(name: str) -> str | None:
+    return _family(name.upper(), TEXTURE_MOODS, None)
+
+
 def sector_special(kind: int) -> tuple[str, float]:
     return SECTOR_TYPES.get(kind, ("none", 0))
 
@@ -94,6 +119,7 @@ THING_PICKUPS = {
     2001: "shotgun",
     2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets
     2011: "health", 2012: "health", 2014: "health", 2015: "health", 2018: "health", 2019: "health",
+    5: "key-blue", 40: "key-blue", 6: "key-yellow", 39: "key-yellow", 13: "key-red", 38: "key-red",  # cards and skulls alike
 }
 THING_BARRELS = {2035}  # Doom's exploding barrel -> our toxic drum (plan 3b)
 SKILL_BITS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 4}               # Doom skill -> THINGS flag bit
