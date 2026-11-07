@@ -466,7 +466,7 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
   ask "slide up (Doom) or sideways (split panels)" before planning; needs a door mesh/material.
 - Lighting: Doom's light levels darkened (A), `?doomlight=0` to compare.
 - Enemies: zombieman → random biomech variant (deadeye pistol / butcher axe / flayer sickle),
-  shotgun guy → soldier, imp → zombie.
+  shotgun guy → soldier, imp → an imp or a zombie (`--imp mix`, the default; 2026-11-02).
 - Order after the first walk: lighting + pools + enemies before doors.
 - Playtest of the empty walk (2026-10-24): "I like it, scale feels decent, the darkness is good — it
   feels familiar yet strange", but "hard to judge since it's literally just geometry".
