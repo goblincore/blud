@@ -25,16 +25,17 @@ export interface BodyLodConfig {
   /** Total width of the hysteresis band around switchM (m). */
   hysteresisM: number;
   wound: BodyLodWoundRule;
-  /** The bake's shading response: 'flesh' (the body's own, default) or 'corpse' (none, as baked corpses ship). */
+  /** The bake's shading response: 'corpse' (none, as baked corpses ship; default: nearer the march in the A/B) or
+   *  'flesh' (the body's own response, as gib chunks bake it: darker and redder than the march). */
   look: BodyLodLook;
 }
 
 export type BodyLodLook = 'flesh' | 'corpse';
 
-export const BODY_LOD_DEFAULTS: BodyLodConfig = { on: true, switchM: 10, hysteresisM: 1, wound: 'refine', look: 'flesh' };
+export const BODY_LOD_DEFAULTS: BodyLodConfig = { on: true, switchM: 10, hysteresisM: 1, wound: 'refine', look: 'corpse' };
 
 /** `?bodylod=0` off (today's march for every body); `?bodylodm=<m>` switch distance; `?bodylodh=<m>` hysteresis;
- *  `?bodylodwound=refine|keep`; `?bodylodlook=flesh|corpse`. */
+ *  `?bodylodwound=refine|keep`; `?bodylodlook=corpse|flesh`. */
 export function bodyLodConfigFrom(search: string): BodyLodConfig {
   const q = new URLSearchParams(search);
   const num = (k: string, d: number) => {
@@ -47,7 +48,7 @@ export function bodyLodConfigFrom(search: string): BodyLodConfig {
     switchM: num('bodylodm', BODY_LOD_DEFAULTS.switchM),
     hysteresisM: num('bodylodh', BODY_LOD_DEFAULTS.hysteresisM),
     wound: w === 'keep' ? 'keep' : 'refine',
-    look: q.get('bodylodlook') === 'corpse' ? 'corpse' : 'flesh',
+    look: q.get('bodylodlook') === 'flesh' ? 'flesh' : 'corpse',
   };
 }
 

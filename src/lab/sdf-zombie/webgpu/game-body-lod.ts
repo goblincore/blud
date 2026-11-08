@@ -8,7 +8,7 @@
 //   ?bodylodm=10          switch distance, metres from the camera to the torso centre
 //   ?bodylodh=1           hysteresis band width, metres
 //   ?bodylodwound=keep    the "show nothing until near" A/B (default 'refine': the first wound sends it back to SDF)
-//   ?bodylodlook=corpse   bake without the body's surface response (how baked corpses look today); default 'flesh'
+//   ?bodylodlook=flesh    bake WITH the body's surface response, as gib chunks do (darker; default 'corpse', as baked corpses)
 //
 //   __sdfGame.bodyLod()                    tier info (meshed ids, refined ids, per-type bake stats, config)
 //   __sdfGame.setBodyLod({ on, switchM, hysteresisM, wound, look })   (a new look bakes each type again)
