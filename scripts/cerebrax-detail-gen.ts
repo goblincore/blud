@@ -41,12 +41,15 @@ const src = readFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/cerebrax.b
 const doc = parseBlob(src);
 const SC = doc.scale ?? 1;
 const built = buildBody(compileBlob(doc, compileFace(doc)));
-// The brain alone: only the skull-bound torso prims (the frame's metal bars run under it).
-const brainPrims = built.prims.filter(p => p.limb === 'torso' && p.bone === 'skull');
+// The brain alone: the pelvis-bound torso flesh (the metal hip crossbar on the same bone is left out).
+const brainPrims = built.prims.filter(p => p.limb === 'torso' && p.bone === 'pelvis' && !p.metal);
 const body = { ...built, split: undefined, prims: brainPrims, clusters: [{ ...built.clusters.find(c => c.limb === 'torso')!, start: 0, count: brainPrims.length, alive: true }] } as typeof built;
 const bones = built.bones as unknown as Map<string, { head: V; tail: V }>;
-/** The brain's centre: the skull bone's head, the aim pivot. Every detail prim binds there. */
+/** The brain's centre: the skull bone's head (probes start here). */
 const C = bones.get('skull')!.head;
+/** Every detail prim binds `rigid` to PELVIS at its tail, as the brain does (cerebrax.blob: on the aim chain's skull
+ *  the brain moved against its harness). Offsets are from this point. */
+const B0 = bones.get('pelvis')!.tail;
 
 const add = (a: V, b: V): V => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: V, b: V): V => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -212,7 +215,7 @@ const section = (s: string) => out.push('', `  # ---- ${s} ----`);
 function emitChain(S: { c: V; r: number }[], blend: number) {
   for (let i = 0; i + 1 < S.length; i++) {
     const A = S[i]!, B = S[i + 1]!;
-    out.push(`  bar  torso on skull from=0 to=0 offset=${fv(sub(A.c, C))} tip=${fv(sub(B.c, A.c))} r=${fa(A.r)} r2=${fa(B.r)} blend=${fa(blend)} rigid`);
+    out.push(`  bar  torso on pelvis from=1 to=1 offset=${fv(sub(A.c, B0))} tip=${fv(sub(B.c, A.c))} r=${fa(A.r)} r2=${fa(B.r)} blend=${fa(blend)} rigid`);
   }
 }
 
@@ -247,7 +250,7 @@ for (const line of lines) {
       const sk = skinDir(norm(q));
       if (!sk) continue;
       // Taper over the last ~6 cm at each end: folds dive into the gaps, they do not stop as blunt ends.
-      const endK = Math.min(1, Math.min(at, total - at) / 0.06);
+      const endK = Math.max(0, Math.min(1, Math.min(at, total - at) / 0.06));   // >= 0: float error made it -1e-17 and sqrt NaN
       const rr = GYRUS_R * (0.45 + 0.55 * Math.sqrt(endK));
       const proud = GYRUS_PROUD * (0.35 + 0.65 * endK);
       S.push({ c: add(sk.p, mul(sk.n, proud - rr)), r: rr });
@@ -310,7 +313,7 @@ function vein(lat0: number, lon0: number, lat1: number, lon1: number, r: number,
   }
   if (S.length < 3) return;
   emitChain(S, 0.0016);
-  for (const c of knots) out.push(`  blob torso on skull at=0 offset=${fv(sub(c, C))} r=${fa(r * 1.7)} blend=${fa(0.002)} rigid`);
+  for (const c of knots) out.push(`  blob torso on pelvis at=1 offset=${fv(sub(c, B0))} r=${fa(r * 1.7)} blend=${fa(0.002)} rigid`);
   if (branch) {
     const m = Math.floor(S.length * (0.3 + rnd() * 0.3));
     const lm = Math.asin(norm(sub(S[m]!.c, C))[1]) / D2R, nm = Math.atan2(S[m]!.c[0] - C[0], S[m]!.c[2] - C[2]) / D2R;

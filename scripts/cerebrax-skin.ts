@@ -1,7 +1,7 @@
 // scripts/cerebrax-skin.ts
 //
-// Write assets-source/cerebrax-kit/skin.json: the cerebrax's marched BRAIN skin (the skull-bound torso prims; COMPILED metres, the body is `scale` 1.60) sampled on a lat/lon grid
-// round the brain's centre (the skull bone's head), so the Blender kit (make_cerebrax.py) seats the conversion machinery ON the flesh instead
+// Write assets-source/cerebrax-kit/skin.json: the cerebrax's marched BRAIN skin (the pelvis-bound torso flesh; COMPILED metres, the body is `scale` 1.60) sampled on a lat/lon grid
+// round the brain's centre (the skull bone's head, still the brain's centre), so the Blender kit (make_cerebrax.py) seats the conversion machinery ON the flesh instead
 // of on a guessed ellipsoid. Re-run after any edit to cerebrax.blob's torso:
 //   npx tsx scripts/cerebrax-skin.ts
 // Grid: lat -90..90, lon -180..180 (deg; lon 0 faces +z, +90 is the body's left +x), STEP degrees. Each sample is the
@@ -19,7 +19,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const doc = parseBlob(readFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/cerebrax.blob'), 'utf8'));
 const built = buildBody(compileBlob(doc, compileFace(doc)));
 // The brain alone (the skull-bound torso prims): the frame's bars under it are kit-covered metal.
-const brain = built.prims.filter(p => p.limb === 'torso' && p.bone === 'skull');
+const brain = built.prims.filter(p => p.limb === 'torso' && p.bone === 'pelvis' && !p.metal);
 const body = { ...built, split: undefined, prims: brain, clusters: [{ ...built.clusters.find(c => c.limb === 'torso')!, start: 0, count: brain.length, alive: true }] } as typeof built;
 const C = (built.bones as unknown as Map<string, { head: V }>).get('skull')!.head;
 const STEP = 3;

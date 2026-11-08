@@ -2,9 +2,14 @@
 // and fuses at its boss scale, the toes are on the floor, the brain's top stays inside the body normal map's
 // -2.5..2.5 m position range (body-normal.wgsl.ts pos16), every rig point maps to a gait joint, all four feet lift
 // through the real motion pipeline, and the knees STAY HIGH (GaitProfile.kneePole / elbowPole): a spider's knee rides
-// above its hip through the whole stride, never folding under like a dog's.
+// above its hip through the whole stride, never folding under like a dog's. And the BRAIN IS LOCKED TO ITS HARNESS:
+// both ride `pelvis`, so nothing can move one against the other.
 import { describe, it, expect } from 'vitest';
 import src from './cerebrax.blob?raw';
+// The kit's head and harness scripts (Vite ?raw: this suite has no node:fs types, character-registry.test.ts says why).
+import headKitSrc from '../../../../assets-source/cerebrax-kit/make_head.py?raw';
+import harnessKitSrc from '../../../../assets-source/cerebrax-kit/make_harness.py?raw';
+import gunKitSrc from '../../../../assets-source/cerebrax-kit/make_gun.py?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -60,5 +65,21 @@ describe('cerebrax — a brain on four spider legs', () => {
     }
     for (const [n, lift] of Object.entries(lifts)) expect(lift, `${n} lifts`).toBeGreaterThan(0.10);
     expect(kneeOverHip, 'every knee rides at least 0.6 m over its socket').toBeGreaterThan(0.6);
+  });
+
+  it('locks the brain to the harness: brain, face and every kit part on the head ride `pelvis`', () => {
+    // On the aim chain's sprung skull (the first pass) the brain swayed, nodded and recoiled against the harness
+    // (kit on pelvis) and clipped through the ring and the gun (owner, arena look, 2026-11-08). One bone, no gap.
+    const flesh = body.prims.filter(p => p.limb === 'torso' && !p.metal);
+    expect(flesh.length).toBeGreaterThan(10);
+    for (const p of flesh) expect(p.bone, 'every brain and face prim rides pelvis').toBe('pelvis');
+    // Every head and harness part the kit installs is `pelvis|...` (biomech-style.md: `<bone>|<part>`).
+    for (const [file, text] of [['make_head.py', headKitSrc], ['make_harness.py', harnessKitSrc], ['make_gun.py', gunKitSrc]] as const) {
+      const installs = [...text.matchAll(/'(\w+(?:\.[lr])?)\|(\w+)'/g)].map(m => m[1]);
+      expect(installs.length, `${file} installs parts`).toBeGreaterThan(0);
+      for (const bone of installs) if (bone !== 'skull') expect(bone, `${file}: on pelvis`).toBe('pelvis');
+    }
+    // make_head.py only names `skull|` to drop the first pass's leftovers.
+    expect(headKitSrc).toContain("drop(['skull|'])");
   });
 });

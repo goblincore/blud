@@ -12,7 +12,7 @@ exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"762
 
 exports[`packBody byte pin > butcher.blob packs the pinned bytes 1`] = `"f39b4fde4822fb18"`;
 
-exports[`packBody byte pin > cerebrax.blob packs the pinned bytes 1`] = `"dd249ee34ffe3f0b"`;
+exports[`packBody byte pin > cerebrax.blob packs the pinned bytes 1`] = `"3ccef0d64a72dde7"`;
 
 exports[`packBody byte pin > chair.blob packs the pinned bytes 1`] = `"615ffe63abf0b16a"`;
 

@@ -12,6 +12,7 @@ try:
 except NameError:
     PARTS = {'ring', 'talons'}
 O = Vector((J['centre'][0], 0, J['centre'][2]))         # the ring's centre axis (blob x, -, z)
+# DIP: the front sweeps 0.26 m down so the low face's chin (y ~1.39) clears the band.
 Y_BACK, DIP, DIP_W, BAND = 1.62, 0.26, 55.0, 0.15
 CLEAR = 0.018                                           # the band's inner face this far off the brain's skin
 

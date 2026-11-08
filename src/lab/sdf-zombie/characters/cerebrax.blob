@@ -23,10 +23,12 @@
 # knee up and out (GaitProfile.kneePole / elbowPole, CEREBRAX_STRIDE).
 #   - The four sockets sit on the harness ring (radius ~0.39 round the
 #     brain's axis, on the diagonals), so the legs splay like an X.
-#   - THE BRAIN TURNS. It rides `skull` on the aim chain (chest -> neck ->
-#     skull, motion.ts), and the neck's head is the brain's centre, so it
-#     swivels in its ring like a turret to look at you; the ring and the legs
-#     stay put.
+#   - THE BRAIN IS LOCKED TO THE FRAME. It and everything seated on it ride
+#     `pelvis` `rigid`, the harness's bone, so brain, ring and gun move as one
+#     piece. A first pass put it on the aim chain (skull) as a turret: the
+#     sprung neck let it sway, nod and recoil against the harness and it
+#     clipped through the ring and the gun (owner, arena look, 2026-11-08). The
+#     gun's aim is the body's turn (CHAINGUN_TUNING's sweep), so it still aims.
 #   - It PULSES: every lobe carries `morph=swell:`, driven by
 #     MotionProfile.joystick.swell (joystick.ts joystickSwell: a slow breath)
 #     with no joystick throw.
@@ -54,7 +56,13 @@ skeleton
   # The aim pivot: a short neck whose head is the brain's centre, so a turn
   # spins the brain about itself.
   bone neck  parent=chest  dir=up len=0.02
-  bone skull parent=neck   dir=up len=0.30
+  # The skull bone points FORWARD, out through the face. The aim chain lays the
+  # neck->skull vector along the gaze (clamped to 0.5 rad off rest): with the
+  # bone UP (the first pass), a level gaze at the player tipped the whole brain
+  # 29 deg forward, face down into the gun harness, in every pose (owner,
+  # arena look). Forward, a level gaze is no pitch at all: the brain only YAWS,
+  # a turret, and a hit from below shoves the face up, away from the harness.
+  bone skull parent=neck   dir=fwd len=0.30
 
   mirror
     # FRONT LEGS. The shoulder on the ring's front diagonal (0.30, 0.94, 0.50).
@@ -81,41 +89,48 @@ body
   bar  torso on pelvis from=1.00 to=1.00 offset=(-0.30,0,0) tip=(0.60,0,0) r=0.040 blend=0.006 color=3a3e45 metal gloss=0.6
   bar  torso on spine from=1.00 to=1.00 offset=(-0.30,0,0) tip=(0.60,0,0) r=0.040 blend=0.006 color=3a3e45 metal gloss=0.6
 
-  # --- THE BRAIN: few prims, all `rigid` on the skull so it turns as one. ---
-  # Its centre is the skull bone's head (the aim pivot). Semi-axes 0.42 wide,
+  # --- THE BRAIN: few prims, all `rigid` on PELVIS, the harness's bone, so the
+  # brain and the ring it is clamped in move as ONE piece. On `skull` (the aim
+  # chain's sprung joints, the first pass) every sway, aim and hit moved the
+  # brain against the harness and it clipped through the ring and the gun
+  # (owner, arena look). Its centre is (0, 1.18, 0.25) authored: the pelvis
+  # tail plus (0, 0.24, 0.25), where the skull bone's head is. Semi-axes 0.42 wide,
   # 0.35 tall, 0.46 deep: longer than wide, a brain, not a ball.
-  blob torso on skull at=0.00 r=0.400 wide=1.05 tall=0.86 deep=1.15 blend=0.040 core rigid morph=swell:*1.025
+  blob torso on pelvis at=1.00 offset=(0.000,0.240,0.250) r=0.400 wide=1.05 tall=0.86 deep=1.15 blend=0.040 core rigid morph=swell:*1.025
   # The two hemispheres, bulging up either side of the longitudinal fissure:
   # the valley between them on top is the fissure's shape (the map deepens it).
-  blob torso on skull at=0.00 offset=(0.19,0.07,0.00) r=0.300 wide=0.80 tall=0.95 deep=1.40 blend=0.050 both rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.190,0.310,0.250) r=0.300 wide=0.80 tall=0.95 deep=1.40 blend=0.050 both rigid morph=swell:*1.04
   # Frontal lobes, swelling forward over the face like a brow.
-  blob torso on skull at=0.00 offset=(0.15,0.02,0.27) r=0.200 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.05
+  blob torso on pelvis at=1.00 offset=(0.150,0.260,0.520) r=0.200 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.05
   # Temporal lobes, low on the sides, hanging over the ring.
-  blob torso on skull at=0.00 offset=(0.30,-0.12,0.08) r=0.170 wide=0.85 tall=0.90 deep=1.50 blend=0.050 both rigid morph=swell:*1.05
+  blob torso on pelvis at=1.00 offset=(0.300,0.120,0.330) r=0.170 wide=0.85 tall=0.90 deep=1.50 blend=0.050 both rigid morph=swell:*1.05
   # The occipital lobes at the back.
-  blob torso on skull at=0.00 offset=(0.12,0.00,-0.30) r=0.220 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.120,0.240,-0.050) r=0.220 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.04
   # The cerebellum tucked under the back, into the ring.
-  blob torso on skull at=0.00 offset=(0.00,-0.22,-0.24) r=0.170 wide=1.50 tall=0.70 deep=1.00 blend=0.045 rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.000,0.020,0.010) r=0.170 wide=1.50 tall=0.70 deep=1.00 blend=0.045 rigid morph=swell:*1.04
 
-  # --- THE FACE: small, snarling, low on the front, pushed out of the brain
-  # as if the brain had grown over a man's face and only this much shows. ---
+  # --- THE FACE: small, snarling, on the lower front, pushed out of the brain
+  # as if the brain had grown over a man's face and only this much shows.
+  # Low, its chin just above the harness's dip: the owner tried it 6 cm higher
+  # and preferred it here. It only LOOKED too low while the brain rode the aim
+  # chain and tipped face-down into the harness (see THE BRAIN). ---
   # The face's mass, a flattened mound under the frontal lobes.
-  blob torso on skull at=0.00 offset=(0.00,-0.17,0.37) r=0.120 wide=1.25 tall=1.05 deep=0.70 blend=0.035 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,0.070,0.620) r=0.120 wide=1.25 tall=1.05 deep=0.70 blend=0.035 rigid
   # The brow: a heavy bar bowed down in the middle, a scowl.
-  bar  torso on skull from=0 to=0 offset=(-0.095,-0.105,0.445) tip=(0.19,0,0) bend=(0,-0.03,0.02) r=0.026 blend=0.014 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.095,0.135,0.695) tip=(0.19,0,0) bend=(0,-0.03,0.02) r=0.026 blend=0.014 rigid
   # Sunken dark sockets under the brow; the kit's red embers sit in them.
-  blob torso on skull at=0.00 offset=(0.045,-0.135,0.452) r=0.022 wide=1.30 tall=0.80 blend=0.006 color=1a0506 gloss=0.6 both rigid
+  blob torso on pelvis at=1.00 offset=(0.045,0.105,0.702) r=0.022 wide=1.30 tall=0.80 blend=0.006 color=1a0506 gloss=0.6 both rigid
   # Cheekbones, swept back from under the eyes.
-  bar  torso on skull from=0 to=0 offset=(0.050,-0.170,0.450) tip=(0.060,0.010,-0.050) r=0.022 r2=0.014 blend=0.012 both rigid
+  bar  torso on pelvis from=1 to=1 offset=(0.050,0.070,0.700) tip=(0.060,0.010,-0.050) r=0.022 r2=0.014 blend=0.012 both rigid
   # A short broad nose, nostrils flared in the snarl.
-  bar  torso on skull from=0 to=0 offset=(0.000,-0.135,0.470) tip=(0,-0.050,0.018) r=0.016 r2=0.024 blend=0.010 rigid
+  bar  torso on pelvis from=1 to=1 offset=(0.000,0.105,0.720) tip=(0,-0.050,0.018) r=0.016 r2=0.024 blend=0.010 rigid
   # The snarl: a dark gullet recessed behind the lips (an additive mouth,
   # never a carve, the teratoma's lesson), the teeth are kit.
-  blob torso on skull at=0.00 offset=(0.000,-0.232,0.440) r=0.030 wide=2.00 tall=0.90 deep=0.70 blend=0.006 color=1a0506 gloss=0.85 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,0.008,0.690) r=0.030 wide=2.00 tall=0.90 deep=0.70 blend=0.006 color=1a0506 gloss=0.85 rigid
   # The upper lip, drawn up off the teeth; the lower lip and a small chin.
-  bar  torso on skull from=0 to=0 offset=(-0.060,-0.212,0.455) tip=(0.12,0,0) bend=(0,0.014,0.016) r=0.012 blend=0.008 rigid
-  bar  torso on skull from=0 to=0 offset=(-0.055,-0.258,0.445) tip=(0.11,0,0) bend=(0,-0.012,0.014) r=0.013 blend=0.008 rigid
-  blob torso on skull at=0.00 offset=(0.000,-0.288,0.425) r=0.030 wide=1.30 tall=0.80 deep=0.80 blend=0.014 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.060,0.028,0.705) tip=(0.12,0,0) bend=(0,0.014,0.016) r=0.012 blend=0.008 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.055,-0.018,0.695) tip=(0.11,0,0) bend=(0,-0.012,0.014) r=0.013 blend=0.008 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,-0.048,0.675) r=0.030 wide=1.30 tall=0.80 deep=0.80 blend=0.014 rigid
 
   # --- LEGS: machine only, thin cores INSIDE the kit (biomech-style.md: keep cores 2-3.5 cm or they show
   # through). Authored radii; compiled x1.60: the shin core 3.5 cm inside a 4.4-6 cm kit tube. The first pass at

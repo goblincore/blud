@@ -841,8 +841,24 @@ FORWARD, which folds a spider's knee under the body. `GaitProfile.kneePole` (new
 (the forelegs) pole them up and out. `cerebrax-blob.test.ts` walks the real pipeline and pins every knee at least
 0.6 m over its socket. The gait is the gibbet's stalk, slower and longer (0.9 Hz, 0.55 m strides, 0.4 m lifts).
 
-**A head that is a turret.** The brain rides `skull`, and the neck's head is the brain's centre, so the aim chain
-spins the brain in its ring to look at you. The harness, the gun and the legs ride `pelvis` and the leg bones.
+**Lock the cargo to its frame; no turret.** The first pass put the brain on `skull` so the aim chain would swivel
+it in its ring. Two faults came from that, both seen only in the arena:
+- The aim lays the neck->skull vector along the GAZE, clamped to 0.5 rad off rest. With the skull bone pointing up,
+  a level gaze tipped the whole brain 29 deg forward, face down onto the harness, in every pose.
+- Rigid prims on `skull` follow its frame unclamped, through the sprung neck: sway, nods and hit recoil moved the
+  brain against a harness on `pelvis`, and it clipped through the ring and the gun.
+
+So everything that must not part rides ONE bone, `rigid`: the brain, the face, the eyes, the teeth, the tendrils,
+the harness and the gun, all on `pelvis`. The aim is the body's turn, and the chaingun's sweep is that turn
+anyway. (If a turret is ever wanted, point the skull bone FORWARD, so a level gaze is no pitch, and keep anything it
+must not touch on the same bone.) A part moved from one bone to another keeps its rest position. Its offsets now
+count from the new bone's point, and the kit parts are renamed `<bone>|<part>`; drop the old names from the .blend.
+
+**Fix the motion before moving the parts.** The tipped brain made the face look too low, so it was raised 6 cm.
+The owner preferred the original low face once the brain was locked to its frame: the "too low" was the tilt, and
+the clipping was the brain moving against the harness. Moving a face on a seated kit costs a lot. Its prims move
+up and forward onto the brain's curve, and the skin probe, the kit's eyes and teeth, the fold gap and wrinkles, the
+harness dip and the gun's `spit` offset all follow. So fix the motion first, look again, and only then move parts.
 
 **Pulsing without a new system.** `MotionProfile.joystick` with `amp 0, idle 0` and a `swell` period is a plain
 breath for ANY body: every lobe prim carries `morph=swell:*1.025..1.05`, and `actor.ts` drives the weight.
