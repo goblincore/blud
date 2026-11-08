@@ -1,6 +1,6 @@
 // scripts/body-lod-damage.mjs — what damage does to far mesh-LOD bodies (spike, 2026-11-08).
 // A row of four zombies 14 m off (beyond the 10 m switch, so all four start as the mesh), frozen. In order:
-//   intact -> slug in body 1's torso -> body 2's left arm severed -> body 3 set alight -> body 4 shot to pieces
+//   intact -> one double-barrel shot at body 1's torso -> body 2's left arm severed -> body 3 set alight -> body 4 shot to pieces
 //   (double barrel x6) -> camera walks in to 8 m (every body crosses the band) -> back out to 14 m.
 // Each step is shot with the LOD on; the 'intact' and the 8 m steps are also shot with it off (same frame).
 // Usage: node scripts/body-lod-damage.mjs <vitePort> <cdpPort> <refine|keep> [outDir]
@@ -11,8 +11,8 @@ mkdirSync(out, { recursive: true });
 const g = await openGame(Number(vite), Number(cdp));
 await g.boot(`level=arena&spawn=zombie&vhs=off&bodylodwound=${rule}`);
 const ROW_Z = -14;
-await g.ev(`(() => { const z = __sdfGame.zombies()[0]; __sdfGame.zombieNudge(z.id, 9 - z.pos[0], -3 - z.pos[2]); })()`);
-const { ids } = await g.ev(`__sdfGame.bodyLodStage('zombie', [[-3,${ROW_Z}],[-1,${ROW_Z}],[1,${ROW_Z}],[3,${ROW_Z}]])`);
+// The arena's own enemy stays where it spawned, (0, -10): a nudge of a frozen body drags its root off its pinned feet.
+const { ids } = await g.ev(`__sdfGame.bodyLodStage('zombie', [[-4.5,${ROW_Z}],[-2.5,${ROW_Z}],[2.5,${ROW_Z}],[4.5,${ROW_Z}]])`);
 await g.ev('__sdfGame.freeze(true)');
 await g.ev(`document.querySelectorAll('body > *:not(#app)').forEach(e => e.style.display = 'none')`);
 for (let i = 0; i < 120; i++) {
@@ -38,7 +38,7 @@ const step = async (tag, ab = false) => {
 };
 await place(14);
 await step('0-intact', true);
-await g.ev(`__sdfGame.aimSurface('torso', ${ids[0]})`); await g.ev('__sdfGame.fireSlug()');
+await g.ev(`__sdfGame.aimSurface('torso', ${ids[0]})`); await g.ev('__sdfGame.fire(2)');
 await step('1-shot');
 await g.ev(`__sdfGame.zombie(${ids[1]}).sever('armL')`);
 await step('2-sever');

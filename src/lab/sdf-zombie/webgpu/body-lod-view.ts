@@ -22,17 +22,19 @@ import { bakeLookOf } from './soldier-corpse-bake';
 import { boneFrames } from '../rig-frames';
 import {
   bodyLodEligible, inMeshBand, restBakeBounds, skinWeights, stickyRefine,
-  type BodyLodConfig, type BodyLodFacts,
+  type BodyLodConfig, type BodyLodFacts, type BodyLodLook,
 } from '../body-lod';
 import type { Vec3 } from '../types';
 
 interface TypeMesh {
   key: string;
+  look: BodyLodLook;
   status: 'pending' | 'ready' | 'failed';
   geometry?: THREE.BufferGeometry;
   bones: string[];
   inverses: THREE.Matrix4[];
   liveClusters: number;
+  livePrims: number;
   bakeMs?: number;
   skinMs?: number;
   verts?: number;
@@ -42,9 +44,9 @@ interface TypeMesh {
 
 interface Instance { mesh: THREE.SkinnedMesh; type: TypeMesh }
 
-const typeKey = (a: ZombieActor) => `${a.characterName()}:${a.body.prims.length}`;
+const typeKey = (a: ZombieActor, look: BodyLodLook) => `${a.characterName()}:${a.body.prims.length}:${look}`;
 
-function restSnapshot(a: ZombieActor, cellSize: number): ChunkBakeData | null {
+function restSnapshot(a: ZombieActor, cellSize: number, look: BodyLodLook): ChunkBakeData | null {
   const body = a.body;
   const box = restBakeBounds(body.prims);
   if (!box) return null;
@@ -52,13 +54,24 @@ function restSnapshot(a: ZombieActor, cellSize: number): ChunkBakeData | null {
     body, flesh: body.prims, bones: body.bonePrims ?? [], centre: box.centre, halfExtent: box.halfExtent,
     extent: Math.max(...box.halfExtent), cellSize, quat: [0, 0, 0, 1], gore: 0,
     carveK: a.view.uniforms.woundCfg.value.y, torn: [], look: bakeLookOf(a.view.uniforms),
+    // 'flesh': the body's own surface response, as a gib chunk's bake carries it (zombie-gpu bakeData): the baked
+    // shader then takes its flesh branch (legacy display gamma, wet spec) instead of the plain-mesh branch the
+    // corpse bake gets. 'corpse': no response, exactly what a baked soldier corpse looks like today.
+    ...(look === 'flesh' ? { surface: surfaceOf(a.view.uniforms) } : {}),
   };
 }
+
+const surfaceOf = (u: ZombieActor['view']['uniforms']) => ({
+  legacyGamma: u.lodCfg.value.y, wetness: u.surfCfg2.value.x, roughness: u.surfCfg.value.y,
+  specIntensity: u.surfCfg.value.x, noiseAmp: u.marchCfg.value.z, fresnel: u.surfCfg.value.z,
+});
 
 export interface BodyLodView {
   /** Per frame, after the cull: decide each body's tier, bake what is missing, pose the meshed ones. */
   update(actors: readonly ZombieActor[], kept: ReadonlySet<ZombieActor>, eye: Vec3, cfg: BodyLodConfig): void;
   meshed(id: number): boolean;
+  /** Debug: the body's skinned mesh, if it has one. */
+  instance(id: number): THREE.SkinnedMesh | null;
   /** Bodies that left the mesh tier this frame: their proxies are owed a show. */
   takeRestored(): ZombieActor[];
   info(): object;
@@ -76,6 +89,7 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
   const instances = new Map<number, Instance>();
   const refined = new Set<number>();          // sticky 'refine': damaged once, marched for good
   let restored: ZombieActor[] = [];
+  const missing = new Set<string>();
   const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
 
   const facts = (a: ZombieActor, t: TypeMesh | undefined): BodyLodFacts => ({
@@ -83,11 +97,13 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
     burning: burning(a),
     tearing: a.tearFrame() !== null,
     wounded: a.wounds().length > 0,
-    severed: t ? a.posed().clusters.filter(c => c.alive).length < t.liveClusters : false,
+    // The LIVE body (sever replaces it): a cluster switched off, or prims dropped inside one (a partial sever).
+    severed: t ? a.body.clusters.filter(c => c.alive).length < t.liveClusters
+      || a.body.prims.filter(p => !p.dead).length < t.livePrims : false,
   });
 
   const submit = (t: TypeMesh, a: ZombieActor, cellSize: number) => {
-    const data = restSnapshot(a, cellSize);
+    const data = restSnapshot(a, cellSize, t.look);
     if (!data) { t.status = 'failed'; t.reason = 'no live prims'; return; }
     const id = jobId++;
     if (!jobs.submit(id, data)) return;
@@ -133,6 +149,7 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
     const skeleton = new THREE.Skeleton(bones, t.inverses.map(m => m.clone()));
     const mesh = new THREE.SkinnedMesh(t.geometry!, material());
     mesh.name = 'body-lod';
+    mesh.userData.boneNames = t.bones;
     mesh.bindMode = THREE.DetachedBindMode;
     mesh.bind(skeleton, new THREE.Matrix4());
     // The geometry's bounds are the REST pose at the bake actor's spawn; the body walks away from them.
@@ -156,7 +173,7 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
     const bones = inst.mesh.skeleton.bones;
     inst.type.bones.forEach((n, i) => {
       const f = frames.get(n);
-      if (!f) return;      // keep last frame's matrix
+      if (!f) { missing.add(n); return; }      // keep last frame's matrix
       pos.set(f.pos[0], f.pos[1], f.pos[2]);
       quat.set(f.quat[0], f.quat[1], f.quat[2], f.quat[3]);
       bones[i]!.matrixWorld.compose(pos, quat, one);
@@ -169,7 +186,7 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
       for (const id of [...instances.keys()]) if (!actors.some(a => a.id === id)) drop(id, null);
       if (!cfg.on) { for (const a of actors) if (instances.has(a.id)) drop(a.id, a); return; }
       for (const a of actors) {
-        const key = typeKey(a);
+        const key = typeKey(a, cfg.look);
         let t = types.get(key);
         const f = facts(a, t);
         if (stickyRefine(cfg.wound, f)) refined.add(a.id);
@@ -178,7 +195,8 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
         const want = !!torso && !refined.has(a.id) && bodyLodEligible(f, cfg.wound)
           && inMeshBand(instances.has(a.id), d, cfg);
         if (want && !t && jobs.pendingId === null && !jobs.error && !f.wounded) {
-          t = { key, status: 'pending', bones: [], inverses: [], liveClusters: a.body.clusters.filter(c => c.alive).length };
+          t = { key, look: cfg.look, status: 'pending', bones: [], inverses: [], liveClusters: a.body.clusters.filter(c => c.alive).length,
+            livePrims: a.body.prims.filter(p => !p.dead).length };
           types.set(key, t);
           submit(t, a, 0.015);
         }
@@ -191,9 +209,11 @@ export function createBodyLodView(parent: THREE.Object3D, material: () => THREE.
       }
     },
     meshed: (id) => instances.has(id),
+    instance: (id) => instances.get(id)?.mesh ?? null,
     takeRestored() { const r = restored; restored = []; return r; },
     info: () => ({
       meshed: [...instances.keys()],
+      missingFrames: [...missing],
       refined: [...refined],
       pendingJob: jobs.pendingId, error: jobs.error,
       types: [...types.values()].map(t => ({ key: t.key, status: t.status, reason: t.reason, bones: t.bones.length,

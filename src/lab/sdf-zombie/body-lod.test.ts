@@ -16,9 +16,9 @@ describe('body-lod config', () => {
     expect(bodyLodConfigFrom('')).toEqual(BODY_LOD_DEFAULTS);
     expect(bodyLodConfigFrom('?bodylod=0').on).toBe(false);
   });
-  it('reads the band, the wound rule and the tint', () => {
-    const c = bodyLodConfigFrom('?bodylodm=14&bodylodh=2&bodylodwound=keep&bodylodtint=1');
-    expect(c).toMatchObject({ switchM: 14, hysteresisM: 2, wound: 'keep', tint: true });
+  it('reads the band, the wound rule and the look', () => {
+    const c = bodyLodConfigFrom('?bodylodm=14&bodylodh=2&bodylodwound=keep&bodylodlook=corpse');
+    expect(c).toMatchObject({ switchM: 14, hysteresisM: 2, wound: 'keep', look: 'corpse' });
     expect(bodyLodConfigFrom('?bodylodm=nope').switchM).toBe(BODY_LOD_DEFAULTS.switchM);
   });
 });

@@ -25,14 +25,16 @@ export interface BodyLodConfig {
   /** Total width of the hysteresis band around switchM (m). */
   hysteresisM: number;
   wound: BodyLodWoundRule;
-  /** Debug: tint meshed bodies so a sheet shows which tier each body is on. */
-  tint: boolean;
+  /** The bake's shading response: 'flesh' (the body's own, default) or 'corpse' (none, as baked corpses ship). */
+  look: BodyLodLook;
 }
 
-export const BODY_LOD_DEFAULTS: BodyLodConfig = { on: true, switchM: 10, hysteresisM: 1, wound: 'refine', tint: false };
+export type BodyLodLook = 'flesh' | 'corpse';
+
+export const BODY_LOD_DEFAULTS: BodyLodConfig = { on: true, switchM: 10, hysteresisM: 1, wound: 'refine', look: 'flesh' };
 
 /** `?bodylod=0` off (today's march for every body); `?bodylodm=<m>` switch distance; `?bodylodh=<m>` hysteresis;
- *  `?bodylodwound=refine|keep`; `?bodylodtint=1`. */
+ *  `?bodylodwound=refine|keep`; `?bodylodlook=flesh|corpse`. */
 export function bodyLodConfigFrom(search: string): BodyLodConfig {
   const q = new URLSearchParams(search);
   const num = (k: string, d: number) => {
@@ -45,7 +47,7 @@ export function bodyLodConfigFrom(search: string): BodyLodConfig {
     switchM: num('bodylodm', BODY_LOD_DEFAULTS.switchM),
     hysteresisM: num('bodylodh', BODY_LOD_DEFAULTS.hysteresisM),
     wound: w === 'keep' ? 'keep' : 'refine',
-    tint: q.get('bodylodtint') === '1',
+    look: q.get('bodylodlook') === 'corpse' ? 'corpse' : 'flesh',
   };
 }
 
