@@ -862,3 +862,122 @@ Enemies aren't built yet; map the roster onto the current cast and note the gaps
 ## Kit pieces around the camera at load (2026-11-02)
 
 Bones are posed in world space, so a kit (or held prop) that has not been posed is a bind pose at the world origin, and a Doom level starts the player at exactly the origin. The kit pre-warm forced those kits to draw, one a step, so for the first seconds pieces of the cast flashed around the camera. Fix: neither draws before its first pose (the inner node, since `object.visible` is the sight cull's), the pre-warm waits for the pose, and a hidden settled body takes one pose on load. `__sdfGame.kitsShownUnposed()` should stay empty once play starts (the warm frame behind the loader flips everything visible). MAP28 headless, frames in the seconds after ready: 4 of 78 showed pieces before, 0 of 208 after, three boots.
+
+## Distance mesh LOD spike (2026-11-08)
+
+**Short answer.** A far, intact, standing body can leave the SDF march and be drawn as one baked mesh per character type,
+skinned to the rig's per-bone frames. On a distant crowd this is the big lever the MAP28 spike asked for. 24 butchers at
+11–25 m: GPU fence **26–29 → 15–16 ms**, completion-order `sdf:march` **50–71 → 4–5 ms**. With 3 butchers near as
+well: fence **44–45 → 19 ms**. Poses and silhouettes match the march; the CPU-skinned mesh sits within 1.1–1.7 cm (p95)
+of the posed SDF surface on every pose tried, swings included. What does **not** match yet is the look. The baked flesh is
+smoother (no per-pixel mottle), loses the face sheet and the red eyes, and is **darker**: 0.44–0.95 of the march's
+luminance over body pixels, typically 0.6–0.75. Kits and held props are meshes already and are the same in both. The
+owner's eye decides whether that is acceptable at 10 m+; the sheets are below. Fixing the look is the old plan's L1
+(texture attributes plus per-pixel detail), and this spike did not try it.
+
+Branch `claude/distance-mesh-lod-2eb45d`, stacked on `claude/map28-spike-7526c7`. Code: `src/lab/sdf-zombie/body-lod.ts`
+(pure: band, damage rule, bake box, skin weights), `webgpu/body-lod-view.ts` (bake, skinned instances, posing),
+`webgpu/game-body-lod.ts` (game glue, seams). The march hook is three lines in `game-main.ts`: a meshed body is skipped in
+the crowd's visible slots, in the fallback proxies and in `setBodies`, beside the corpse bake's `headless` check.
+
+**How it works.** The first intact body of a type is baked in REST pose through the corpse bake's worker
+(`chunk-bake.worker.ts`, cell 1.5 cm, same albedo, tissue and AO as baked corpses). On the main thread every vertex is
+weighted to its four nearest bones by distance to their prims (`skinWeights`, 2.5 cm falloff). The result is one shared
+geometry per type and one `THREE.SkinnedMesh` per body. Each body's bones take their `matrixWorld` every frame from
+`rig-frames.ts boneFrames` (the frames that pose the kit), with `boneInverse` = the bone's rest head. Joints blend, so
+the mesh does not crack. Hysteretic band on camera-to-torso distance. While a type is still baking, its bodies march.
+
+**Toggles** (all on the URL, and `__sdfGame.setBodyLod({...})` live):
+
+| | |
+|---|---|
+| `?bodylod=0` | today: every body marches (the A/B "off") |
+| `?bodylodm=10` | switch distance, m (default 10) |
+| `?bodylodh=1` | hysteresis width, m (default 1: in at 10.5, out at 9.5) |
+| `?bodylodwound=keep` | the "show nothing until near" damage rule (default `refine`) |
+| `?bodylodlook=flesh` | bake with the body's surface response, as gib chunks do (default `corpse`, as baked corpses) |
+
+Seams: `__sdfGame.bodyLod()` (meshed and refined ids, per-type bake ms, skin ms, verts), `bodyLodProbe(id)` (CPU skin error
+vs the posed SDF), `bodyLodStage(name, [[x,z],...])` (spawn a line-up). Scripts: `scripts/body-lod-ab.mjs` (look sheets),
+`body-lod-crowd.mjs` (crowd cost), `body-lod-damage.mjs` (damage sequence), `body-lod-spots.mjs` (level spots),
+`body-lod-sheet.py`, and `scripts/lib/cdp-game.mjs` (headless driver; `measure()` = `frameSplit` plus completion-order
+march ms).
+
+### Damage: the rule chosen
+
+**`refine` (default): the mesh is only ever an intact body.** The first wound, a sever, a burn, a tear or a collapse
+sends the body back to the march **for good**. It does not return to the mesh when it walks back out. Hits, wounds, blood,
+gibs and blow-off are untouched: they test the CPU body (`posed()`), never what is drawn. The body is simply on the march
+the frame its wound is stamped, and the hit masks the pop. In `damage-refine.jpg`, each damaged body's on and off frames
+are identical from the hit onward. Gibs and blow-off work from the mesh tier because they never ran on it.
+
+What it gives up:
+- A wounded crowd costs full march again. Every body you have shot at 10 m+ is marched until it dies, and a corpse stays
+  marched too (the soldier corpse bake still applies to soldiers).
+- Burning bodies march. A crowd lit by a fire barrel loses the LOD.
+- The switch itself pops in **look** at the band (darker, smoother, no face or eyes), though not in pose. At 10 m that
+  is visible side by side; in play the owner should judge.
+
+**`keep` (A/B):** a wounded far body stays a clean mesh, with no crater, until it comes nearer than the band. Then it
+marches and its wounds appear. A sever, burn, tear or collapse still refines it. In the 14 m run a body with 6 pellet
+wounds stayed meshed and showed none of them. At 8 m one double-barrel hit severed prims and refined it anyway. It saves
+march on a shot crowd, but a body you hit shows nothing where you hit it. **Recommendation: keep `refine`.** Wounds on
+the mesh tier (stamping the world-space crater texture the segment renderer binds, plan L3 step 3) is the next step if
+shot crowds turn out to matter.
+
+**Crossing the band:** intact bodies swap in either direction on a 1 m hysteresis with no pose pop. Wounded and burning
+bodies never enter the mesh tier under `refine`. Under `keep`, a wounded body's craters appear as it comes inside the band.
+
+### Numbers
+
+Arena, frozen, headless, `measure()` medians (fence ms; march ms is completion-order attribution, so read it relatively).
+Load average was 4–9 throughout, so fence varies ±5 ms between legs of the same state.
+
+| scene | off: fence / march | on: fence / march | meshed |
+|---|---|---|---|
+| 24 butchers at 11–25 m | 25.8–28.8 / 50–71 | 14.6–16.3 / 4.3–5.1 | 24 |
+| 3 near + 24 far butchers | 44.0–45.3 / 166 | 18.7–19.3 / 31–37 | 24 |
+| 24 zombies at 11–25 m | 12.6–14.0 / 9.7–12.3 | 8.4–9.7 / 2.4–3.1 | 24 |
+| 3 near + 24 far zombies | 18.0–19.3 / 63–81 | 13.9–15.0 / 7.6–8.1 | 24 |
+| row of 5 (one type) at 6–17 m, per character | 10–18 / 4–10 (cultist 20 at 6 m) | 3–11 / 0 | all |
+
+**MAP28 at the baseline spots** (same three spots as the baseline run, enemies idle, all spawned types baked):
+
+| spot | baseline (before any change): fence / march | off: fence / march | on: fence / march | meshed / visible |
+|---|---|---|---|---|
+| A (-15, 5), bodies 1–5 m | 20.3 / 26.9 | 17.8–35.0 / 31–47 | 30.5–31.9 / 27–28 | 5 / 16 |
+| B (-25, 15), juggernaut crowd 8–10 m | 12.9 / 5.0 | 12.7–15.3 / 9.7–10.1 | 13.7–16.2 / 8.5–9.9 | 11 / 16 |
+| C (-19.4, 10.5) | 13.2 / 7.5 | 15.3–18.8 / 7.8–23.8 | 14.6–34.0 / 9.6–23.4 | 0 / 10 |
+
+Nothing changed at the MAP28 spots, within noise. These screens' cost is the **near** bodies (spot A), and spot B's far
+crowd is juggernauts, which are mostly kit with little SDF flesh. The LOD pays on distant crowds of flesh-heavy kinds (the
+butcher rows above). MAP28 has those in live play, not at idle spots. A live tour A/B was not run.
+
+**Bake cost (the catch).** Worker bake per type: soldier 2.2–2.9 s, zombie 2.1–4.3 s, flayer 3.0 s, juggernaut 3.0–4.5 s,
+butcher 4.0–8.1 s, teratoma 12.7 s, imp 21 s, **cultist 30–45 s** (38k verts). Skin weights on the main thread take
+46–150 ms per type, and imp 346, teratoma 300, **cultist 640–880 ms**: a hitch. The bake is one job at a time, so
+types queue. Until a type is ready its bodies march, which is safe but slow to arrive. For anything past the spike, bake
+offline or at level load, and move the skin weights into the worker.
+
+### Sheets (arena only; MAP28 frames are WAD-derived and stay in `.lab-tmp/lod/`)
+
+`docs/dev-notes/2026-11-08-body-lod/`:
+- `look-{zombie,soldier,juggernaut,cultist,butcher}.jpg`: a row of 4–5 frozen bodies at 6, 10, 14 and 17 m, left to
+  right: mesh with the corpse look (default) | mesh with the flesh look | march. 17 m is too dark in the arena to read;
+  ignore it.
+- `crowd-{zombie,butcher}.jpg`: 3 near + 24 far, and 24 far, LOD on | off.
+- `damage-{refine,keep}.jpg`: the damage sequence, LOD on | off at each step (shot, sever, alight, shredded, walk in
+  to 6.3 and 4.5 m, back out to 8 m).
+
+### Not verified
+
+- **Live play.** Everything is frozen and headless. No live tour A/B, no recording of a body walking across the band, so
+  temporal pops (one frame of mesh after a hit, swap flicker) are unchecked. `refine` swaps in the same frame the wound
+  is stamped (`stepBodyLod` runs after the tick), but that was not filmed.
+- **Deferred renderer** (`?renderer=deferred`): the group is registered with the router like the corpse group, but it
+  was never booted.
+- **Shadows:** whether a meshed body casts the same shadow as a marched one was not checked.
+- **Melee and head effects** (head split, head pop, squash, jaw) on a meshed body: under `refine` any of these is
+  damage and refines it. A head deform without a wound was not checked.
+- **Characters** not sheeted: flayer, deadeye, teratoma, imp, warbull (baked fine at MAP28; not looked at).
+- The far-crowd numbers are one machine under load: ranges, not promises.

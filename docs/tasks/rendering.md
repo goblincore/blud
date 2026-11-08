@@ -346,6 +346,13 @@ refuses to run beside a stray game page and retakes a run when a fixed loop in t
   the same fight every run: `census-diff.mjs` exit 0 across 3 repeats with the census AND the
   frame hash identical, on a loaded machine. Re-run the flip's fire/gib legs with that query
   before merging the flip. See `docs/dev-notes/2026-09-14-demo-recorder.md`.
+- [~] **DISTANCE MESH LOD SPIKE (2026-11-08):** far intact bodies drawn as a per-type rest-pose bake, skinned to
+  `boneFrames`; `?bodylod=0` off, `?bodylodm`/`?bodylodh` band, `?bodylodwound=keep`, `?bodylodlook=flesh`. 24 far
+  butchers: fence 26–29 → 15–16 ms, march 50–71 → 4–5 ms. Pose matches (1–2 cm). Look does not yet: darker (0.6–0.75
+  luminance), smooth, no face. Damage rule `refine`: the first wound, burn or sever sends the body back to the march for
+  good. MAP28 idle spots unchanged (near bodies dominate). Bake is slow (cultist 30–45 s, 0.9 s main-thread skin).
+  Write-up, sheets, what is not verified: `docs/dev-notes/2026-10-24-sector-levels-handoff.md` "Distance mesh LOD
+  spike". Next if kept: L1 look (texture, brightness), offline or load-time bake, wounds on the mesh tier, live tour A/B.
 - [ ] **BAKED MESH LOD (plan 2026-09-14):** `docs/superpowers/plans/2026-09-14-baked-mesh-lod.md` — L1 textured bake (rest-anchor + aux vertex attrs, per-pixel detail/mottle/meat/gloss; the "untextured smooth corpse" fix), L2 corpse bake for every character, L3 distance LOD (per-type segment bake shared by all instances, posed per frame, hysteretic band; removes far bodies from the march). Owner 2026-09-14: distant crowds are the real crowd case.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is

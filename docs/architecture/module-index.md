@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 93 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 94 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -57,8 +57,8 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 60 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
-| [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
+| [SDF march renderer](#sdf-march-renderer) | 61 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [Character authoring](#character-authoring) | 41 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
@@ -329,6 +329,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-bench-scenario.ts` — The scripted firefight, as DATA.
 - `webgpu/game-bench.ts` — Runs a Scenario against the page and reports per-segment frame cost.
 - `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
+- `webgpu/game-body-lod.ts` — DISTANCE MESH LOD, the game's half (spike 2026-11-08): the config from the URL, the per-frame step after the cull, the march's question…
 - `webgpu/game-bone-cull.ts` — Toggling bone culling, and re-stamping the level probes.
 - `webgpu/game-brain-gib.ts` — THE BRAIN MESH (melee head damage, plan Task 11; spec §14 decision 3).
 - `webgpu/game-bullet-time.ts` — BULLET TIME's in-game looks (bullet-time.ts holds the state and the math), lifted beside game-tick.ts rather than into it.
@@ -662,6 +663,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/actor-lod.ts` — ENEMY UPDATE LOD (occlusion pass, 2026-10-28; owner: "not rendering or updating enemies that aren't visible").
 - `webgpu/aim-style.ts` — PER-WEAPON AIM STYLE (owner 2026-10-27): "the dead-zone free look (inspired by Realms of the Haunting) will be a per-weapon setting.
 - `webgpu/arena-cycle.ts` — The TEST ARENA's character cycling (game-arena.ts), pure: which registry characters it steps through, and the next one from the current.
+- `webgpu/body-lod-view.ts` — DISTANCE MESH LOD — the rendering half (spike, 2026-11-08).
 - `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
 - `webgpu/cloth-proxy.ts` — THE RASTERISED CLOTH PROXY (SDF-cloth cost spike, option 1, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
@@ -732,6 +734,7 @@ The `.blob` language, body building, validation, silhouette fitting.
 - `blob-parse.ts` — The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
 - `body-field.ts` — FAST CPU BODY FIELDS for the shot path (shot frame pass, 2026-10-29).
 - `body-grain.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md).
+- `body-lod.ts` — DISTANCE MESH LOD — the pure half (spike, 2026-11-08; plan docs/superpowers/plans/2026-09-14-baked-mesh-lod.md L3).
 - `body-normal-bake/bake.wgsl.ts` — THE BAKE FIELD in WGSL: `sdBodyClosed` (validate.ts) line for line, built from the SAME leaf functions the game marches with…
 - `body-normal-bake/cpu-bake.ts` — The CPU backend, and the REFERENCE every other backend is held to: per texel it finds the plain skin along a ray toward the region's axis, the…
 - `body-normal-bake/frame.ts` — THE FRAME, which the shader (march/body/blocks/post/body-normal.wgsl.ts) must agree with exactly, and the texel encode.
