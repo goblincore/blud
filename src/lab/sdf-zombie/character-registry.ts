@@ -61,6 +61,7 @@ import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import impBlobSrc from './characters/imp.blob?raw';
+import cerebraxBlobSrc from './characters/cerebrax.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -478,6 +479,19 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/imp-body-n.png', meta: '/assets/lab/imp-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('imp'),
+  },
+  // THE BOSS BRAIN-SPIDER (cerebrax.blob's header): a huge brain in the .blob, its gyri, sulci and veins in the
+  // baked body normal map, and the harness, the four spider legs, the cables and the under-barrel chaingun Blender
+  // kit (assets-source/cerebrax-kit/). No face sheet: the face is prims, the eyes and teeth kit.
+  cerebrax: {
+    name: 'cerebrax', src: cerebraxBlobSrc,
+    kit: '/assets/lab/cerebrax-kit.gltf',
+    // The gyri and sulci (a random-wave labyrinth of folds), the fissures, cortical veins and the snarl's wrinkles
+    // (characters/cerebrax.detail, baked round a vertical axis through the brain: scripts/cerebrax-detail-gen.ts has
+    // the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/cerebrax-body-n.png', meta: '/assets/lab/cerebrax-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('cerebrax'),
   },
   // The cacodemon-style floater (teratoma.blob's header): a flesh ball in the
   // .blob, its folds and veins in the baked body normal map, and the hard parts

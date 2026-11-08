@@ -1,0 +1,32 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "cerebrax",
+  "width": 1024,
+  "height": 321,
+  "version": 2,
+  "yMin": 1.3,
+  "yMax": 2.48,
+  "axisX": 0,
+  "axisZ": 0.401,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        2.48,
+        0.401
+      ],
+      "tail": [
+        0,
+        1.3,
+        0.4
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 320
+    }
+  ],
+  "backend": "gpu",
+  "adapter": "apple metal-3 apple-m3 (Metal driver on macOS Version 27.0.1 (Build 26A434))"
+}

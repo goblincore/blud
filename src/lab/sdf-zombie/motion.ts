@@ -1424,6 +1424,12 @@ export function stepMotion(
   // yaw (not wander.heading — the knee must agree with the turned body
   // mid-turn, same contract as every other body-local thing this frame).
   const legPole = headingDir(bodyYaw);
+  // A spider's knee rides HIGH (GaitProfile.kneePole, the cerebrax): the hind legs' pole is authored body-local for
+  // the LEFT leg and mirrored for the right. Absent: knees bow forward, as every biped's always have.
+  const authoredKneePole = gaitProfile.kneePole;
+  const kneePoleOf = (side: 'L' | 'R'): Vec3 => authoredKneePole
+    ? rotateYaw([side === 'L' ? authoredKneePole[0] : -authoredKneePole[0], authoredKneePole[1], authoredKneePole[2]], bodyYaw)
+    : legPole;
   if (cfg.faceHeading !== undefined && !collapsed && !footwork) {
     // Travel can reverse under an aimed torso. Swing feet follow travel, but
     // the knee hinge still faces the chest instead of turning inside out.
@@ -1434,7 +1440,7 @@ export function stepMotion(
       if (sig.missing[side === 'L' ? 'legL' : 'legR'] || idx[foot] === undefined) continue;
       const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
       const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
-      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);
+      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, kneePoleOf(side));
       targets[iff] = chain[2]!;
     }
   }
@@ -1447,7 +1453,7 @@ export function stepMotion(
     }
     const solved = solvePlantedLeg(
       targets[idx[hip]!]!, targets[idx[knee]!]!, targets[idx[foot]!]!,
-      st, lens, SOLVE, legPole,
+      st, lens, SOLVE, kneePoleOf(hip === 'hipL' ? 'L' : 'R'),
     );
     targets[idx[knee]!] = solved.knee;
     targets[idx[foot]!] = solved.foot;

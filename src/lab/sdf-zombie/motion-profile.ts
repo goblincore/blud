@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -613,6 +613,44 @@ export const IMP_PROFILE: MotionProfile = {
   spit: { from: 'handTipR', offset: [0, 0, 0.04] },
 };
 
+/** THE CEREBRAX (characters/cerebrax.blob): a boss, a huge brain clamped into a harness on four long spider legs, a
+ *  chaingun slung under its face. It walks on CEREBRAX_STRIDE (the gibbet's four-beat stalk, spider-kneed) and shoots
+ *  through the soldier's brain on the juggernaut's CHAINGUN_TUNING: long sweeping bursts from a long range, no strafing,
+ *  the sweep a slow turn a running player can outrun. The gun fires from the body (`spit`), not a held prop. The brain
+ *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw: no `hem` bone, so nothing jiggles. */
+export const CEREBRAX_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  physicsDeath: false,
+  name: 'cerebrax',
+  gait: { walk: CEREBRAX_STRIDE, run: CEREBRAX_STRIDE },
+  runBand: { from: Infinity, to: Infinity },
+  // Slow and heavy: its legs are long, so it covers ground anyway; the gun is the threat.
+  cruise: 0.9,
+  // The chaingun's sweep is the body's turn (CHAINGUN_TUNING.sweepFire), so this is how fast its fire chases you.
+  turnRate: 1.1,
+  armStyle: 'foreleg',
+  gunner: { weapon: 'chaingun' },
+  // The under-barrel's muzzle (assets-source/cerebrax-kit/make_gun.py prints it: blob (0, 1.01, 1.17)), body-local
+  // from the hips' rig point (compiled (0, 1.504, 0)), plus 5 cm so the round leaves clear of the barrels.
+  spit: { from: 'pelvis', offset: [0, -0.494, 1.22] },
+  // A slow breath (owner: "visibly pulse or throb"): the lobes swell 2.5-5% over 1.6 s.
+  joystick: { amp: 0, idle: 0, swell: { period: 1.6 } },
+  // A BOSS soaks: twice the teratoma's meter divisors. Dynamite still gibs through GIB_THRESHOLD.
+  toughness: { pellet: 9, blast: 3.5, sever: 9 },
+  // Craters and gouts sized for a 1.3 m brain, like the teratoma's ball (its numbers, a little bigger).
+  gore: {
+    craterScale: 2.4,
+    blood: {
+      pellet: { countMul: 2.5, sizeMul: 1.35, coneScale: 1.25, speedMul: 1.4 },
+      slug: { countMul: 3, sizeMul: 1.4, coneScale: 1.35, speedMul: 3 },
+    },
+    chunks: {
+      pellet: { count: [0.35, 2], scale: 1.4 },
+      slug: { count: [6, 9], scale: 2.4 },
+    },
+  },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -697,6 +735,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   gamer: GAMER_PROFILE,
   teratoma: TERATOMA_PROFILE,
   imp: IMP_PROFILE,
+  cerebrax: CEREBRAX_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

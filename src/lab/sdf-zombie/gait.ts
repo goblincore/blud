@@ -240,6 +240,10 @@ export type GaitProfile = {
    *  Default [0, 0, -1], a dog's elbow pointing back. A crawler hauling itself on its arms (the gutcrawler) points
    *  its elbows UP and OUT, above the shoulders, like a man pulling himself along a floor. */
   elbowPole?: Vec3;
+  /** The hind legs' knee IK pole for a planted foot, body-local, for the LEFT leg (+x; the right mirrors x). Default:
+   *  the body's forward, the knee bowing ahead as on every biped. A spider (the cerebrax) carries its knees HIGH
+   *  above the body and out to the side, so it poles them up and out. */
+  kneePole?: Vec3;
   /** 'foreleg' only: the CHEST ROLL (m). The shoulder over the planted paw drops and the reaching one rises, and the
    *  chest shifts toward the planted arm by half as much: the body's weight rolls onto the arm that is hauling it.
    *  Tied to each paw's own stance clock, deepest at mid-stance. Absent/0: no roll (the quadrupeds). */
@@ -612,6 +616,32 @@ export const GIBBET_STALK: GaitProfile = {
   swayAmp: 0.03,
   bobAmp: 0.025,
   rockAmp: 0.02,
+};
+
+/** The CEREBRAX's stride (characters/cerebrax.blob): a boss brain carried on four long spider legs. The gibbet's
+ *  four-beat stalk on legs four times its size, so slower (a big body takes big, unhurried steps) and longer, each
+ *  foot lifted high and set down on its point. Its knees ride HIGH: both pairs are poled up and out (the arms'
+ *  `elbowPole`, the legs' `kneePole`), so a planted leg folds like a spider's, never like a dog's. The frame barely
+ *  bobs; the brain does the moving (it pulses, and turns in its ring to aim). */
+export const CEREBRAX_STRIDE: GaitProfile = {
+  ...GIBBET_STALK,
+  name: 'cerebrax-stride',
+  hemSwing: 0,
+  strideFreq: 0.9,
+  stanceDuty: 0.65,
+  strideLen: 0.55,
+  landAhead: 0.6,
+  footLift: 0.40,
+  footPush: 0.05,
+  kneeBend: 0.0,
+  kneeLift: 0.25,
+  elbowBow: 0.0,
+  swayAmp: 0.03,
+  bobAmp: 0.03,
+  rockAmp: 0.02,
+  headBob: 0.2,
+  elbowPole: [0.6, 0.8, 0.15],
+  kneePole: [0.6, 0.8, -0.15],
 };
 
 /** THE CHAIR's waddle (characters/chair.blob): how you walk a heavy chair
