@@ -646,3 +646,66 @@ def test_route_goes_one_way_down_a_drop():
 def test_a_floor_that_hurts_glows(tmp_path):
     out, _ = convert_row(tmp_path, (0, 128, "RROCK01", "CEIL3_5", 160, 5), 0, 0)
     assert out["sectors"][1]["glow"] == "lava" and out["sectors"][1]["hurtPerSec"] == 10
+
+
+# Monster closets (2026-11-08): what Doom keeps shut until a walk-over line.
+
+def build_pair(mid_sector, special, things=()) -> bytes:
+    """A (x 0..128) and M (x 128..256), 256 deep; M touches A only (a closet, not a doorway). Line 0 (A's south wall)
+    carries `special`, tag 1; M is tagged 1."""
+    verts = [(0, 0), (128, 0), (256, 0), (0, 256), (128, 256), (256, 256)]
+    sectors = [(0, 128, "FLOOR4_8", "CEIL3_5", 160, 0, 0), mid_sector + (1,)]
+    sides = [(0, 0, "-", "-", "STARTAN3", 0), (0, 0, "-", "-", "STARTAN3", 1)]
+    lines = [(1, 0, 1, special, 1, 0, 0xFFFF), (0, 3, 1, 0, 0, 0, 0xFFFF), (3, 4, 1, 0, 0, 0, 0xFFFF),
+             (4, 1, 4, 0, 0, 0, 1),                                                             # A | M
+             (2, 1, 1, 0, 0, 1, 0xFFFF), (5, 2, 1, 0, 0, 1, 0xFFFF), (4, 5, 1, 0, 0, 1, 0xFFFF)]
+    return pack_wad(verts, sectors, sides, lines, [(64, 128, 0, 1, 7)] + list(things))
+
+
+def _convert_pair(tmp_path, *a, **kw):
+    wad = tmp_path / "p.wad"
+    wad.write_bytes(build_pair(*a, **kw))
+    out, stats = doom_map.convert(wad, "E1M1", units_per_m=32)
+    json.dumps(out)
+    return out, stats
+
+
+def test_a_shut_sector_a_walk_over_line_opens_is_a_closet_with_a_trigger_on_the_line(tmp_path):
+    out, stats = _convert_pair(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 2)     # W1 door open stay
+    assert stats["closets"] == [1] and stats["doors_left_open"] == []
+    [c] = out["closets"]
+    assert c == {"id": "closet-1", "sector": 1, "opensOn": "line.tag-1", "moves": "ceil", "shut": out["sectors"][1]["floor"],
+                 "speed": doom_map.DOOR_SPEED_M_S}
+    assert out["sectors"][1]["ceil"] == round((128 - 4) / 32, 4)                        # the file keeps it open
+    [t] = [t for t in out["triggers"] if t["event"] == "line.tag-1"]
+    # Line 0 runs x 128 -> 0 at y 0 (our z 4 from the start at y 128); the box is the line's grown by the pad.
+    pad = doom_map.WALK_LINE_PAD_M
+    assert t["min"][0] == round(-2 - pad, 4) and t["max"][0] == round(2 + pad, 4)
+    assert t["min"][2] == round(4 - pad, 4) and t["max"][2] == round(4 + pad, 4)
+    assert t["once"] is True and "completeOn" not in out
+
+
+def test_a_switch_opened_or_open_sector_is_no_closet(tmp_path):
+    out, stats = _convert_pair(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 63)    # SR: no use key, stays an open hole
+    assert "closets" not in out and stats["doors_left_open"] == [1]
+    out, stats = _convert_pair(tmp_path, (0, 96, "FLOOR4_8", "CEIL3_5", 160, 0), 2)    # open in the WAD: nothing to shut
+    assert "closets" not in out and not any(t["event"].startswith("line.") for t in out["triggers"])
+
+
+def test_a_sealed_alcove_a_walk_over_floor_lower_opens_is_a_floor_closet_its_monsters_on_top(tmp_path):
+    out, stats = _convert_pair(tmp_path, (128, 192, "FLOOR4_8", "CEIL3_5", 160, 0), 36,  # over A's ceiling: sealed
+                               things=[(192, 128, 0, 3004, 7)])
+    [c] = out["closets"]
+    assert c["moves"] == "floor" and c["shut"] == 4.0 and c["speed"] == doom_map.DOOR_BLAZE_SPEED_M_S
+    assert out["sectors"][1]["floor"] == 0.0                                            # the file keeps it lowered
+    [s] = out["spawns"]
+    assert s["pos"][1] == 4.0                                                           # standing on the shut floor
+
+
+def test_a_doorway_a_walk_over_line_opens_is_a_sealed_door_on_its_event(tmp_path):
+    out, _ = convert_row(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 2)
+    [door] = out["doors"]
+    assert door["opensOn"] == "line.tag-1" and door["sealed"] is True and "closets" not in out
+    assert [t["id"] for t in out["triggers"] if t["event"] == "line.tag-1"] == ["line-0"]
+    out, _ = convert_row(tmp_path, (0, 64, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 2)      # open in the WAD: opens on approach
+    assert "opensOn" not in out["doors"][0]

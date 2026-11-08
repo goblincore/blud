@@ -61,6 +61,16 @@ GUN_DOOR_SPECIALS = {46}
 # class is applied once when converting; moving them is plan 2.
 # Doors (raise / open / close variants alike): the target sector is written OPEN.
 REMOTE_DOOR_SPECIALS = {2, 4, 16, 29, 46, 61, 63, 86, 90, 103, 105, 106, 108, 109, 111, 112, 114, 115}
+# Walk-over (W1 / WR) door opens and raises: a target sector the WAD has SHUT (ceiling at or under its floor) is a monster
+# closet or a door that only that line opens (2026-11-08). Doom keeps it shut until the player crosses the line, and so do
+# we: the line becomes a trigger box firing `line.tag-<tag>`, a doorway-shaped target a door that opens on it, any other
+# target a CLOSET (sector-def.ts SectorClosetDef) whose ceiling rises on it. 16 (close, then open) is left out: it starts open.
+WALK_DOOR_SPECIALS = {2, 4, 86, 90, 105, 106, 108, 109}
+# Walk-over floor lowers: a target SEALED in the WAD (its floor at or over every neighbour's ceiling: an alcove hidden over
+# a room, MAP28's s104-s106 imp ledge) is a closet whose floor comes down on the line's event.
+WALK_FLOOR_LOWER_SPECIALS = {19, 36, 37, 38, 82, 83, 84, 98}
+# Doom's turbo floor lowers (36, 98) move at the blazing door speed.
+FAST_FLOOR_SPECIALS = {36, 98}
 # Floor lowers: written LOWERED to the lowest neighbouring floor (also for the "to highest / next" variants).
 FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
 # Floor raises: written RAISED to the next neighbouring floor up (Doom 2's "raise to next higher" family).

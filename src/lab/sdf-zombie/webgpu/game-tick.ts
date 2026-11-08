@@ -271,6 +271,7 @@ export function tick(ctx: GameContext, dt: number) {
   // reads this tick's leaves). A handful of doors, a few dot products each.
   ctx.world.doors?.step(dt);
   ctx.world.lifts?.step(dt);
+  ctx.world.closets?.step(dt);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.

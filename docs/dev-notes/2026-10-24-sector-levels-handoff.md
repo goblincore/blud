@@ -862,3 +862,61 @@ Enemies aren't built yet; map the roster onto the current cast and note the gaps
 ## Kit pieces around the camera at load (2026-11-02)
 
 Bones are posed in world space, so a kit (or held prop) that has not been posed is a bind pose at the world origin, and a Doom level starts the player at exactly the origin. The kit pre-warm forced those kits to draw, one a step, so for the first seconds pieces of the cast flashed around the camera. Fix: neither draws before its first pose (the inner node, since `object.visible` is the sight cull's), the pre-warm waits for the pose, and a hidden settled body takes one pose on load. `__sdfGame.kitsShownUnposed()` should stay empty once play starts (the warm frame behind the loader flips everything visible). MAP28 headless, frames in the seconds after ready: 4 of 78 showed pieces before, 0 of 208 after, three boots.
+
+## Monster closets (2026-11-08)
+
+The distance mesh LOD spike (draft PR goblincore/blud#103) helped only far crowds and looked different, so it is shelved.
+The owner's point: MAP28's cost is a near crowd just round the first corner, and Doom keeps that room shut until a script
+opens it. The WAD agrees. The closets are shut sectors that walk-over lines open, and the converter used to write every door
+sector open at load. Now they start shut and open when the player crosses the line. `?closets=0` is the old open level.
+
+**MAP28's closets** (UV things; distances from the start):
+
+| Closet | Shut by | Opened by | What is behind it |
+|---|---|---|---|
+| s115 (ceiling rises) | ceiling = floor in the WAD | W1 line 735 (sp2), in s112, just past door-113 | s114: 8 revenants (flayers), 14–16 m. The first-corner trap |
+| s109 (ceiling rises) | ceiling = floor | W1 line 404 (sp2), about 107 m away | s108: 15 ambush spectres and revenants (butchers, flayers). Opens late |
+| s75 (ceiling rises) | ceiling = floor | W1 line 327 (sp2) | a small closet on the way to the red key |
+| s104–s106 (floor comes down) | floor 128 = s103's ceiling: an alcove hidden over the room | W1 lines 533/534 (sp36, fast) | 9 imps, soldiers and a juggernaut on the ledge |
+| door-87, -91, -96 (doorways) | ceiling = floor | W1 lines 482/483 (sp2) | now `sealed` doors with `opensOn: line.tag-6`, not doors that open on approach |
+
+Doom's sp36 lowers the ledge to 8 units over the highest floor beside it. We lower it to the lowest floor beside it, as the
+converter already did, so it ends 8 units lower than in Doom.
+
+**What the level file gained** (`sector-def.ts` SectorClosetDef, checked in `sector-json.ts`): top-level
+`closets: [{id, sector, opensOn, moves: 'ceil' | 'floor', shut, speed?}]`. Walk-over lines that open something become
+`triggers` boxes firing `line.tag-<tag>`, once. A box is the line's box grown by 0.3 m (`WALK_LINE_PAD_M`), so a diagonal
+line fires a little early: line 404 by up to about 1 m.
+
+**How a closet works** (`sector-closets.ts`, pure; `game-closets.ts` runs it):
+- **The file keeps it open.** The static mesh, navigation and the portal graph are all built from the file, so they see the
+  closet open. Enemies can route out once it opens, and the flood has its lines to open again. `createGameClosets` (game-main,
+  after the lifts) then writes the live sector's ceiling (or floor) at `shut`. This is the lifts' rule turned round. The
+  lifts' parser writes the live height, because their navigation wants the top. A closet's navigation wants it open.
+- **Every height reader follows the live sector.** A shut closet's lines have no opening, so the ground blocks bodies,
+  navigation's `canTravel` refuses the step, and rays stop at them: sight, shots and the render's occlusion. The portal
+  flood gets the lines as closed (`game-zone-cull.ts` `closedFor`). Bodies behind a shut closet are culled and not marched.
+- **Opening:** the event starts it, it moves at `speed` (3 m/s; 6 for blazing doors and sp36) and stays open. Doom's raise
+  variants (sp4, sp90, ...) would close it again, but these open for good. The portal lines open on the first frame.
+- **The block** fills the shut part: the sector's footprint, sides facing out, and a moving cap. A uniform slides it, and the
+  vertex shader clamps every vertex into the travel, so it squeezes into the ceiling (or floor) and hides when open. It uses
+  the door-frame metal for now. **That gives the closet away**, because a dark metal-plate wall stands in a rock room. A
+  wall that matches its room is a follow-up.
+
+**Measured** (headless, `scripts/closet-spots.mjs`, frozen crowd, this Mac's GPU at 960×540, `?god=1&vhs=off`; two runs per
+spot, ms). `?bodylod=0` is not a parameter on this branch, because the LOD is not merged here.
+
+| Spot | Closets shut (new) | `?closets=0` (old) |
+|---|---|---|
+| start (0, 0), facing the start yaw | fence 4.2–4.7, march 0, 0 bodies | fence 6.7–8.5, march 0, 0 bodies |
+| s112 (7.27, 1.45), facing the closet, before line 735 | **fence 4.6–5.1, march 0, 0 bodies, 1 sector** | fence 6.2–13.9, **march 12.6**, 8 bodies, 3 sectors |
+| the same spot after crossing line 735 | fence 12.1–14.9, march 7.7–8.0, 8 bodies (it opened) | fence 9–11.7, march 8.2–9.8, 8 bodies |
+
+At the start itself nothing changed: door-113 already hid s114 until approached. The cost appeared as soon as door-113
+opened, because s115 was an open hole. Now it appears only past line 735, as in Doom. The s104 ledge, seen from s103:
+shut, 0 bodies; after lines 533/534 the crowd rides the floor down (unfrozen) and attacks. The first spot the earlier
+session used, (7.5, 3.4), is in the void, so the flood fails open there and every sector shows. Don't measure from it.
+
+**Not verified:** the doom gate (paused); damage on; s109's and s75's openings in play (only s115 and the ledge were walked);
+real 60 Hz. `doom_route.py` counts closets as locks opened by their trigger's sector. MAP28: exit reached, 0 dead ends,
+the same 81 sectors as before.

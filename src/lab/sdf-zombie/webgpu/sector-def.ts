@@ -90,6 +90,13 @@ export interface SectorSwitchDef { id: string; line: number; event: string }
 /** A LIFT (the level file's top-level `lifts`, sector-lifts.ts runs it): sector `sector`'s floor moves between `low`
  *  (its floor in the file, so the static mesh draws the shaft) and `top`, where it rests. */
 export interface SectorLiftDef { id: string; sector: number; low: number; top: number; speed: number; wait: number }
+/** A MONSTER CLOSET (the level file's top-level `closets`, sector-closets.ts runs it; 2026-11-08): a sector Doom keeps
+ *  shut until the player crosses a walk-over line. The file's sector heights are its OPEN position (the static mesh,
+ *  navigation and the portal graph are built open); the game shuts it at load. `moves` 'ceil': the ceiling rests at
+ *  `shut` (the floor: no opening) and rises to the sector's ceiling; 'floor': the floor rests at `shut` (over the rooms
+ *  beside it: an alcove hidden above a ceiling) and comes down to the sector's floor. Opens once, on `opensOn`. */
+export type ClosetMoves = 'ceil' | 'floor';
+export interface SectorClosetDef { id: string; sector: number; opensOn: string; moves: ClosetMoves; shut: number; speed: number }
 export interface SectorMap {
   vertices: XZ[]; sectors: SectorDef[]; lines: SectorLine[];
   /** Door entities (optional: older files have none). */
@@ -98,6 +105,8 @@ export interface SectorMap {
   switches?: readonly SectorSwitchDef[];
   /** Lifts (optional). */
   lifts?: readonly SectorLiftDef[];
+  /** Monster closets (optional). */
+  closets?: readonly SectorClosetDef[];
 }
 
 /** Spec §6.2: the highest step a body walks up (Doom's 24 units at 32 units/m). */
