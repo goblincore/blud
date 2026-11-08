@@ -72,8 +72,24 @@ def brain_radius_at(lon, y):
             r = math.hypot(p.x - _C.x, p.z - _C.z)
             best = r if best is None else max(best, r)
     if best is None:
-        p = lowest[1]; best = math.hypot(p.x - _C.x, p.z - _C.z) * 0.6
+        # Below the brain on this bearing (under the tilted face's chin): the widest skin just above, so the band
+        # passes UNDER the overhang instead of pinching in toward the axis.
+        near = [math.hypot(p.x - _C.x, p.z - _C.z) for p in (skin(-90 + i * 1.0, lon)[0] for i in range(121)) if p.y < y + 0.10]
+        best = max(near) if near else 0.30
     return best
+
+
+# THE BRAIN'S TILT (cerebrax.blob, THE BRAIN): the brain is authored upright and rotated 25 deg face-down about its
+# centre. Kit seated on the face is placed in the UPRIGHT brain's (lat, lon) and mapped through tilted().
+TILT = 25.0
+
+
+def tilted(lat, lon):
+    """(lat, lon) on the upright brain -> the same point on the tilted one (rotation about x, +z toward -y)."""
+    la, lo, t = math.radians(lat), math.radians(lon), math.radians(TILT)
+    x, y, z = math.cos(la) * math.sin(lo), math.sin(la), math.cos(la) * math.cos(lo)
+    y, z = y * math.cos(t) - z * math.sin(t), y * math.sin(t) + z * math.cos(t)
+    return math.degrees(math.asin(max(-1.0, min(1.0, y)))), math.degrees(math.atan2(x, z))
 
 
 def curl_path(p0, d0, axis, L, curl, n=40, twist=None):

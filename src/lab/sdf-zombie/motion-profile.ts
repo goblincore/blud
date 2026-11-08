@@ -630,9 +630,9 @@ export const CEREBRAX_PROFILE: MotionProfile = {
   turnRate: 1.1,
   armStyle: 'foreleg',
   gunner: { weapon: 'chaingun' },
-  // The under-barrel's muzzle (assets-source/cerebrax-kit/make_gun.py prints it: blob (0, 1.01, 1.17)), body-local
+  // The under-barrel's muzzle (assets-source/cerebrax-kit/make_gun.py prints it: blob (0, 0.77, 1.43), hung under the tilted brain's face), body-local
   // from the hips' rig point (compiled (0, 1.504, 0)), plus 5 cm so the round leaves clear of the barrels.
-  spit: { from: 'pelvis', offset: [0, -0.494, 1.22] },
+  spit: { from: 'pelvis', offset: [0, -0.734, 1.48] },
   // A slow breath (owner: "visibly pulse or throb"): the lobes swell 2.5-5% over 1.6 s.
   joystick: { amp: 0, idle: 0, swell: { period: 1.6 } },
   // A BOSS soaks: twice the teratoma's meter divisors. Dynamite still gibs through GIB_THRESHOLD.

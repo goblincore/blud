@@ -16,7 +16,7 @@ drop(['skull|'])
 
 # The eye sockets (cerebrax.blob: dark blobs at (+-0.045, -0.135, 0.452) from the brain's centre, authored, x1.60 ->
 # lat -16.6, lon +-5.7).
-EYES = [(-16.6, 5.7), (-16.6, -5.7)]
+EYES = [tilted(-16.6, 5.7), tilted(-16.6, -5.7)]   # the brain is tilted 25 deg (common.py TILT)
 
 if 'eyes' in PARTS:
     # Embers seated IN the sockets, a few mm proud (biomech-style.md: the cyberbride's floated 1.5 cm high and read as
@@ -33,9 +33,9 @@ if 'teeth' in PARTS:
     import random; rr = random.Random(7)
     for row, la, dirz, L0 in (('u', -24.6, -1, 0.050), ('l', -29.4, 1, 0.036)):
         for k in range(-3, 4):
-            lo = k * 2.6 + rr.uniform(-0.5, 0.5)
-            root = sk(la, lo, -0.010)
-            n = skn(la, lo)
+            la_t, lo_t = tilted(la, k * 2.6 + rr.uniform(-0.5, 0.5))
+            root = sk(la_t, lo_t, -0.010)
+            n = skn(la_t, lo_t)
             d = Vector((0, 0, dirz)) * 1.0 + n * 0.35 + Vector((rr.uniform(-0.15, 0.15), 0, 0))
             L = L0 * (1.25 if abs(k) == 2 else 1.0) * rr.uniform(0.8, 1.1)
             horn(f'{row}{k}', root, d, n.cross(Vector((0, 0, 1))).normalized(), L, 0.010 if abs(k) == 2 else 0.008, curl=0.2 * -dirz)
@@ -51,7 +51,8 @@ if 'tendrils' in PARTS:
     RUNS = [(48, 34, 1.30, -2.1, 0.5), (48, -34, 1.30, -2.1, -0.5), (18, 78, 0.85, -1.9, 0.0), (18, -78, 0.85, -1.9, 0.0),
             (30, 140, 0.75, -1.7, 0.3), (30, -140, 0.75, -1.7, -0.3)]
     tips = []; plugs = []
-    for i, (la, lo, L, curl, tw) in enumerate(RUNS):
+    for i, (la0, lo0, L, curl, tw) in enumerate(RUNS):
+        la, lo = tilted(la0, lo0)
         n = skn(la, lo)
         root = sk(la, lo, -0.03)
         side = n.cross(Vector((0, 0, 1)))

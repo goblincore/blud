@@ -89,7 +89,15 @@ body
   bar  torso on pelvis from=1.00 to=1.00 offset=(-0.30,0,0) tip=(0.60,0,0) r=0.040 blend=0.006 color=3a3e45 metal gloss=0.6
   bar  torso on spine from=1.00 to=1.00 offset=(-0.30,0,0) tip=(0.60,0,0) r=0.040 blend=0.006 color=3a3e45 metal gloss=0.6
 
-  # --- THE BRAIN: few prims, all `rigid` on PELVIS, the harness's bone, so the
+  # --- THE BRAIN: TILTED 25 DEG FACE-DOWN in its clamp (owner, arena look:
+  # the first pass, tipped forward on the aim chain, "looks better": the face
+  # low and close to the gun, the brain overhanging the frame). Every prim
+  # below is the upright brain rotated about its centre (0, 1.18, 0.25)
+  # authored, about x, +z toward -y: offsets, tips and bends; the lobes'
+  # wide/tall/deep stay world-aligned (the grammar has no rest orient, and the
+  # lobes are nearly round). The kit (common.py TILT) and the fold generator
+  # (TILT) use the same 25 deg.
+  # All `rigid` on PELVIS, the harness's bone, so the
   # brain and the ring it is clamped in move as ONE piece. On `skull` (the aim
   # chain's sprung joints, the first pass) every sway, aim and hit moved the
   # brain against the harness and it clipped through the ring and the gun
@@ -99,38 +107,37 @@ body
   blob torso on pelvis at=1.00 offset=(0.000,0.240,0.250) r=0.400 wide=1.05 tall=0.86 deep=1.15 blend=0.040 core rigid morph=swell:*1.025
   # The two hemispheres, bulging up either side of the longitudinal fissure:
   # the valley between them on top is the fissure's shape (the map deepens it).
-  blob torso on pelvis at=1.00 offset=(0.190,0.310,0.250) r=0.300 wide=0.80 tall=0.95 deep=1.40 blend=0.050 both rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.190,0.303,0.280) r=0.300 wide=0.80 tall=0.95 deep=1.40 blend=0.050 both rigid morph=swell:*1.04
   # Frontal lobes, swelling forward over the face like a brow.
-  blob torso on pelvis at=1.00 offset=(0.150,0.260,0.520) r=0.200 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.05
+  blob torso on pelvis at=1.00 offset=(0.150,0.144,0.503) r=0.200 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.05
   # Temporal lobes, low on the sides, hanging over the ring.
-  blob torso on pelvis at=1.00 offset=(0.300,0.120,0.330) r=0.170 wide=0.85 tall=0.90 deep=1.50 blend=0.050 both rigid morph=swell:*1.05
+  blob torso on pelvis at=1.00 offset=(0.300,0.097,0.272) r=0.170 wide=0.85 tall=0.90 deep=1.50 blend=0.050 both rigid morph=swell:*1.05
   # The occipital lobes at the back.
-  blob torso on pelvis at=1.00 offset=(0.120,0.240,-0.050) r=0.220 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.120,0.367,-0.022) r=0.220 wide=1.00 tall=1.00 deep=0.95 blend=0.050 both rigid morph=swell:*1.04
   # The cerebellum tucked under the back, into the ring.
-  blob torso on pelvis at=1.00 offset=(0.000,0.020,0.010) r=0.170 wide=1.50 tall=0.70 deep=1.00 blend=0.045 rigid morph=swell:*1.04
+  blob torso on pelvis at=1.00 offset=(0.000,0.142,-0.060) r=0.170 wide=1.50 tall=0.70 deep=1.00 blend=0.045 rigid morph=swell:*1.04
 
   # --- THE FACE: small, snarling, on the lower front, pushed out of the brain
   # as if the brain had grown over a man's face and only this much shows.
-  # Low, its chin just above the harness's dip: the owner tried it 6 cm higher
-  # and preferred it here. It only LOOKED too low while the brain rode the aim
-  # chain and tipped face-down into the harness (see THE BRAIN). ---
+  # With the brain's tilt it hangs low over the harness's V, the chin just over
+  # the gun mount (the owner tried it 6 cm higher and preferred it low). ---
   # The face's mass, a flattened mound under the frontal lobes.
-  blob torso on pelvis at=1.00 offset=(0.000,0.070,0.620) r=0.120 wide=1.25 tall=1.05 deep=0.70 blend=0.035 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,-0.070,0.513) r=0.120 wide=1.25 tall=1.05 deep=0.70 blend=0.035 rigid
   # The brow: a heavy bar bowed down in the middle, a scowl.
-  bar  torso on pelvis from=1 to=1 offset=(-0.095,0.135,0.695) tip=(0.19,0,0) bend=(0,-0.03,0.02) r=0.026 blend=0.014 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.095,-0.043,0.609) tip=(0.190,0.000,0.000) bend=(0.000,-0.036,0.005) r=0.026 blend=0.014 rigid
   # Sunken dark sockets under the brow; the kit's red embers sit in them.
-  blob torso on pelvis at=1.00 offset=(0.045,0.105,0.702) r=0.022 wide=1.30 tall=0.80 blend=0.006 color=1a0506 gloss=0.6 both rigid
+  blob torso on pelvis at=1.00 offset=(0.045,-0.073,0.603) r=0.022 wide=1.30 tall=0.80 blend=0.006 color=1a0506 gloss=0.6 both rigid
   # Cheekbones, swept back from under the eyes.
-  bar  torso on pelvis from=1 to=1 offset=(0.050,0.070,0.700) tip=(0.060,0.010,-0.050) r=0.022 r2=0.014 blend=0.012 both rigid
+  bar  torso on pelvis from=1 to=1 offset=(0.050,-0.104,0.586) tip=(0.060,0.030,-0.041) r=0.022 r2=0.014 blend=0.012 both rigid
   # A short broad nose, nostrils flared in the snarl.
-  bar  torso on pelvis from=1 to=1 offset=(0.000,0.105,0.720) tip=(0,-0.050,0.018) r=0.016 r2=0.024 blend=0.010 rigid
+  bar  torso on pelvis from=1 to=1 offset=(0.000,-0.081,0.619) tip=(0.000,-0.053,-0.005) r=0.016 r2=0.024 blend=0.010 rigid
   # The snarl: a dark gullet recessed behind the lips (an additive mouth,
   # never a carve, the teratoma's lesson), the teeth are kit.
-  blob torso on pelvis at=1.00 offset=(0.000,0.008,0.690) r=0.030 wide=2.00 tall=0.90 deep=0.70 blend=0.006 color=1a0506 gloss=0.85 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,-0.156,0.551) r=0.030 wide=2.00 tall=0.90 deep=0.70 blend=0.006 color=1a0506 gloss=0.85 rigid
   # The upper lip, drawn up off the teeth; the lower lip and a small chin.
-  bar  torso on pelvis from=1 to=1 offset=(-0.060,0.028,0.705) tip=(0.12,0,0) bend=(0,0.014,0.016) r=0.012 blend=0.008 rigid
-  bar  torso on pelvis from=1 to=1 offset=(-0.055,-0.018,0.695) tip=(0.11,0,0) bend=(0,-0.012,0.014) r=0.013 blend=0.008 rigid
-  blob torso on pelvis at=1.00 offset=(0.000,-0.048,0.675) r=0.030 wide=1.30 tall=0.80 deep=0.80 blend=0.014 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.060,-0.144,0.573) tip=(0.120,0.000,0.000) bend=(0.000,0.006,0.020) r=0.012 blend=0.008 rigid
+  bar  torso on pelvis from=1 to=1 offset=(-0.055,-0.182,0.544) tip=(0.110,0.000,0.000) bend=(0.000,-0.017,0.008) r=0.013 blend=0.008 rigid
+  blob torso on pelvis at=1.00 offset=(0.000,-0.201,0.513) r=0.030 wide=1.30 tall=0.80 deep=0.80 blend=0.014 rigid
 
   # --- LEGS: machine only, thin cores INSIDE the kit (biomech-style.md: keep cores 2-3.5 cm or they show
   # through). Authored radii; compiled x1.60: the shin core 3.5 cm inside a 4.4-6 cm kit tube. The first pass at

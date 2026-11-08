@@ -69,6 +69,17 @@ function dirOf(lat: number, lon: number): V {
   return [cl * Math.sin(lon * D2R), Math.sin(lat * D2R), cl * Math.cos(lon * D2R)];
 }
 
+// THE TILT (cerebrax.blob, THE BRAIN): the brain is authored upright and rotated 25 deg face-down about its centre
+// (about x, +z toward -y). The gaps (fissures, face) and the face's wrinkles are defined on the UPRIGHT brain, in
+// its own (lat, lon), and mapped through tilt()/untilt(); the random-wave folds need no map (they live in 3D).
+const TILT = 25 * D2R;
+const rotX = (v: V, t: number): V => [v[0], v[1] * Math.cos(t) - v[2] * Math.sin(t), v[1] * Math.sin(t) + v[2] * Math.cos(t)];
+const latLonOf = (d: V): [number, number] => [Math.asin(Math.max(-1, Math.min(1, d[1] / len(d)))) / D2R, Math.atan2(d[0], d[2]) / D2R];
+/** Upright-brain (lat, lon) -> the tilted brain's. */
+const tilt = (lat: number, lon: number) => latLonOf(rotX(dirOf(lat, lon), TILT));
+/** The tilted brain's (lat, lon) -> the upright brain's. */
+const untilt = (lat: number, lon: number) => latLonOf(rotX(dirOf(lat, lon), -TILT));
+
 /** The skin along the ray from the centre in direction d (marched inward from outside), and its outward normal. */
 function skinDir(d: V): { p: V; n: V } | null {
   let t = 1.4, p = add(C, mul(d, t));
@@ -138,8 +149,9 @@ function sylvianDist(p: V, s: number): number {
 }
 const LAT_MIN = -42;   // below this the harness ring hides the brain
 /** True where a fold may lie. */
-function foldable(lat: number, lon: number): boolean {
-  if (lat < LAT_MIN) return false;
+function foldable(latW: number, lonW: number): boolean {
+  if (latW < LAT_MIN) return false;
+  const [lat, lon] = untilt(latW, lonW);   // the gaps live on the upright brain
   if (faceGap(lat, lon) < 0) return false;
   const p = ellPoint(lat, lon);
   if (fissureDist(p, lat) < 0.030) return false;
@@ -269,7 +281,7 @@ for (const s of [1, -1]) {
   for (let lat = 2; lat <= 178; lat += 1.6) {
     // Walk over the top in the x = 0 plane, then step out to the bank.
     const th = lat * D2R;
-    const dir0 = norm([0, Math.sin(th), Math.cos(th)]);
+    const dir0 = norm(rotX([0, Math.sin(th), Math.cos(th)], TILT));
     const top = skinDir(dir0)!.p;
     const sk = skinDir(norm(add(sub(top, C), [s * 0.055, 0, 0])));
     if (!sk) continue;
@@ -278,7 +290,7 @@ for (const s of [1, -1]) {
     // A slow meander along the bank (~0.4 m wavelength, 1.2 cm swing): the banks are folds too, not rails.
     const wob = 0.012 * Math.sin(lat * 0.09 + (s > 0 ? 0 : 1.7));
     const c = add(sk.p, add(mul(sk.n, 0.016 - rr), [s * wob, 0, 0]));
-    if (faceGap(Math.asin(Math.max(-1, Math.min(1, (c[1] - C[1]) / len(sub(c, C))))) / D2R, 0) < 0) continue;
+    if (faceGap(...untilt(...latLonOf(sub(c, C)))) < 0) continue;
     S.push({ c, r: rr });
   }
   emitChain(S, GYRUS_BLEND);
@@ -289,7 +301,7 @@ for (const s of [1, -1]) {
 // a knot about one sample in six, one branch. Here they run DOWN from the fissure over the hemispheres.
 section('veins: cortical vessels from the fissure down over the hemispheres');
 function vein(lat0: number, lon0: number, lat1: number, lon1: number, r: number, proud: number, branch: boolean) {
-  const a = ellPoint(lat0, lon0), b = ellPoint(lat1, lon1);
+  const a = ellPoint(...tilt(lat0, lon0)), b = ellPoint(...tilt(lat1, lon1));   // given on the upright brain
   const n = Math.max(8, Math.round(len(sub(b, a)) / 0.009));
   let phase = rnd() * 6.28;
   const S: { c: V; r: number }[] = [];
@@ -303,7 +315,7 @@ function vein(lat0: number, lon0: number, lat1: number, lon1: number, r: number,
     const sk = skinDir(norm(q));
     if (!sk) continue;
     const lat = Math.asin(norm(q)[1]) / D2R, lon = Math.atan2(q[0], q[2]) / D2R;
-    if (faceGap(lat, lon) < 0 || lat < LAT_MIN) break;
+    if (faceGap(...untilt(lat, lon)) < 0 || lat < LAT_MIN) break;
     const k = Math.sin(Math.PI * Math.min(1, t * 1.1 + 0.05));
     const rr = r * (0.55 + 0.45 * k);
     // Over the folds: the vein's top sits `proud` above the gyrus crown (GYRUS_PROUD), so it is not buried in a sulcus.
@@ -316,7 +328,7 @@ function vein(lat0: number, lon0: number, lat1: number, lon1: number, r: number,
   for (const c of knots) out.push(`  blob torso on pelvis at=1 offset=${fv(sub(c, B0))} r=${fa(r * 1.7)} blend=${fa(0.002)} rigid`);
   if (branch) {
     const m = Math.floor(S.length * (0.3 + rnd() * 0.3));
-    const lm = Math.asin(norm(sub(S[m]!.c, C))[1]) / D2R, nm = Math.atan2(S[m]!.c[0] - C[0], S[m]!.c[2] - C[2]) / D2R;
+    const [lm, nm] = untilt(...latLonOf(sub(S[m]!.c, C)));   // back to the upright brain: vein() tilts again
     vein(lm, nm, lm - 14 - rnd() * 8, nm + (rnd() < 0.5 ? -1 : 1) * (14 + rnd() * 10), r * 0.65, proud * 0.75, false);
   }
 }
@@ -331,7 +343,7 @@ for (const s of [1, -1]) {
 // corners. Small: the face spans ~45 cm compiled.
 section('the snarl: forehead furrows, crow\'s feet, nasolabial creases');
 function faceRidge(pts: [number, number][], r: number, proud: number) {
-  const S = pts.map(([lat, lon]) => { const sk = skinDir(dirOf(lat, lon))!; return { c: add(sk.p, mul(sk.n, proud - r)), r }; });
+  const S = pts.map(([lat, lon]) => { const sk = skinDir(dirOf(...tilt(lat, lon)))!; return { c: add(sk.p, mul(sk.n, proud - r)), r }; });
   emitChain(S, 0.003);
 }
 // Two furrows bowed DOWN into a V over the nose (a scowl), the upper one shorter: three level ones read as stacked

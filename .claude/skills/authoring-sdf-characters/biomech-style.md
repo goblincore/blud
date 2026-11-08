@@ -854,11 +854,18 @@ anyway. (If a turret is ever wanted, point the skull bone FORWARD, so a level ga
 must not touch on the same bone.) A part moved from one bone to another keeps its rest position. Its offsets now
 count from the new bone's point, and the kit parts are renamed `<bone>|<part>`; drop the old names from the .blend.
 
-**Fix the motion before moving the parts.** The tipped brain made the face look too low, so it was raised 6 cm.
-The owner preferred the original low face once the brain was locked to its frame: the "too low" was the tilt, and
-the clipping was the brain moving against the harness. Moving a face on a seated kit costs a lot. Its prims move
-up and forward onto the brain's curve, and the skin probe, the kit's eyes and teeth, the fold gap and wrinkles, the
-harness dip and the gun's `spit` offset all follow. So fix the motion first, look again, and only then move parts.
+**Bake a good accident into the rest pose.** In the end the owner LIKED the tipped look the aim chain produced: the
+brain rolled 29 deg forward in its clamp, overhanging the ring, the face low and close to the gun. What was wrong was
+only that it moved. So the tilt is authored, on the locked frame:
+- Every brain and face prim is the upright brain rotated 25 deg about its centre: offsets, tips and bends. Ellipsoid
+  axes stay world-aligned, because the grammar has no rest orient and the lobes are nearly round.
+- The kit and the fold generator keep their face-relative placements in the UPRIGHT brain's (lat, lon) and map them
+  through `tilted()` (common.py `TILT`) and `tilt()/untilt()` (the generator). The random-wave folds live in 3D and
+  need no map.
+- The harness's V got deeper with a flat bottom under the chin, and the gun hangs lower (re-read the muzzle and the
+  `spit` offset).
+
+Fix the motion before moving parts: a 6 cm face raise, tried in between, was reverted.
 
 **Pulsing without a new system.** `MotionProfile.joystick` with `amp 0, idle 0` and a `swell` period is a plain
 breath for ANY body: every lobe prim carries `morph=swell:*1.025..1.05`, and `actor.ts` drives the weight.

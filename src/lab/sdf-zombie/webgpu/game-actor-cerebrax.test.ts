@@ -36,10 +36,11 @@ describe('cerebrax actor (game path)', () => {
     }
     expect(shots.length, 'a burst, not a shot').toBeGreaterThanOrEqual(8);
     const o = shots[0]!.origin;
-    // The muzzle (assets-source/cerebrax-kit/make_gun.py): ~1.0 m up, ~1.2 m in front of the hips.
-    expect(o[1]).toBeGreaterThan(0.8);
-    expect(o[1]).toBeLessThan(1.3);
-    expect(o[2], 'out in front of the body, not inside the brain').toBeGreaterThan(0.9);
+    // The muzzle (assets-source/cerebrax-kit/make_gun.py): ~0.8 m up, hung under the tilted brain's face, ~1.45 m in
+    // front of the hips.
+    expect(o[1]).toBeGreaterThan(0.6);
+    expect(o[1]).toBeLessThan(1.0);
+    expect(o[2], 'out in front of the body, not inside the brain').toBeGreaterThan(1.2);
     expect(shots[0]!.direction[2], 'toward the player').toBeGreaterThan(0.5);
   });
 

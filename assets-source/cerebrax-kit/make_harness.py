@@ -12,8 +12,9 @@ try:
 except NameError:
     PARTS = {'ring', 'talons'}
 O = Vector((J['centre'][0], 0, J['centre'][2]))         # the ring's centre axis (blob x, -, z)
-# DIP: the front sweeps 0.26 m down so the low face's chin (y ~1.39) clears the band.
-Y_BACK, DIP, DIP_W, BAND = 1.62, 0.26, 55.0, 0.15
+# DIP: the brain is tilted 25 deg face-down (cerebrax.blob), its chin at y ~1.15; the V's flat bottom sits just under
+# it (the owner: the face hanging low over the frame, close to the gun). 0.26 under the upright brain's face.
+Y_BACK, DIP, DIP_FLAT, DIP_W, BAND = 1.62, 0.50, 18.0, 70.0, 0.15
 CLEAR = 0.018                                           # the band's inner face this far off the brain's skin
 
 
@@ -22,8 +23,9 @@ def smooth(x):
 
 
 def y_top(lon):
-    """The band's top edge: Y_BACK at the back, dipping DIP under the face (lon 0) over +-DIP_W degrees."""
-    return Y_BACK - DIP * (1 - smooth(abs(lon) / DIP_W))
+    """The band's top edge: Y_BACK at the back, dipping DIP under the face: flat across the face's width (+-DIP_FLAT
+    deg), then rising to Y_BACK by +-DIP_W, so the V's arms climb either side of the face."""
+    return Y_BACK - DIP * (1 - smooth((abs(lon) - DIP_FLAT) / (DIP_W - DIP_FLAT)))
 
 
 _RCACHE = {}
@@ -87,7 +89,7 @@ if 'ring' in PARTS:
            for v0 in (0.12, 0.30, 0.70, 0.88)]
     # The eyes' red light spills onto the front of the band under the face (kit-overlay.ts GLOW_FROM_ATTRIBUTE:
     # skullmetal burns red): two embers at the eye sockets, a steep falloff over 0.35 m.
-    eyes = [(sk(-16.6, sx * 5.7, 0.01), 0.03, 0.9) for sx in (1, -1)]
+    eyes = [(sk(*tilted(-16.6, sx * 5.7), 0.01), 0.03, 0.9) for sx in (1, -1)]
     finish_part('harness', 'pelvis|harness', 22000, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
 
 if 'talons' in PARTS:
