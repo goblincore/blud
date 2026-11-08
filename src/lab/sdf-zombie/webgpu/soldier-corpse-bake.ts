@@ -21,6 +21,17 @@ export function corpsePartition(body: BuildResult, head: boolean): BuildResult {
     bonePrims: body.bonePrims?.filter(p => !p.dead && (p.limb === 'head') === head) };
 }
 
+/** The march's look, frozen for a bake (the view's uniforms: palette, tissue depths, mottle). Shared by the corpse
+ *  bake and the distance mesh LOD (body-lod-view.ts). */
+export function bakeLookOf(u: ZombieActor['view']['uniforms']): ChunkBakeData['look'] {
+  const col = (v: {r:number;g:number;b:number}): Vec3 => [v.r,v.g,v.b];
+  return { baseColor:col(u.baseColor.value),deepColor:col(u.deepColor.value),fatColor:col(u.fatColor.value),
+      mottleColor:col(u.mottleColor.value),organColor:col(u.organColor.value),boneColor:col(u.boneColor.value),visceraColor:col(u.visceraColor.value),
+      woundDepthAmp:u.surfCfg3.value.x,fatDepth:u.surfCfg3.value.y,muscleDepth:u.surfCfg3.value.z,
+      visceraAmp:u.surfCfg3.value.w,visceraDepth:u.visceraDepth.value,mottleAmp:u.surfCfg2.value.z,
+      mottleScale:u.surfCfg2.value.w,organAmp:u.organAmp.value,goreStrength:0 };
+}
+
 export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null {
   const body = corpsePartition(actor.posed(), false);
   const active = body.prims.filter(p => !p.dead && p.op !== 'sub' && body.clusters.some(c => c.alive && c.id === p.cluster));
@@ -33,7 +44,6 @@ export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null 
   const centre = [0,1,2].map(k=>(lo[k]!+hi[k]!)/2) as unknown as Vec3;
   const halfExtent = [0,1,2].map(k=>(hi[k]!-lo[k]!)/2) as unknown as Vec3;
   const u = actor.view.uniforms;
-  const col = (v: {r:number;g:number;b:number}): Vec3 => [v.r,v.g,v.b];
   return {
     body, flesh: body.prims, bones: body.bonePrims ?? [], centre, halfExtent,
     extent: Math.max(...halfExtent), cellSize: .015, quat: [0,0,0,1], gore: 0,
@@ -52,11 +62,7 @@ export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null 
         normal: woundCarveNormal(body.prims,w,actor.pose().yaw) ?? undefined, depth:w.carveDepth,
         owner: ownerBody }];
     }),
-    look: { baseColor:col(u.baseColor.value),deepColor:col(u.deepColor.value),fatColor:col(u.fatColor.value),
-      mottleColor:col(u.mottleColor.value),organColor:col(u.organColor.value),boneColor:col(u.boneColor.value),visceraColor:col(u.visceraColor.value),
-      woundDepthAmp:u.surfCfg3.value.x,fatDepth:u.surfCfg3.value.y,muscleDepth:u.surfCfg3.value.z,
-      visceraAmp:u.surfCfg3.value.w,visceraDepth:u.visceraDepth.value,mottleAmp:u.surfCfg2.value.z,
-      mottleScale:u.surfCfg2.value.w,organAmp:u.organAmp.value,goreStrength:0 },
+    look: bakeLookOf(u),
   };
 }
 

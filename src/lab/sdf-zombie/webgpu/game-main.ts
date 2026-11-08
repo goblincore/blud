@@ -425,6 +425,7 @@ import { BLAST_KICK_RAD_PER_UNIT, detonateAt, overcookInHand, stepDynamite } fro
 import { acquireVolumeAtlas, bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor, releaseVolumeAtlas } from './game-skeleton-actors';
 import { GAME_HULL_EXIT_BOUND, GAME_LAST_STEP, GAME_LEVEL_SHADOW, GAME_OMEGA, GAME_RELAX, GAME_WOUND_EARLY_OUT, GAME_WOUND_STEP, SMG_TARGET_CHEST_Y, rebuildCast, spawnAll, spawnEnemy } from './game-spawn';
 import { arenaRespawn, installArena } from './game-arena';
+import { bodyLodMeshed, createBodyLodSeams, installBodyLod, stepBodyLod } from './game-body-lod';
 import { applyWoundTuning } from './game-wound-tuning';
 import { DemoReplayOpts, applyDemoQuery, demoSynthesize, runDemoReplay } from './game-demo-replay';
 import { applyRig } from './game-ambient-rig';
@@ -2336,6 +2337,7 @@ async function main() {
     ctx.world.loop?.batches?.update();
     freezeLevelMatrices(ctx);   // sector levels: static level transforms composed once (`?batch=0` off)
     updateVisibleActors(ctx);
+    stepBodyLod(ctx);
     syncKitVisibility(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
     // has written its record AND after updateVisibleActors(), so the visible
@@ -2400,6 +2402,7 @@ async function main() {
           // A headless baked corpse is drawn by its mesh; its instance must not
           // march too (see soldier-corpse-bake bakedState).
           if (ctx.world.soldierCorpses?.bakedState(a.id) === 'headless') continue;
+          if (bodyLodMeshed(a.id)) continue;   // drawn by its type's LOD mesh (game-body-lod.ts)
           vis.add(a.crowd.slot);
         }
         // ALWAYS sync, ready or not: sync() is what flushes the shared atlas
@@ -2436,7 +2439,7 @@ async function main() {
       for (const a of ctx.world.actors) {
         if (!a.crowd) continue;
         const on = shown !== null && shown.has(a)
-          && ctx.world.soldierCorpses?.bakedState(a.id) !== 'headless';
+          && ctx.world.soldierCorpses?.bakedState(a.id) !== 'headless' && !bodyLodMeshed(a.id);
         a.view.object.visible = on;
         if (a.view.depthPreObject) a.view.depthPreObject.visible = on;
       }
@@ -2456,8 +2459,8 @@ async function main() {
         ? ((ctx.crowd.earlyz.on
             ? [...ctx.crowd.types.values()].flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]))
             : [...ctx.crowd.types.values()].map(t => t.mesh)) as THREE.Object3D[])
-            .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
-        : ctx.render.visibleActors.map(a => a.view.object),
+            .concat(ctx.render.visibleActors.filter(a => !a.crowd && !bodyLodMeshed(a.id)).map(a => a.view.object))
+        : ctx.render.visibleActors.filter(a => !bodyLodMeshed(a.id)).map(a => a.view.object),
       // GIBS DEGRADE (defer-compile task): the chunk/gib material is the only
       // user of the chunk program, and a draw before it is ready is the 47.8 s
       // synchronous freeze 87b8f71c exists to prevent. The pieces keep
@@ -4672,7 +4675,7 @@ async function main() {
   ctx.world.soldierCorpseGroup.name = 'soldier-corpses';
   scene.add(ctx.world.soldierCorpseGroup);
   ctx.boot.deferredApi?.router.register(ctx.world.soldierCorpseGroup, 'mesh', 'level-only');
-  ctx.world.soldierCorpses = createSoldierCorpseBakes(ctx.world.soldierCorpseGroup, () => {
+  const bakedBodyMaterial = () => {
     if (!ctx.bake.mat) {
       // Whichever finishes first (corpse or detached chunk) must seed the
       // same mode-aware shared material.
@@ -4684,7 +4687,10 @@ async function main() {
       ctx.bake.seed?.(ctx.bake.mat);
     }
     return ctx.bake.mat.material;
-  });
+  };
+  ctx.world.soldierCorpses = createSoldierCorpseBakes(ctx.world.soldierCorpseGroup, bakedBodyMaterial);
+  // DISTANCE MESH LOD (spike 2026-11-08, game-body-lod.ts): far intact bodies drawn as their type's baked mesh.
+  installBodyLod(ctx, bakedBodyMaterial);
   const disposeCorpses = () => ctx.world.soldierCorpses?.dispose();
   window.addEventListener('pagehide', disposeCorpses);
   import.meta.hot?.dispose(() => { disposeCorpses(); window.removeEventListener('pagehide',disposeCorpses); });
@@ -6050,6 +6056,7 @@ async function main() {
     // values after the decomposition. See seam-merge.ts. Factories first,
     // then the inline members — later parts win, as later spreads did.
     createGibsBakeSeams(ctx),
+    createBodyLodSeams(ctx),
     createLightingProbeSeams(ctx),
     createDemoStepSeams(ctx),
     createRenderQualitySeams(ctx),
