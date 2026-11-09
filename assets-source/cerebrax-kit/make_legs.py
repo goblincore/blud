@@ -97,7 +97,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         drop([f'{mid}.l|tube', f'{mid}.r|tube', f'{mid}.l|collar', f'{mid}.r|collar']); clear_work()
         F = BoneFrame(K, A, fwd=Vector((K.x, K.y, 0)).normalized())   # ph 0 = outboard
         rad = lambda t: 0.060 - 0.016 * t + 0.010 * math.exp(-((t - 0.10) / 0.10) ** 2)
-        S = [0.05 + 0.88 * i / 60 for i in range(61)]
+        S = [0.05 + 0.95 * i / 60 for i in range(61)]   # into the ankle ball: 0.93 left a gap over the foot
         # Silver bone-metal, not plain chrome: polished chrome reflects the dark level and rendered as a black rod
         # (first engine look), while the caps should be the dark parts (the reference's black joint caps).
         tube('tube', [F.h + F.u * (F.L * s) for s in S], [rad(s) for s in S], segs=28)
@@ -109,7 +109,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         _, P, N = bone_shell('collar', F, T0, T1, D(-178), D(178), rf, rf, 0.016, nu=30, nv=48)
         edge_lips(P, N, 0.009, n=60, which=('u0', 'u1'))
         # The bottom collar: a cuff over the ankle's top.
-        _, P2, N2 = bone_shell('cuff', F, 0.84, 0.95, D(-178), D(178), lambda t: rad(t) + 0.020, lambda t: rad(t) + 0.020, 0.016, nu=16, nv=48)
+        _, P2, N2 = bone_shell('cuff', F, 0.86, 0.985, D(-178), D(178), lambda t: rad(t) + 0.020, lambda t: rad(t) + 0.020, 0.016, nu=16, nv=48)
         edge_lips(P2, N2, 0.009, n=60, which=('u0',))
         for tt in (0.38, 0.62):
             ring(f'band{tt}', F.h + F.u * (F.L * tt), F.u, rad(tt) + 0.010, 0.010)

@@ -10,7 +10,7 @@ from mathutils import Vector
 try:
     PARTS
 except NameError:
-    PARTS = {'ring', 'talons'}
+    PARTS = {'ring', 'frame', 'talons'}
 O = Vector((J['centre'][0], 0, J['centre'][2]))         # the ring's centre axis (blob x, -, z)
 # DIP: the brain is tilted 25 deg face-down (cerebrax.blob), its chin at y ~1.15; the V's flat bottom sits just under
 # it (the owner: the face hanging low over the frame, close to the gun). 0.26 under the upright brain's face.
@@ -76,9 +76,10 @@ if 'ring' in PARTS:
         for sx in (1, -1):
             h = Vector((JV[key].x * sx, JV[key].y, JV[key].z)); kn = Vector((JV[up].x * sx, JV[up].y, JV[up].z))
             d = (kn - h).normalized()
-            ball(f'sock{key}{sx}', h, 1.0, 0.115, 0.115, 0.115)
-            ring(f'sring{key}{sx}', h + d * 0.085, d, 0.085, 0.014)
-            ring(f'sring2{key}{sx}', h + d * 0.115, d, 0.058, 0.010)
+            # Big enough that the strut's root stays sunk in it through the whole stride (the strut swings about h).
+            ball(f'sock{key}{sx}', h, 1.0, 0.150, 0.150, 0.150)
+            ring(f'sring{key}{sx}', h + d * 0.120, d, 0.100, 0.016)
+            ring(f'sring2{key}{sx}', h + d * 0.150, d, 0.070, 0.011)
             # A raked horn off the boss, pointing back down the body: the socket's skull-cheek sweep.
             horn(f'shorn{key}{sx}', h - d * 0.05 + Vector((0, 0, 0.06)), -d + Vector((0, 0, 0.5)), d.cross(Vector((0, 0, 1))).normalized(), 0.16, 0.030, curl=-0.8)
             # A strut from the boss into the band (the band runs inside the legs' roots).
@@ -91,6 +92,50 @@ if 'ring' in PARTS:
     # skullmetal burns red): two embers at the eye sockets, a steep falloff over 0.35 m.
     eyes = [(sk(*tilted(-16.6, sx * 5.7), 0.01), 0.03, 0.9) for sx in (1, -1)]
     finish_part('harness', 'pelvis|harness', 22000, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
+
+if 'frame' in PARTS:
+    # THE CHASSIS (pelvis|frame): the band alone read as a ring with four legs stuck on it (owner, arena look,
+    # 2026-11-08: "the legs seem a bit disconnected from the rest of the frame"). A side rail on each flank runs
+    # hind socket -> fore socket, bowing out round the band; four braces drop from the sockets to a belly boss under
+    # the brain; so every leg hangs off one welded frame, the reference's undercarriage.
+    drop(['pelvis|frame']); clear_work()
+    def bez(a, m, b, n=24):
+        return [a * (1 - t) ** 2 + m * 2 * t * (1 - t) + b * t * t for t in (i / n for i in range(n + 1))]
+    low = min(skin(-90 + i, lon)[0].y for i in range(0, 60, 2) for lon in range(-180, 180, 15))
+    belly = bv(O.x, low - 0.12, J['centre'][2])
+    print('FRAME brain bottom', round(low, 3), 'belly', tuple(round(c, 3) for c in belly))
+    for sx in (1, -1):
+        H = Vector((JV['hip'].x * sx, JV['hip'].y, JV['hip'].z)); S = Vector((JV['shoulder'].x * sx, JV['shoulder'].y, JV['shoulder'].z))
+        # The rail: out round the band's flank at socket height, a little under it.
+        v = 0.75 if sx > 0 else 0.25
+        m = band_point(0.25, v, 0.10); m = Vector((m.x, m.y, H.z - 0.04))
+        rail = bez(H, m, S)
+        tube(f'rail{sx}', rail, [0.060 + 0.012 * (1 - bell((i / 24 - 0.5) / 0.5)) for i in range(25)], segs=16)
+        top = [p + Vector((0, 0, 0.055)) for p in rail[3:-3]]
+        tube(f'railcrest{sx}', top, [0.008 + 0.010 * bell((i / (len(top) - 1) - 0.5) / 0.5) for i in range(len(top))], segs=8)
+        mid = rail[12]
+        ring(f'railband{sx}', mid, (rail[13] - rail[11]).normalized(), 0.072, 0.013)
+        # Chevron ribs down the rail's outer face.
+        out = Vector((sx, 0, 0))
+        for k in (6, 9, 15, 18):
+            a_, b_ = rail[k], rail[k + 1]; t_ = (b_ - a_).normalized()
+            R_ = [i / 10 for i in range(11)]
+            tube(f'rrib{sx}{k}', [rail[k] + out * (0.058 + 0.004 * u) + Vector((0, 0, 0.04 - 0.09 * u)) - t_ * (0.04 * u) for u in R_],
+                 [0.004 + 0.006 * sn(0.1 + u * 0.9) for u in R_], segs=8)
+        # The braces: each socket down to the belly, sagging a little.
+        for nm, P0 in (('h', H), ('s', S)):
+            mm = P0.lerp(belly, 0.5) + Vector((0, 0, -0.06))
+            br = bez(P0, mm, belly, 16)
+            tube(f'brace{nm}{sx}', br, [0.048 - 0.012 * i / 16 for i in range(17)], segs=14)
+            ring(f'bring{nm}{sx}', br[4], (br[5] - br[3]).normalized(), 0.050, 0.010)
+    # The belly boss: a domed knuckle with a ring and a horn raking back down off it.
+    ball('belly', belly, 1.0, 0.130, 0.130, 0.095)
+    ring('bellyring', belly + Vector((0, 0, -0.03)), Vector((0, 0, 1)), 0.120, 0.016)
+    horn('bellyhorn', belly + Vector((0, 0.02, -0.07)), Vector((0, 0.7, -1.0)), Vector((1, 0, 0)), 0.30, 0.050, curl=0.9)
+    # A hanger from the belly forward to the keel, so the gun's mount is on the same frame.
+    kp = band_point(0.0, 0.5, 0.0) + Vector((0, 0.02, -0.06))
+    tube('gunstay', bez(belly, belly.lerp(kp, 0.5) + Vector((0, 0, -0.08)), kp, 16), [0.040] * 17, segs=12)
+    finish_part('frame', 'pelvis|frame', 9000, voxel=0.005, noise=0.003, noise_scale=0.07, ao=(1.5, 1.6))
 
 if 'talons' in PARTS:
     # Talons rising off the band's top edge and curling in over the brain: three per side, none in front of the face.

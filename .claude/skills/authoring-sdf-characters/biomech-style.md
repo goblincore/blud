@@ -884,3 +884,14 @@ offset inside the brain, or a mind that never fires, which no turntable shows.
   into handle loops; about 2 rad sweeps like a ram's horn.
 - A harness for a ball: a band fitted to the probed skin, high at the back and dipping to a mandible point under
   the low face (a level ring cut across the chin), with talons curling in over the brain like prongs round a gem.
+- Legs on a ring read as stuck on. With only the band, the owner saw "the legs ... disconnected from the rest of
+  the frame". The fix was a chassis (`make_harness.py` `frame`):
+  - a rail down each flank, joining the hind socket to the fore socket;
+  - four braces dropping from the sockets to a belly boss under the brain;
+  - a stay from the belly to the gun's keel;
+  - socket balls big enough to swallow the strut's root through the whole stride.
+
+  The player looks UP at a boss, so judge the undercarriage from eye height (`BLOB_PITCH=-0.2 BLOB_TARGET_Y=1.6`).
+  The default turntable pitch hides it.
+- A shin tube that stops short of the ankle (it ended at 0.93 of the bone) leaves a visible gap over the foot ball.
+  Run tubes into the next knuckle.
