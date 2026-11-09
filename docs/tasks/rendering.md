@@ -2,6 +2,25 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The march's ceiling: research and the cost ladder — 2026-11-09
+
+Notes: [`NOTES.md`](../dev-notes/2026-11-09-sdf-perf-research/NOTES.md) (research: what has been tried, the literature,
+the upscaler as an algorithm) and [`LADDER.md`](../dev-notes/2026-11-09-sdf-perf-research/LADDER.md) (the measurement).
+Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed with its shader text edited rung by rung).
+
+- [x] **Measured, clean zombie close-up (0.6 m, 73 % cover):** the field itself is about a seventh of the walk-only
+  frame. A field call costs 11 ns through `mapBody` and 3.6 ns through a stripped `mapLean` (the tile-list fold and
+  the carves), with the same picture to the bit. The wound, re-fold and bone code is never taken on this body and
+  its presence costs 26 to 30 % of the walk. The shipped pass with the walk on `mapLean`: 20.6 → 14.6 ms (−24 to
+  −29 % over three runs); with the call chosen per pixel inside the loop, −16 to −22 %.
+- [x] Rays that walk and miss: 15 % of the walked pixels, 60 % of the steps, 48 % of the folds (24 steps a ray).
+- [x] The per-pixel setup without the temporal start's probe is 0.2 ms.
+- [ ] **Next: the clean-body fast path in the real shader** (`mapLean` beside `mapBody`, chosen per pixel when every
+  slot in the tile is clean; the clean `march-hash` pins should not move). Then per sample for wounded bodies
+  (outside the wound bound a sample is `mapLean`'s exactly). Owner's go-ahead pending.
+- [ ] Not measured: a wounded frame, a crowd frame, other bodies, the live game, the cold compile of the extra call
+  sites, and why untaken code costs.
+
 ## three r187 — 2026-10-30
 
 - [x] **Upgraded from r186.** Cold boot, r186 → r187, three alternating runs each: the warm 4211 → 3155 ms, the first

@@ -178,7 +178,18 @@ async function parity({ manifest, device, passes, blob }) {
       }
     }
     const n = ref.width * ref.height * 4;
-    out.push({ label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n });
+    // COUNTER READBACK (ladder.mjs `count`): a shader that writes b = 1, 2 or 3 as a pixel class gets its r and g
+    // summed per class. Read it for a `count` rung only: any other frame's blue can land on an integer by chance.
+    const classes = {};
+    for (let y = 0; y < ref.height; y++) {
+      for (let x = 0; x < ref.width; x++) {
+        const o = y * (bytesPerRow / 4) + x * 4, k = Math.round(got[o + 2]);
+        if (k < 1 || k > 3 || Math.abs(got[o + 2] - k) > 1e-3) continue;
+        const c = (classes[k] ??= { pixels: 0, r: 0, g: 0 });
+        c.pixels++; c.r += got[o]; c.g += got[o + 1];
+      }
+    }
+    out.push({ label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n, classes });
     show(device, got, ref.width, ref.height, bytesPerRow / 4);
     staging.unmap();
   }
