@@ -62,10 +62,10 @@ Each line is the first sentence of the module's header comment.
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
-| [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
+| [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 29 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 30 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -841,6 +841,7 @@ Gib parts, launch, tearing, entrails, strands.
 Brains, the soldier, crowd logic.
 
 - `actor.ts` — The per-body actor record and the shared pose step.
+- `brain-arcs.ts` — BRAIN ARCS: electricity crawling over the cerebrax's brain while it seizes (owner, 2026-11-09: "cool electricity effects ...
 - `brain.ts` — One zombie's decision layer, as a named state machine.
 - `crowd.ts` — Ground-plane crowd separation: the reason zombies stop standing inside one another.
 - `soldier-brain.ts` — One soldier's decision layer, as a named state machine.
@@ -900,6 +901,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
 - `fireball.ts` — The imp's FIREBALL (characters/imp.blob) and its THROW.
+- `flesh-jiggle.ts` — FLESH JIGGLE: a hit makes a soft mass on a rigid frame QUIVER, violently and out of shape (the cerebrax: owner, 2026-11-09, "the wobble when hit…
 - `gore-spread.ts` — GORE SPREAD: the queue that moves a gun hit's gore one tick past the hit frame, a few jobs a tick (gore spread pass, 2026-10-29).
 - `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
 - `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…

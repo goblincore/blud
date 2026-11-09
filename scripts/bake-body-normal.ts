@@ -3,7 +3,7 @@
 // Bake a character's BODY NORMAL MAP (spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md):
 //
 //   npx tsx scripts/bake-body-normal.ts <character> [width] [torsoRows] [--limb bone:t0:t1:rMax:rows ...]
-//     [--torso-axis hx,hy,hz:tx,ty,tz] [--torso-seg label:hx,hy,hz:tx,ty,tz:rMax:rows ...] [--cpu] [--shards N]
+//     [--torso-axis hx,hy,hz:tx,ty,tz] [--torso-r0 m] [--torso-seg label:hx,hy,hz:tx,ty,tz:rMax:rows ...] [--cpu] [--shards N]
 //     reads  src/lab/sdf-zombie/characters/<character>.blob
 //            src/lab/sdf-zombie/characters/<character>.detail   (extra `body` lines, never marched)
 //     writes public/assets/lab/<character>-body-n.png            (an atlas of tangent-space normals)
@@ -46,6 +46,7 @@ const limbArgs: string[] = [];
 const segArgs: string[] = [];
 const pos: string[] = [];
 let torsoAxisArg: string | null = null;
+let torsoR0: number | null = null;
 let forceCpu = false;
 let shards = 1, shardK = 0, shardN = 1, shardOut: string | null = null;
 for (let i = 0; i < argv.length; i++) {
@@ -55,6 +56,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (argv[i] === '--shard-out') shardOut = argv[++i]!;
   else if (argv[i] === '--limb') limbArgs.push(argv[++i]!);
   else if (argv[i] === '--torso-axis') torsoAxisArg = argv[++i]!;
+  // Region 0's ray start radius (default 0.6 m): a torso wider than that from its axis needs more (regions.ts).
+  else if (argv[i] === '--torso-r0') torsoR0 = Number(argv[++i]);
   else if (argv[i] === '--torso-seg') segArgs.push(argv[++i]!);
   else pos.push(argv[i]!);
 }
@@ -70,7 +73,7 @@ const detailSrc = readFileSync(detailPath, 'utf8');
 let bodies: ReturnType<typeof bakeBodies>, layout: ReturnType<typeof buildRegions>;
 try {
   bodies = bakeBodies(blobSrc, detailSrc, name);
-  layout = buildRegions(bodies.base, { torsoRows: H, torsoAxis: torsoAxisArg, limbs: limbArgs, torsoSegs: segArgs });
+  layout = buildRegions(bodies.base, { torsoRows: H, torsoAxis: torsoAxisArg, torsoR0, limbs: limbArgs, torsoSegs: segArgs });
 } catch (e) { console.error((e as Error).message); process.exit(2); }
 const { base, detail } = bodies;
 const { regions, height: TH } = layout;

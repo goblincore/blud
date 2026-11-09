@@ -1,0 +1,166 @@
+{
+ "size": 2048,
+ "flat": [
+  2,
+  2,
+  8,
+  8
+ ],
+ "tiles": {
+  "nrm_pelvis|harness": [
+   14,
+   2,
+   571,
+   571
+  ],
+  "nrm_pelvis|frame": [
+   589,
+   2,
+   571,
+   571
+  ],
+  "nrm_skull|tendrils": [
+   1164,
+   2,
+   571,
+   571
+  ],
+  "nrm_thigh.l|strut": [
+   2,
+   577,
+   553,
+   553
+  ],
+  "nrm_upperarm.l|strut": [
+   559,
+   577,
+   553,
+   553
+  ],
+  "nrm_shin.l|tube": [
+   1116,
+   577,
+   464,
+   464
+  ],
+  "nrm_forearm.l|tube": [
+   2,
+   1134,
+   464,
+   464
+  ],
+  "nrm_shin.l|collar": [
+   470,
+   1134,
+   455,
+   455
+  ],
+  "nrm_forearm.l|collar": [
+   929,
+   1134,
+   455,
+   455
+  ],
+  "nrm_pelvis|gun": [
+   1388,
+   1134,
+   330,
+   330
+  ],
+  "nrm_pelvis|talons": [
+   1722,
+   1134,
+   312,
+   312
+  ],
+  "nrm_skull|plugs": [
+   2,
+   1602,
+   267,
+   267
+  ],
+  "nrm_shin.l|knee": [
+   273,
+   1602,
+   258,
+   258
+  ],
+  "nrm_forearm.l|knee": [
+   535,
+   1602,
+   258,
+   258
+  ],
+  "nrm_thigh.l|ram": [
+   797,
+   1602,
+   223,
+   223
+  ],
+  "nrm_upperarm.l|ram": [
+   1024,
+   1602,
+   223,
+   223
+  ],
+  "nrm_pelvis|feed": [
+   1251,
+   1602,
+   205,
+   205
+  ],
+  "nrm_foot.l|foot": [
+   1460,
+   1602,
+   169,
+   169
+  ],
+  "nrm_hand.l|foot": [
+   1633,
+   1602,
+   169,
+   169
+  ],
+  "nrm_skull|teeth": [
+   1806,
+   1602,
+   62,
+   62
+  ]
+ },
+ "parts": {
+  "pelvis|harness": "nrm_pelvis|harness",
+  "pelvis|frame": "nrm_pelvis|frame",
+  "pelvis|talons": "nrm_pelvis|talons",
+  "thigh.l|strut": "nrm_thigh.l|strut",
+  "thigh.r|strut": "nrm_thigh.l|strut",
+  "thigh.l|ram": "nrm_thigh.l|ram",
+  "thigh.r|ram": "nrm_thigh.l|ram",
+  "shin.l|knee": "nrm_shin.l|knee",
+  "shin.r|knee": "nrm_shin.l|knee",
+  "shin.l|tube": "nrm_shin.l|tube",
+  "shin.r|tube": "nrm_shin.l|tube",
+  "shin.l|collar": "nrm_shin.l|collar",
+  "shin.r|collar": "nrm_shin.l|collar",
+  "foot.l|foot": "nrm_foot.l|foot",
+  "foot.r|foot": "nrm_foot.l|foot",
+  "upperarm.l|strut": "nrm_upperarm.l|strut",
+  "upperarm.r|strut": "nrm_upperarm.l|strut",
+  "upperarm.l|ram": "nrm_upperarm.l|ram",
+  "upperarm.r|ram": "nrm_upperarm.l|ram",
+  "forearm.l|knee": "nrm_forearm.l|knee",
+  "forearm.r|knee": "nrm_forearm.l|knee",
+  "forearm.l|tube": "nrm_forearm.l|tube",
+  "forearm.r|tube": "nrm_forearm.l|tube",
+  "forearm.l|collar": "nrm_forearm.l|collar",
+  "forearm.r|collar": "nrm_forearm.l|collar",
+  "hand.l|foot": "nrm_hand.l|foot",
+  "hand.r|foot": "nrm_hand.l|foot",
+  "skull|teeth": "nrm_skull|teeth",
+  "skull|tendrils": "nrm_skull|tendrils",
+  "skull|plugs": "nrm_skull|plugs",
+  "pelvis|gun": "nrm_pelvis|gun",
+  "pelvis|feed": "nrm_pelvis|feed"
+ },
+ "scale": 0.558
+}

@@ -34,6 +34,7 @@ import { makeZombie } from '../body';
 import { translateBody } from '../translate';
 import { rotateYaw } from '../gait';
 import { kitFrames, type BoundRig } from '../rig-bind';
+import type { ArcDrive } from '../brain-arcs';
 import type { MotionFrame } from '../motion';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
@@ -47,7 +48,7 @@ import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
 import { hash01 } from '../gib-launch';
 import { KIT_BURST, kitBurstLaunch } from '../kit-burst';
-import { createArmorSparks, createMuzzleFlash } from './character-effects';
+import { createArmorSparks, createBrainArcs, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { levelBatchOn } from './level-batch';
 
@@ -538,6 +539,8 @@ export interface CharacterView {
      *  Absent = an idle heartbeat on this view's own clock, so the lab's
      *  turntable blinks too. Only kits with `led`/`core` materials react. */
     lights?: StatusLights | null,
+    /** The brain's electricity (brain-arcs.ts; game-actor arcDrive): null or absent is dark. */
+    arcs?: ArcDrive | null,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
@@ -645,6 +648,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const armed = opts.unarmed !== true;
   const muzzleFlash = armed && entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
+  // A convulsing brain (MotionProfile.fleshJiggle, the cerebrax) crackles with electricity while it seizes.
+  const brainArcs = entry.profile.fleshJiggle && opts.effectsScene ? createBrainArcs() : null;
+  if (brainArcs) opts.effectsScene!.add(brainArcs.object);
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
@@ -708,6 +714,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     heldProp = null;
     muzzleFlash?.dispose();
     armorSparks?.dispose();
+    brainArcs?.dispose();
     casings?.dispose();
   }
 
@@ -719,9 +726,10 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null, lights = null) {
-      if (equipmentRetired) return;
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null, lights = null, arcs = null) {
+      if (equipmentRetired) { brainArcs?.update(null, dt); return; }
       lightsClock += dt;
+      brainArcs?.update(arcs, dt);
       kit?.glow(lights ?? statusLights({ mode: 'idle', t: lightsClock, phase: releaseSeed * 0.37 }));
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
@@ -776,6 +784,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       ejection.reset();
       kit?.resetDamage();
       armorSparks?.reset();
+      brainArcs?.reset();
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },

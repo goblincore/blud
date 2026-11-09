@@ -468,7 +468,7 @@ export function tick(ctx: GameContext, dt: number) {
         }
         // Its kit and prop are hidden this frame (out of the visual and march sets): nothing reads their pose.
         if (kitPoseSkippable(ctx, a, march)) continue;
-        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
+        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights(), a.arcDrive?.() ?? null);
       }
     }
     // The actor animation phase: wall-clock in play, the SIM CLOCK while a

@@ -2,6 +2,24 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Cerebrax (boss: a brain in a harness on four spider legs, a chaingun under its face) — first pass 2026-11-08
+
+- [x] **Body** `characters/cerebrax.blob` at `scale 1.60`: a brain of 24 SDF prims (mass, hemispheres, frontal,
+  temporal and occipital lobes, cerebellum, a small snarling face low on the front), on the gibbet's four-legged rig
+  with spider legs (knees 2.75 m up, poled up and out by the new `GaitProfile.kneePole` / `elbowPole`). The brain rides
+  `skull`, so the aim chain turns it in its ring. It pulses on the `swell` morph (`MotionProfile.joystick.swell`,
+  no throw). `?character=cerebrax`, `?spawn=cerebrax`.
+- [x] **Folds** `characters/cerebrax.detail` from `scripts/cerebrax-detail-gen.ts`: gyri along the nodal lines of a
+  random-wave field, fissure banks, cortical veins, the snarl's wrinkles. Baked round a vertical axis; the bake
+  gained `--torso-r0` (region 0's ray start, fixed at 0.6 m before).
+- [x] **Kit** `assets-source/cerebrax-kit/` (headless `butcher-kit/build.py`, skin from `scripts/cerebrax-skin.ts`): the
+  harness band dipping to a mandible point under the face, talons over the brain, socket bosses; skullmetal struts
+  with crests and rams, black knee caps with horns, silver shins in sculpted collars, talon feet; eye embers,
+  teeth, glowing tendrils; the under-barrel chaingun. ~256k tris: the kit triangle pass is still to come.
+- [x] **Attack**: `gunner: chaingun` + `spit` from the hips: the soldier brain on the juggernaut's sweeping-burst tuning,
+  fired from the under-barrel (`webgpu/game-actor-cerebrax.test.ts`).
+- [ ] Owner look; a death (it uses the authored falls); drone or swarm variants; kit triangle optimisation; kit shedding.
+
 ## Imp (gaunt fireball-throwing demon: burning socket fists, a forge-heart feeding them) — first pass 2026-10-24
 
 - [x] **Body** `characters/imp.blob`: a gaunt, hunched, pale-hide demon on the butcher's digitigrade legs (flesh, not

@@ -235,3 +235,110 @@ def mirror_to_r(o, kitname):
     bm.to_mesh(c.data); bm.free()
     work_coll().objects.link(c)
     return install(c, kitname)
+
+
+# ---------- NORMAL MAPS (2026-11-09, the cerebrax first) ----------
+# A part keeps its fused HIGH sculpt, is decimated to its budget, UV-unwrapped, and gets the detail the decimation
+# smeared (ribbing, sutures, the clouds noise) back as a tangent-space normal map baked from the high. Each part bakes
+# its OWN tile (an image packed into the .blend, named on the object as `nrm`; a mirrored .r part shares its .l's);
+# build.py --export packs every tile into one atlas, <kit>-normal.png + .json, and scripts/blender-kit.ts remaps the
+# UVs into it. Texel density NRM_DENSITY px per metre of surface; the atlas scales it down if it does not fit.
+NRM_DENSITY = 900
+
+
+def keep_high(o):
+    """A copy of `o` (the fused sculpt) to bake from, before it is decimated."""
+    h = o.copy(); h.data = o.data.copy(); h.name = o.name + '_hi'
+    work_coll().objects.link(h)
+    h.hide_render = True   # or bake_ao's rays hit it, lying on the low part's surface, and black the part out
+    return h
+
+
+def bake_normal(lo, hi, key, extrusion=0.006, density=None):
+    """UV-unwrap `lo` and bake `hi`'s surface onto it as a tangent-space normal map (a new tile image, packed).
+    `key` names the tile: the part's INSTALLED name (`thigh.l|strut`), since a kit builds several parts of one
+    working name (a strut per leg) and they would overwrite each other's tile."""
+    area = sum(p.area for p in lo.data.polygons)
+    px = int(min(1024, max(64, round(math.sqrt(area) * (density or NRM_DENSITY) / 16) * 16)))
+    for x in bpy.context.view_layer.objects: x.select_set(False)
+    lo.hide_set(False); lo.select_set(True); bpy.context.view_layer.objects.active = lo
+    while lo.data.uv_layers: lo.data.uv_layers.remove(lo.data.uv_layers[0])
+    lo.data.uv_layers.new(name='UVMap')
+    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=D(60), island_margin=3.0 / px, area_weight=0.0, scale_to_bounds=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    name = 'nrm_' + key
+    old = bpy.data.images.get(name)
+    if old: bpy.data.images.remove(old)
+    img = bpy.data.images.new(name, px, px, alpha=False)
+    img.colorspace_settings.name = 'Non-Color'
+    img.generated_color = (0.5, 0.5, 1.0, 1.0)
+    mat = lo.data.materials[0]
+    mat.use_nodes = True
+    node = mat.node_tree.nodes.new('ShaderNodeTexImage'); node.image = img
+    mat.node_tree.nodes.active = node
+    sc = bpy.context.scene; prev = sc.render.engine
+    sc.render.engine = 'CYCLES'; sc.cycles.samples = 1; sc.cycles.device = 'CPU'
+    hi.hide_set(False); hi.hide_render = False; hi.select_set(True)
+    lo.select_set(True); bpy.context.view_layer.objects.active = lo
+    bpy.ops.object.bake(type='NORMAL', normal_space='TANGENT', use_selected_to_active=True, cage_extrusion=extrusion,
+                        max_ray_distance=extrusion * 3, margin=max(4, px // 64), target='IMAGE_TEXTURES')
+    sc.render.engine = prev
+    mat.node_tree.nodes.remove(node)
+    img['px'] = px   # its baked size: pack_normal_atlas sizes the tile from this, however it was stored
+    img.use_fake_user = True   # no material uses it, and the .blend drops images nothing uses
+    img.pack()
+    lo['nrm'] = img.name
+    bpy.data.objects.remove(hi, do_unlink=True)
+    bpy.context.view_layer.update()
+    return img
+
+
+def pack_normal_atlas(objs, out_png, out_json, size=2048, pad=4):
+    """Shelf-pack every part's tile into one atlas; tiles shrink together until they fit. Writes the PNG and a JSON of
+    {size, flat: [x, y, w, h], tiles: {image: [x, y, w, h]}, parts: {object: image}} in Blender pixel coords (origin
+    bottom left). `flat` is a block of flat normal for parts without a tile that share a material with ones with."""
+    import json
+    import numpy as np
+    parts = {o.name: o['nrm'] for o in objs if o.get('nrm') and bpy.data.images.get(o['nrm'])}
+    # Tiles no part uses any more (a part renamed or rebuilt under a new key) leave the .blend.
+    for im in [im for im in bpy.data.images if im.name.startswith('nrm_') and im.name != 'nrm_atlas' and im.name not in parts.values()]:
+        bpy.data.images.remove(im)
+    tiles = sorted({n: int(bpy.data.images[n].get('px', bpy.data.images[n].size[0])) for n in parts.values()}.items(), key=lambda t: -t[1])
+    scale = 1.0
+    while True:
+        rects = {}; x = y = 0; shelf = 0
+        items = [('__flat__', 8)] + [(n, max(8, int(s * scale))) for n, s in tiles]
+        ok = True
+        for n, s in items:
+            if x + s + pad > size: x = 0; y += shelf + pad; shelf = 0
+            if y + s + pad > size: ok = False; break
+            rects[n] = [x + pad // 2, y + pad // 2, s, s]; x += s + pad; shelf = max(shelf, s)
+        if ok: break
+        scale *= 0.92
+    atlas = np.zeros((size, size, 4), dtype=np.float32); atlas[...] = (0.5, 0.5, 1.0, 1.0)
+    for n, (rx, ry, s, _) in rects.items():
+        if n == '__flat__': continue
+        src = bpy.data.images[n]
+        if src.size[0] != s:
+            # Store the tile at its atlas size: kept at its bake size the .blend grew 2 -> 24 MB. `px` keeps the
+            # baked size, so the next pack sizes it from that (rescaling a stored tile up only blurs it a little).
+            src.scale(s, s); src.pack()
+        px = np.empty(s * s * 4, dtype=np.float32); src.pixels.foreach_get(px)
+        tile = px.reshape(s, s, 4)
+        atlas[ry:ry + s, rx:rx + s] = tile
+        # Bleed the tile's edge into the pad, so mips never sample the neighbour or the background.
+        h = pad // 2
+        atlas[ry - h:ry, rx:rx + s] = tile[0:1]; atlas[ry + s:ry + s + h, rx:rx + s] = tile[-1:]
+        atlas[ry - h:ry + s + h, rx - h:rx] = atlas[ry - h:ry + s + h, rx:rx + 1]
+        atlas[ry - h:ry + s + h, rx + s:rx + s + h] = atlas[ry - h:ry + s + h, rx + s - 1:rx + s]
+    out = bpy.data.images.get('nrm_atlas') or bpy.data.images.new('nrm_atlas', size, size, alpha=False)
+    out.use_fake_user = False   # written to disk; nothing in the .blend needs it
+    if tuple(out.size) != (size, size): out.scale(size, size)
+    out.colorspace_settings.name = 'Non-Color'
+    out.pixels.foreach_set(atlas.ravel())
+    out.filepath_raw = out_png; out.file_format = 'PNG'; out.save()
+    flat = rects.pop('__flat__')
+    with open(out_json, 'w') as f:
+        json.dump({'size': size, 'flat': flat, 'tiles': rects, 'parts': parts, 'scale': round(scale, 3)}, f, indent=1)
+    return scale
