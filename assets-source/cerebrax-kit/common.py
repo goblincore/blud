@@ -131,16 +131,19 @@ def glow_bake(o, srcs, reach, power=2.0, facing=0.35):
         g.value = min(1.0, val)
 
 
-def finish_part(name, kit, tris, material='skullmetal', mirror=False, lines=(), glow=None, ao=(1.0, 1.3), flatten=None, **fk):
-    """fuse -> sutures -> decimate -> AO -> optional glow -> install (and mirror a .l part to .r)."""
+def finish_part(name, kit, tris, material='skullmetal', mirror=False, lines=(), glow=None, ao=(1.0, 1.3), flatten=None, nrm=True, **fk):
+    """fuse -> sutures -> keep the high -> decimate -> AO -> normal map -> optional glow -> install (and mirror a .l part to .r)."""
     o = fuse(name, **fk)
     if lines: press_lines(o, lines)
     if flatten is not None:
         for v in o.data.vertices:
             if v.co.z < flatten: v.co.z = flatten
         o.data.update()
+    hi = keep_high(o) if nrm else None
     decimate(o, tris)
     bake_ao(o, material, gain=ao[0], gamma=ao[1])
+    # The detail the decimation smeared comes back as a normal map baked from the high (kit_sculpt.py bake_normal).
+    if hi: bake_normal(o, hi, kit, extrusion=max(0.006, 3 * fk.get('voxel', 0.0022)))
     if glow: glow_bake(o, *glow)
     install(o, kit)
     if mirror:
@@ -154,7 +157,8 @@ def join_work():
     """Join everything in the work collection into one object and return it. DESELECT FIRST (the imp's lesson): a
     part's install leaves it selected, and join() swallows every selected object, so the first cerebrax build lost
     its gun into the barrels and its feed hose into the eyes."""
-    for o in bpy.context.view_layer.objects: o.select_set(False)
+    for o in bpy.context.view_layer.objects:
+        if o: o.select_set(False)   # None: an object just removed (bake_normal's high copy) the layer still lists
     objs = list(work_coll().objects)
     for o in objs: o.select_set(True)
     bpy.context.view_layer.objects.active = objs[0]

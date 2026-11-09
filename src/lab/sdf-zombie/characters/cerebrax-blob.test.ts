@@ -10,6 +10,7 @@ import src from './cerebrax.blob?raw';
 import headKitSrc from '../../../../assets-source/cerebrax-kit/make_head.py?raw';
 import harnessKitSrc from '../../../../assets-source/cerebrax-kit/make_harness.py?raw';
 import gunKitSrc from '../../../../assets-source/cerebrax-kit/make_gun.py?raw';
+import kitGltfSrc from '../../../../public/assets/lab/cerebrax-kit.gltf?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -117,5 +118,22 @@ describe('cerebrax — a brain on four spider legs', () => {
     }
     expect(drift, 'leg roots off their sockets (m)').toBeLessThan(0.005);
     expect(tilt, 'the frame tips (rad)').toBeLessThan(0.01);
+  });
+
+  it('ships its kit with a baked normal atlas: UVs and tangents on the sculpted parts', () => {
+    // scripts/blender-kit.ts remaps each part's tile into <kit>-normal.png (kit_sculpt.py bake_normal), so the
+    // decimated kit keeps the sculpt's detail.
+    const g = JSON.parse(kitGltfSrc);
+    expect(g.images?.[0]?.uri).toBe('cerebrax-kit-n.png');
+    const prims = g.meshes[0].primitives as { attributes: Record<string, number>; material: number }[];
+    const baked = prims.filter(p => g.materials[p.material].normalTexture);
+    const names = baked.map(p => g.materials[p.material].name);
+    for (const m of ['skullmetal', 'black', 'hose', 'tooth']) expect(names).toContain(m);
+    for (const p of baked) {
+      expect(p.attributes.TEXCOORD_0).toBeDefined();
+      expect(p.attributes.TANGENT).toBeDefined();
+      const uv = g.accessors[p.attributes.TEXCOORD_0!];
+      expect(uv.count).toBe(g.accessors[p.attributes.POSITION!].count);
+    }
   });
 });

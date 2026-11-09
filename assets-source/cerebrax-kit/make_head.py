@@ -77,7 +77,7 @@ if 'tendrils' in PARTS:
                 ring(f'tr{i}_{j}', pts[j], ax, rad[j] * 1.04, rad[j] * 0.22)
         plugs.append((sk(la, lo, 0.012), n, rad[0]))
         tips.append((pts[-1], (pts[-1] - pts[-3]).normalized(), rad[-1]))
-    finish_part('tendrils', 'skull|tendrils', 9000, material='hose', voxel=0.003, noise=0.0015, ao=(1.3, 1.3))
+    finish_part('tendrils', 'skull|tendrils', 5000, material='hose', voxel=0.003, noise=0.0015, ao=(1.3, 1.3))
     # The ferrules at the roots and the plugs at the ends: bony collars, burning red near the tips (_glow).
     for i, (p, n, r) in enumerate(plugs):
         ring(f'fer{i}', p, n, r * 1.25, r * 0.38)

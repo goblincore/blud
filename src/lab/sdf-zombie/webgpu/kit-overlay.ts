@@ -515,6 +515,8 @@ export async function loadKit(
       nm.name = old.name;
       nm.color.copy(old.color);
       nm.vertexColors = old.vertexColors;
+      // A baked normal atlas (scripts/blender-kit.ts): GLTFLoader put it on the old material.
+      if (old.normalMap) { nm.normalMap = old.normalMap; nm.normalScale.copy(old.normalScale); }
       nm.emissiveNode = vec3(...glowSpec.color).mul(attribute('_glow', 'float')).mul(glowSpec.gain);
       (o as THREE.Mesh).material = nm;
       old.dispose();

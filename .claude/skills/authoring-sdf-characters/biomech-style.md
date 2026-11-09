@@ -275,9 +275,25 @@ pistol. A ranged variant needs a different set of parts from a melee one:
 
 ## Budget
 
-The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
-detail into a normal map on a low-poly cage, aiming for 2-4k triangles per part. Author at full detail first;
-optimize once the look is approved.
+The twinhead kit is about 145k triangles, too high for crowds. Author at full detail first; optimize once the
+look is approved.
+
+**Kit normal maps (since 2026-11-09, the cerebrax first).** A sculpted part can keep its detail at a low triangle
+count:
+- `kit_sculpt.py` `keep_high` copies the fused sculpt before `decimate`.
+- `bake_normal` UV-unwraps the decimated part (smart project), bakes the high onto it as a tangent-space normal map
+  in Cycles (selected to active), and packs the tile into the `.blend`. A mirrored `.r` part shares its `.l` tile.
+- `build.py --export` packs every tile into `<kit>-normal.png` + `.json` (`pack_normal_atlas`, 2048, tiles shrink
+  together to fit) and exports tangents.
+- `scripts/blender-kit.ts` remaps each part's UVs into the atlas and ships it as `<character>-kit-n.png` beside the
+  `.gltf`, the `normalTexture` of every material with a baked part. Parts without a tile in such a material point
+  at the atlas's flat block.
+- The cerebrax's `finish_part` bakes by default (`nrm=False` opts out). Another kit opts in by calling
+  `keep_high` / `bake_normal` in its own finish step.
+
+Gotchas: the high copy must be hidden from render while `bake_ao` runs (keep_high does it), or its surface,
+lying on the low one, blacks the AO out. A baked image must have a fake user, or the `.blend` drops it on save
+(no material uses it).
 
 ## Non-humanoid rigs (the gorehound, 2026-10-22)
 
@@ -900,3 +916,4 @@ offset inside the brain, or a mind that never fires, which no turntable shows.
   - motion.ts JUDDER: the whole frame seizes as one piece, and the legs spasm.
   - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
 - A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
+- With a baked normal atlas ("Kit normal maps" under Budget) the ribbing survives too: the cerebrax went 94k -> 74k triangles (tendrils 9000 -> 5000, harness 9000 -> 6500, struts, knees and collars down a third). Its 20 tiles fill a 2048 atlas at 56% of their baked size; the big parts (harness, frame, tendrils) come out at about 500 px per metre.

@@ -91,7 +91,7 @@ if 'ring' in PARTS:
     # The eyes' red light spills onto the front of the band under the face (kit-overlay.ts GLOW_FROM_ATTRIBUTE:
     # skullmetal burns red): two embers at the eye sockets, a steep falloff over 0.35 m.
     eyes = [(sk(*tilted(-16.6, sx * 5.7), 0.01), 0.03, 0.9) for sx in (1, -1)]
-    finish_part('harness', 'pelvis|harness', 9000, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
+    finish_part('harness', 'pelvis|harness', 6500, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
 
 if 'frame' in PARTS:
     # THE CHASSIS (pelvis|frame): the band alone read as a ring with four legs stuck on it (owner, arena look,

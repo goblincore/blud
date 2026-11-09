@@ -58,7 +58,7 @@ if 'gun' in PARTS:
     tube('feed', sm, [0.026] * len(sm), segs=12)
     for j in range(2, len(sm) - 2, 2):
         ring(f'fr{j}', sm[j], (sm[j + 1] - sm[j - 1]).normalized(), 0.027, 0.006)
-    finish_part('feed', 'pelvis|feed', 2400, material='cable', voxel=0.003, noise=0.001, ao=(1.3, 1.3))
+    finish_part('feed', 'pelvis|feed', 1500, material='cable', voxel=0.003, noise=0.001, ao=(1.3, 1.3))
     # The muzzle in BLOB coords (blender (x, y, z) -> blob (x, z, -y)): MotionProfile.spit's offset is this minus the
     # hips' rig point (0, 1.504, 0).
     print('MUZZLE blob', (round(MUZ.x, 3), round(MUZ.z, 3), round(-MUZ.y, 3)))
