@@ -380,6 +380,9 @@ export interface RecoilState {
 /** The whole per-body motion state — every sub-state the modules own, plus
  *  the two wiring-owned blends. Plain data; reconstruct or hand-edit in tests. */
 export interface MotionState {
+  /** THE JUDDER (MotionProfile.rigidFrame): a hit's shudder through the whole rigid frame, `t` s since the last kick,
+   *  `gain` its strength, `dir` the shot (world, unit). Absent until the first hit. */
+  judder?: { t: number; gain: number; dir: Vec3 };
   wander: WanderState;
   gait: ReturnType<typeof stepGait>['state'];
   stagger: StaggerState;
@@ -645,6 +648,25 @@ const SOLVE = {
 
 const Z: Vec3 = [0, 0, 0];
 
+/** THE JUDDER's shape (MotionProfile.rigidFrame): a SEIZURE (owner: "like causing an epileptic seizure"). `shake` m of
+ *  fast shudder and `recoil` m of shove along the shot at a kick of gain 1, `decay` s to 1/e (it convulses for ~1.5 s);
+ *  while it lasts the legs SPASM every `spasm` s, each knee kicked up to `knee` m, in a jerky order; kicks stack to
+ *  `maxGain`. */
+const JUDDER = { shake: 0.035, recoil: 0.045, recoilHz: 4, decay: 0.38, knee: 0.14, spasm: 0.085, maxGain: 2.5 } as const;
+
+/** How hard a rigidFrame body is seizing now, 0..1 (gain 1 and up is full): the brain's arcs read it
+ *  (brain-arcs.ts). */
+export function judderLevel(state: MotionState): number {
+  const j = state.judder;
+  return j ? Math.min(1, j.gain * Math.exp(-j.t / JUDDER.decay)) : 0;
+}
+
+/** The trunk joints a MotionProfile.rigidFrame body moves as one piece and pins (the cerebrax's frame: the brain,
+ *  the harness and the four leg sockets; and `neck` / `head`, the skull bone's ends, which carry the kit on the
+ *  brain's face, so they hold still with it and only the game's flesh jiggle moves them). */
+const RIGID_FRAME_JOINTS = ['pelvis', 'hips', 'hipL', 'hipR', 'spineA', 'spineB', 'chest', 'clavicleL', 'clavicleR',
+  'shoulderL', 'shoulderR', 'neck', 'head'] as const;
+
 /** Joints the reach-style blend floor applies to (the arms). */
 const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
@@ -728,6 +750,19 @@ export function stepMotion(
     toughness: profile.toughness,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
+  // THE JUDDER (owner, 2026-11-09: shooting the brain should make "the whole thing judder like hitting the nervous
+  // system"): each hit kicks a shudder the rigid frame carries whole (below, where its joints are laid), and twitches
+  // the knees. Folds into one that is still ringing; a corpse lets it go.
+  let judder = profile.rigidFrame && !collapsed ? state.judder : undefined;
+  const judderKick = !!(profile.rigidFrame && !collapsed && sig.shot);
+  if (judderKick && sig.shot) {
+    const left = judder ? judder.gain * Math.exp(-judder.t / JUDDER.decay) : 0;
+    const d = sig.shot.dirWorld, l = Math.hypot(d[0], d[1], d[2]) || 1;
+    judder = { t: 0, gain: Math.min(JUDDER.maxGain, left + (sig.shot.type === 'pellet' ? 0.6 : 1) * (sig.shot.gain ?? 1)),
+      dir: [d[0] / l, d[1] / l, d[2] / l] };
+  } else if (judder) {
+    judder = judder.t + dt > JUDDER.decay * 6 ? undefined : { ...judder, t: judder.t + dt };
+  }
 
   // SOLDIER-STYLE HIT REACTIONS (the arm open / flail / hunch): the soldier,
   // and any profile that opts in (the cultist, staggerStyle 'soldier').
@@ -1424,6 +1459,12 @@ export function stepMotion(
   // yaw (not wander.heading — the knee must agree with the turned body
   // mid-turn, same contract as every other body-local thing this frame).
   const legPole = headingDir(bodyYaw);
+  // A spider's knee rides HIGH (GaitProfile.kneePole, the cerebrax): the hind legs' pole is authored body-local for
+  // the LEFT leg and mirrored for the right. Absent: knees bow forward, as every biped's always have.
+  const authoredKneePole = gaitProfile.kneePole;
+  const kneePoleOf = (side: 'L' | 'R'): Vec3 => authoredKneePole
+    ? rotateYaw([side === 'L' ? authoredKneePole[0] : -authoredKneePole[0], authoredKneePole[1], authoredKneePole[2]], bodyYaw)
+    : legPole;
   if (cfg.faceHeading !== undefined && !collapsed && !footwork) {
     // Travel can reverse under an aimed torso. Swing feet follow travel, but
     // the knee hinge still faces the chest instead of turning inside out.
@@ -1434,7 +1475,7 @@ export function stepMotion(
       if (sig.missing[side === 'L' ? 'legL' : 'legR'] || idx[foot] === undefined) continue;
       const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
       const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
-      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);
+      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, kneePoleOf(side));
       targets[iff] = chain[2]!;
     }
   }
@@ -1447,7 +1488,7 @@ export function stepMotion(
     }
     const solved = solvePlantedLeg(
       targets[idx[hip]!]!, targets[idx[knee]!]!, targets[idx[foot]!]!,
-      st, lens, SOLVE, legPole,
+      st, lens, SOLVE, kneePoleOf(hip === 'hipL' ? 'L' : 'R'),
     );
     targets[idx[knee]!] = solved.knee;
     targets[idx[foot]!] = solved.foot;
@@ -1711,6 +1752,7 @@ export function stepMotion(
   }
 
   const nextState: MotionState = {
+    ...(judder ? { judder } : {}),
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength, fallKind: fallKind ?? null } : {}),
     ...(corpse ? { corpseHold: corpse.hold } : {}),
     wander, gait: gait.state, stagger: stagger.state,
@@ -1735,6 +1777,45 @@ export function stepMotion(
     floorY: feetY,
     ...(cfg.floorAt ? { floorVel } : {}),
   };
+
+  // MotionProfile.rigidFrame: the trunk moves as ONE rigid piece, the pelvis target's translation plus the body's yaw.
+  // The gait's bob, sway and lean offset each trunk joint on its own, a few cm apart; the cerebrax's pelvis bone is
+  // only 4 cm long, so that tipped its frame up to 10 degrees, and with it the brain, the kit and the socket balls,
+  // while the craters (damage.ts frame: a prim's axis, no roll) slid across the brain. Pinned below (posePins).
+  if (profile.rigidFrame && !collapsed && idx.pelvis !== undefined) {
+    let p0 = targets[idx.pelvis]!;
+    const b0 = joints.base[idx.pelvis]!;
+    if (judder) {
+      // The shudder: three incommensurate fast shakes (no axis reads as a metronome) and a slower recoil along the shot.
+      const t = judder.t, e = judder.gain * Math.exp(-t / JUDDER.decay), w = 2 * Math.PI, A = JUDDER.shake, R = JUDDER.recoil;
+      const kick = R * Math.sin(w * JUDDER.recoilHz * t);
+      p0 = add(p0, [
+        e * (A * Math.sin(w * 13 * t) + judder.dir[0] * kick),
+        e * (0.7 * A * Math.sin(w * 17 * t + 1.3) + judder.dir[1] * kick * 0.5),
+        e * (A * Math.sin(w * 11 * t + 2.1) + judder.dir[2] * kick),
+      ]);
+      targets[idx.pelvis] = p0;
+    }
+    // The legs spasm: on the hit and then every JUDDER.spasm s while it convulses, each knee kicked up and out by its
+    // own jerky share (the verlet rings them back; the feet stay planted).
+    const beat = judder ? Math.floor(judder.t / JUDDER.spasm) : -1;
+    const newBeat = judder && (judderKick || Math.floor((judder.t - dt) / JUDDER.spasm) !== beat);
+    if (judder && newBeat) {
+      const g = judder.gain * Math.exp(-judder.t / JUDDER.decay);
+      if (g > 0.15) {
+        ([['kneeL', 1, 0], ['kneeR', -1, 1], ['elbowL', 1, 2], ['elbowR', -1, 3]] as const).forEach(([j, side, n]) => {
+          // A fixed shuffle per beat: some legs jerk hard, some barely, some down.
+          const k = Math.sin((beat + 1) * 7.31 + n * 2.17) * 0.9 + 0.35;
+          if (idx[j] !== undefined) kicks.push({ joint: j, delta: add(rotateYaw([side * JUDDER.knee * 0.5 * k * g, 0, 0], bodyYaw), [0, JUDDER.knee * k * g, 0]) });
+        });
+      }
+    }
+    for (const name of RIGID_FRAME_JOINTS) {
+      const i = idx[name];
+      if (i === undefined || i === idx.pelvis) continue;
+      targets[i] = add(p0, rotateYaw(sub(joints.base[i]!, b0), bodyYaw));
+    }
+  }
 
   return {
     state: nextState,
@@ -1768,7 +1849,10 @@ export function stepMotion(
         // head frame plus the gape), and a free chin point would sag on a
         // stiffness-0 bone (rig-bind.ts).
         const jaw = !collapsed && idx.jaw !== undefined ? (['jaw'] as const) : [];
-        const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        // MotionProfile.rigidFrame: the trunk is one welded frame the legs hang off; the legs' constraints must not
+        // drag its sockets about.
+        const frame = profile.rigidFrame && !collapsed ? RIGID_FRAME_JOINTS : [];
+        const pins = [...legs, ...arms, ...jaw, ...frame].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return pins.length ? { posePins: pins } : {};
       })(),
       restPull: structural ? (fallKind ? fallPull : 1) : collapse.restPull,

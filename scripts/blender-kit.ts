@@ -25,6 +25,11 @@
 //   * a part MAY carry vertex colours (COLOR_0, e.g. baked ambient occlusion):
 //     they multiply the albedo (three turns vertexColors on for a primitive
 //     with COLOR_0). Within one material, parts without colours get white.
+//   * a part MAY carry UVs and tangents into a NORMAL ATLAS: build.py --export writes <kit>-normal.png and
+//     <kit>-normal.json beside the .glb (kit_sculpt.py bake_normal / pack_normal_atlas), the JSON naming each part's
+//     tile. Its UVs come out of Blender in its tile (0..1) and are remapped here into the atlas; the PNG is copied
+//     beside the kit as <character>-kit-n.png and becomes the normalTexture of every material with a baked part.
+//     Parts of such a material without a tile point at the atlas's flat block.
 //   * a part MAY carry a float `_glow` attribute (Blender: a POINT attribute
 //     named `_glow`, exported with export_attributes): baked light from a
 //     glowing part onto its neighbours, 0..1. It passes through as `_glow`;
@@ -36,8 +41,8 @@
 // translations (kit-overlay.ts poseKitBones assumes exactly that), and one
 // skinned mesh with a primitive per material. Self-contained: the buffer is a
 // base64 data URI, like WAM's output, so only the .gltf ships.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
 import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
@@ -83,6 +88,11 @@ const jsonLen = glb.readUInt32LE(12);
 const gj = JSON.parse(glb.subarray(20, 20 + jsonLen).toString('utf8'));
 const binStart = 20 + jsonLen + 8;
 const bin = glb.subarray(binStart, binStart + glb.readUInt32LE(20 + jsonLen));
+// The normal atlas, if the kit has one (Blender pixel rects, origin bottom left).
+const atlasJson = glbPath.replace(/-parts\.glb$/, '-normal.json');
+const atlas = glbPath !== atlasJson && existsSync(atlasJson)
+  ? JSON.parse(readFileSync(atlasJson, 'utf8')) as { size: number; flat: number[]; tiles: Record<string, number[]>; parts: Record<string, string> }
+  : null;
 const NCOMP: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
 function read(acc: number): { data: number[]; n: number; comps: number } {
   const a = gj.accessors[acc];
@@ -120,7 +130,7 @@ function local(n: { matrix?: M4; translation?: V3; rotation?: number[]; scale?: 
 }
 const I: M4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
-interface Batch { pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean; glow: number[]; hasGlow: boolean }
+interface Batch { uv: number[]; tan: number[]; hasUv: boolean; pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean; glow: number[]; hasGlow: boolean }
 const batches = new Map<string, Batch>();
 let parts = 0;
 function walk(ni: number, parent: M4) {
@@ -139,7 +149,7 @@ function walk(ni: number, parent: M4) {
       const mi = p.material;
       const m = mi === undefined ? { name: 'iron' } : gj.materials[mi];
       const key: string = m.name;
-      const b = batches.get(key) ?? { pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false, glow: [], hasGlow: false };
+      const b = batches.get(key) ?? { uv: [], tan: [], hasUv: false, pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false, glow: [], hasGlow: false };
       batches.set(key, b);
       const P = read(p.attributes.POSITION), N = read(p.attributes.NORMAL);
       const C = p.attributes.COLOR_0 !== undefined ? read(p.attributes.COLOR_0) : null;
@@ -147,8 +157,29 @@ function walk(ni: number, parent: M4) {
       const G = p.attributes._GLOW ?? p.attributes._glow;
       const Gd = G !== undefined ? read(G) : null;
       if (Gd) b.hasGlow = true;
+      // A tile in the normal atlas: Blender's glTF UVs (v flipped: v_gltf = 1 - v_blender) into the atlas.
+      const tileName = atlas?.parts[nm];
+      const rect = tileName ? atlas!.tiles[tileName] : undefined;
+      if (tileName && !rect) die(`${nm}: normal tile "${tileName}" is not in ${atlasJson}`);
+      const UV = rect && p.attributes.TEXCOORD_0 !== undefined ? read(p.attributes.TEXCOORD_0) : null;
+      const TN = UV && p.attributes.TANGENT !== undefined ? read(p.attributes.TANGENT) : null;
+      if (rect && (!UV || !TN)) die(`${nm} has a normal tile but no UVs or tangents in the .glb (export_tangents)`);
+      if (UV) b.hasUv = true;
       const base = b.pos.length / 3;
       for (let i = 0; i < P.n; i++) {
+        if (UV && rect) {
+          const S = atlas!.size, [x, y, w, h] = rect as [number, number, number, number];
+          b.uv.push((x + UV.data[i * 2]! * w) / S, 1 - (y + (1 - UV.data[i * 2 + 1]!) * h) / S);
+          const [tx, ty, tz, tw] = [TN!.data[i * 4]!, TN!.data[i * 4 + 1]!, TN!.data[i * 4 + 2]!, TN!.data[i * 4 + 3]!];
+          const ax = world[0]! * tx + world[4]! * ty + world[8]! * tz, ay = world[1]! * tx + world[5]! * ty + world[9]! * tz,
+            az = world[2]! * tx + world[6]! * ty + world[10]! * tz;
+          const tl = Math.hypot(ax, ay, az) || 1;
+          b.tan.push(ax / tl, ay / tl, az / tl, tw);
+        } else if (atlas) {
+          const [x, y, w, h] = atlas.flat as [number, number, number, number];
+          b.uv.push((x + w / 2) / atlas.size, 1 - (y + h / 2) / atlas.size);
+          b.tan.push(1, 0, 0, 1);
+        }
         const [x, y, z] = [P.data[i * 3]!, P.data[i * 3 + 1]!, P.data[i * 3 + 2]!];
         b.pos.push(world[0]! * x + world[4]! * y + world[8]! * z + world[12]!,
           world[1]! * x + world[5]! * y + world[9]! * z + world[13]!,
@@ -207,8 +238,11 @@ for (const [mname, b] of [...batches].sort(([a], [c]) => a.localeCompare(c))) {
   const indices = acc(push(Buffer.from(new Uint32Array(b.idx).buffer), 34963), 5125, b.idx.length, 'SCALAR');
   const COLOR_0 = b.hasVcol ? acc(push(f32(b.vcol), 34962), 5126, n, 'VEC3') : undefined;
   const GLOW = b.hasGlow ? acc(push(f32(b.glow), 34962), 5126, n, 'SCALAR') : undefined;
-  materials.push({ name: mname, pbrMetallicRoughness: { baseColorFactor: b.color, metallicFactor: 0.7, roughnessFactor: 0.3 } });
-  primitives.push({ attributes: { POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}), ...(GLOW !== undefined ? { _glow: GLOW } : {}) }, indices, material: materials.length - 1 });
+  const TEXCOORD_0 = b.hasUv ? acc(push(f32(b.uv), 34962), 5126, n, 'VEC2') : undefined;
+  const TANGENT = b.hasUv ? acc(push(f32(b.tan), 34962), 5126, n, 'VEC4') : undefined;
+  materials.push({ name: mname, pbrMetallicRoughness: { baseColorFactor: b.color, metallicFactor: 0.7, roughnessFactor: 0.3 },
+    ...(b.hasUv ? { normalTexture: { index: 0 } } : {}) });
+  primitives.push({ attributes: { ...(b.hasUv ? { TEXCOORD_0, TANGENT } : {}), POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}), ...(GLOW !== undefined ? { _glow: GLOW } : {}) }, indices, material: materials.length - 1 });
 }
 const ibm: number[] = [];
 for (const k of order) { const h = heads.get(k)!; ibm.push(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -h[0], -h[1], -h[2], 1); }
@@ -221,6 +255,10 @@ for (const k of order) {
 }
 for (const n of nodes as { children?: number[] }[]) if (n.children?.length === 0) delete n.children;
 const roots = order.filter(k => !parentOf.get(k)).map(k => 1 + jointIndex.get(k)!);
+// The atlas ships beside the kit; the .gltf names it relatively.
+const anyUv = [...batches.values()].some(b => b.hasUv);
+const atlasOut = outPath.replace(/\.gltf$/, '-n.png');
+if (anyUv) copyFileSync(atlasJson.replace(/\.json$/, '.png'), atlasOut);
 const gltf = {
   asset: { version: '2.0', generator: `blud scripts/blender-kit.ts (${name})` },
   scene: 0, scenes: [{ nodes: [0, ...roots] }],
@@ -228,9 +266,11 @@ const gltf = {
   meshes: [{ primitives }],
   skins: [{ joints: order.map(k => 1 + jointIndex.get(k)!), inverseBindMatrices, skeleton: roots[0] }],
   materials,
+  ...(anyUv ? { images: [{ uri: basename(atlasOut) }], samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }],
+    textures: [{ source: 0, sampler: 0 }] } : {}),
   buffers: [{ byteLength: offset, uri: `data:application/octet-stream;base64,${Buffer.concat(chunks).toString('base64')}` }],
   bufferViews, accessors,
 };
 writeFileSync(outPath, JSON.stringify(gltf));
 const tris = [...batches.values()].reduce((s, b) => s + b.idx.length / 3, 0);
-console.log(`blender-kit: ${parts} parts, ${batches.size} materials (${[...batches.keys()].join(', ')}), ${tris} tris -> ${outPath}`);
+console.log(`blender-kit: ${parts} parts, ${batches.size} materials (${[...batches.keys()].join(', ')}), ${tris} tris -> ${outPath}${anyUv ? ` (+ normal atlas ${basename(atlasOut)})` : ''}`);

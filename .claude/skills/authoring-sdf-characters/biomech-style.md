@@ -275,9 +275,25 @@ pistol. A ranged variant needs a different set of parts from a melee one:
 
 ## Budget
 
-The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
-detail into a normal map on a low-poly cage, aiming for 2-4k triangles per part. Author at full detail first;
-optimize once the look is approved.
+The twinhead kit is about 145k triangles, too high for crowds. Author at full detail first; optimize once the
+look is approved.
+
+**Kit normal maps (since 2026-11-09, the cerebrax first).** A sculpted part can keep its detail at a low triangle
+count:
+- `kit_sculpt.py` `keep_high` copies the fused sculpt before `decimate`.
+- `bake_normal` UV-unwraps the decimated part (smart project), bakes the high onto it as a tangent-space normal map
+  in Cycles (selected to active), and packs the tile into the `.blend`. A mirrored `.r` part shares its `.l` tile.
+- `build.py --export` packs every tile into `<kit>-normal.png` + `.json` (`pack_normal_atlas`, 2048, tiles shrink
+  together to fit) and exports tangents.
+- `scripts/blender-kit.ts` remaps each part's UVs into the atlas and ships it as `<character>-kit-n.png` beside the
+  `.gltf`, the `normalTexture` of every material with a baked part. Parts without a tile in such a material point
+  at the atlas's flat block.
+- The cerebrax's `finish_part` bakes by default (`nrm=False` opts out). Another kit opts in by calling
+  `keep_high` / `bake_normal` in its own finish step.
+
+Gotchas: the high copy must be hidden from render while `bake_ao` runs (keep_high does it), or its surface,
+lying on the low one, blacks the AO out. A baked image must have a fake user, or the `.blend` drops it on save
+(no material uses it).
 
 ## Non-humanoid rigs (the gorehound, 2026-10-22)
 
@@ -722,7 +738,11 @@ throws fireballs. What it taught:
 - **A kit only sheds if the registry says so.** Without `kitSheds: true` (or `armoured`) in `character-registry.ts`
   the kit never runs `createKitDamage`: a shot-off arm left the imp's fist and hoses hanging in the air, though every
   island was on the right bone. With it, a `tooth` island also falls out when a crater reaches it, so kit teeth never
-  float in front of the exposed skull (the seating above only narrows that gap).
+  float in front of the exposed skull (the seating above only narrows that gap). Every kit has one or the other
+  (`characters/kit-sheds.test.ts` fails a new kit without it, and pins how far any torso piece reaches into a limb).
+- **A bone that names no limb sheds with its parent's.** A tusk bone under the forearm, a horn under the skull: kit
+  pieces on them ride the nearest ancestor that names a limb (`limbBone` in kit-damage.ts). `plate` islands take hits
+  and break only on an `armoured` kit; on a `kitSheds` kit a plate-named blade is scenery.
 - **A hose sheds by the bone it rides.** Kit pieces leave with the limb their island is skinned to (kit-damage.ts
   `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
   the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds
@@ -787,3 +807,117 @@ Owner: the walking zombie "has like visible seams currently, not sure from where
   ever anisotropic AND sits under detail, check it posed: its noise frame is the one it shapes with.
 - **Limb regions can be bands.** A hit no region claims wears no map, so bake only the bands round the seams; one
   region reaches across a joint for the same cluster (foreArm t -0.15 covers the elbow's upper-arm side).
+
+## A boss brain-spider: the cerebrax (2026-11-08)
+
+The cerebrax (`characters/cerebrax.blob`, kit `assets-source/cerebrax-kit/`, folds `scripts/cerebrax-detail-gen.ts`)
+is a huge brain clamped in a bone-metal harness on four long spider legs, a chaingun slung under its face. The
+gibbet's rule again: the machine is the body, the brain is the cargo. What it added:
+
+**Brain folds are a random-wave labyrinth, not placed ridges.** Gyri are fat sausages packed side by side, meandering
+in long curves that never cross. The NODAL LINES of a narrow-band random wave field (a sum of ~64 plane waves of
+one wavelength, random directions and phases) are exactly that shape, at a nearly even spacing. The recipe:
+- Evaluate the field in 3D on the brain's surface (an ellipsoid fitted by probing), so nothing about the PATTERN
+  depends on the map's projection. Add a slow domain warp (0.9 m wavelength, 6 cm) so the spacing breathes.
+- Trace the zero contour with marching squares on a 0.5 deg lat/lon grid of directions. Join the segments by
+  their shared grid edges, then resample every 2 cm of 3D arclength and probe each sample onto the skin.
+- A 0.20 m 3D wavelength gives lines ~9.9 cm apart on a 1.34 m brain (a man's gyri, scaled up). Ridges of
+  r 5.5 cm standing 2 cm proud, blend 4 mm, have ~8.5 cm footprints, so neighbours meet in a V crease: the
+  sulcus. At r 5 cm and 1.8 cm proud, flat floors showed between them.
+- Gaps, not grooves (the detail is additive). Leave no folds along the longitudinal fissure (3 cm either side
+  of x = 0 over the top), the lateral fissures, the face and under the harness. Taper each fold's last 6 cm
+  into the gap, and drop stubs under 7 cm (they read as beads). Two rolled "bank" folds either side of the
+  longitudinal fissure make it read as a cleft rather than a seam.
+- The face's wrinkles: furrows BOWED down into a scowl. Three level forehead furrows read as stacked bars.
+
+**A ball's projection: a vertical cylinder, poles where nobody looks.** The bake's projections are cylinders, and a
+cylinder smears its poles. On this boss the bottom pole sits in the harness and the top pole is above the player's
+eye line. The forehead, front and sides (what a player at 1.6 m sees of a brain centred at 1.9 m) sit at the
+cylinder's equator, so a vertical axis is the right one. A cylinder through the FACE (tilted forward) would put the
+pole on the one patch that has no folds, but it costs the forehead 1.5x stretch. Two limits:
+- **Region 0's rays started 0.6 m from its axis**, so on a torso wider than that they started inside the flesh.
+  `bake-body-normal.ts --torso-r0 <m>` sets it (the cerebrax bakes at 1.1).
+- **The region table stores positions in -2.5..2.5 m** (`body-normal.wgsl.ts` pos16). A body whose flesh rises
+  past 2.5 m compiled loses its relief above that. The brain's top is held under 2.47 m (`cerebrax-blob.test.ts`
+  pins it), and the boss's height comes from its legs.
+- **The GPU bake needs the `webgpu` package.** Without it the bake silently falls back to the CPU: 3,160 detail
+  prims at 1024 x 320 would have taken hours, where the GPU took 13 s. A worktree that borrows an older checkout's
+  `node_modules` may not have `webgpu`, so read the `bake-body-normal: gpu|cpu` line before waiting. Never pipe the
+  bake through `tail`: it hides that line until the end.
+
+**No parallax needed (yet).** Nothing parallax-like exists in the march (`body-normal.wgsl.ts` only bends the
+shading normal). At 4 mm texels the folds read as deep from every angle in the frames. Parallax or relief mapping
+would be a renderer feature; propose it to the owner rather than building it.
+
+**A boss at `scale`.** `scale 1.60` multiplies every compiled length, so:
+- the kit's joints, the skin probes and the detail generator all work in COMPILED metres, and the generator
+  divides each emitted number back by the scale (the gamer's rule);
+- the thin SDF cores grow 1.6x too. The legs' first cores (r 4 cm authored, 6.4 cm compiled) were FATTER than the
+  kit's shin tube and rendered as black rods. Size cores against the compiled kit.
+
+**Spider legs on the biped names.** The gibbet's four-legged rig with the thighs and upper arms raked UP to knees
+2.75 m high, and the shins dropping long and nearly straight to a point. The planted-leg IK used to pole every knee
+FORWARD, which folds a spider's knee under the body. `GaitProfile.kneePole` (new, the hind legs) and `elbowPole`
+(the forelegs) pole them up and out. `cerebrax-blob.test.ts` walks the real pipeline and pins every knee at least
+0.6 m over its socket. The gait is the gibbet's stalk, slower and longer (0.9 Hz, 0.55 m strides, 0.4 m lifts).
+
+**Lock the cargo to its frame; no turret.** The first pass put the brain on `skull` so the aim chain would swivel
+it in its ring. Two faults came from that, both seen only in the arena:
+- The aim lays the neck->skull vector along the GAZE, clamped to 0.5 rad off rest. With the skull bone pointing up,
+  a level gaze tipped the whole brain 29 deg forward, face down onto the harness, in every pose.
+- Rigid prims on `skull` follow its frame unclamped, through the sprung neck: sway, nods and hit recoil moved the
+  brain against a harness on `pelvis`, and it clipped through the ring and the gun.
+
+So everything that must not part rides ONE bone, `rigid`: the brain, the face, the eyes, the teeth, the tendrils,
+the harness and the gun, all on `pelvis`. The aim is the body's turn, and the chaingun's sweep is that turn
+anyway. (If a turret is ever wanted, point the skull bone FORWARD, so a level gaze is no pitch, and keep anything it
+must not touch on the same bone.) A part moved from one bone to another keeps its rest position. Its offsets now
+count from the new bone's point, and the kit parts are renamed `<bone>|<part>`; drop the old names from the .blend.
+
+**Bake a good accident into the rest pose.** In the end the owner LIKED the tipped look the aim chain produced: the
+brain rolled 29 deg forward in its clamp, overhanging the ring, the face low and close to the gun. What was wrong was
+only that it moved. So the tilt is authored, on the locked frame:
+- Every brain and face prim is the upright brain rotated 25 deg about its centre: offsets, tips and bends. Ellipsoid
+  axes stay world-aligned, because the grammar has no rest orient and the lobes are nearly round.
+- The kit and the fold generator keep their face-relative placements in the UPRIGHT brain's (lat, lon) and map them
+  through `tilted()` (common.py `TILT`) and `tilt()/untilt()` (the generator). The random-wave folds live in 3D and
+  need no map.
+- The harness's V got deeper with a flat bottom under the chin, and the gun hangs lower (re-read the muzzle and the
+  `spit` offset).
+
+Fix the motion before moving parts: a 6 cm face raise, tried in between, was reverted.
+
+**Pulsing without a new system.** `MotionProfile.joystick` with `amp 0, idle 0` and a `swell` period is a plain
+breath for ANY body: every lobe prim carries `morph=swell:*1.025..1.05`, and `actor.ts` drives the weight.
+
+**A gun in the body.** `gunner: { weapon: 'chaingun' }` plus `spit` from the hips' rig point gives the soldier's
+shooting brain on the juggernaut's sweeping-burst tuning, fired from a body-mounted barrel (no prop, no arms).
+`game-actor-cerebrax.test.ts` drives the game actor and checks the bursts leave the muzzle. That catches a `spit`
+offset inside the brain, or a mind that never fires, which no turntable shows.
+
+**Kit notes.**
+- Polished `chrome` on a large part renders BLACK in the dark levels (it reflects the room). Long legs read as
+  silver in fused `skullmetal`; keep chrome for rods.
+- `join()` swallows every selected object, and an installed part stays selected: the first build lost the gun
+  into the barrels and the ammo feed into the eyes. `common.py`'s `join_work()` deselects first.
+- Curled tendrils: a pair curled about mirrored axes mirrors with ONE sign. At 3.2 rad over a metre they closed
+  into handle loops; about 2 rad sweeps like a ram's horn.
+- A harness for a ball: a band fitted to the probed skin, high at the back and dipping to a mandible point under
+  the low face (a level ring cut across the chin), with talons curling in over the brain like prongs round a gem.
+- Legs on a ring read as stuck on. With only the band, the owner saw "the legs ... disconnected from the rest of
+  the frame". The fix was a chassis (`make_harness.py` `frame`):
+  - a rail down each flank, joining the hind socket to the fore socket;
+  - four braces dropping from the sockets to a belly boss under the brain;
+  - a stay from the belly to the gun's keel;
+  - socket balls big enough to swallow the strut's root through the whole stride.
+
+  The player looks UP at a boss, so judge the undercarriage from eye height (`BLOB_PITCH=-0.2 BLOB_TARGET_Y=1.6`).
+  The default turntable pitch hides it.
+- A shin tube that stops short of the ankle (it ended at 0.93 of the bone) leaves a visible gap over the foot ball.
+  Run tubes into the next knuckle.
+- Hit reactions for a rigid boss (MotionProfile.rigidFrame). Its rig flinch moves nothing, so the hit is sold three ways:
+  - `fleshJiggle`: the struck lobes shove, distort and squash, out of step with each other. It is a post-pose deform, so craters ride it. The kit on the flesh rides the frame-pinned `skull` bone, which the jiggle shoves.
+  - motion.ts JUDDER: the whole frame seizes as one piece, and the legs spasm.
+  - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
+- A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
+- With a baked normal atlas ("Kit normal maps" under Budget) the ribbing survives too: the cerebrax went 94k -> 74k triangles (tendrils 9000 -> 5000, harness 9000 -> 6500, struts, knees and collars down a third). Its 20 tiles fill a 2048 atlas at 56% of their baked size; the big parts (harness, frame, tendrils) come out at about 500 px per metre.

@@ -1,6 +1,7 @@
 {
   "_comment": "Every committed body normal map's bake command (scripts/bake-body-normal.ts <character> ...args), from the generator headers (scripts/*-detail-gen.ts). check-bake-args.test.ts holds each to its committed public/assets/lab/<character>-body-n.json region table. Two headers were wrong (flayer's forearm ranges are the other way round, venus's torso band is 256 rows); these are the arguments the committed maps were actually baked with.",
   "butcher": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:1:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:0.9:0.13:96"],
+  "cerebrax": ["1024", "320", "--torso-axis", "0,2.48,0.401:0,1.30,0.40", "--torso-r0", "1.1"],
   "chair": ["512", "320", "--limb", "clavicle.l:0:1:0.11:64", "--limb", "clavicle.r:0:1:0.11:64", "--limb", "upperarm.l:0:1:0.08:64", "--limb", "upperarm.r:0:1:0.08:64"],
   "deadeye": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:1:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:1:0.13:96"],
   "flayer": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:0.9:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:1:0.13:96"],

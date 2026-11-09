@@ -12,7 +12,7 @@ import { worldHitToWound } from '../damage';
 import { rotateYaw } from '../gait';
 import { translateBody } from '../translate';
 
-function fixture(material = 'plate') {
+function fixture(material = 'plate', armour = true) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute([
     -.19, 1.33, 0, -.09, 1.33, 0, -.09, 1.43, 0, -.19, 1.43, 0,
@@ -28,7 +28,7 @@ function fixture(material = 'plate') {
   mesh.bind(new THREE.Skeleton([l,r]));
   const root = new THREE.Group(); root.add(mesh);
   root.updateMatrixWorld(true);
-  return { mesh, l, r, damage:createKitDamage(root) };
+  return { mesh, l, r, damage:createKitDamage(root, armour) };
 }
 const body = () => buildBody(compileBlob(parseBlob(source)));
 
@@ -144,6 +144,17 @@ describe('damaged kit pieces', () => {
     const hit={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:2};
     expect(damage.update(b,[miss,hit],0,0)).toEqual([]); // no spark: a tooth is not armour
     expect(damage.debris.children).toHaveLength(1);
+    expect(mesh.geometry.index!.count).toBe(6);
+    damage.dispose();
+  });
+  it('without armour (kitSheds) a plate takes hits without breaking, and still leaves with its limb', () => {
+    const {mesh,damage}=fixture('plate', false);
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const wounds=[1,2,3,4].map(eventId=>({...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId}));
+    expect(damage.update(b,wounds,0,0)).toEqual([]);
+    expect(mesh.geometry.index!.count).toBe(12);
+    expect(damage.update(severLimb(b,'armL').body,wounds,0,0)).toEqual([]); // shed, but no armour event
     expect(mesh.geometry.index!.count).toBe(6);
     damage.dispose();
   });

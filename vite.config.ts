@@ -164,6 +164,7 @@ const SLOW_TESTS = [
   'src/lab/sdf-zombie/characters/broodmother-blob.test.ts',                    // 10 s
   'src/lab/sdf-zombie/head-keepout.test.ts',                                   // 10 s
   'src/lab/sdf-zombie/webgpu/character-view.test.ts',                          // 10 s
+  'src/lab/sdf-zombie/characters/kit-sheds.test.ts',                           // 25 s (local): every shipped kit, raw
 ];
 for (const f of SLOW_TESTS) {
   if (!existsSync(resolve(__dirname, f))) throw new Error(`vite.config.ts SLOW_TESTS: no such file ${f}`);
