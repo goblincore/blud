@@ -62,7 +62,7 @@ Each line is the first sentence of the module's header comment.
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
-| [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
+| [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
 | [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 30 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
@@ -841,6 +841,7 @@ Gib parts, launch, tearing, entrails, strands.
 Brains, the soldier, crowd logic.
 
 - `actor.ts` — The per-body actor record and the shared pose step.
+- `brain-arcs.ts` — BRAIN ARCS: electricity crawling over the cerebrax's brain while it seizes (owner, 2026-11-09: "cool electricity effects ...
 - `brain.ts` — One zombie's decision layer, as a named state machine.
 - `crowd.ts` — Ground-plane crowd separation: the reason zombies stop standing inside one another.
 - `soldier-brain.ts` — One soldier's decision layer, as a named state machine.

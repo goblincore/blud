@@ -29,6 +29,8 @@ import {
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
 import { joystickSwell } from '../joystick';
+import { surfaceTable, type ArcDrive } from '../brain-arcs';
+import { sdBody } from '../validate';
 import { ageJiggle, boneEndPoints, jiggleBulk, jiggleFlesh, kickJiggle, type JiggleKick } from '../flesh-jiggle';
 import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
@@ -69,7 +71,7 @@ import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
-import type { MotionFrame } from '../motion';
+import { judderLevel, type MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
 import { HOUND_TUNING } from '../hound-attack';
@@ -531,6 +533,9 @@ export interface ZombieActor {
    * effects (bleed emitters) off the exact wound without ring-index sniffing.
    */
   hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null;
+  /** The brain's electricity this frame (brain-arcs.ts), for a profile with a fleshJiggle: how hard it seizes
+   *  (motion.ts judderLevel), where its brain is and how big. Null for every other body. */
+  arcDrive(): ArcDrive | null;
   /**
    * A SLUG (one big projectile) lands at `hitWorld`: same choreography as
    * hit() but stamps the slug calibre crater. Separate method on purpose —
@@ -987,6 +992,23 @@ export function createZombieActor(opts: {
   const fleshKicks: JiggleKick[] = [];
   const skullEnds = fleshSpec ? boneEndPoints(opts.body.bones, 'skull') : null;
   const fleshOf = (p: Primitive): boolean => p.limb === 'torso' && p.bone === 'pelvis' && !p.metal;
+  /** The brain the arcs crawl over: its core prim, and its semi-axes about that core at rest (the flesh's extent). */
+  const brainCore = fleshSpec ? opts.body.prims.findIndex(p => fleshOf(p) && p.core) : -1;
+  const brainRadii: Vec3 = (() => {
+    const c = brainCore >= 0 ? opts.body.prims[brainCore]!.a : [0, 0, 0];
+    const r = [0.3, 0.3, 0.3];
+    for (const p of opts.body.prims) {
+      if (!fleshOf(p)) continue;
+      for (let k = 0; k < 3; k++) for (const e of [p.a, p.b]) r[k] = Math.max(r[k]!, Math.abs(e[k]! - c[k]!) + p.radius * p.scale[k]! * 0.85);
+    }
+    return [r[0]!, r[1]!, r[2]!];
+  })();
+  /** The brain's measured surface (brain-arcs.ts surfaceTable), once, against the rest body (a ray that meets a
+   *  leg's root first seats its arc there: the current jumps to the frame). */
+  const brainSurface = brainCore >= 0 ? (() => {
+    const c = opts.body.prims[brainCore]!.a;
+    return surfaceTable(p => sdBody([c[0] + p[0], c[1] + p[1], c[2] + p[2]], opts.body), brainRadii);
+  })() : undefined;
   let reactionTime = 0;
   let shotWindow: number[] = [];
   const seenReactionShots = new Map<string, number>();
@@ -2737,6 +2759,11 @@ export function createZombieActor(opts: {
     boundRig: () => bound,
     rigImpulse: (at: Vec3, delta: Vec3) => { bound = impulseAt(bound, at, delta); },
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
+    arcDrive: () => {
+      if (!fleshSpec || brainCore < 0) return null;
+      const level = judderLevel(state);
+      return level > 0 ? { level, centre: [...posed.prims[brainCore]!.a] as Vec3, radii: brainRadii, yaw: bodyYaw, surface: brainSurface } : null;
+    },
     nudge,
     setEncounterOrder: (order: EncounterOrder) => { encounterOrder = order; },
     setBrainInput: (p: BrainPlayer | null, alerted: boolean) => {

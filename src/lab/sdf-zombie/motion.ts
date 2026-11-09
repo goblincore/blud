@@ -654,6 +654,13 @@ const Z: Vec3 = [0, 0, 0];
  *  `maxGain`. */
 const JUDDER = { shake: 0.035, recoil: 0.045, recoilHz: 4, decay: 0.38, knee: 0.14, spasm: 0.085, maxGain: 2.5 } as const;
 
+/** How hard a rigidFrame body is seizing now, 0..1 (gain 1 and up is full): the brain's arcs read it
+ *  (brain-arcs.ts). */
+export function judderLevel(state: MotionState): number {
+  const j = state.judder;
+  return j ? Math.min(1, j.gain * Math.exp(-j.t / JUDDER.decay)) : 0;
+}
+
 /** The trunk joints a MotionProfile.rigidFrame body moves as one piece and pins (the cerebrax's frame: the brain,
  *  the harness and the four leg sockets; and `neck` / `head`, the skull bone's ends, which carry the kit on the
  *  brain's face, so they hold still with it and only the game's flesh jiggle moves them). */

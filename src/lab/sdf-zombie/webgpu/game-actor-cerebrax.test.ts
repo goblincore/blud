@@ -88,4 +88,20 @@ describe('cerebrax actor (game path)', () => {
     for (let i = 0; i < 240; i++) step();
     expect(Math.hypot(...local(posed()[core]!.a).map((v, j) => v - mean[j]!)), 'rung out: back within its unhit bob').toBeLessThan(calmSpan + 0.01);
   });
+
+  it('crackles with electricity while it seizes, and goes dark after', () => {
+    const a = cerebrax(() => {});
+    const step = () => { a.setRingInput(false, 0); a.step(1 / 60); };
+    for (let i = 0; i < 30; i++) step();
+    expect(a.arcDrive(), 'dark before a hit').toBeNull();
+    const c = (a as any).posed().prims.find((p: any) => p.limb === 'torso' && p.core).a as Vec3;
+    a.hit([c[0], c[1] + 0.4, c[2] + 0.7], [0, -0.3, -1]);
+    step();
+    const d = a.arcDrive();
+    expect(d, 'arcs on the hit').not.toBeNull();
+    expect(d!.level).toBeGreaterThan(0.3);
+    expect(Math.hypot(d!.centre[0] - c[0], d!.centre[1] - c[1], d!.centre[2] - c[2]), 'round the brain').toBeLessThan(0.2);
+    for (let i = 0; i < 400; i++) step();
+    expect(a.arcDrive(), 'dark once the seizure passes').toBeNull();
+  });
 });

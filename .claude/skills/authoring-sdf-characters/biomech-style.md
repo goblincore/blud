@@ -895,3 +895,8 @@ offset inside the brain, or a mind that never fires, which no turntable shows.
   The default turntable pitch hides it.
 - A shin tube that stops short of the ankle (it ended at 0.93 of the bone) leaves a visible gap over the foot ball.
   Run tubes into the next knuckle.
+- Hit reactions for a rigid boss (MotionProfile.rigidFrame). Its rig flinch moves nothing, so the hit is sold three ways:
+  - `fleshJiggle`: the struck lobes shove, distort and squash, out of step with each other. It is a post-pose deform, so craters ride it. The kit on the flesh rides the frame-pinned `skull` bone, which the jiggle shoves.
+  - motion.ts JUDDER: the whole frame seizes as one piece, and the legs spasm.
+  - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
+- A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
