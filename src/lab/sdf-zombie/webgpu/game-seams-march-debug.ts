@@ -157,7 +157,8 @@ export function createMarchDebugSeams(ctx: GameContext) {
     /** LEAN WALK runtime A/B (a `?leanwalk` page; march/lean-walk-flag.ts). false writes debugCfg.x = -1, which the
      *  per-pixel test reads as "stay on mapBody" (LEAN_TEST_BLOCK), so one compiled program draws both legs. To every
      *  other reader -1 is 0 (each tests `> 0.5` or a mode's own band), and a page without the flag has no reader at
-     *  all. It overwrites the debug mode: set that after, not before. Bodies spawned later start at 0 (lean on). */
+     *  all. It shares the debug mode's lane: setMarchDebugMode(n) afterwards puts the fast path back on, and
+     *  setMarchDebugMode(-23) is the census (mode 23) with the switch held. Bodies spawned later start at 0 (on). */
     setLeanWalk(on: boolean) {
       const x = on ? 0 : -1;
       for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = x;

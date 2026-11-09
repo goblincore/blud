@@ -143,7 +143,8 @@ describe('MAP_LEAN: the tile-list fold and the carves, and mapBody\'s exit state
 
 describe('LEAN_CENSUS_BLOCK (debug mode 23)', () => {
   it('returns the per-pixel choice, the slot count and the steps before the miss discard', () => {
-    expect(LEAN_CENSUS_BLOCK).toContain('if (debugCfg.x > 22.5 && debugCfg.x < 23.5) {');
+    // abs(): -23 is the census with the runtime switch held (leanOk reads debugCfg.x > -0.5).
+    expect(LEAN_CENSUS_BLOCK).toContain('if (abs(debugCfg.x) > 22.5 && abs(debugCfg.x) < 23.5) {');
     expect(LEAN_CENSUS_BLOCK).toContain('return vec4<f32>(select(0.0, 1.0, leanOk), f32(gPixN), gDebugSteps + select(0.0, 1000.0, hit), t);');
   });
 });

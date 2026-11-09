@@ -106,7 +106,9 @@ export const LEAN_TEST_BLOCK = /* wgsl */ `  // LEAN WALK (?leanwalk, lean-walk-
 export const LEAN_CENSUS_BLOCK = /* wgsl */ `
   // LEAN WALK CENSUS (debugCfg.x == 23, ?leanwalk only). Raw counters, returned before the miss discard.
   // r = 1 where the walk took mapLean, g = slots in the pixel's table, b = steps + 1000 * hit. Only ever read back.
-  if (debugCfg.x > 22.5 && debugCfg.x < 23.5) {
+  // -23 is the same census with the runtime switch held (any negative mode holds it): r must then be 0 on every
+  // pixel, which is how the switch is shown to reach the shader. The step counter only runs for a positive mode.
+  if (abs(debugCfg.x) > 22.5 && abs(debugCfg.x) < 23.5) {
     return vec4<f32>(select(0.0, 1.0, leanOk), f32(gPixN), gDebugSteps + select(0.0, 1000.0, hit), t);
   }`;
 
