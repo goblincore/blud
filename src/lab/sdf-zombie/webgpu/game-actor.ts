@@ -28,7 +28,8 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
-import { joystickSwell, stepSwellJiggle } from '../joystick';
+import { joystickSwell } from '../joystick';
+import { ageJiggle, boneEndPoints, jiggleBulk, jiggleFlesh, kickJiggle, type JiggleKick } from '../flesh-jiggle';
 import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
@@ -778,7 +779,9 @@ export function createZombieActor(opts: {
   const repose = (): BuildResult => {
     const p = applyRig(current, corpseDrawn(), bodyYaw);
     const d0 = headDeform ? headDeform(p) : p;
-    const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
+    const d1 = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
+    const d = fleshSpec && fleshKicks.length
+      ? jiggleFlesh(d1, fleshKicks, fleshSpec, fleshOf, skullEnds ? bound.rig.points[skullEnds[1]]?.pos ?? null : null) : d1;
     const s = headSplit?.(d) ?? null;
     return s ? { ...d, split: s } : d;
   };
@@ -978,8 +981,12 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
-  /** The swell's hit jiggle (joystick.ts SwellJiggle), for a profile whose swell has one. */
-  const swellJiggle = { amp: 0, since: 0 };
+  /** THE FLESH JIGGLE (MotionProfile.fleshJiggle, flesh-jiggle.ts): the kicks still ringing, the skull bone's two rig
+   *  points (the kit on the flesh rides them), and which prims quiver (the frame's own flesh). */
+  const fleshSpec = opts.profile?.fleshJiggle;
+  const fleshKicks: JiggleKick[] = [];
+  const skullEnds = fleshSpec ? boneEndPoints(opts.body.bones, 'skull') : null;
+  const fleshOf = (p: Primitive): boolean => p.limb === 'torso' && p.bone === 'pelvis' && !p.metal;
   let reactionTime = 0;
   let shotWindow: number[] = [];
   const seenReactionShots = new Map<string, number>();
@@ -2032,13 +2039,11 @@ export function createZombieActor(opts: {
         // stops at a wall even where its bones would pull it on through.
         points = corpseContacts(points, f.corpseBody?.pointR);
       }
-      // A BREATHING body (MotionProfile.joystick.swell, the cerebrax): the `swell` morph weight from the gait clock, plus
-      // the hit jiggle a shot kicks (joystick.ts SwellJiggle). actor.ts does the same for the lab; the game had neither,
-      // so its brain never pulsed. Stops on the corpse.
+      // A BREATHING body (MotionProfile.joystick.swell, the cerebrax): the `swell` morph weight from the gait clock.
+      // actor.ts does the same for the lab; the game had none, so its brain never pulsed. Stops on the corpse.
       const joy = opts.profile?.joystick;
       const swellMorphs = joy?.swell && !f.collapsed ? {
-        swell: joystickSwell(state.gait.time, null, joy)
-          + (joy.swell.jiggle ? stepSwellJiggle(swellJiggle, sdt, signals.shot ? (signals.shot.gain ?? 1) : null, joy.swell.jiggle) : 0),
+        swell: joystickSwell(state.gait.time, null, joy),
       } : undefined;
       bound = {
         ...bound,
@@ -2047,6 +2052,24 @@ export function createZombieActor(opts: {
           ...(swellMorphs ? { morphs: { ...bound.rig.morphs, ...swellMorphs } } : {}) },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
+      // THE FLESH JIGGLE's clock, and its whole-mass shove laid on the skull bone's points (pinned to the rigid frame,
+      // MotionProfile.rigidFrame), so the kit on the flesh (eyes, teeth, tendrils) moves with the brain it sits on.
+      // The prims themselves quiver in repose(). A corpse lets go of it.
+      if (fleshSpec && fleshKicks.length) {
+        if (f.collapsed) fleshKicks.length = 0;
+        else {
+          ageJiggle(fleshKicks, sdt, fleshSpec);
+          if (skullEnds && fleshKicks.length) {
+            const b = jiggleBulk(fleshKicks, fleshSpec);
+            const pts = bound.rig.points.slice();
+            for (const i of skullEnds) {
+              const q = pts[i];
+              if (q) pts[i] = { ...q, pos: [q.pos[0] + b[0], q.pos[1] + b[1], q.pos[2] + b[2]], prev: [q.prev[0] + b[0], q.prev[1] + b[1], q.prev[2] + b[2]] };
+            }
+            bound = { ...bound, rig: { ...bound.rig, points: pts } };
+          }
+        }
+      }
       // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.
       {
         const lift = corpseLift(f), floorY = f.floorY;
@@ -2455,6 +2478,8 @@ export function createZombieActor(opts: {
   }
   /** Preserve the strongest pending Soldier impact and its source. */
   function selectPendingShot(shot: NonNullable<MotionSignals['shot']>): void {
+    // Every landed shot kicks the flesh (a volley's pellets fold into one kick, flesh-jiggle.ts kickJiggle).
+    if (fleshSpec) kickJiggle(fleshKicks, shot.woundWorld, shot.dirWorld, shot.type === 'pellet' ? 0.35 : (shot.gain ?? 1));
     const rank = (s: NonNullable<MotionSignals['shot']>) =>
       s.fullStagger ? 3 : s.soldierLevel === 'heavy' ? 2 : s.soldierLevel === 'medium' ? 1 : 0;
     // Keep strength and impact source together until motion consumes them.

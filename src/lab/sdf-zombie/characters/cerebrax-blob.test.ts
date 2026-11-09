@@ -68,20 +68,23 @@ describe('cerebrax — a brain on four spider legs', () => {
     expect(kneeOverHip, 'every knee rides at least 0.6 m over its socket').toBeGreaterThan(0.6);
   });
 
-  it('locks the brain to the harness: brain, face and every kit part on the head ride `pelvis`', () => {
+  it('locks the brain to the harness: the flesh rides `pelvis`, the kit on it rides the frame-pinned `skull`', () => {
     // On the aim chain's sprung skull (the first pass) the brain swayed, nodded and recoiled against the harness
     // (kit on pelvis) and clipped through the ring and the gun (owner, arena look, 2026-11-08). One bone, no gap.
     const flesh = body.prims.filter(p => p.limb === 'torso' && !p.metal);
     expect(flesh.length).toBeGreaterThan(10);
     for (const p of flesh) expect(p.bone, 'every brain and face prim rides pelvis').toBe('pelvis');
-    // Every head and harness part the kit installs is `pelvis|...` (biomech-style.md: `<bone>|<part>`).
-    for (const [file, text] of [['make_head.py', headKitSrc], ['make_harness.py', harnessKitSrc], ['make_gun.py', gunKitSrc]] as const) {
-      const installs = [...text.matchAll(/'(\w+(?:\.[lr])?)\|(\w+)'/g)].map(m => m[1]);
-      expect(installs.length, `${file} installs parts`).toBeGreaterThan(0);
-      for (const bone of installs) if (bone !== 'skull') expect(bone, `${file}: on pelvis`).toBe('pelvis');
+    // The harness and the gun are the frame (`pelvis`); the eyes, teeth and tendrils sit ON the flesh, so they ride
+    // `skull`, whose points rigidFrame pins to the frame and the game's flesh jiggle shoves (flesh-jiggle.ts).
+    const installs = (text: string) => [...text.matchAll(/'(\w+(?:\.[lr])?)\|(\w+)'/g)].map(m => m[1]);
+    for (const [file, text] of [['make_harness.py', harnessKitSrc], ['make_gun.py', gunKitSrc]] as const) {
+      expect(installs(text).length, `${file} installs parts`).toBeGreaterThan(0);
+      for (const bone of installs(text)) expect(bone, `${file}: on the frame`).toBe('pelvis');
     }
-    // make_head.py only names `skull|` to drop the first pass's leftovers.
-    expect(headKitSrc).toContain("drop(['skull|'])");
+    // (Its `drop([...])` lines name the old `pelvis|` copies only to clear them.)
+    const head = installs(headKitSrc.split('\n').filter(l => !l.includes('drop(')).join('\n'));
+    expect(head.length).toBeGreaterThan(0);
+    for (const bone of head) expect(bone, 'make_head.py: on the flesh').toBe('skull');
   });
 
   it('walks as one rigid frame: the leg roots stay in their sockets and the brain never tips', () => {
@@ -102,7 +105,8 @@ describe('cerebrax — a brain on four spider legs', () => {
       });
       const F = kitFrames(body, m.bound, m.lastBodyYaw);
       const p = F.get('pelvis')!, c = Math.cos(m.lastBodyYaw), s = Math.sin(m.lastBodyYaw);
-      for (const b of ['thigh.l', 'thigh.r', 'upperarm.l', 'upperarm.r']) {
+      // The legs' sockets, and the skull (the kit on the flesh) held to the frame too.
+      for (const b of ['thigh.l', 'thigh.r', 'upperarm.l', 'upperarm.r', 'skull']) {
         const o = restOff(b);
         // The socket where the frame (pelvis, yawed) holds it, against where the leg's frame actually starts.
         const want = [p.pos[0] + c * o[0]! + s * o[2]!, p.pos[1] + o[1]!, p.pos[2] - s * o[0]! + c * o[2]!];

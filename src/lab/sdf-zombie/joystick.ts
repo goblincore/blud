@@ -15,39 +15,7 @@ export interface JoystickSpec {
   /** The knob BREATHES (owner: "it breathes and grows, like the bulbous part enlarges and the rocket inside is exposed a
    *  bit more"): the `swell` morph channel (expression.ts), 0..1, on a slow breath of `period` s, throbbing up to 1 through
    *  an attack. The .blob's `morph=swell:` words say what grows. Absent: no breathing. */
-  swell?: { period: number; jiggle?: SwellJiggle };
-}
-
-/** A HIT JIGGLE on the swell channel (the cerebrax: its frame is rigid, so a shot quivers the flesh instead of moving
- *  it; owner: "when i shoot the brain/flesh it should still jiggle"). Each shot kicks a damped wobble that ADDS to the
- *  breath: the swell weight swings past 1 and below 0, so the lobes bulge and suck in about their own centres while the
- *  frame, the kit and the craters' anchors stay put. */
-export interface SwellJiggle {
-  /** Swell weight one shot of gain 1 adds at the wobble's peak. Kicks stack up to 1.6x this. */
-  amp: number;
-  /** Wobble frequency (Hz). */
-  freq: number;
-  /** Seconds for the wobble to fall to 1/e. */
-  decay: number;
-}
-
-/** The jiggle's state: the wobble's current amplitude (swell weight) and how long ago it was last kicked (s). */
-export interface JiggleState { amp: number; since: number }
-
-/** Advance `st` by `dt` and kick it when a shot of `gain` landed this step. Returns the swell weight to add. */
-export function stepSwellJiggle(st: JiggleState, dt: number, shotGain: number | null, spec: SwellJiggle): number {
-  if (shotGain !== null) {
-    // Keep what is still ringing, add the kick, cap the stack.
-    const left = st.amp * Math.exp(-st.since / spec.decay);
-    st.amp = Math.min(spec.amp * 1.6, left + spec.amp * shotGain);
-    st.since = 0;
-  } else {
-    st.since += dt;
-  }
-  if (st.amp === 0) return 0;
-  const env = st.amp * Math.exp(-st.since / spec.decay);
-  if (env < 1e-3) { st.amp = 0; return 0; }
-  return env * Math.sin(2 * Math.PI * spec.freq * st.since + Math.PI / 2) * (st.since < 0.02 ? st.since / 0.02 : 1);
+  swell?: { period: number };
 }
 
 /** The `hem` offset (body-local: +x his right, +y up, +z forward) at time `t` (s), with `attackPhase` 0..1 while

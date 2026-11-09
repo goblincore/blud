@@ -4,6 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
+import type { FleshJiggleSpec } from './flesh-jiggle';
 import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
@@ -91,6 +92,10 @@ export interface MotionProfile {
    *  are 2.7 m long: their length constraints dragged the hip and shoulder points 20-27 cm off the frame each stride,
    *  and the kit's legs (thigh / upperarm frames) slid out of their socket balls on the frame (pelvis). */
   rigidFrame?: boolean;
+  /** A hit makes the flesh QUIVER (flesh-jiggle.ts): the game shoves, distorts and squashes the `pelvis` flesh about
+   *  each hit and shoves the `skull` bone (the kit on the flesh) with the whole mass. For a rigidFrame body, whose rig
+   *  flinch moves nothing. */
+  fleshJiggle?: FleshJiggleSpec;
   /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
    *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
    *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
@@ -622,7 +627,7 @@ export const IMP_PROFILE: MotionProfile = {
  *  chaingun slung under its face. It walks on CEREBRAX_STRIDE (the gibbet's four-beat stalk, spider-kneed) and shoots
  *  through the soldier's brain on the juggernaut's CHAINGUN_TUNING: long sweeping bursts from a long range, no strafing,
  *  the sweep a slow turn a running player can outrun. The gun fires from the body (`spit`), not a held prop. The brain
- *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw (no `hem` bone); a shot rings the swell (SwellJiggle). */
+ *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw (no `hem` bone); a shot quivers it (fleshJiggle). */
 export const CEREBRAX_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
@@ -641,8 +646,11 @@ export const CEREBRAX_PROFILE: MotionProfile = {
   // One welded frame: the brain, harness and leg sockets never move against each other (MotionProfile.rigidFrame).
   rigidFrame: true,
   // A slow breath (owner: "visibly pulse or throb"): the lobes swell 2.5-5% over 1.6 s.
-  // A shot quivers the flesh (the frame is rigid): the swell rings at 6 Hz, gone in about half a second.
-  joystick: { amp: 0, idle: 0, swell: { period: 1.6, jiggle: { amp: 1.6, freq: 6, decay: 0.18 } } },
+  joystick: { amp: 0, idle: 0, swell: { period: 1.6 } },
+  // A shot QUIVERS the brain (owner: "more violent and distorted"): the struck lobes shove 9 cm and squash 18%, out of
+  // step with each other, at 7 Hz; the whole brain shoves 2.5 cm in its clamp (1.8 cm clearance plus the band's lip).
+  // Gone in ~0.7 s. The face takes a third of the local shove so its kit eyes and teeth stay seated.
+  fleshJiggle: { amp: 0.09, bulk: 0.025, freq: 7, decay: 0.16, reach: 0.45, squash: 0.18, calm: 0.35, calmReach: 0.35 },
   // A BOSS soaks: twice the teratoma's meter divisors. Dynamite still gibs through GIB_THRESHOLD.
   toughness: { pellet: 9, blast: 3.5, sever: 9 },
   // Craters and gouts sized for a 1.3 m brain, like the teratoma's ball (its numbers, a little bigger).
