@@ -63,6 +63,6 @@ describe('WORLD_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(40); // +artScene, +light (2026-09-26), +disco (2026-09-27), +egg, +sequence (2026-09-30), +emergence (2026-10-16), +sectorFx (2026-10-24), +barrels (2026-10-25), +doors (2026-10-28)
+    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(41); // +closets (2026-11-08), +artScene, +light (2026-09-26), +disco (2026-09-27), +egg, +sequence (2026-09-30), +emergence (2026-10-16), +sectorFx (2026-10-24), +barrels (2026-10-25), +doors (2026-10-28)
   });
 });

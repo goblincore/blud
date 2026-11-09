@@ -17,6 +17,7 @@ export function createDoorSeams(ctx: GameContext) {
     /** The gun switches: id, line, event, pressed; empty without any (or under `?locks=0`). */
     switches: () => ctx.world.switches?.field.defs.map((d, i) => ({ ...d, pressed: ctx.world.switches!.field.pressed[i] === 1 })) ?? [],
     lifts: () => ctx.world.lifts?.snapshot() ?? [],
+    closets: () => ctx.world.closets?.snapshot() ?? [],
     pressSwitch: (id: string) => ctx.world.switches?.press(id) ?? false,
     forceDoor: (id: string, open: number, phase?: DoorPhase) => ctx.world.doors?.force(id, open, phase) ?? false,
     /** The leaf meshes: name, zone room, culling, whether the level pre-warm can see them (in the level group). */

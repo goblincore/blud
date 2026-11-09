@@ -46,13 +46,13 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 93 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 94 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 57 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 58 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 20 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
@@ -335,6 +335,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-burning.ts` — IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts rather than into its closure (the decomposition's rule for new features).
 - `webgpu/game-chunk-bake.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
 - `webgpu/game-chunk-pieces.ts` — Chunk gib pieces: creating, dressing and releasing a piece view, spawning a chunk piece, and gibbing chunk meat and baked pieces.
+- `webgpu/game-closets.ts` — MONSTER CLOSETS IN PLAY (2026-11-08): the level's `closets` on ctx.world.closets.
 - `webgpu/game-crowd-queries.ts` — Crowd queries: the live body of a crowd type nearest the player, and the set of actors whose bone can show.
 - `webgpu/game-crowd-types.ts` — Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
 - `webgpu/game-deferred-lights.ts` — THE SHARED GAME LIGHT LIST (hybrid deferred M2, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
@@ -561,6 +562,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/level-tier.ts` — THE CHEAP LEVEL TIER (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/portal.wgsl.ts` — The Void's portal, embers and glow pool, hand-written WGSL (spec 2026-09-24-void-portal-design.md §5).
 - `webgpu/sector-bounce.ts` — GLOW BOUNCE (hand-off 2026-10-24 item 2b): the green a nukage pool (lava, acid) throws on the room round it, baked once per vertex at mesh build.
+- `webgpu/sector-closets.ts` — MONSTER CLOSETS (2026-11-08): sectors Doom keeps shut until the player crosses a walk-over line.
 - `webgpu/sector-debris.ts` — THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level.
 - `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
 - `webgpu/sector-doors.ts` — SECTOR DOORS (owner design 2026-10-28): sci-fi doors whose two leaves split sideways into the jambs, opening by themselves for the player and for…

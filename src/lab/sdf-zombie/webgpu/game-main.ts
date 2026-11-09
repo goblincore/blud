@@ -108,6 +108,7 @@ import { addSectorMeshes } from './game-sector-mesh';
 import { createGameDoors } from './game-doors';
 import { createGameSwitches } from './game-switches';
 import { createGameLifts } from './game-lifts';
+import { createGameClosets } from './game-closets';
 import { withLiftsLow } from './sector-lifts';
 import { stripMoods } from './sector-moods';
 import { createZoneCull, updateZoneCull } from './game-zone-cull';
@@ -813,6 +814,8 @@ async function main() {
   if (ctx.world.level.def?.sectors) ctx.world.doors = createGameDoors(ctx);
   if (ctx.world.level.def?.sectors) ctx.world.switches = createGameSwitches(ctx);
   if (ctx.world.level.def?.sectors) ctx.world.lifts = createGameLifts(ctx);
+  // Closets: after the static mesh, navigation and the portal graph (built from the file's open heights); this shuts them.
+  if (ctx.world.level.def?.sectors) ctx.world.closets = createGameClosets(ctx);
   // Barrels (plan 3b): sector levels only. Their meshes join the level group here so the light-list loop below lights
   // them like the walls; their boxes join ctx.world.colliders (the same array) before anything moves.
   if (ctx.world.level.def?.barrels?.length) ctx.world.barrels = createBarrelRuntime(ctx, ctx.world.level.def.barrels);

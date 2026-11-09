@@ -305,6 +305,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
     for (const ev of events) {
       ctx.telemetry.telemetry.event('level-event', { event: ev });
       ctx.world.doors?.levelEvent(ev);
+      ctx.world.closets?.levelEvent(ev);
       for (const cmd of commandsFor(ev, def.completeOn)) runLevelCommand(ctx, cmd);
     }
   }

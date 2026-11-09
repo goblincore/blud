@@ -12,10 +12,11 @@ import { buildSectorGround } from './sector-ground';
 import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
 import {
   DOOR_STYLES, GLOW_KINDS, SECTOR_SPECIALS, zoneName,
-  type DoorStyle, type GlowKind, type SectorDef, type SectorDoorDef, type SectorLiftDef, type SectorLine, type SectorSwitchDef, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
+  type DoorStyle, type GlowKind, type SectorDef, type SectorDoorDef, type SectorLiftDef, type SectorClosetDef, type SectorLine, type SectorSwitchDef, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
 } from './sector-def';
 import { DOOR_SPEED_M_S, DOOR_WAIT_S } from './sector-doors';
 import { LIFT_SPEED_M_S, LIFT_WAIT_S } from './sector-lifts';
+import { CLOSET_SPEED_M_S } from './sector-closets';
 
 type Json = Record<string, unknown>;
 
@@ -23,7 +24,7 @@ type Json = Record<string, unknown>;
  *  metre, scripts/levels/doom_map.py). The game does not read it; tools that place things by Doom
  *  position (the doom gate's route) do. */
 const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry', 'unitsPerM',
-  'vertices', 'sectors', 'lines', 'doors', 'switches', 'lifts', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
+  'vertices', 'sectors', 'lines', 'doors', 'switches', 'lifts', 'closets', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
@@ -35,6 +36,7 @@ const DOOR_KEYS = ['sector', 'speed', 'wait'];
 const DOOR_ENTITY_KEYS = ['id', 'sector', 'faces', 'a', 'b', 'width', 'depth', 'height', 'zones', 'style', 'speed', 'wait', 'key', 'opensOn', 'sealed'];
 const SWITCH_KEYS = ['id', 'line', 'event'];
 const LIFT_KEYS = ['id', 'sector', 'top', 'speed', 'wait'];
+const CLOSET_KEYS = ['id', 'sector', 'opensOn', 'moves', 'shut', 'speed'];
 /** How far a door's stated width may differ from |b - a|, and its faces from parallel to a -> b (metres). */
 const DOOR_TOLERANCE_M = 0.01;
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
@@ -303,8 +305,34 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     });
   }
 
+  // --- closets (sector-def.ts SectorClosetDef; sector-closets.ts runs them; the sector's heights are the open position) ---
+  const closets: SectorClosetDef[] = [];
+  if (j.closets !== undefined) {
+    const seen = new Set<string>();
+    const taken = new Set<number>([...lifts.map(l => l.sector), ...doors.map(d => d.sector)]);
+    objects(j.closets, 'closets').forEach((o, i) => {
+      const where = `closets[${i}]`;
+      const before = errors.length;
+      unknownKeys(o, CLOSET_KEYS, where);
+      const id = typeof o.id === 'string' && o.id !== '' ? o.id : (errors.push(`${where}.id: expected a name`), '');
+      if (id && seen.has(id)) errors.push(`closet ${id}: duplicate id`);
+      seen.add(id);
+      if (!sectorIndex(o.sector)) { errors.push(`${where}.sector: a sector index`); return; }
+      if (taken.has(o.sector as number)) errors.push(`${where}.sector: already a door, lift or closet`);
+      taken.add(o.sector as number);
+      const sec = sectors[o.sector as number]!;
+      const opensOn = typeof o.opensOn === 'string' && o.opensOn !== '' ? o.opensOn : (errors.push(`${where}.opensOn: an event name`), '');
+      const moves = o.moves === 'ceil' || o.moves === 'floor' ? o.moves : (errors.push(`${where}.moves: 'ceil' or 'floor'`), 'ceil');
+      if (!isNum(o.shut)) errors.push(`${where}.shut: a height`);
+      else if (moves === 'ceil' && ((o.shut as number) < sec.floor - 1e-6 || (o.shut as number) >= sec.ceil)) errors.push(`${where}.shut: from the sector's floor to under its ceiling`);
+      else if (moves === 'floor' && ((o.shut as number) <= sec.floor || (o.shut as number) > sec.ceil + 1e-6)) errors.push(`${where}.shut: over the sector's floor, up to its ceiling`);
+      const speed = o.speed === undefined ? CLOSET_SPEED_M_S : isNum(o.speed) && o.speed > 0 ? o.speed : (errors.push(`${where}.speed: > 0`), 1);
+      if (errors.length === before) closets.push({ id, sector: o.sector as number, opensOn, moves, shut: o.shut as number, speed });
+    });
+  }
+
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
-  const map: SectorMap = { vertices, sectors, lines, ...(doors.length ? { doors } : {}), ...(switches.length ? { switches } : {}), ...(lifts.length ? { lifts } : {}) };
+  const map: SectorMap = { vertices, sectors, lines, ...(doors.length ? { doors } : {}), ...(switches.length ? { switches } : {}), ...(lifts.length ? { lifts } : {}), ...(closets.length ? { closets } : {}) };
   if (errors.length === 0) sectors.forEach((_, s) => {
     const idx = sectorEdgeIndices(map, s);
     const bal = new Map<number, number>();

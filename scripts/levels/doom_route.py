@@ -11,7 +11,8 @@ so a line wide enough over a sector the body cannot cross still counts.
 Locks count: a door with a `key` stays shut until a key pickup of that colour is reached, a `sealed` door until a
 reached sector holds a switch firing its `opensOn` (the switch's line borders the sector: a shot from that sector). So
 a key behind its own lock, or a switch behind the door it opens, reads as the exit not reached. Every door taken as
-open is the `open_doors` result, for what the locks cost.
+open is the `open_doors` result, for what the locks cost. A closet (`closets`, 2026-11-08) waits for its `opensOn` like a
+sealed door; a trigger box (a walk-over line's) gives its event to the sector under its centre.
 
 Lifts count: a lift sector stands at its `top`, and a body within a step of its low position can ride it up.
 
@@ -70,12 +71,17 @@ def flood(level: dict, locks: bool = True) -> dict:
             waits[d["sector"]] = f"key-{d['key']}"
         elif d.get("sealed"):
             waits[d["sector"]] = d["opensOn"]
+    for c in level.get("closets", []) if locks else []:
+        waits[c["sector"]] = c["opensOn"]
     gives: dict[int, list[str]] = {}
     for p in level.get("pickups", []):
         if p["item"].startswith("key-"):
             gives.setdefault(sector_of((p["pos"][0], p["pos"][2]), segs), []).append(p["item"])
     for sw in level.get("switches", []):
         gives.setdefault(lines[sw["line"]]["front"], []).append(sw["event"])
+    for t in level.get("triggers", []):
+        if t.get("event") != "level.end":
+            gives.setdefault(sector_of(((t["min"][0] + t["max"][0]) / 2, (t["min"][2] + t["max"][2]) / 2), segs), []).append(t["event"])
     have: set[str] = set()
     order: list[str] = []
     waiting: list[int] = []
@@ -134,6 +140,8 @@ def flood(level: dict, locks: bool = True) -> dict:
             locked[d["sector"]] = f"key-{d['key']}"
         elif d.get("sealed"):
             locked[d["sector"]] = d["opensOn"]
+    for c in level.get("closets", []) if locks else []:
+        locked[c["sector"]] = c["opensOn"]
     first = (start, frozenset(gives.get(start, [])))
     states, order_q = {first}, [first]
     succ: dict = {}

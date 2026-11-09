@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseLevel, parseSectorLevel } from './sector-json';
 import { withLiftsLow } from './sector-lifts';
+import { CLOSET_SPEED_M_S } from './sector-closets';
 
 const fixture = (): any => JSON.parse(readFileSync('public/assets/levels/fixtures/sectors.level.json', 'utf8'));
 
@@ -247,6 +248,28 @@ describe('parseSectorLevel: locks and gun switches', () => {
     expect(() => parseSectorLevel(j)).toThrow(/lifts\[0\]\.top/);
     j.lifts = [{ id: 'l', sector: 2, top: 9 }];
     expect(() => parseSectorLevel(j)).toThrow(/under the sector's ceiling/);
+  });
+
+  it('reads a closet at its open heights (the game shuts it), with the default speed', () => {
+    const j = doorway({});
+    delete j.doors;
+    j.closets = [{ id: 'c', sector: 1, opensOn: 'line.tag-1', moves: 'ceil', shut: 0 }];
+    const map = parseSectorLevel(j).sectors!;
+    expect(map.closets![0]).toMatchObject({ id: 'c', sector: 1, opensOn: 'line.tag-1', moves: 'ceil', shut: 0, speed: CLOSET_SPEED_M_S });
+    expect(map.sectors[1]!.ceil).toBe(2.5);
+  });
+
+  it('refuses a closet on a door, a bad shut height or a bad kind', () => {
+    const j = doorway({});
+    j.closets = [{ id: 'c', sector: 1, opensOn: 'e', moves: 'ceil', shut: 0 }];
+    expect(() => parseSectorLevel(j)).toThrow(/already a door, lift or closet/);
+    delete j.doors;
+    j.closets = [{ id: 'c', sector: 1, opensOn: 'e', moves: 'ceil', shut: 2.5 }];
+    expect(() => parseSectorLevel(j)).toThrow(/closets\[0\]\.shut/);
+    j.closets = [{ id: 'c', sector: 1, opensOn: 'e', moves: 'floor', shut: 0 }];
+    expect(() => parseSectorLevel(j)).toThrow(/closets\[0\]\.shut/);
+    j.closets = [{ id: 'c', sector: 1, opensOn: 'e', moves: 'wall', shut: 0 }];
+    expect(() => parseSectorLevel(j)).toThrow(/closets\[0\]\.moves/);
   });
 
   it('takes key pickups', () => {
