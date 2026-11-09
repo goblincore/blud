@@ -91,7 +91,7 @@ if 'ring' in PARTS:
     # The eyes' red light spills onto the front of the band under the face (kit-overlay.ts GLOW_FROM_ATTRIBUTE:
     # skullmetal burns red): two embers at the eye sockets, a steep falloff over 0.35 m.
     eyes = [(sk(*tilted(-16.6, sx * 5.7), 0.01), 0.03, 0.9) for sx in (1, -1)]
-    finish_part('harness', 'pelvis|harness', 22000, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
+    finish_part('harness', 'pelvis|harness', 9000, lines=sut, glow=(eyes, 0.35), voxel=0.005, noise=0.004, noise_scale=0.07, ao=(1.5, 1.6))
 
 if 'frame' in PARTS:
     # THE CHASSIS (pelvis|frame): the band alone read as a ring with four legs stuck on it (owner, arena look,
@@ -135,7 +135,7 @@ if 'frame' in PARTS:
     # A hanger from the belly forward to the keel, so the gun's mount is on the same frame.
     kp = band_point(0.0, 0.5, 0.0) + Vector((0, 0.02, -0.06))
     tube('gunstay', bez(belly, belly.lerp(kp, 0.5) + Vector((0, 0, -0.08)), kp, 16), [0.040] * 17, segs=12)
-    finish_part('frame', 'pelvis|frame', 9000, voxel=0.005, noise=0.003, noise_scale=0.07, ao=(1.5, 1.6))
+    finish_part('frame', 'pelvis|frame', 3500, voxel=0.005, noise=0.003, noise_scale=0.07, ao=(1.5, 1.6))
 
 if 'talons' in PARTS:
     # Talons rising off the band's top edge and curling in over the brain: three per side, none in front of the face.
@@ -151,4 +151,4 @@ if 'talons' in PARTS:
         horn(f't{lon}', base - radial * 0.01, Vector((0, 0, 1)) + radial * 0.15, tangent, L, 0.042, curl=-1.35)   # about z x radial, + turns outward: - curls in
         ball(f'tk{lon}', base + Vector((0, 0, 0.01)), 1.0, 0.050, 0.050, 0.040)
         ring(f'tr{lon}', base + Vector((0, 0, 0.045)), Vector((0, 0, 1)), 0.040, 0.009)
-    finish_part('talons', 'pelvis|talons', 8000, voxel=0.004, noise=0.003, ao=(1.5, 1.6))
+    finish_part('talons', 'pelvis|talons', 3000, voxel=0.004, noise=0.003, ao=(1.5, 1.6))

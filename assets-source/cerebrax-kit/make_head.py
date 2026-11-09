@@ -39,7 +39,7 @@ if 'teeth' in PARTS:
             d = Vector((0, 0, dirz)) * 1.0 + n * 0.35 + Vector((rr.uniform(-0.15, 0.15), 0, 0))
             L = L0 * (1.25 if abs(k) == 2 else 1.0) * rr.uniform(0.8, 1.1)
             horn(f'{row}{k}', root, d, n.cross(Vector((0, 0, 1))).normalized(), L, 0.010 if abs(k) == 2 else 0.008, curl=0.2 * -dirz)
-    finish_part('teeth', 'pelvis|teeth', 3000, material='tooth', voxel=0.0016, noise=0.0006, smooth=(0.5, 2), ao=(1.2, 1.2))
+    finish_part('teeth', 'pelvis|teeth', 1500, material='tooth', voxel=0.0016, noise=0.0006, smooth=(0.5, 2), ao=(1.2, 1.2))
 
 if 'tendrils' in PARTS:
     # Each: rooted under the skin (a ferrule where it leaves), standing out along the skin's normal, then curling up
@@ -75,7 +75,7 @@ if 'tendrils' in PARTS:
                 ring(f'tr{i}_{j}', pts[j], ax, rad[j] * 1.04, rad[j] * 0.22)
         plugs.append((sk(la, lo, 0.012), n, rad[0]))
         tips.append((pts[-1], (pts[-1] - pts[-3]).normalized(), rad[-1]))
-    finish_part('tendrils', 'pelvis|tendrils', 16000, material='hose', voxel=0.003, noise=0.0015, ao=(1.3, 1.3))
+    finish_part('tendrils', 'pelvis|tendrils', 9000, material='hose', voxel=0.003, noise=0.0015, ao=(1.3, 1.3))
     # The ferrules at the roots and the plugs at the ends: bony collars, burning red near the tips (_glow).
     for i, (p, n, r) in enumerate(plugs):
         ring(f'fer{i}', p, n, r * 1.25, r * 0.38)
@@ -85,7 +85,7 @@ if 'tendrils' in PARTS:
         tube(f'plug{i}', [p - d * 0.01, p + d * 0.05], [r * 1.35, r * 1.15], segs=14)
         ring(f'plugr{i}', p + d * 0.02, d, r * 1.45, r * 0.30)
         glows.append((p + d * 0.065, 0.015, 1.0))
-    finish_part('plugs', 'pelvis|plugs', 5000, glow=(glows, 0.08), voxel=0.003, noise=0.001, ao=(1.4, 1.4))
+    finish_part('plugs', 'pelvis|plugs', 1800, glow=(glows, 0.08), voxel=0.003, noise=0.001, ao=(1.4, 1.4))
     for i, (p, d, r) in enumerate(tips):
         ball(f'tip{i}', p + d * 0.062, 1.0, r * 0.95, r * 0.95, r * 0.95)
     plain_part(join_work(), 'eyeglow', 'pelvis|tips', mirror=False)

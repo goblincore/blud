@@ -34,7 +34,7 @@ if 'gun' in PARTS:
         R_ = [i / 10 for i in range(11)]
         for t0 in (0.20, 0.40):
             tube(f'rib{side}{t0}', [on(t0 - 0.06 * u, side * (D(10) + D(80) * u), 0.002) for u in R_], [0.003 + 0.005 * sn(u) for u in R_], segs=8)
-    finish_part('gun', 'pelvis|gun', 5000, voxel=0.003, noise=0.002, ao=(1.5, 1.6))
+    finish_part('gun', 'pelvis|gun', 2200, voxel=0.003, noise=0.002, ao=(1.5, 1.6))
     # Six chrome barrels in a ring, out of the shroud's mouth, and a muzzle plate round them.
     for k in range(6):
         a = 2 * math.pi * k / 6
@@ -58,7 +58,7 @@ if 'gun' in PARTS:
     tube('feed', sm, [0.026] * len(sm), segs=12)
     for j in range(2, len(sm) - 2, 2):
         ring(f'fr{j}', sm[j], (sm[j + 1] - sm[j - 1]).normalized(), 0.027, 0.006)
-    finish_part('feed', 'pelvis|feed', 4000, material='cable', voxel=0.003, noise=0.001, ao=(1.3, 1.3))
+    finish_part('feed', 'pelvis|feed', 2400, material='cable', voxel=0.003, noise=0.001, ao=(1.3, 1.3))
     # The muzzle in BLOB coords (blender (x, y, z) -> blob (x, z, -y)): MotionProfile.spit's offset is this minus the
     # hips' rig point (0, 1.504, 0).
     print('MUZZLE blob', (round(MUZ.x, 3), round(MUZ.z, 3), round(-MUZ.y, 3)))

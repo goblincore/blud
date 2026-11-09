@@ -52,7 +52,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         for i, t in enumerate((0.30, 0.50, 0.70)):
             horn(f'sp{i}', on(t, 0, 0.020), F.f * 1.0 - F.u * 0.9, F.s, 0.07 + 0.03 * sn((t - 0.2) / 0.6), 0.013, curl=-0.6)
         sut = [zigzag(lambda s: on(0.18 + 0.62 * s, D(70)), 0.008, 10, lambda s: (on(0.18 + 0.62 * s, D(78)) - on(0.18 + 0.62 * s, D(70))).normalized())]
-        finish_part('strut', f'{up}.l|strut', 9000, mirror=True, lines=sut, voxel=0.0045, noise=0.004, noise_scale=0.06)
+        finish_part('strut', f'{up}.l|strut', 3500, mirror=True, lines=sut, voxel=0.0045, noise=0.004, noise_scale=0.06)
         # The ram under the beam: an iron cylinder from near the socket, a chrome rod into a lug under the knee.
         clear_work()
         top = F.at(0.14, D(180), rf(0.14) + 0.050, rs(0.14) + 0.050)
@@ -66,7 +66,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         ball('lug', end, 0.030)
         tube('web', [top, F.at(0.14, D(180), rf(0.14) - 0.01, rs(0.14) - 0.01)], [0.020, 0.020], segs=10)
         tube('web2', [end, F.at(0.90, D(180), rf(0.90) - 0.01, rs(0.90) - 0.01)], [0.018, 0.018], segs=10)
-        finish_part('ram', f'{up}.l|ram', 3000, material='iron', mirror=True, voxel=0.004, noise=0.0015)
+        finish_part('ram', f'{up}.l|ram', 1000, material='iron', mirror=True, voxel=0.004, noise=0.0015)
         rod = tube('rod', [bot.lerp(end, i / 8) for i in range(9)], [0.015] * 9, segs=14)
         plain_part(rod, 'chrome', f'{up}.l|rod')
 
@@ -90,7 +90,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         # The horn off the crown, curling up and back over the knee: the silhouette's high point.
         horn('kneehorn', cap + point * 0.09, point + UPZ * 0.6 - u_out * 0.2, side, 0.30, 0.042, curl=-1.5)
         horn('kneespur', cap + point * 0.06 - u_in * 0.06, point - u_in * 0.8, side, 0.13, 0.020, curl=0.9)
-        finish_part('knee', f'{mid}.l|knee', 6000, material='black', mirror=True, voxel=0.0045, noise=0.003, ao=(1.6, 1.2))
+        finish_part('knee', f'{mid}.l|knee', 2500, material='black', mirror=True, voxel=0.0045, noise=0.003, ao=(1.6, 1.2))
 
     # ------------------------------------------------------------------------------------------- the chrome shin
     if 'shin' in PARTS:
@@ -101,7 +101,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         # Silver bone-metal, not plain chrome: polished chrome reflects the dark level and rendered as a black rod
         # (first engine look), while the caps should be the dark parts (the reference's black joint caps).
         tube('tube', [F.h + F.u * (F.L * s) for s in S], [rad(s) for s in S], segs=28)
-        finish_part('tube', f'{mid}.l|tube', 3000, mirror=True, voxel=0.004, noise=0.0015, noise_scale=0.08, ao=(1.3, 1.3))
+        finish_part('tube', f'{mid}.l|tube', 800, mirror=True, voxel=0.004, noise=0.0015, noise_scale=0.08, ao=(1.3, 1.3))
         rf = lambda t: rad(t) + 0.016
         # The top collar: a sleeve with a pointed lower edge running down the outer side.
         T0 = lambda ph: 0.03
@@ -121,7 +121,7 @@ def spider_leg(H, K, A, T, up, mid, low):
             tube(f'fin{j}', [on(t, D(20), 0.004 + bh(t) * j / 4) for t in B], [0.008 - 0.001 * j + 0.004 * sn((t - 0.12) / 0.36) for t in B], segs=8)
         for i, tt in enumerate((0.18, 0.28, 0.38)):
             horn(f'sp{i}', on(tt, D(20), bh(tt) + 0.004), F.at(0, D(20), 1, 1) - F.h + F.u * 0.8, F.f.cross(F.u), 0.09, 0.012, curl=-0.5)
-        finish_part('collar', f'{mid}.l|collar', 7000, mirror=True, voxel=0.004, noise=0.003)
+        finish_part('collar', f'{mid}.l|collar', 2500, mirror=True, voxel=0.004, noise=0.003)
 
     # ------------------------------------------------------------------------------------------- the foot
     if 'foot' in PARTS:
@@ -133,7 +133,7 @@ def spider_leg(H, K, A, T, up, mid, low):
         # The talon: from the ankle down, curling outward so its point takes the floor ~2 cm past the toe joint.
         horn('talon', A + Fm.u * 0.04, Fm.u + out * 0.15, out.cross(Fm.u).normalized(), 0.26, 0.060, curl=0.5)
         horn('spur', A - out * 0.05 + UPZ * 0.02, -out + UPZ * 0.3, out.cross(UPZ).normalized(), 0.11, 0.022, curl=-0.7)
-        finish_part('foot', f'{low}.l|foot', 4000, material='black', mirror=True, voxel=0.004, noise=0.002, ao=(1.6, 1.2), flatten=0.0)
+        finish_part('foot', f'{low}.l|foot', 1500, material='black', mirror=True, voxel=0.004, noise=0.002, ao=(1.6, 1.2), flatten=0.0)
 
 
 if 'hind' in LIMBS: spider_leg(JV['hip'], JV['knee'], JV['hock'], JV['toe'], 'thigh', 'shin', 'foot')
