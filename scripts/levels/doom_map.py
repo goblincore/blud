@@ -657,8 +657,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         else:
             pickups.append({"id": f"p{ti}", "item": THING_PICKUPS[t["type"]], "pos": pos})
 
-    override_spawns = []
+    override_spawns, recast = [], []
     if overrides is not None:
+        recast = doom_overrides.apply_recast(overrides, spawns)
         used = {s["id"] for s in spawns} | {p["id"] for p in pickups} | {b["id"] for b in barrels}
         override_spawns = doom_overrides.apply_spawns(overrides, spawns, used, verts_m, out_lines, out_sectors, sector_segs)
 
@@ -732,7 +733,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
              "emitter_lights_by_push": {c: len(v) for c, v in push_sets.items()},
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
-             "override_sectors": sector_patches, "override_spawns": override_spawns}
+             "override_sectors": sector_patches, "override_spawns": override_spawns, "recast": recast}
     return level, stats
 
 
@@ -1111,7 +1112,8 @@ def main() -> None:
     if overrides is not None:
         patched = ", ".join(f"{p['sector']} {sorted(p['set'])}" for p in stats["override_sectors"]) or "none"
         added = ", ".join(f"{s['id']} ({s['kind']}, sector {s['sector']})" for s in stats["override_spawns"]) or "none"
-        print(f"overrides {ov_path}: sectors patched: {patched}; spawns added: {added}")
+        recast = ", ".join(f"{c['id']} {c['from']}->{c['to'] or 'removed'}" for c in stats["recast"]) or "none"
+        print(f"overrides {ov_path}: sectors patched: {patched}; spawns added: {added}; recast: {recast}")
     if a.svg:
         write_svg(level, a.svg / f"{a.map.upper()}.svg")
         print(f"plan: {a.svg / (a.map.upper() + '.svg')}")
