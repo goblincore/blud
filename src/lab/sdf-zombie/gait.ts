@@ -638,7 +638,8 @@ export const CEREBRAX_STRIDE: GaitProfile = {
   elbowBow: 0.0,
   swayAmp: 0.03,
   bobAmp: 0.03,
-  rockAmp: 0.02,
+  // No roll: the frame is rigid (MotionProfile.rigidFrame drops the trunk's per-joint offsets anyway).
+  rockAmp: 0,
   headBob: 0.2,
   elbowPole: [0.6, 0.8, 0.15],
   kneePole: [0.6, 0.8, -0.15],

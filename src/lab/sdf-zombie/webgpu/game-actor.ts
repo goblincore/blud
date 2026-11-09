@@ -28,6 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
+import { joystickSwell, stepSwellJiggle } from '../joystick';
 import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
@@ -977,6 +978,8 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
+  /** The swell's hit jiggle (joystick.ts SwellJiggle), for a profile whose swell has one. */
+  const swellJiggle = { amp: 0, since: 0 };
   let reactionTime = 0;
   let shotWindow: number[] = [];
   const seenReactionShots = new Map<string, number>();
@@ -2029,10 +2032,19 @@ export function createZombieActor(opts: {
         // stops at a wall even where its bones would pull it on through.
         points = corpseContacts(points, f.corpseBody?.pointR);
       }
+      // A BREATHING body (MotionProfile.joystick.swell, the cerebrax): the `swell` morph weight from the gait clock, plus
+      // the hit jiggle a shot kicks (joystick.ts SwellJiggle). actor.ts does the same for the lab; the game had neither,
+      // so its brain never pulsed. Stops on the corpse.
+      const joy = opts.profile?.joystick;
+      const swellMorphs = joy?.swell && !f.collapsed ? {
+        swell: joystickSwell(state.gait.time, null, joy)
+          + (joy.swell.jiggle ? stepSwellJiggle(swellJiggle, sdt, signals.shot ? (signals.shot.gain ?? 1) : null, joy.swell.jiggle) : 0),
+      } : undefined;
       bound = {
         ...bound,
         // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
-        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+          ...(swellMorphs ? { morphs: { ...bound.rig.morphs, ...swellMorphs } } : {}) },
           f.collapsed ? f.floorY : undefined, pointFloor),
       };
       // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.

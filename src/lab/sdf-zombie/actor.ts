@@ -33,7 +33,7 @@ import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
 import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from './motion-profile';
-import { joystickSwell } from './joystick';
+import { joystickSwell, stepSwellJiggle, type JiggleState } from './joystick';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -54,6 +54,8 @@ export interface ActorMotion {
   motionState: MotionState | null;
   lastRootShift: Vec3;
   lastBodyYaw: number;
+  /** The swell's hit jiggle (joystick.ts SwellJiggle); absent until the first shot on a body that has one. */
+  jiggle?: JiggleState;
 }
 
 export interface ActorMotionInit {
@@ -168,6 +170,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
   const { signals } = input;
   let f: MotionFrame | null = null;
   let first = true;
+  let step0Shot = signals.shot;
   for (const sdt of planSubSteps(input.dt)) {
     const step = stepMotion(
       m.motionState, m.motionJoints,
@@ -211,8 +214,14 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     // A BREATHING joystick (MotionProfile.joystick.swell, the gamer): its `swell` morph weight joins the caller's, from the gait
     // clock and the attack's phase, so the knob breathes in the game with no expression layer behind it.
     const joy = input.profile?.joystick;
+    // A shot kicks the swell's jiggle (SwellJiggle). Signals drain after the first sub-step, so `shotNow` is read here,
+    // before the drain above cleared it for this frame: stepMotion was handed the same value.
+    const jig = joy?.swell?.jiggle;
+    const kick = jig ? (step0Shot ? (step0Shot.gain ?? 1) : null) : null;
+    step0Shot = null;
+    const jiggle = jig ? stepSwellJiggle(m.jiggle ??= { amp: 0, since: 0 }, sdt, kick, jig) : 0;
     const morphs = joy?.swell
-      ? { ...input.morphs, swell: joystickSwell(m.motionState.gait.time, input.attack ? input.attack.phase : null, joy) }
+      ? { ...input.morphs, swell: joystickSwell(m.motionState.gait.time, input.attack ? input.attack.phase : null, joy) + jiggle }
       : input.morphs;
 
     let points = stepRig(

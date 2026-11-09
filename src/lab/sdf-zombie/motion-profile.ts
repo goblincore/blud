@@ -86,6 +86,11 @@ export interface MotionProfile {
   /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
    *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
   joystick?: JoystickSpec;
+  /** A RIGID FRAME (the cerebrax): while it stands, the trunk's joints (pelvis, hips, spine, chest, clavicles,
+   *  shoulders) are pinned to their pose targets (MotionFrame.posePins), so the Verlet rig cannot tug them. Its legs
+   *  are 2.7 m long: their length constraints dragged the hip and shoulder points 20-27 cm off the frame each stride,
+   *  and the kit's legs (thigh / upperarm frames) slid out of their socket balls on the frame (pelvis). */
+  rigidFrame?: boolean;
   /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
    *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
    *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
@@ -617,7 +622,7 @@ export const IMP_PROFILE: MotionProfile = {
  *  chaingun slung under its face. It walks on CEREBRAX_STRIDE (the gibbet's four-beat stalk, spider-kneed) and shoots
  *  through the soldier's brain on the juggernaut's CHAINGUN_TUNING: long sweeping bursts from a long range, no strafing,
  *  the sweep a slow turn a running player can outrun. The gun fires from the body (`spit`), not a held prop. The brain
- *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw: no `hem` bone, so nothing jiggles. */
+ *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw (no `hem` bone); a shot rings the swell (SwellJiggle). */
 export const CEREBRAX_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
@@ -633,8 +638,11 @@ export const CEREBRAX_PROFILE: MotionProfile = {
   // The under-barrel's muzzle (assets-source/cerebrax-kit/make_gun.py prints it: blob (0, 0.77, 1.43), hung under the tilted brain's face), body-local
   // from the hips' rig point (compiled (0, 1.504, 0)), plus 5 cm so the round leaves clear of the barrels.
   spit: { from: 'pelvis', offset: [0, -0.734, 1.48] },
+  // One welded frame: the brain, harness and leg sockets never move against each other (MotionProfile.rigidFrame).
+  rigidFrame: true,
   // A slow breath (owner: "visibly pulse or throb"): the lobes swell 2.5-5% over 1.6 s.
-  joystick: { amp: 0, idle: 0, swell: { period: 1.6 } },
+  // A shot quivers the flesh (the frame is rigid): the swell rings at 6 Hz, gone in about half a second.
+  joystick: { amp: 0, idle: 0, swell: { period: 1.6, jiggle: { amp: 1.6, freq: 6, decay: 0.18 } } },
   // A BOSS soaks: twice the teratoma's meter divisors. Dynamite still gibs through GIB_THRESHOLD.
   toughness: { pellet: 9, blast: 3.5, sever: 9 },
   // Craters and gouts sized for a 1.3 m brain, like the teratoma's ball (its numbers, a little bigger).

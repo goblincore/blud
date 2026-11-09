@@ -16,6 +16,7 @@ import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { sdBody } from '../validate';
+import { kitFrames } from '../rig-bind';
 import { makeRng } from '../wander';
 import type { Vec3 } from '../types';
 
@@ -81,5 +82,36 @@ describe('cerebrax — a brain on four spider legs', () => {
     }
     // make_head.py only names `skull|` to drop the first pass's leftovers.
     expect(headKitSrc).toContain("drop(['skull|'])");
+  });
+
+  it('walks as one rigid frame: the leg roots stay in their sockets and the brain never tips', () => {
+    // The verlet legs dragged the hip and shoulder points 20-27 cm off the frame each stride (the kit's legs slid out of
+    // their socket balls), and the gait's bob and sway tipped the 4 cm pelvis bone up to 10 deg (the brain and its
+    // craters swam). Owner, arena look, 2026-11-09. MotionProfile.rigidFrame.
+    const m = makeActorMotion(body, { seed: 3 });
+    const profile = characterEntry('cerebrax').profile;
+    const rng = makeRng(3);
+    const rest = kitFrames(body, m.bound, 0);
+    const restOff = (b: string) => rest.get(b)!.pos.map((v, k) => v - rest.get('pelvis')!.pos[k]!);
+    let drift = 0, tilt = 0;
+    for (let i = 0; i < 480; i++) {
+      stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: true, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals: emptyActorSignals(), profile, forceSpeed: profile.cruise,
+      });
+      const F = kitFrames(body, m.bound, m.lastBodyYaw);
+      const p = F.get('pelvis')!, c = Math.cos(m.lastBodyYaw), s = Math.sin(m.lastBodyYaw);
+      for (const b of ['thigh.l', 'thigh.r', 'upperarm.l', 'upperarm.r']) {
+        const o = restOff(b);
+        // The socket where the frame (pelvis, yawed) holds it, against where the leg's frame actually starts.
+        const want = [p.pos[0] + c * o[0]! + s * o[2]!, p.pos[1] + o[1]!, p.pos[2] - s * o[0]! + c * o[2]!];
+        drift = Math.max(drift, Math.hypot(...F.get(b)!.pos.map((v, k) => v - want[k]!)));
+      }
+      const q = p.quat, upY = 1 - 2 * (q[0]! * q[0]! + q[2]! * q[2]!);   // the frame's up, y component
+      tilt = Math.max(tilt, Math.acos(Math.min(1, upY)));
+    }
+    expect(drift, 'leg roots off their sockets (m)').toBeLessThan(0.005);
+    expect(tilt, 'the frame tips (rad)').toBeLessThan(0.01);
   });
 });

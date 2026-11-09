@@ -54,4 +54,20 @@ describe('cerebrax actor (game path)', () => {
     }
     expect(a.pose().pos[2] - z0, 'it closes the distance').toBeGreaterThan(2);
   });
+
+  it('breathes in the game, and a shot quivers the brain on its rigid frame', () => {
+    // The game actor applied no swell at all (only actor.ts did, for the lab): the brain never pulsed in the arena.
+    // And with the frame rigid (MotionProfile.rigidFrame), a hit's jiggle is the flesh ringing (SwellJiggle).
+    const a = cerebrax(() => {});
+    const core = body.prims.findIndex(p => p.limb === 'torso' && p.core);
+    const r = () => (a as any).posed().prims[core].radius as number;
+    const sample = (n: number) => { const v: number[] = []; for (let i = 0; i < n; i++) { a.setRingInput(false, 0); a.step(1 / 60); v.push(r()); } return v; };
+    const calm = sample(120);
+    const span = (v: number[]) => Math.max(...v) - Math.min(...v);
+    expect(span(calm), 'the breath moves the core').toBeGreaterThan(0.004);
+    const c = (a as any).posed().prims[core].a as Vec3;
+    a.hit([c[0], c[1] + 0.3, c[2] + 0.75], [0, 0, -1]);
+    const shot = sample(20);
+    expect(span(shot), 'a shot rings it harder than a breath').toBeGreaterThan(span(calm.slice(0, 20)) * 2);
+  });
 });

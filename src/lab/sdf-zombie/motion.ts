@@ -645,6 +645,11 @@ const SOLVE = {
 
 const Z: Vec3 = [0, 0, 0];
 
+/** The trunk joints a MotionProfile.rigidFrame body moves as one piece and pins (the cerebrax's frame: the brain,
+ *  the harness and the four leg sockets). */
+const RIGID_FRAME_JOINTS = ['pelvis', 'hips', 'hipL', 'hipR', 'spineA', 'spineB', 'chest', 'clavicleL', 'clavicleR',
+  'shoulderL', 'shoulderR'] as const;
+
 /** Joints the reach-style blend floor applies to (the arms). */
 const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
@@ -1742,6 +1747,19 @@ export function stepMotion(
     ...(cfg.floorAt ? { floorVel } : {}),
   };
 
+  // MotionProfile.rigidFrame: the trunk moves as ONE rigid piece, the pelvis target's translation plus the body's yaw.
+  // The gait's bob, sway and lean offset each trunk joint on its own, a few cm apart; the cerebrax's pelvis bone is
+  // only 4 cm long, so that tipped its frame up to 10 degrees, and with it the brain, the kit and the socket balls,
+  // while the craters (damage.ts frame: a prim's axis, no roll) slid across the brain. Pinned below (posePins).
+  if (profile.rigidFrame && !collapsed && idx.pelvis !== undefined) {
+    const p0 = targets[idx.pelvis]!, b0 = joints.base[idx.pelvis]!;
+    for (const name of RIGID_FRAME_JOINTS) {
+      const i = idx[name];
+      if (i === undefined || i === idx.pelvis) continue;
+      targets[i] = add(p0, rotateYaw(sub(joints.base[i]!, b0), bodyYaw));
+    }
+  }
+
   return {
     state: nextState,
     frame: {
@@ -1774,7 +1792,10 @@ export function stepMotion(
         // head frame plus the gape), and a free chin point would sag on a
         // stiffness-0 bone (rig-bind.ts).
         const jaw = !collapsed && idx.jaw !== undefined ? (['jaw'] as const) : [];
-        const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        // MotionProfile.rigidFrame: the trunk is one welded frame the legs hang off; the legs' constraints must not
+        // drag its sockets about.
+        const frame = profile.rigidFrame && !collapsed ? RIGID_FRAME_JOINTS : [];
+        const pins = [...legs, ...arms, ...jaw, ...frame].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return pins.length ? { posePins: pins } : {};
       })(),
       restPull: structural ? (fallKind ? fallPull : 1) : collapse.restPull,
