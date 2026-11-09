@@ -15,8 +15,10 @@ Behind a compile-time flag, `?leanwalk`, default off (shader text byte-identical
 3. **The walk and the temporal start's probe** call `mapLean` when `leanOk`, `mapBody` otherwise.
    Each keeps its single `mapBody(` call site. Normal taps, AO and scatter probes, the wound shadow,
    the cone pre-pass and the refine entry are untouched.
-4. **A runtime switch**, `__sdfGame.setLeanWalk(on)`, on the spare `debugCfg.z` lane (1 = forced to
-   `mapBody`), for an A/B inside one compiled program.
+4. **A runtime switch**, `__sdfGame.setLeanWalk(on)`: off writes `debugCfg.x = -1`, which the
+   per-pixel test reads as "stay on `mapBody`", for an A/B inside one compiled program. (`debugCfg`
+   is a `vec2` and `.y` is the flat-albedo seam; every other reader of `.x` tests `> 0.5` or a
+   mode's own band, so -1 is 0 to all of them.)
 5. **A census**, debug mode 23 (compiled only with the flag): per pixel `leanOk`, the slot count,
    the walk's steps.
 
@@ -48,9 +50,9 @@ for each slot `s` of the pixel's table, in table order:
 | --- | --- | --- |
 | `loadInstance(base + s)`: 19 to 22 record reads | reads `counts`, `band`, wind, anchor, alive from it | reads those three records only (`REC_COUNTS`, `REC_ANCHOR_BAND`, `REC_WIND_ALIVE`), sets `gWindDrift` and `gBodyAnchor` |
 | dead slot: `continue` | same | same test on the same value |
-| head split: pieces, caps, shell | closed (`REC_SPLIT_N` is zero): one piece `(-1e9, 0, 0)` at `pIn`; the second piece's cap is 1e9, so the loop breaks | folds once at `pIn` |
+| head split: pieces, caps, shell | closed (`REC_SPLIT_N` is zero): one piece `(-1e9, 0, 0)` at `pIn`, skipped only if the running union is already at or under -1e9; the second piece's cap is 1e9, so the loop breaks | the same skip (`-1e9 >= dUnion`), then folds once at `pIn` |
 | per-piece resets | `gFoldBest*` reset; the wound scratch (`gWoundCluster`, `gWoundOwners`, `gWoundRaisers`, `gWoundThreat`, `gWoundAmp`) set to 0; `gWoundExact` set | resets `gFoldBest*`. The wound scratch is 0 on such a pixel whoever runs (initial value, and every `mapBody` call leaves it 0). `gWoundExact` is left alone: its only reader is `applyWounds`, which `mapBody` always precedes with its own write |
-| `?limbs`: `limbMode` | needs a wound count over 0.5: false, `gLimbOn = gLimbSlack = 0` | nothing: both are 0 on such a pixel for the same reason |
+| `?limbs`: `limbMode` | needs a wound count over 0.5: false, `gLimbOn = gLimbSlack = 0` | nothing. `foldGroup` reads both, and both are 0 on such a pixel: 0 at the start, and every `mapBody` call before the hit folds the pixel's own (unwounded) slots. This would break if a tiles-off `mapBody` call ever ran in the invocation before the walk; none does |
 | volume branch | `REC_VOL_POSE0.w` off: not taken | not present |
 | `gCullRef` | `select(1e9, gCullUB, base + s == gCullSlot && piece == gCullPiece && !limbMode)`, piece 0; with `?shadebound` the same value before the hit | the same expression with piece 0 |
 | tile fold | `foldGroup` over `gPixFirst[k] .. gPixEnd[k]` | the same call, the same order |
@@ -80,8 +82,11 @@ instance. `mapLean` never calls `loadInstance` in its slot loop; it ends with `m
 `gBodyAnchor` back on the loaded instance. The state is the same by induction over the calls, and
 the reload costs 22 reads only when the winning slot changes: once for a one-body pixel whose slot
 is not the setup's, never again. The stale split lanes (`gInstSplitH/A/R`, loaded for open slots
-only) agree too: no slot of such a pixel is open, so neither function writes them except through a
-reload of the same slot.
+only) agree where it can be seen: no live slot of such a pixel is open, so neither function writes
+them except through a reload of the same slot. One case differs and cannot be seen: `mapBody` loads
+a DEAD slot's record before it tests the alive flag, so a dead slot that still held an open split
+would leave its lanes behind where `mapLean` does not. Every reader of those lanes is behind
+`gInstSplitOpen`, which agrees, and freeing a slot zeroes its split record.
 
 What the walk reads between calls (`gBand` in the cloth accept and the shell noise,
 `gInstSplitOpen`, `gInstMelt.y`, `gFoldBestDistort`, `gRefoldWin`, `gHitPiece`, `gHitSplitF`,
@@ -92,7 +97,7 @@ What the walk reads between calls (`gBand` in the cloth accept and the shell noi
 `leanOk` is true when all of these hold:
 
 - the pixel is on the tile-list path (`gTileActive > 0.5`);
-- the runtime switch is not set (`debugCfg.z < 0.5`);
+- the runtime switch is not set (`debugCfg.x > -0.5`);
 - the per-ray wound list is off or empty (`!(gWoundListOn > 0.5 && gWoundN > 0)`);
 - for every slot of the pixel's table that is alive (`REC_WIND_ALIVE.w >= 0.5`; a dead slot folds
   in neither function):
@@ -101,9 +106,11 @@ What the walk reads between calls (`gBand` in the cloth accept and the shell noi
   - no baked volume: not `REC_VOL_POSE0.w > 0.5`;
   - no bare-bones fold: not `(REC_COUNTS2.y > 0.5 && REC_COUNTS2.x > 0)`.
 
-Five record reads a live slot, once a pixel, stopping at the first slot that fails. The comparisons
-are written so a NaN lane fails the test. The melt does not enter the field except through the
-bare-bones flag.
+Five record reads a live slot, once a pixel, stopping at the first slot that fails. A NaN wound
+count fails the test; the other lanes use `mapBody`'s and `loadInstance`'s own comparisons, so a
+NaN there takes the same side in both functions. The melt does not enter the field except through
+the bare-bones flag (`foldGroup`, `applyCarves` and the primitives read no instance global but
+`gWindDrift` and `gBodyAnchor`).
 
 `leanSlotExact(floats, slot)` mirrors the per-slot part on the CPU, and a unit test pins both
 against records written by `createCrowdRecords` and against the `REC_*` indices.
