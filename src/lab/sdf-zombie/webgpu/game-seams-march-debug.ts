@@ -11,6 +11,7 @@ import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_MELT, REC_VEC4S, REC_VOL_POSE0, REC_WIND_ALIVE, REC_WOUND_BOUND } from './crowd-records';
 import { classifyNormalSupport } from './normal-gradient-support';
+import { LEAN_WALK } from './march/lean-walk-flag';
 
 export function createMarchDebugSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;
@@ -152,6 +153,21 @@ export function createMarchDebugSeams(ctx: GameContext) {
       // the write above usually reaches them — but the crowd parity gate must
       // not depend on that frame ordering. Write the type nodes directly too.
       for (const t of ctx.crowd.types.values()) t.uniforms.debugCfg.value.y = v;
+    },
+    /** LEAN WALK runtime A/B (a `?leanwalk` page; march/lean-walk-flag.ts). false writes debugCfg.x = -1, which the
+     *  per-pixel test reads as "stay on mapBody" (LEAN_TEST_BLOCK), so one compiled program draws both legs. To every
+     *  other reader -1 is 0 (each tests `> 0.5` or a mode's own band), and a page without the flag has no reader at
+     *  all. It overwrites the debug mode: set that after, not before. Bodies spawned later start at 0 (lean on). */
+    setLeanWalk(on: boolean) {
+      const x = on ? 0 : -1;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = x;
+      for (const c of ctx.bake.views) c.uniforms.debugCfg.value.x = x;
+      for (const t of ctx.crowd.types.values()) t.uniforms.debugCfg.value.x = x;
+    },
+    /** Whether this page compiled the lean walk in, and whether the runtime switch leaves it on. */
+    leanWalkState() {
+      const x = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      return { compiled: LEAN_WALK, enabled: LEAN_WALK && x > -0.5 };
     },
   };
 }
