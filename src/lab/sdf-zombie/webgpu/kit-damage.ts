@@ -32,6 +32,9 @@ export interface Piece {
   joint: number;
   /** kitSupportKey(bone), fixed at load. */
   support: string;
+  /** kitSupportKey of the limb bone it rides when its own is not one (limbBone: a tusk's forearm), the support when its
+   *  own bone has no flesh. */
+  anchor?: string;
   limb: LimbId;
   centre: THREE.Vector3;
   radius: number;
@@ -53,6 +56,13 @@ export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; lim
  *  plate impacts since the last frame (sparks); `shed` the plates at zero. */
 export interface KitArmorInput { spec: ArmorSpec; shed: ReadonlySet<string>; hits: readonly Vec3[] }
 
+/** The bone a kit bone sheds with: itself, or (a horn on the skull, a tusk on the forearm: names boneLimb cannot read) the
+ *  nearest ancestor that names a limb. A bone with no such ancestor (spine, a chair's own frame) is the torso's. */
+function limbBone(bone:THREE.Object3D|undefined):THREE.Object3D|undefined {
+  for(let b=bone; b && (b as THREE.Bone).isBone; b=b.parent??undefined) if(boneLimb(b.name)!=='torso') return b;
+  return bone;
+}
+
 /** WAM keeps part shapes disconnected but merges them per material. Join
  * UV-seam duplicates by position, then collect triangle islands once at load.
  * The intact mesh keeps its original draw calls; only detached islands bake. */
@@ -61,14 +71,25 @@ export function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
   const skin = g.getAttribute('skinIndex'), weight = g.getAttribute('skinWeight');
   if (!pos || !skin || !weight) return [];
   const indices = g.index ? Array.from(g.index.array) : Array.from({length:pos.count}, (_,i)=>i);
-  const parent = Array.from({length:pos.count}, (_,i)=>i);
+  const parent = Int32Array.from({length:pos.count}, (_,i)=>i);
   const root = (a:number):number => { while(parent[a]!==a) { parent[a]=parent[parent[a]!]!; a=parent[a]!; } return a; };
   const union = (a:number,b:number) => { parent[root(b)]=root(a); };
-  const vertices = new Map<string,number>();
-  for (const i of indices) {
-    const key = [pos.getX(i),pos.getY(i),pos.getZ(i)].map(v=>Math.round(v*1e6)).join(',');
-    const previous=vertices.get(key);
-    if(previous!==undefined) union(i,previous); else vertices.set(key,i);
+  // Seam duplicates share a position to the micrometre. An open-addressed table of the rounded coordinates, once per
+  // vertex: a string key per index took 0.3-2.5 s on a sculpted kit, once per spawned body.
+  const used = new Uint8Array(pos.count);
+  for (const i of indices) used[i] = 1;
+  const q = new Float64Array(pos.count*3);
+  let size = 1; while (size < pos.count*2) size <<= 1;
+  const table = new Int32Array(size).fill(-1);
+  for (let i=0; i<pos.count; i++) {
+    if (!used[i]) continue;
+    const x=Math.round(pos.getX(i)*1e6), y=Math.round(pos.getY(i)*1e6), z=Math.round(pos.getZ(i)*1e6);
+    q[i*3]=x; q[i*3+1]=y; q[i*3+2]=z;
+    for (let h=(Math.imul(x|0,73856093)^Math.imul(y|0,19349663)^Math.imul(z|0,83492791))&(size-1); ; h=(h+1)&(size-1)) {
+      const j=table[h]!;
+      if (j<0) { table[h]=i; break; }
+      if (q[j*3]===x && q[j*3+1]===y && q[j*3+2]===z) { union(i,j); break; }
+    }
   }
   for(let i=0;i<indices.length;i+=3) { union(indices[i]!,indices[i+1]!); union(indices[i]!,indices[i+2]!); }
   const islands=new Map<number,number[]>();
@@ -77,16 +98,21 @@ export function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     list.push(indices[i]!,indices[i+1]!,indices[i+2]!); islands.set(key,list);
   }
   const material=Array.isArray(mesh.material)?mesh.material[0]:mesh.material;
-  return [...islands.values()].map(list=>{
+  const stamp = new Int32Array(pos.count).fill(-1);
+  return [...islands.values()].map((list,n)=>{
     const bounds=new THREE.Box3(), point=new THREE.Vector3(), votes=new Map<number,number>();
-    for(const i of new Set(list)) {
+    for(const i of list) {
+      if(stamp[i]===n) continue;
+      stamp[i]=n;
       bounds.expandByPoint(point.fromBufferAttribute(pos,i));
       for(let j=0;j<4;j++) { const bone=skin.getComponent(i,j); votes.set(bone,(votes.get(bone)??0)+weight.getComponent(i,j)); }
     }
     const joint=[...votes].sort((a,b)=>b[1]-a[1])[0]?.[0]??0;
-    const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
+    const own=mesh.skeleton.bones[joint], bone=own?.name??'pelvis';
+    const anchor=limbBone(own)?.name??bone;
     const centre=bounds.getCenter(new THREE.Vector3());
-    return {source:mesh,indices:list,bone,joint,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
+    return {source:mesh,indices:list,bone,joint,support:kitSupportKey(bone),
+      anchor:anchor===bone?undefined:kitSupportKey(anchor),limb:boneLimb(anchor),centre,radius:bounds.getSize(point).length()*.5,
       armor:material?.name==='plate',tooth:material?.name==='tooth',released:false,damage:0};
   });
 }
@@ -116,15 +142,17 @@ export function kitSupportIndex(body:BuildResult):KitSupportIndex {
 }
 
 /** A piece stays attached while its limb has a live cluster and its support
- * bone has no non-carve prims or at least one live one. */
-export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIndex):boolean {
+ * bone has no non-carve prims or at least one live one. A support with no flesh
+ * of its own (a tusk bone) falls back to its `anchor`, the limb bone it rides. */
+export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIndex, anchor?:string):boolean {
   if(!index.liveLimbs.has(limb)) return false;
-  return index.boneAlive.get(support)??true;
+  return index.boneAlive.get(support)??(anchor===undefined?undefined:index.boneAlive.get(anchor))??true;
 }
 
 /** Breakable-kit damage (character-registry.ts armoured, kitSheds). Missing anatomy always sheds its equipment;
- * clustered local impacts knock armor plates off to expose existing wounds. */
-export function createKitDamage(object:THREE.Object3D) {
+ * with `armour`, clustered local impacts knock armor plates off to expose existing wounds. Without it (kitSheds) a
+ * `plate` island is only scenery: a cleaver blade is not a breastplate. */
+export function createKitDamage(object:THREE.Object3D, armour:boolean) {
   const pieces:Piece[]=[], originals=new Map<THREE.SkinnedMesh,number[]>();
   object.traverse(o=>{
     const mesh=o as THREE.SkinnedMesh;
@@ -132,7 +160,7 @@ export function createKitDamage(object:THREE.Object3D) {
     // Each glTF primitive can share attribute storage; own only its index.
     mesh.geometry=mesh.geometry.clone();
     originals.set(mesh,mesh.geometry.index?Array.from(mesh.geometry.index.array):Array.from({length:mesh.geometry.getAttribute('position').count},(_,i)=>i));
-    pieces.push(...piecesOf(mesh));
+    for(const piece of piecesOf(mesh)) { piece.armor&&=armour; pieces.push(piece); }
   });
   const debris=new THREE.Group(); debris.name='DetachedArmor';
   const drops:Debris[]=[];
@@ -248,7 +276,7 @@ export function createKitDamage(object:THREE.Object3D) {
           // bone): the plate islands, and what is mounted on them, so the
           // helmet's lenses and snout never hang in front of a bare face.
           support??=kitSupportIndex(body);
-          if(!kitPieceAttached(piece.limb,piece.support,support) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
+          if(!kitPieceAttached(piece.limb,piece.support,support,piece.anchor) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
             const point=bake(piece,seat); changed.add(piece.source);
             if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
           }
@@ -263,7 +291,7 @@ export function createKitDamage(object:THREE.Object3D) {
         // Kit teeth float in front of the exposed skull once their gum is shot away (owner, 2026-11-02): out they come.
         const toothOut=piece.tooth && impacts.some(hit=>worldBounds(piece).distanceToPoint(new THREE.Vector3(...hit.point))<=hit.radius);
         support??=kitSupportIndex(body);
-        if(toothOut || !kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
+        if(toothOut || !kitPieceAttached(piece.limb,piece.support,support,piece.anchor) || piece.damage>=(piece.limb==='torso'?3:2)) {
           const point=bake(piece,seat); changed.add(piece.source);
           if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
         }

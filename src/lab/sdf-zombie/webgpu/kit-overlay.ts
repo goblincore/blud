@@ -474,7 +474,7 @@ export function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.Texture {
  */
 export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
-  breakable = false, opts: KitLoadOpts = {},
+  breakable: false | 'sheds' | 'armour' = false, opts: KitLoadOpts = {},
 ): Promise<KitOverlay> {
   const gltf = await new GLTFLoader().loadAsync(url);
   if (opts.only) keepKitMaterials(gltf.scene, opts.only);
@@ -523,7 +523,7 @@ export async function loadKit(
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
       const std = mat as THREE.MeshStandardMaterial;
-      const look = breakable && mat.name === 'plate'
+      const look = breakable === 'armour' && mat.name === 'plate'
         ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
         : LOOK[mat.name] ?? LOOK_DEFAULT;
       if (std.isMeshStandardMaterial || (std as unknown as { isMeshStandardNodeMaterial?: boolean }).isMeshStandardNodeMaterial) {
@@ -553,14 +553,15 @@ export async function loadKit(
   if (kitScale !== 1) for (const b of skinBounds) b.pad *= kitScale;
   skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
 
-  const damageView = breakable ? createKitDamage(object) : null;
+  const damageView = breakable ? createKitDamage(object, breakable === 'armour') : null;
   const debris = damageView?.debris ?? new THREE.Group();
   // Distance twins of the opaque cloth for the march's occT bound (kit-occluder.ts). After createKitDamage, which
   // clones the geometry the twins must share. Drawn only by pass 1c, and only while it is on.
   const occluders = addKitOccluders(object);
-  // A kit too big to split into islands on the gib frame has its split by bone worked out here instead (kit-burst.ts).
+  // A kit too big to split into islands on the gib frame has its split by bone worked out here instead (kit-burst.ts),
+  // breakable or not: a sculpted kit's islands (the damage view's) burst in 15-33 ms on the gib frame, by bone in ~0.
   const kitIndexCount = skinned.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
-  const byBone = !breakable && kitIndexCount > KIT_BURST.islandIndexLimit ? prepareKitBurst(skinned) : null;
+  const byBone = kitIndexCount > KIT_BURST.islandIndexLimit ? prepareKitBurst(skinned) : null;
   let posed = false;
   const pose: KitOverlay['pose'] = (frames, damage) => {
     posed = true;
@@ -591,7 +592,8 @@ export async function loadKit(
       object.visible = true; // the sight cull's, while there was a body to cull
       const drawn = skinned.filter(m => m.visible);
       const indexCount = drawn.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
-      const islands = damageView?.livePieces()
+      // By bone, the shed pieces stay gone: the split draws (and tears) only the index the damage view left.
+      const islands = byBone ? null : damageView?.livePieces()
         ?? (indexCount <= KIT_BURST.islandIndexLimit ? drawn.flatMap(piecesOf) : null);
       const pieces = createKitBurst({ meshes: skinned, islands, byBone, launch, rolls, seat });
       return {
