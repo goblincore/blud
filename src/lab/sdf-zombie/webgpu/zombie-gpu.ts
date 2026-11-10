@@ -2716,6 +2716,7 @@ export function createZombieGpuView(
       const gr = p.groupRange;
       lastGroups.push({
         bodyIndex: slot,
+        groupIndex: g,
         start: gr[o]!, count: gr[o + 1]!,
         center: [gb[o]!, gb[o + 1]!, gb[o + 2]!],
         radius: gb[o + 3]!,
