@@ -1,0 +1,481 @@
+{
+ "dir": ".scratch/compute/mobw-ship",
+ "scene": {
+  "scene": "asis",
+  "query": "frozen=1",
+  "prelude": "(() => {\n  const b = __sdfGame.rooms.find((x) => x.id === 1).bounds;\n  const cx = (b.minX + b.maxX) / 2, pz = b.minZ + 0.6;\n  __sdfGame.teleport(1);\n  __sdfGame.placePlayer({ x: cx, z: pz, yaw: Math.PI, pitch: -0.12 });\n  __sdfGame.freeze(true);\n  const region = { minX: cx - 1.7, maxX: cx + 1.7, minZ: pz + 0.9, maxZ: pz + 3.4 };\n  window.__mob = __sdfGame.spawnCrowd('zombie', 22, { spacing: 0.6, region });\n  if (window.__mob.ok < 22) throw new Error('mob: only ' + window.__mob.ok + ' bodies landed');\n})();\n__sdfGame.setHullExitBound(true);\n__sdfGame.step(4);\n// Wound the mob: a grid of shots from the eye across the view, each stamped on the nearest body it hits.\n(() => {\n  __sdfGame.setWoundTuning({ spillChance: 0 });\n  const m = __sdfGameDebug.normalCaptureState().camera;\n  const eye = [m[12], m[13], m[14]];\n  const bodies = __sdfGame.zombies().map((z) => ({ id: z.id, d: Math.hypot(z.pos[0] - eye[0], z.pos[2] - eye[2]) })).sort((a, b) => a.d - b.d);\n  let n = 0;\n  const ids = new Set();\n  for (let ia = -4; ia <= 4; ia++) for (let ib = -2; ib <= 2; ib++) {\n    let d = [0, 1, 2].map((i) => -m[8 + i] + ia * 0.13 * m[i] + ib * 0.11 * m[4 + i]);\n    const L = Math.hypot(d[0], d[1], d[2]);\n    d = d.map((v) => v / L);\n    for (const z of bodies) {\n      if (!__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], (ia + ib) % 2 ? 'pellet' : 'slug', z.id)) continue;\n      n++; ids.add(z.id);\n      break;\n    }\n  }\n  __sdfGame.step(30);\n  if (n < 12 || ids.size < 5) throw new Error('mob wounds: ' + n + ' stamped on ' + ids.size + ' bodies');\n  window.__mobWounds = { stamped: n, bodies: ids.size, chunks: __sdfGame.chunkCount };\n  console.log('mob wounds', JSON.stringify(window.__mobWounds));\n})();",
+  "variant": {
+   "name": "ship",
+   "js": "0"
+  },
+  "passes": "^sdf:march$",
+  "ship": {
+   "sdfScale": 0.5,
+   "upscale": true
+  },
+  "staged": null,
+  "crowd": {
+   "state": "ready",
+   "tilesOn": true
+  },
+  "width": 1280,
+  "height": 800
+ },
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "legs": [
+  {
+   "name": "frag",
+   "manifest": "manifest.json",
+   "compute": false
+  },
+  {
+   "name": "frag2",
+   "manifest": "manifest.json",
+   "compute": false
+  },
+  {
+   "name": "list",
+   "manifest": "manifest.cmp-list.json",
+   "compute": true,
+   "stats": [
+    {
+     "rect": [
+      72,
+      30,
+      328,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 306,
+     "tilesNonEmpty": 53,
+     "dispatched": 53,
+     "maxCount": 11
+    },
+    {
+     "rect": [
+      158,
+      89,
+      281,
+      195
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 72,
+     "tilesNonEmpty": 17,
+     "dispatched": 17,
+     "maxCount": 31
+    },
+    {
+     "rect": [
+      0,
+      0,
+      400,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 475,
+     "tilesNonEmpty": 400,
+     "dispatched": 400,
+     "maxCount": 64
+    }
+   ],
+   "programs": 3
+  },
+  {
+   "name": "list8",
+   "manifest": "manifest.cmp-list8.json",
+   "compute": true,
+   "stats": [
+    {
+     "rect": [
+      72,
+      30,
+      328,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 306,
+     "tilesNonEmpty": 53,
+     "dispatched": 53,
+     "maxCount": 11
+    },
+    {
+     "rect": [
+      158,
+      89,
+      281,
+      195
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 72,
+     "tilesNonEmpty": 17,
+     "dispatched": 17,
+     "maxCount": 31
+    },
+    {
+     "rect": [
+      0,
+      0,
+      400,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 475,
+     "tilesNonEmpty": 400,
+     "dispatched": 400,
+     "maxCount": 64
+    }
+   ],
+   "programs": 3
+  }
+ ],
+ "info": {
+  "frag": {
+   "warmS": 1.349,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "frag2": {
+   "warmS": 1.161,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "list": {
+   "warmS": 2.144,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.001239478588104248,
+     "meanDiff": 2.5248688155746396e-7,
+     "differingFrac": 0.0003083333333333333,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 83,
+     "inexactFloats": 43491,
+     "chanOver": [
+      63,
+      47,
+      38,
+      0
+     ],
+     "chanMax": [
+      0.001239478588104248,
+      0.0005812644958496094,
+      0.0005627870559692383,
+      4.76837158203125e-7
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "list8": {
+   "warmS": 1.057,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.001239478588104248,
+     "meanDiff": 2.5248688155746396e-7,
+     "differingFrac": 0.0003083333333333333,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 83,
+     "inexactFloats": 43491,
+     "chanOver": [
+      63,
+      47,
+      38,
+      0
+     ],
+     "chanMax": [
+      0.001239478588104248,
+      0.0005812644958496094,
+      0.0005627870559692383,
+      4.76837158203125e-7
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "frag",
+    "frag2",
+    "list",
+    "list8"
+   ],
+   "ms": {
+    "frag": 60.08999999761581,
+    "frag2": 61.38999999761582,
+    "list": 45.52000000476837,
+    "list8": 40.91000000238419
+   },
+   "minMs": {
+    "frag": 55.83999999761581,
+    "frag2": 55.97999999523163,
+    "list": 44.91000000238419,
+    "list8": 40.52999999523163
+   },
+   "diff": {
+    "frag2": 1.3000000000000043,
+    "list": -14.569999992847443,
+    "list8": -19.179999995231626
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "frag2",
+    "list",
+    "list8",
+    "frag"
+   ],
+   "ms": {
+    "frag2": 61.55,
+    "list": 46.83999999761581,
+    "list8": 42.3,
+    "frag": 64.96999999284745
+   },
+   "minMs": {
+    "frag2": 57.789999997615816,
+    "list": 45.85,
+    "list8": 41.559999990463254,
+    "frag": 60.12999999523163
+   },
+   "diff": {
+    "frag2": -3.419999992847451,
+    "list": -18.129999995231636,
+    "list8": -22.66999999284745
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "list",
+    "list8",
+    "frag",
+    "frag2"
+   ],
+   "ms": {
+    "list": 46.4,
+    "list8": 42.16000000238419,
+    "frag": 62.35,
+    "frag2": 53.13999999761582
+   },
+   "minMs": {
+    "list": 45.690000009536746,
+    "list8": 41.73999999761581,
+    "frag": 48.97999999523163,
+    "frag2": 51.3
+   },
+   "diff": {
+    "frag2": -9.210000002384184,
+    "list": -15.950000000000003,
+    "list8": -20.189999997615814
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "list8",
+    "frag",
+    "frag2",
+    "list"
+   ],
+   "ms": {
+    "list8": 39.12000000476837,
+    "frag": 60.3,
+    "frag2": 63.01000000238419,
+    "list": 44.43000000715256
+   },
+   "minMs": {
+    "list8": 38.85999999046326,
+    "frag": 54.440000009536746,
+    "frag2": 56.909999990463255,
+    "list": 43.75
+   },
+   "diff": {
+    "frag2": 2.7100000023841915,
+    "list": -15.86999999284744,
+    "list8": -21.179999995231626
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "frag",
+    "frag2",
+    "list",
+    "list8"
+   ],
+   "ms": {
+    "frag": 59.65,
+    "frag2": 62.11999999284744,
+    "list": 44.32999999523163,
+    "list8": 39.78000000715256
+   },
+   "minMs": {
+    "frag": 57.23999999761581,
+    "frag2": 51.87999999523163,
+    "list": 43.02999999523163,
+    "list8": 38.98999999761581
+   },
+   "diff": {
+    "frag2": 2.469999992847441,
+    "list": -15.320000004768367,
+    "list8": -19.86999999284744
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "frag2",
+    "list",
+    "list8",
+    "frag"
+   ],
+   "ms": {
+    "frag2": 58.5,
+    "list": 43.960000002384184,
+    "list8": 39.98999999761581,
+    "frag": 61.88000000715256
+   },
+   "minMs": {
+    "frag2": 53.840000009536745,
+    "list": 43.13999999761582,
+    "list8": 38.98999999761581,
+    "frag": 52.46999999284744
+   },
+   "diff": {
+    "frag2": -3.38000000715256,
+    "list": -17.920000004768376,
+    "list8": -21.89000000953675
+   }
+  }
+ ],
+ "base": "frag",
+ "baseMedianMs": 61.09000000357628,
+ "table": [
+  {
+   "leg": "frag",
+   "medianMs": 61.09000000357628,
+   "lo": 59.65,
+   "hi": 64.96999999284745
+  },
+  {
+   "leg": "frag2",
+   "medianMs": 61.46999999880791,
+   "lo": 53.13999999761582,
+   "hi": 63.01000000238419,
+   "diffMedianMs": -1.040000003576278,
+   "diffMinMs": -9.210000002384184,
+   "diffMaxMs": 2.7100000023841915,
+   "diffMedianPct": -1.7024062915622773,
+   "diffMinPct": -15.076117207145229,
+   "diffMaxPct": 4.436077921469217
+  },
+  {
+   "leg": "list",
+   "medianMs": 44.97500000596047,
+   "lo": 43.960000002384184,
+   "hi": 46.83999999761581,
+   "diffMedianMs": -15.909999996423721,
+   "diffMinMs": -18.129999995231636,
+   "diffMaxMs": -14.569999992847443,
+   "diffMedianPct": -26.043542307239044,
+   "diffMinPct": -29.677524953626264,
+   "diffMaxPct": -23.850057279414795
+  },
+  {
+   "leg": "list8",
+   "medianMs": 40.45,
+   "lo": 39.12000000476837,
+   "hi": 42.3,
+   "diffMedianMs": -20.68499999642372,
+   "diffMinMs": -22.66999999284745,
+   "diffMaxMs": -19.179999995231626,
+   "diffMedianPct": -33.85987885940874,
+   "diffMinPct": -37.10918315848801,
+   "diffMaxPct": -31.396300530543144
+  }
+ ]
+}
