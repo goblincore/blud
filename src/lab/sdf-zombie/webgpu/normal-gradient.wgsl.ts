@@ -13,6 +13,8 @@ import { ROW_PRIM_CLIP, ROW_PRIM_SHELL, ROW_PRIM_WARP } from './march/layout';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { TILE_MAX_ENTRIES } from './tile-cull';
+import { TILE_REF as TR } from './march/tile-ref-flag';
+import { DATA_ROWS } from './march/layout';
 
 // Local diagnostic validity. The declaration follows the first function
 // because three's wgslFn parser requires every source to start at fn.
@@ -770,9 +772,11 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       // this pixel's entries that belong to the hit band (gBand, pinned by
       // MARCH_TRACE_POST); other instances' entries are not part of the
       // winner's field. A per-body view has one band, so nothing changes.
-      if (gTileBand[e] != f32(gBand)) { continue; }
+${TR ? `      if (f32(gTileRef[e] >> 8u) * ${DATA_ROWS}.0 != f32(gBand)) { continue; }
+      d = ngGroup(d, p, data, gInstCounts, gBand, tileBounds(data, e, gBand), tileRange(data, e, gBand));
+` : `      if (gTileBand[e] != f32(gBand)) { continue; }
       d = ngGroup(d, p, data, gInstCounts, gBand, gTileBounds[e], gTileGrp[e]);
-      if (gNgReason == 1) { return d; }
+`}      if (gNgReason == 1) { return d; }
     }
   }
   for (var c = 0; c < 8; c = c + 1) {
@@ -791,8 +795,9 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
         var listed = false;
         for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
           if (f32(e) >= gTileN) { break; }
-          if (gTileGrp[e].x == grp.x && gTileBand[e] == f32(gBand)) { listed = true; break; }
-        }
+${TR ? `          if ((gTileRef[e] & 255u) == u32(g) && f32(gTileRef[e] >> 8u) * ${DATA_ROWS}.0 == f32(gBand)) { listed = true; break; }
+` : `          if (gTileGrp[e].x == grp.x && gTileBand[e] == f32(gBand)) { listed = true; break; }
+`}        }
         // Tile culling is not itself a stencil-owner certificate. Explicitly
         // include omitted candidates via their group bounds at this hit.
         if (!listed) { let excluded = ngExcluded(p, bounds, grp, data, gBand); }

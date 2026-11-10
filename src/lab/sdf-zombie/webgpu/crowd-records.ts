@@ -3,7 +3,10 @@
 // Layout is vec4-granular so the WGSL loader is `(*inst)[base + REC_X]`.
 import * as THREE from 'three/webgpu';
 import { storage } from 'three/tsl';
-import { DATA_ROWS } from './march.wgsl';
+// From the leaf, not the barrel (march.wgsl.ts): map-body.wgsl.ts and lean-walk.wgsl.ts build their text from the
+// REC_* constants below, so a barrel import here made the record layout depend on import order (a test that
+// imported this module first saw them undefined).
+import { DATA_ROWS } from './march/layout';
 import type { SplitWarp } from '../head-split';
 import { SPLIT_ABLATE, splitAblate } from './split-ablate';
 

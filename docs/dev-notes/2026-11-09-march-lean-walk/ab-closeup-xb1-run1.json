@@ -1,0 +1,462 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "held",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk held xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "offboot",
+   "dir": ".scratch/lean/closeup-xb1-off",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup no flag xb1",
+   "manifest": "manifest.json"
+  }
+ ],
+ "baseMedianMs": 18.365000003576277,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 18.365000003576277,
+   "lo": 18.1,
+   "hi": 19.12000000476837
+  },
+  {
+   "leg": "off2",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 18.455000001192094,
+   "lo": 17.47999999523163,
+   "hi": 19.689999997615814,
+   "diffMedianMs": 0.3000000000000007,
+   "diffMinMs": -1.6400000095367417,
+   "diffMaxMs": 0.8499999999999979,
+   "diffMedianPct": 1.6335420633900393,
+   "diffMinPct": -8.93002999846109,
+   "diffMaxPct": 4.628369179605089
+  },
+  {
+   "leg": "on",
+   "label": "closeup ?leanwalk on xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 16.274999994039533,
+   "lo": 15.189999997615814,
+   "hi": 18.819999992847443,
+   "diffMedianMs": -2.135000002384187,
+   "diffMinMs": -3.9300000071525574,
+   "diffMaxMs": 0.5999999880790696,
+   "diffMedianPct": -11.625374364107984,
+   "diffMinPct": -21.39940106935614,
+   "diffMaxPct": 3.2670840618689336
+  },
+  {
+   "leg": "held",
+   "label": "closeup ?leanwalk held xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "medianMs": 18.42000000476837,
+   "lo": 18.230000007152558,
+   "hi": 19.860000002384187,
+   "diffMedianMs": 0.06500000357627833,
+   "diffMinMs": -0.8000000000000007,
+   "diffMaxMs": 1.6399999976158135,
+   "diffMedianPct": 0.3539341332078446,
+   "diffMinPct": -4.356112169040098,
+   "diffMaxPct": 8.930029933549966
+  },
+  {
+   "leg": "offboot",
+   "label": "closeup no flag xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-off",
+   "medianMs": 18.324999994039537,
+   "lo": 17.60999999046326,
+   "hi": 19.869999992847443,
+   "diffMedianMs": 0.2199999928474412,
+   "diffMinMs": -1.5100000143051133,
+   "diffMaxMs": 1.279999995231627,
+   "diffMedianPct": 1.1979308075393404,
+   "diffMinPct": -8.222161796956525,
+   "diffMaxPct": 6.969779444499691
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 18.220000004768373,
+    "off2": 19.07000000476837,
+    "on": 18.819999992847443,
+    "held": 19.860000002384187,
+    "offboot": 19.5
+   },
+   "minMs": {
+    "off": 17.1,
+    "off2": 17.889999997615813,
+    "on": 15.539999997615814,
+    "held": 17.539999997615816,
+    "offboot": 18.460000002384184
+   },
+   "diff": {
+    "off2": 0.8499999999999979,
+    "on": 0.5999999880790696,
+    "held": 1.6399999976158135,
+    "offboot": 1.279999995231627
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "offboot",
+    "off"
+   ],
+   "ms": {
+    "off2": 19.689999997615814,
+    "on": 16.409999990463255,
+    "held": 18.580000007152556,
+    "offboot": 19.869999992847443,
+    "off": 19.02000000476837
+   },
+   "minMs": {
+    "off2": 18.560000002384186,
+    "on": 15.670000004768372,
+    "held": 17.92999999523163,
+    "offboot": 18.339999997615813,
+    "off": 18.079999995231628
+   },
+   "diff": {
+    "off2": 0.669999992847444,
+    "on": -2.6100000143051147,
+    "held": -0.4399999976158142,
+    "offboot": 0.8499999880790732
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "offboot",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 16.139999997615813,
+    "held": 18.230000007152558,
+    "offboot": 18.569999992847443,
+    "off": 18.110000002384187,
+    "off2": 18.87999999523163
+   },
+   "minMs": {
+    "on": 15.669999992847442,
+    "held": 17.78000000715256,
+    "offboot": 17.560000002384186,
+    "off": 17.720000004768373,
+    "off2": 17.46999999284744
+   },
+   "diff": {
+    "off2": 0.7699999928474419,
+    "on": -1.970000004768373,
+    "held": 0.12000000476837158,
+    "offboot": 0.4599999904632561
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "offboot",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 18.310000002384186,
+    "offboot": 18.079999995231628,
+    "off": 18.1,
+    "off2": 18.03000000715256,
+    "on": 15.8
+   },
+   "minMs": {
+    "held": 17.35,
+    "offboot": 17.1,
+    "off": 17.529999995231627,
+    "off2": 17.65,
+    "on": 15.020000004768372
+   },
+   "diff": {
+    "off2": -0.06999999284744263,
+    "on": -2.3000000000000007,
+    "held": 0.21000000238418437,
+    "offboot": -0.020000004768373714
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "offboot",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "offboot": 17.910000002384187,
+    "off": 18.510000002384185,
+    "off2": 17.789999997615816,
+    "on": 16.810000002384186,
+    "held": 18.52000000476837
+   },
+   "minMs": {
+    "offboot": 17.279999995231627,
+    "off": 17.579999995231628,
+    "off2": 17.480000007152558,
+    "on": 14.880000007152557,
+    "held": 17.21999999284744
+   },
+   "diff": {
+    "off2": -0.7200000047683695,
+    "on": -1.6999999999999993,
+    "held": 0.01000000238418508,
+    "offboot": -0.5999999999999979
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 19.12000000476837,
+    "off2": 17.47999999523163,
+    "on": 15.189999997615814,
+    "held": 18.32000000476837,
+    "offboot": 17.60999999046326
+   },
+   "minMs": {
+    "off": 16.97999999523163,
+    "off2": 17.289999997615816,
+    "on": 14.779999995231629,
+    "held": 18.080000007152556,
+    "offboot": 16.940000009536742
+   },
+   "diff": {
+    "off2": -1.6400000095367417,
+    "on": -3.9300000071525574,
+    "held": -0.8000000000000007,
+    "offboot": -1.5100000143051133
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.602,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.44,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.436,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "warmS": 0.435,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0197561979293823,
+       "g": 1.0091222524642944
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "offboot": {
+   "dir": ".scratch/lean/closeup-xb1-off",
+   "warmS": 0.554,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0613442659378052,
+       "g": 1.033752679824829
+      }
+     }
+    }
+   ],
+   "errors": []
+  }
+ }
+}

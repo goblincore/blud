@@ -1,0 +1,13 @@
+== off run 1 nonce 0.1709 18:50:12 load { 1.98 2.12 2.40 }
+run 1/1 @ 2026-11-09T23:50:12.827Z ... phase=ready warmMs=44044 drawOnce=1749.3000000715256 asyncFirst=42075.39999997616 entries=200 bootWall=45443 ms
+{"warmMs":44044,"asyncFirst":42075.39999997616,"drawOnce":1749.3000000715256,"bootWallMs":45443,"background":{"state":{"gib":"ready","crowd":"ready"},"msFromNav":147224,"timedOut":false},"backgroundStart":{"gib":44044},"backgroundDone":{},"error":null}
+== on run 1 nonce 0.1912 18:52:41 load { 2.79 2.40 2.46 }
+run 1/1 @ 2026-11-09T23:52:42.052Z ... phase=ready warmMs=48697 drawOnce=1712.8000000715256 asyncFirst=46787.299999952316 entries=200 bootWall=50077 ms
+{"warmMs":48697,"asyncFirst":46787.299999952316,"drawOnce":1712.8000000715256,"bootWallMs":50077,"background":{"state":{"gib":"ready","crowd":"ready"},"msFromNav":164392,"timedOut":false},"backgroundStart":{"gib":48698},"backgroundDone":{},"error":null}
+== off run 2 nonce 0.1846 18:55:27 load { 2.21 2.34 2.42 }
+run 1/1 @ 2026-11-09T23:55:28.128Z ... phase=ready warmMs=43673 drawOnce=1712.1999999284744 asyncFirst=41759.60000002384 entries=200 bootWall=45126 ms
+{"warmMs":43673,"asyncFirst":41759.60000002384,"drawOnce":1712.1999999284744,"bootWallMs":45126,"background":{"state":{"gib":"ready","crowd":"ready"},"msFromNav":146333,"timedOut":false},"backgroundStart":{"gib":43673},"backgroundDone":{},"error":null}
+== on run 2 nonce 0.1767 18:57:55 load { 2.34 2.49 2.48 }
+run 1/1 @ 2026-11-09T23:57:56.049Z ... phase=ready warmMs=48700 drawOnce=1717.1000000238419 asyncFirst=46752.799999952316 entries=200 bootWall=50161 ms
+{"warmMs":48700,"asyncFirst":46752.799999952316,"drawOnce":1717.1000000238419,"bootWallMs":50161,"background":{"state":{"gib":"ready","crowd":"ready"},"msFromNav":163929,"timedOut":false},"backgroundStart":{"gib":48701},"backgroundDone":{},"error":null}
+== done 19:00:40

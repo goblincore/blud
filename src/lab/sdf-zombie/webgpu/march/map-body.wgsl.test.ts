@@ -35,7 +35,8 @@ describe('ported features reach the entry point', () => {
 // text is held by the march golden snapshot.
 describe('the head split in mapBody (head-split.ts splitField)', () => {
   const M = `${REGION_MARGIN}`;
-  const code = MAP_BODY.replace(/\/\/[^\n]*/g, '');
+  // mapBody's own text: MAP_BODY's tail also carries mapLean (lean-walk-flag.ts), which has its own tests.
+  const code = MAP_BODY.split('\nfn mapLean(')[0]!.replace(/\/\/[^\n]*/g, '');
 
   it('the slot is closed unless its record carries a plane normal, and a closed slot is one uncapped piece at pIn', () => {
     expect(MAP_BODY).toMatch(/^fn mapBody\(pIn: vec3<f32>, /);

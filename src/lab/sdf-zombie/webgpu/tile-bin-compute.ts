@@ -49,7 +49,7 @@
 import * as THREE from 'three/webgpu';
 import { withPassLabel } from './gpu-pass-timing';
 import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
-import { TILE_MAX_ENTRIES, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
+import { TILE_MAX_ENTRIES, TILE_SIZE_PX, tileMetaX, type TileGroupInput } from './tile-cull';
 
 /**
  * Group slots in the groups buffer. Shared by one crowd type (64 instances x
@@ -101,7 +101,7 @@ export function packGroups(groups: TileGroupInput[], out: Float32Array): Float32
     out[o + 5] = s.count;
     out[o + 6] = s.distort;
     out[o + 7] = s.flags;
-    out[o + 8] = s.bodyIndex;
+    out[o + 8] = tileMetaX(s);
     if (s.cullOffset) { out[o + 9] = s.cullOffset[0]; out[o + 10] = s.cullOffset[1]; out[o + 11] = s.cullOffset[2]; }
   }
   return out;

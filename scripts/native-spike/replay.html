@@ -149,7 +149,7 @@ const encodePasses = (enc, passes) => {
 // Read back colour attachment 0 of each pass and compare it with what the
 // game itself rendered — a replay that draws a different picture measures a
 // different workload.
-async function parity({ manifest, device, passes, blob }) {
+async function parity({ manifest, device, passes, blob }, wantSheet = false) {
   const out = [];
   for (const p of passes) {
     if (!p.output) continue;
@@ -178,11 +178,47 @@ async function parity({ manifest, device, passes, blob }) {
       }
     }
     const n = ref.width * ref.height * 4;
-    out.push({ label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n });
+    // COUNTER READBACK (ladder.mjs `count`): a shader that writes b = 1, 2 or 3 as a pixel class gets its r and g
+    // summed per class. Read it for a `count` rung only: any other frame's blue can land on an integer by chance.
+    const classes = {};
+    // Pixels whose colour (not the depth in alpha) moved by more than 0.02 and by more than 0.1 in any channel:
+    // the 1e-4 bar above counts float jitter, these count what an eye could see.
+    let over02 = 0, over10 = 0;
+    for (let y = 0; y < ref.height; y++) {
+      for (let x = 0; x < ref.width; x++) {
+        const o = y * (bytesPerRow / 4) + x * 4, k = Math.round(got[o + 2]);
+        const w = (y * ref.width + x) * 4;
+        const dc = Math.max(Math.abs(got[o] - want[w]), Math.abs(got[o + 1] - want[w + 1]), Math.abs(got[o + 2] - want[w + 2]));
+        if (!(dc <= 0.02)) over02++;
+        if (!(dc <= 0.1)) over10++;
+        if (k < 1 || k > 3 || Math.abs(got[o + 2] - k) > 1e-3) continue;
+        const c = (classes[k] ??= { pixels: 0, r: 0, g: 0 });
+        c.pixels++; c.r += got[o]; c.g += got[o + 1];
+      }
+    }
+    const entry = { label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n, over02, over10, classes };
+    // A LOOK SHEET (ladder.mjs LADDER_SHEETS): the game's own frame | this replay | their difference times 8, as a PNG.
+    if (wantSheet) entry.sheet = sheet(got, want, ref.width, ref.height, bytesPerRow / 4);
+    out.push(entry);
     show(device, got, ref.width, ref.height, bytesPerRow / 4);
     staging.unmap();
   }
   return out;
+}
+
+function sheet(got, want, w, h, stride) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w * 3; canvas.height = h;
+  const img = new ImageData(w * 3, h);
+  const enc = (v) => 255 * Math.min(1, Math.max(0, v)) ** (1 / 2.2);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+    const g = c < 3 ? got[y * stride + x * 4 + c] : 1, wv = c < 3 ? want[(y * w + x) * 4 + c] : 1;
+    img.data[(y * w * 3 + x) * 4 + c] = c < 3 ? enc(wv) : 255;
+    img.data[(y * w * 3 + w + x) * 4 + c] = c < 3 ? enc(g) : 255;
+    img.data[(y * w * 3 + 2 * w + x) * 4 + c] = c < 3 ? Math.min(255, 255 * 8 * Math.abs(g - wv)) : 255;
+  }
+  canvas.getContext('2d').putImageData(img, 0, 0);
+  return canvas.toDataURL('image/png');
 }
 
 // Put the replayed image on the page so a person can look at it.
@@ -201,13 +237,13 @@ function show(device, rgba, w, h, stride) {
 // passes in one command buffer, wall-clock from submit to completion, divided
 // by K. Completion time is the only timestamp this GPU reports honestly
 // (gpu-pass-timing.ts), and K amortises the submit round trip.
-window.replay = async ({ dir, manifest = 'manifest.json', repeat = 20, rounds = 30, warmup = 5 }) => {
+window.replay = async ({ dir, manifest = 'manifest.json', repeat = 20, rounds = 30, warmup = 5, sheet: wantSheet = false }) => {
   const state = await load(dir, manifest);
   const { device, passes, errors } = state;
   const first = device.createCommandEncoder();
   encodePasses(first, passes);
   device.queue.submit([first.finish()]);
-  const check = await parity(state);
+  const check = await parity(state, wantSheet);
   const round = async () => {
     const enc = device.createCommandEncoder();
     for (let k = 0; k < repeat; k++) encodePasses(enc, passes);

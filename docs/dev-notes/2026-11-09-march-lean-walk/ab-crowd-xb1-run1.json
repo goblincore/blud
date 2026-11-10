@@ -1,0 +1,474 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "shaderFrom": ".scratch/lean/crowd-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?leanwalk on xb1 [frame of .scratch/lean/crowd-xb1-on, program of .scratch/lean/crowd-xb1-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372783,
+      368140
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "shaderFrom": ".scratch/lean/crowd-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?leanwalk on xb1 [frame of .scratch/lean/crowd-xb1-on, program of .scratch/lean/crowd-xb1-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    },
+    {
+     "lines": 59,
+     "bytes": [
+      372783,
+      368140
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?leanwalk on xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/crowd-xb1-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "leanwalk",
+    "variant": "held",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?leanwalk held xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "offboot",
+   "dir": ".scratch/lean/crowd-xb1-off",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "",
+    "variant": "",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd no flag xb1",
+   "manifest": "manifest.json"
+  }
+ ],
+ "baseMedianMs": 15.549999994039535,
+ "table": [
+  {
+   "leg": "off",
+   "label": "crowd ?leanwalk on xb1 [frame of .scratch/lean/crowd-xb1-on, program of .scratch/lean/crowd-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "medianMs": 15.549999994039535,
+   "lo": 15.310000002384186,
+   "hi": 15.670000004768372
+  },
+  {
+   "leg": "off2",
+   "label": "crowd ?leanwalk on xb1 [frame of .scratch/lean/crowd-xb1-on, program of .scratch/lean/crowd-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "medianMs": 15.520000004768372,
+   "lo": 15.380000007152557,
+   "hi": 15.67999999523163,
+   "diffMedianMs": -0.004999995231628418,
+   "diffMinMs": -0.11000001430511475,
+   "diffMaxMs": 0.07000000476837087,
+   "diffMedianPct": -0.0321543101835689,
+   "diffMinPct": -0.7073955906577416,
+   "diffMaxPct": 0.4501608025414955
+  },
+  {
+   "leg": "on",
+   "label": "crowd ?leanwalk on xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "medianMs": 13.169999998807906,
+   "lo": 13.009999990463257,
+   "hi": 13.9,
+   "diffMedianMs": -2.26000000834465,
+   "diffMinMs": -2.520000004768372,
+   "diffMaxMs": -1.7400000095367432,
+   "diffMedianPct": -14.533762117112088,
+   "diffMinPct": -16.205787818227087,
+   "diffMaxPct": -11.189710676551138
+  },
+  {
+   "leg": "held",
+   "label": "crowd ?leanwalk held xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/crowd-xb1-held",
+   "medianMs": 15.605000001192092,
+   "lo": 15.389999997615813,
+   "hi": 15.830000007152558,
+   "diffMedianMs": 0.09499999880790622,
+   "diffMinMs": -0.06000001430511581,
+   "diffMaxMs": 0.2600000143051151,
+   "diffMedianPct": 0.6109324684522227,
+   "diffMinPct": -0.3858521821743691,
+   "diffMaxPct": 1.6720258161078818
+  },
+  {
+   "leg": "offboot",
+   "label": "crowd no flag xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/crowd-xb1-off",
+   "medianMs": 15.475,
+   "lo": 15.25,
+   "hi": 15.589999997615815,
+   "diffMedianMs": -0.0600000083446508,
+   "diffMinMs": -0.12999999523162842,
+   "diffMaxMs": 0.059999990463257546,
+   "diffMedianPct": -0.3858521438434044,
+   "diffMinPct": -0.8360128313920172,
+   "diffMaxPct": 0.38585202885052167
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 15.529999995231629,
+    "off2": 15.520000004768372,
+    "on": 13.009999990463257,
+    "held": 15.630000007152557,
+    "offboot": 15.4
+   },
+   "minMs": {
+    "off": 15.240000009536743,
+    "off2": 15.370000004768372,
+    "on": 12.859999990463256,
+    "held": 15.45,
+    "offboot": 15.139999997615813
+   },
+   "diff": {
+    "off2": -0.009999990463256836,
+    "on": -2.520000004768372,
+    "held": 0.10000001192092789,
+    "offboot": -0.12999999523162842
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "offboot",
+    "off"
+   ],
+   "ms": {
+    "off2": 15.380000007152557,
+    "on": 13.029999995231629,
+    "held": 15.389999997615813,
+    "offboot": 15.439999997615814,
+    "off": 15.380000007152557
+   },
+   "minMs": {
+    "off2": 15.3,
+    "on": 12.82000000476837,
+    "held": 15.229999995231628,
+    "offboot": 15.229999995231628,
+    "off": 15.260000002384185
+   },
+   "diff": {
+    "off2": 0,
+    "on": -2.350000011920928,
+    "held": 0.009999990463256836,
+    "offboot": 0.059999990463257546
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "offboot",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 13.139999997615813,
+    "held": 15.470000004768371,
+    "offboot": 15.25,
+    "off": 15.310000002384186,
+    "off2": 15.380000007152557
+   },
+   "minMs": {
+    "on": 13.029999995231629,
+    "held": 15.32000000476837,
+    "offboot": 14.989999997615815,
+    "off": 15.160000002384185,
+    "off2": 15.290000009536744
+   },
+   "diff": {
+    "off2": 0.07000000476837087,
+    "on": -2.1700000047683723,
+    "held": 0.16000000238418544,
+    "offboot": -0.06000000238418579
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "offboot",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 15.759999990463257,
+    "offboot": 15.589999997615815,
+    "off": 15.670000004768372,
+    "off2": 15.67999999523163,
+    "on": 13.620000004768372
+   },
+   "minMs": {
+    "held": 15.530000007152557,
+    "offboot": 15.339999997615815,
+    "off": 15.57000000476837,
+    "off2": 15.35,
+    "on": 13.15
+   },
+   "diff": {
+    "off2": 0.009999990463256836,
+    "on": -2.0500000000000007,
+    "held": 0.08999998569488454,
+    "offboot": -0.08000000715255773
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "offboot",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "offboot": 15.510000002384185,
+    "off": 15.569999992847443,
+    "off2": 15.520000004768372,
+    "on": 13.2,
+    "held": 15.830000007152558
+   },
+   "minMs": {
+    "offboot": 15.160000002384185,
+    "off": 15.35,
+    "off2": 15.280000007152557,
+    "on": 13.05,
+    "held": 15.639999997615813
+   },
+   "diff": {
+    "off2": -0.04999998807907069,
+    "on": -2.3699999928474433,
+    "held": 0.2600000143051151,
+    "offboot": -0.059999990463257546
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 15.640000009536744,
+    "off2": 15.529999995231629,
+    "on": 13.9,
+    "held": 15.579999995231628,
+    "offboot": 15.579999995231628
+   },
+   "minMs": {
+    "off": 15.289999997615814,
+    "off2": 15.270000004768372,
+    "on": 13.479999995231628,
+    "held": 15.409999990463257,
+    "offboot": 15.030000007152557
+   },
+   "diff": {
+    "off2": -0.11000001430511475,
+    "on": -1.7400000095367432,
+    "held": -0.06000001430511581,
+    "offboot": -0.06000001430511581
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "warmS": 0.617,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "warmS": 0.484,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/crowd-xb1-on",
+   "warmS": 0.527,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/crowd-xb1-held",
+   "warmS": 0.477,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "offboot": {
+   "dir": ".scratch/lean/crowd-xb1-off",
+   "warmS": 0.65,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  }
+ }
+}

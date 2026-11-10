@@ -4,6 +4,8 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { SHADE_BOUND as SHADE } from '../shade-bound-flag';
+import { LEAN_WALK as LEAN } from '../lean-walk-flag';
+import { LEAN_TEST_BLOCK } from '../lean-walk.wgsl';
 import { ROW_PRIM_SHAPE, WOUND_STEP_MUL } from '../layout';
 import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
@@ -67,7 +69,8 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
   if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugRefolds = 0.0; gDebugRefoldWins = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
 ${TILE_PRELOAD_BLOCK}
 ${WOUND_LIST_BLOCK}
-${HULL_BOUNDS_BLOCK}
+${LEAN ? `${LEAN_TEST_BLOCK}
+` : ''}${HULL_BOUNDS_BLOCK}
 ${RAY_WINDOW_BLOCK}
 ${STEP_CONFIG_BLOCK}
 ${START_BOUNDS_BLOCK}
@@ -129,7 +132,8 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
     gCullUB = select(1e9, cullFold + 3.0 * abs(t - cullT) + 0.002, i > 0 && cullFold < 1e8);
     gCullSlot = cullSlot;
     gCullPiece = cullPiece;
-    let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+${LEAN ? `    var dres = vec4<f32>(0.0);
+    if (leanOk) { dres = mapLean(camPos + rd * t, data, inst, instCfg); } else { dres = ` : '    let dres = '}mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);${LEAN ? ' }' : ''}
     gWalkStep = 0.0;
     gCullUB = 1e9;
     cullFold = gLastFold;

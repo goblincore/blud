@@ -73,6 +73,11 @@
   (branch `claude/flat-room`). The goblin to human height (1.70 m) is built, owner look pending ([notes](docs/dev-notes/2026-10-11-goblin-human-height/NOTES.md), [characters](docs/tasks/characters.md)).
 
 **Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [x] **The march's clean-body fast path is on by default, walk only** (2026-11-09, owner's call; branch
+  `claude/march-lean-walk-40ed5e`, not merged; [notes](docs/dev-notes/2026-11-09-march-lean-walk/NOTES.md)). The
+  same picture to the bit; the march pass −15 % on a clean close-up and a 12-zombie crowd, +1.9 % on a wounded
+  close-up, 3 s more cold compile. `?leanwalk=0` turns it off. The march golden snapshot was re-recorded; the
+  `march-hash` pins are stale on Chrome 157 (not re-pinned). Next: the same choice per sample on wounded bodies.
 - [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
   frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
   `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
