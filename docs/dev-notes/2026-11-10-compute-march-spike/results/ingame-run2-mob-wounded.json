@@ -1,0 +1,237 @@
+{
+ "query": "frozen=1&marchcompute",
+ "prelude": "docs/dev-notes/2026-11-10-compute-march-spike/prelude-mob-wounded.js",
+ "frames": 30,
+ "rounds": 12,
+ "ship": {
+  "sdfScale": 0.5,
+  "upscale": true
+ },
+ "settleS": 1.73,
+ "state": {
+  "compiled": true,
+  "enabled": true,
+  "types": [
+   {
+    "frames": 72,
+    "groups": [
+     32,
+     35
+    ],
+    "rect": [
+     72,
+     30,
+     328,
+     300
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 24,
+    "groups": [
+     16,
+     17
+    ],
+    "rect": [
+     0,
+     118,
+     124,
+     246
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 72,
+    "groups": [
+     17,
+     14
+    ],
+    "rect": [
+     158,
+     89,
+     281,
+     195
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 48,
+    "groups": [
+     50,
+     38
+    ],
+    "rect": [
+     0,
+     0,
+     400,
+     300
+    ],
+    "drawing": true
+   }
+  ]
+ },
+ "baseMs": 70.6050000011921,
+ "summary": {
+  "off2": {
+   "medianMs": 70.0383333325386,
+   "diffMedianMs": -0.5250000000000057,
+   "diffMinMs": -10.179999999205279,
+   "diffMaxMs": 21.036666667461404,
+   "diffMedianPct": -0.7435734013046407
+  },
+  "on": {
+   "medianMs": 61.516666668653485,
+   "diffMedianMs": -8.578333334128061,
+   "diffMinMs": -16.890000001589456,
+   "diffMaxMs": 21.523333330949143,
+   "diffMedianPct": -12.149753323395261
+  }
+ },
+ "rows": [
+  {
+   "off": 73.12000000079473,
+   "off2": 72.36000000238418,
+   "on": 64.00666666428248
+  },
+  {
+   "on": 61.413333336512245,
+   "off": 75.67000000079473,
+   "off2": 66.50999999841055
+  },
+  {
+   "off": 76.21666666666667,
+   "off2": 71.11666666666666,
+   "on": 59.32666666507721
+  },
+  {
+   "on": 89.47000000079473,
+   "off": 67.94666666984558,
+   "off2": 72.85333333412807
+  },
+  {
+   "off": 67.38333333333334,
+   "off2": 67.09333333174388,
+   "on": 54.53666666348775
+  },
+  {
+   "on": 58.97666666507721,
+   "off": 73.20666666825612,
+   "off2": 68.64666666587193
+  },
+  {
+   "off": 75.45666666825612,
+   "off2": 68.71000000238419,
+   "on": 90.77999999920527
+  },
+  {
+   "on": 74.70333333015442,
+   "off": 79.51333333253861,
+   "off2": 69.33333333333333
+  },
+  {
+   "off": 68.09000000158946,
+   "off2": 70.74333333174387,
+   "on": 55.516666666666666
+  },
+  {
+   "on": 63.74000000158946,
+   "off": 66.87333333492279,
+   "off2": 67.06999999682108
+  },
+  {
+   "off": 65.99000000158945,
+   "off2": 71.62999999920527,
+   "on": 57.946666669845584
+  },
+  {
+   "on": 61.620000000794725,
+   "off": 67.92666666905085,
+   "off2": 88.96333333651225
+  }
+ ],
+ "passes": "{\"installed\":true,\"samples\":[{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":3.350074,\"start\":0,\"end\":3.350074},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.237787,\"start\":0,\"end\":0.237787},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.019708,\"start\":0.746571,\"end\":0.766279},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":2.682667,\"start\":6.378652,\"end\":9.061319},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":1.413563,\"start\":7.815296,\"end\":9.228859},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":57.641162,\"start\":8.903447,\"end\":66.544609},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":57.760077,\"start\":8.907405,\"end\":66.667482},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":57.874117,\"start\":8.911989,\"end\":66.786106},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":58.062448,\"start\":8.984654,\"end\":67.047102},{\"frame\":0,\"label\":\"sdf:upscale:L1a\",\"kind\":\"render\",\"ms\":59.060683,\"start\":8.995528,\"end\":68.056211},{\"frame\":0,\"label\":\"sdf:upscale:L2a\",\"kind\":\"render\",\"ms\":59.353636,\"start\":9.011695,\"end\":68.365331},{\"frame\":0,\"label\":\"sdf:upscale:L3a\",\"kind\":\"render\",\"ms\":59.650215,\"start\":9.027362,\"end\":68.677577},{\"frame\":0,\"label\":\"sdf:upscale:L4a\",\"kind\":\"render\",\"ms\":59.925169,\"start\":9.043028,\"end\":68.968197},{\"frame\":0,\"label\":\"sdf:upscale:shuffle\",\"kind\":\"render\",\"ms\":60.026875,\"start\":9.059236,\"end\":69.086111},{\"frame\":0,\"label\":\"sdf:upscale:sharpen\",\"kind\":\"render\",\"ms\":60.122791,\"start\":9.075736,\"end\":69.198527},{\"frame\":0,\"label\":\"sdf:composite\",\"kind\":\"render\",\"ms\":60.164998,\"start\":9.155985,\"end\":69.320983},{\"frame\":0,\"label\":\"goo:surface\",\"kind\":\"render\",\"ms\":2.507378,\"start\":67.047268,\"end\":69.554646},{\"frame\":0,\"label\":\"effects\",\"kind\":\"render\",\"ms\":1.551768,\"start\":68.056419,\"end\":69.608187},{\"frame\":0,\"label\":\"post:fxaa\",\"kind\":\"render\",\"ms\":1.522769,\"start\":68.365872,\"end\":69.888641},{\"frame\":0,\"label\":\"post:vhs-input\",\"kind\":\"render\",\"ms\":1.283605,\"start\":68.677785,\"end\":69.96139},{\"frame\":0,\"label\":\"post:vhs\",\"kind\":\"render\",\"ms\":1.111608,\"start\":68.968405,\"end\":70.080013},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":1.134983,\"start\":69.08632,\"end\":70.221303},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":1.105566,\"start\":69.198694,\"end\":70.30426},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":3.204784,\"start\":69.558813,\"end\":72.763597},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":2.647751,\"start\":70.268677,\"end\":72.916428},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":1.710058,\"start\":71.320077,\"end\":73.030135},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":58.81581,\"start\":72.481727,\"end\":131.297537},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":59.570633,\"start\":72.486227,\"end\":132.05686},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":60.100749,\"start\":72.492893,\"end\":132.593642},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":60.104792,\"start\":"
+}

@@ -64,6 +64,64 @@ async function load(dir, name) {
     device.queue.submit([enc.finish()]);
   };
 
+  // THE COMPUTE-MARCH SPIKE (compute-march.mjs; docs/dev-notes/2026-11-10-compute-march-spike). A pass whose record
+  // carries `compute` is replayed as a clear of two storage targets (colour rgba32float, depth r32float) followed by
+  // one compute pass with a dispatch per captured draw. Each dispatch binds the draw's OWN bind groups, rebuilt on
+  // layouts that are visible to the compute stage, and a third group: the two targets and the spike's tile list.
+  const buildCompute = async (c, resolve) => {
+    const usage = TU.STORAGE_BINDING | TU.RENDER_ATTACHMENT | TU.COPY_SRC;
+    const color = device.createTexture({ size: [c.width, c.height], format: 'rgba32float', usage });
+    const depth = device.createTexture({ size: [c.width, c.height], format: 'r32float', usage });
+    const outLayout = device.createBindGroupLayout({ entries: [
+      { binding: 0, visibility: 4, storageTexture: { access: 'write-only', format: 'rgba32float' } },
+      { binding: 1, visibility: 4, storageTexture: { access: 'read-write', format: 'r32float' } },
+      { binding: 2, visibility: 4, buffer: { type: 'read-only-storage' } },
+    ] });
+    const modules = new Map();
+    const draws = [];
+    for (const d of c.draws) {
+      const layouts = [], groups = [];
+      for (const g of d.groups) {
+        const bg = objects[g.$ref], lay = objects[bg.desc.layout.$ref];
+        if (lay.kind !== 'bindGroupLayout') throw new Error(`replay: compute needs an explicit bind group layout, got ${lay.kind}`);
+        const layout = device.createBindGroupLayout({ entries: lay.desc.entries.map((e) => ({ ...e, visibility: 4 })) });
+        layouts.push(layout);
+        groups.push(device.createBindGroup({ layout, entries: await resolve(bg.desc.entries) }));
+      }
+      const bytes = await blob(d.tiles);
+      const tiles = device.createBuffer({ size: bytes.length, usage: BU.STORAGE | BU.COPY_DST });
+      device.queue.writeBuffer(tiles, 0, bytes);
+      groups.push(device.createBindGroup({ layout: outLayout, entries: [
+        { binding: 0, resource: color.createView() }, { binding: 1, resource: depth.createView() }, { binding: 2, resource: { buffer: tiles } },
+      ] }));
+      // One module per distinct text: a crowd frame's draws can share a program.
+      if (!modules.has(d.code)) {
+        const module = device.createShaderModule({ code: c.codes[d.code] });
+        const info = await module.getCompilationInfo();
+        for (const m of info.messages) if (m.type === 'error') errors.push(`compute shader ${d.code} line ${m.lineNum}: ${m.message}`);
+        modules.set(d.code, module);
+      }
+      let pipeline = null;
+      device.pushErrorScope('validation');
+      try {
+        pipeline = await device.createComputePipelineAsync({
+          layout: device.createPipelineLayout({ bindGroupLayouts: [...layouts, outLayout] }),
+          compute: { module: modules.get(d.code), entryPoint: 'main' },
+        });
+      } catch (e) { errors.push(`compute pipeline: ${e.message}`); }
+      const scoped = await device.popErrorScope();
+      if (scoped) errors.push(`compute pipeline (validation): ${scoped.message}`);
+      draws.push({ pipeline, groups, count: d.count });
+    }
+    return {
+      color, depth, draws,
+      clear: { colorAttachments: [
+        { view: color.createView(), clearValue: c.clear, loadOp: 'clear', storeOp: 'store' },
+        { view: depth.createView(), clearValue: { r: 1, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' },
+      ] },
+    };
+  };
+
   // Each pass gets its own copy of every buffer and texture it touched: the
   // capture holds their contents per pass, so there is nothing to share.
   const passes = [];
@@ -132,6 +190,7 @@ async function load(dir, name) {
       cmds: await Promise.all(rec.cmds.map((c) => resolve(c))),
       output: rec.desc.colorAttachments[0] ? { ref: rec.desc.colorAttachments[0].view, post: rec.post } : null,
       get,
+      compute: rec.compute ? await buildCompute(rec.compute, resolve) : null,
     });
   }
   await device.queue.onSubmittedWorkDone();
@@ -140,6 +199,19 @@ async function load(dir, name) {
 
 const encodePasses = (enc, passes) => {
   for (const p of passes) {
+    if (p.compute) {
+      // The clear the render pass's loadOp did, then the march as dispatches.
+      enc.beginRenderPass(p.compute.clear).end();
+      const pass = enc.beginComputePass();
+      for (const d of p.compute.draws) {
+        if (!d.pipeline) continue;
+        pass.setPipeline(d.pipeline);
+        d.groups.forEach((g, i) => pass.setBindGroup(i, g));
+        pass.dispatchWorkgroups(...d.count);
+      }
+      pass.end();
+      continue;
+    }
     const pass = enc.beginRenderPass(p.desc);
     for (const [name, ...args] of p.cmds) pass[name](...args);
     pass.end();
@@ -157,7 +229,7 @@ async function parity({ manifest, device, passes, blob }, wantSheet = false) {
     const texId = viewNode.texture.$ref, d = manifest.objects[texId].desc;
     const ref = p.output.post[texId]?.mips?.[0];
     if (!ref || d.format !== 'rgba32float') { out.push({ label: p.label, skipped: d.format }); continue; }
-    const tex = await p.get(viewNode.texture);
+    const tex = p.compute ? p.compute.color : await p.get(viewNode.texture);
     const bytesPerRow = Math.ceil((ref.width * 16) / 256) * 256;
     const staging = device.createBuffer({ size: bytesPerRow * ref.height, usage: BU.MAP_READ | BU.COPY_DST });
     const enc = device.createCommandEncoder();
@@ -167,10 +239,21 @@ async function parity({ manifest, device, passes, blob }, wantSheet = false) {
     const got = new Float32Array(staging.getMappedRange());
     const want = new Float32Array((await blob(ref.file)).buffer);
     let maxDiff = 0, sum = 0, differing = 0, nonZero = 0;
+    // Whole texels over the 1e-4 bar (any of the four floats), and floats that are not the same value at all.
+    let texels = 0, inexact = 0, lastTexel = -1;
+    // Per channel (r, g, b, and the clip depth in a): floats over the bar, and the largest difference.
+    const chanOver = [0, 0, 0, 0], chanMax = [0, 0, 0, 0];
+    // Texels that are a hit in one image and a miss in the other (a miss carries depth >= 0.99999).
+    let hitFlips = 0;
     for (let y = 0; y < ref.height; y++) {
       for (let x = 0; x < ref.width * 4; x++) {
         const g = got[y * (bytesPerRow / 4) + x], w = want[y * ref.width * 4 + x];
         const diff = Math.abs(g - w);
+        if (g !== w) inexact++;
+        if (!(diff <= 1e-4)) chanOver[x & 3]++;
+        if (diff > chanMax[x & 3]) chanMax[x & 3] = diff;
+        if ((x & 3) === 3 && (g >= 0.99999) !== (w >= 0.99999)) hitFlips++;
+        if (!(diff <= 1e-4) && lastTexel !== y * ref.width + (x >> 2)) { texels++; lastTexel = y * ref.width + (x >> 2); }
         if (!(diff <= 1e-4)) differing++;
         if (diff > maxDiff) maxDiff = diff;
         if (Number.isFinite(diff)) sum += diff;
@@ -196,7 +279,7 @@ async function parity({ manifest, device, passes, blob }, wantSheet = false) {
         c.pixels++; c.r += got[o]; c.g += got[o + 1];
       }
     }
-    const entry = { label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n, over02, over10, classes };
+    const entry = { label: p.label, maxDiff, meanDiff: sum / n, differingFrac: differing / n, nonZeroFrac: nonZero / n, over02, over10, classes, differingTexels: texels, inexactFloats: inexact, chanOver, chanMax, hitFlips };
     // A LOOK SHEET (ladder.mjs LADDER_SHEETS): the game's own frame | this replay | their difference times 8, as a PNG.
     if (wantSheet) entry.sheet = sheet(got, want, ref.width, ref.height, bytesPerRow / 4);
     out.push(entry);
@@ -259,4 +342,22 @@ window.replay = async ({ dir, manifest = 'manifest.json', repeat = 20, rounds = 
   return { repeat, rounds, medianMs: median(ms), minMs: Math.min(...ms), maxMs: Math.max(...ms), ms, parity: check, errors };
 };
 window.replayReady = true;
+
+// A LOOK BY EYE (compute-view.mjs): ?dir=/cap/<frame>&manifest=<name> replays that leg once and shows the sheet
+// (the game's own frame | this replay | their difference times 8) with the comparison's numbers. Not timed.
+const look = new URLSearchParams(location.search);
+if (look.has('dir')) {
+  document.body.style.cssText = 'background:#111;color:#ddd;font:14px system-ui;margin:24px';
+  document.getElementById('view').style.display = 'none';
+  const say = document.body.appendChild(document.createElement('p'));
+  const name = `${look.get('dir').replace('/cap/', '')}, ${look.get('manifest') ?? 'manifest.json'}`;
+  say.innerHTML = `<a href="/" style="color:#8cf">all frames</a> &nbsp; ${name}: replaying (a compute leg can take a minute to compile)…`;
+  window.replay({ dir: look.get('dir'), manifest: look.get('manifest') ?? 'manifest.json', repeat: 1, rounds: 1, warmup: 0, sheet: true }).then((r) => {
+    const p = r.parity[0] ?? {};
+    say.innerHTML = `<a href="/" style="color:#8cf">all frames</a> &nbsp; <b>${name}</b><br>the game's frame | this replay | difference &times; 8<br>`
+      + `texels over 1e-4: ${p.differingTexels}, largest difference ${Number(p.maxDiff).toPrecision(3)}, floats not identical: ${p.inexactFloats}, `
+      + `colour moved by more than 0.02: ${p.over02} px, hit/miss flips: ${p.hitFlips}${r.errors.length ? `<br><span style="color:#f88">${r.errors.join('<br>')}</span>` : ''}`;
+    if (p.sheet) { const img = document.body.appendChild(new Image()); img.src = p.sheet; img.style.cssText = 'width:100%;max-width:2400px;image-rendering:pixelated;margin-top:12px'; }
+  }).catch((e) => { say.innerHTML += `<br><span style="color:#f88">${e.message}</span>`; });
+}
 </script>

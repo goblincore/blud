@@ -30,6 +30,7 @@ import {
 } from './zombie-gpu';
 import type { GameTelemetry } from './game-telemetry';
 import { splitInstances } from './earlyz/batch-split';
+import { createCrowdMarchCompute, registerMarchCompute } from './march-compute';
 
 // Re-exported for the existing `./crowd-type` import sites; the function itself
 // now lives beside the record buffer it allocates from (task 7c), so
@@ -323,6 +324,12 @@ export function createCrowdType(
   mesh.frustumCulled = false; // the box attributes ARE the bounds; no double cull
   const depthPreMesh = new THREE.Mesh(activeGeometry(), activeHandles().depthPreMaterial);
   depthPreMesh.frustumCulled = false;
+  // THE COMPUTE MARCH (?marchcompute; march-compute.ts). buildCompute exists only under the flag, on the quad
+  // material with tile lists. The layer dispatches it and swaps the copy material onto `mesh` around the march's
+  // render, and only while the mesh is drawing the quad material.
+  if (quadHandles.buildCompute && quadHandles.quadClip !== undefined) {
+    registerMarchCompute(mesh, quadHandles.material, createCrowdMarchCompute(quadHandles.buildCompute, quadRect, quadHandles.quadClip));
+  }
   const frontMesh = front && frontHandles ? new THREE.Mesh(front.geo, frontHandles.material) : null;
   if (frontMesh) {
     frontMesh.frustumCulled = false;

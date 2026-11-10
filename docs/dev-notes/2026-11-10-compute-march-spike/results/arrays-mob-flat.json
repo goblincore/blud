@@ -1,0 +1,481 @@
+{
+ "dir": ".scratch/compute-arr/mob-flat",
+ "scene": {
+  "scene": "asis",
+  "query": "frozen=1&tileref=0",
+  "prelude": "(() => {\n  const b = __sdfGame.rooms.find((x) => x.id === 1).bounds;\n  const cx = (b.minX + b.maxX) / 2, pz = b.minZ + 0.6;\n  __sdfGame.teleport(1);\n  __sdfGame.placePlayer({ x: cx, z: pz, yaw: Math.PI, pitch: -0.12 });\n  __sdfGame.freeze(true);\n  const region = { minX: cx - 1.7, maxX: cx + 1.7, minZ: pz + 0.9, maxZ: pz + 3.4 };\n  window.__mob = __sdfGame.spawnCrowd('zombie', 22, { spacing: 0.6, region });\n  if (window.__mob.ok < 22) throw new Error('mob: only ' + window.__mob.ok + ' bodies landed');\n})();\n__sdfGame.setHullExitBound(true);\n__sdfGame.step(4);",
+  "variant": {
+   "name": "flat",
+   "js": "__sdfGame.setFlatAlbedo(true)"
+  },
+  "passes": "^sdf:march$",
+  "ship": {
+   "sdfScale": 0.5,
+   "upscale": true
+  },
+  "staged": null,
+  "crowd": {
+   "state": "ready",
+   "tilesOn": true
+  },
+  "width": 1280,
+  "height": 800
+ },
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "legs": [
+  {
+   "name": "frag",
+   "manifest": "manifest.json",
+   "compute": false
+  },
+  {
+   "name": "frag2",
+   "manifest": "manifest.json",
+   "compute": false
+  },
+  {
+   "name": "port",
+   "manifest": "manifest.cmp-port.json",
+   "compute": true,
+   "stats": [
+    {
+     "rect": [
+      72,
+      30,
+      328,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 306,
+     "tilesNonEmpty": 53,
+     "dispatched": 306,
+     "maxCount": 11
+    },
+    {
+     "rect": [
+      100,
+      89,
+      281,
+      195
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 96,
+     "tilesNonEmpty": 25,
+     "dispatched": 96,
+     "maxCount": 31
+    },
+    {
+     "rect": [
+      0,
+      0,
+      400,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 475,
+     "tilesNonEmpty": 400,
+     "dispatched": 475,
+     "maxCount": 64
+    }
+   ],
+   "programs": 3
+  },
+  {
+   "name": "list",
+   "manifest": "manifest.cmp-list.json",
+   "compute": true,
+   "stats": [
+    {
+     "rect": [
+      72,
+      30,
+      328,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 306,
+     "tilesNonEmpty": 53,
+     "dispatched": 53,
+     "maxCount": 11
+    },
+    {
+     "rect": [
+      100,
+      89,
+      281,
+      195
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 96,
+     "tilesNonEmpty": 25,
+     "dispatched": 25,
+     "maxCount": 31
+    },
+    {
+     "rect": [
+      0,
+      0,
+      400,
+      300
+     ],
+     "grid": [
+      25,
+      19
+     ],
+     "tilesInRect": 475,
+     "tilesNonEmpty": 400,
+     "dispatched": 400,
+     "maxCount": 64
+    }
+   ],
+   "programs": 3
+  }
+ ],
+ "info": {
+  "frag": {
+   "warmS": 0.864,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "frag2": {
+   "warmS": 0.731,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "port": {
+   "warmS": 0.932,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.0007311701774597168,
+     "meanDiff": 2.148747444152832e-9,
+     "differingFrac": 0.0000020833333333333334,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 1,
+     "inexactFloats": 3704,
+     "chanOver": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0.0007311701774597168
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "list": {
+   "warmS": 0.903,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.0007311701774597168,
+     "meanDiff": 2.148747444152832e-9,
+     "differingFrac": 0.0000020833333333333334,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 1,
+     "inexactFloats": 3704,
+     "chanOver": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0.0007311701774597168
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "frag",
+    "frag2",
+    "port",
+    "list"
+   ],
+   "ms": {
+    "frag": 30.860000002384187,
+    "frag2": 30.779999995231627,
+    "port": 30.95,
+    "list": 26.819999992847443
+   },
+   "minMs": {
+    "frag": 29.460000002384184,
+    "frag2": 29.130000007152557,
+    "port": 30.279999995231627,
+    "list": 26.64000000953674
+   },
+   "diff": {
+    "frag2": -0.0800000071525595,
+    "port": 0.08999999761581279,
+    "list": -4.040000009536744
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "frag2",
+    "port",
+    "list",
+    "frag"
+   ],
+   "ms": {
+    "frag2": 31.15,
+    "port": 31.07000000476837,
+    "list": 26.939999997615814,
+    "frag": 31.42999999523163
+   },
+   "minMs": {
+    "frag2": 28.960000002384184,
+    "port": 30.15,
+    "list": 26.57000000476837,
+    "frag": 29.130000007152557
+   },
+   "diff": {
+    "frag2": -0.27999999523163055,
+    "port": -0.35999999046325826,
+    "list": -4.489999997615815
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "port",
+    "list",
+    "frag",
+    "frag2"
+   ],
+   "ms": {
+    "port": 31.039999997615816,
+    "list": 27.05,
+    "frag": 30.860000002384187,
+    "frag2": 31.37999999523163
+   },
+   "minMs": {
+    "port": 30.329999995231628,
+    "list": 26.810000002384186,
+    "frag": 30.07000000476837,
+    "frag2": 28.920000004768372
+   },
+   "diff": {
+    "frag2": 0.5199999928474419,
+    "port": 0.17999999523162913,
+    "list": -3.810000002384186
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "list",
+    "frag",
+    "frag2",
+    "port"
+   ],
+   "ms": {
+    "list": 27.02000000476837,
+    "frag": 30.55,
+    "frag2": 30.65,
+    "port": 30.71999999284744
+   },
+   "minMs": {
+    "list": 26.37999999523163,
+    "frag": 29.939999997615814,
+    "frag2": 29.410000002384187,
+    "port": 30.119999992847443
+   },
+   "diff": {
+    "frag2": 0.09999999999999787,
+    "port": 0.1699999928474405,
+    "list": -3.5299999952316305
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "frag",
+    "frag2",
+    "port",
+    "list"
+   ],
+   "ms": {
+    "frag": 29.97999999523163,
+    "frag2": 29.330000007152556,
+    "port": 29.35,
+    "list": 26
+   },
+   "minMs": {
+    "frag": 29,
+    "frag2": 28.439999997615814,
+    "port": 28.6,
+    "list": 25.519999992847442
+   },
+   "diff": {
+    "frag2": -0.6499999880790739,
+    "port": -0.6299999952316284,
+    "list": -3.97999999523163
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "frag2",
+    "port",
+    "list",
+    "frag"
+   ],
+   "ms": {
+    "frag2": 29.310000002384186,
+    "port": 29.239999997615815,
+    "list": 25.960000002384184,
+    "frag": 30.6
+   },
+   "minMs": {
+    "frag2": 27.829999995231628,
+    "port": 28.95,
+    "list": 25.65,
+    "frag": 29.160000002384187
+   },
+   "diff": {
+    "frag2": -1.2899999976158156,
+    "port": -1.3600000023841865,
+    "list": -4.639999997615817
+   }
+  }
+ ],
+ "base": "frag",
+ "baseMedianMs": 30.730000001192096,
+ "table": [
+  {
+   "leg": "frag",
+   "medianMs": 30.730000001192096,
+   "lo": 29.97999999523163,
+   "hi": 31.42999999523163
+  },
+  {
+   "leg": "frag2",
+   "medianMs": 30.714999997615813,
+   "lo": 29.310000002384186,
+   "hi": 31.37999999523163,
+   "diffMedianMs": -0.18000000119209503,
+   "diffMinMs": -1.2899999976158156,
+   "diffMaxMs": 0.5199999928474419,
+   "diffMedianPct": -0.5857468310612183,
+   "diffMinPct": -4.197852253712246,
+   "diffMaxPct": 1.6921574774724042
+  },
+  {
+   "leg": "port",
+   "medianMs": 30.83499999642372,
+   "lo": 29.239999997615815,
+   "hi": 31.07000000476837,
+   "diffMedianMs": -0.13499999642372273,
+   "diffMinMs": -1.3600000023841865,
+   "diffMaxMs": 0.17999999523162913,
+   "diffMedianPct": -0.4393101087487333,
+   "diffMinPct": -4.425642702022221,
+   "diffMaxPct": 0.5857468116649739
+  },
+  {
+   "leg": "list",
+   "medianMs": 26.87999999523163,
+   "lo": 25.960000002384184,
+   "hi": 27.05,
+   "diffMedianMs": -4.010000002384187,
+   "diffMinMs": -4.639999997615817,
+   "diffMaxMs": -3.5299999952316305,
+   "diffMedianPct": -13.049137657756683,
+   "diffMinPct": -15.099251537376569,
+   "diffMaxPct": -11.487146095329297
+  }
+ ]
+}

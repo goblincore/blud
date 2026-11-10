@@ -39,6 +39,7 @@ import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickM
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
+import { marchComputeBegin } from './march-compute';
 import { layerOn } from './light-layers';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
 import { inputsUseNormals, type UpscaleConfig, type UpscaleModel } from './upscale/upscale-model';
@@ -2852,6 +2853,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // per-body front-to-back branch (ships off) clears and re-renders per body, and
       // is left exactly as it is: ONE predicate decides both that branch and the seed.
       const perBodyGate = prevUniforms.enabled.value > 0.5 && bodies.length > 0;
+      // THE COMPUTE MARCH (?marchcompute; march-compute.ts): crowd types march in a compute pass here, with the
+      // camera as jittered above, and draw a copy of the result in the render below. A no-op without the flag. Not
+      // with the per-body gate (one render a body, each reading the last) nor with the march's extra attachments
+      // (the copy writes colour and depth only).
+      const endMarchCompute = perBodyGate || marchMrt ? () => {} : marchComputeBegin(renderer, camera, target.width, target.height);
+      setPassLabel('sdf:march');
       ensureSeed();
       seedReasonLast = seedBlockReason(perBodyGate);
       if (seedReasonLast === null && seed !== null && seed.mesh.parent !== scene) {
@@ -2921,6 +2928,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         withMarchMrt(() => renderer.render(scene, camera));
       }
       if (seed) seed.mesh.visible = false;
+      endMarchCompute();
       // DISTANCE SPLIT FAR PASS: real half-scale rays from D onward, UNJITTERED, into the checker-grid
       // target the resolve merges. Near bodies discard at their proxy (tMax < D), so this costs only the
       // far bodies' pixels.
