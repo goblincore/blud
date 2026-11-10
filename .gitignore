@@ -42,6 +42,20 @@ public/assets/audio-placeholder
 # Reference models are dev-only and untracked: a dispatch worktree auto-commit once swept a 116 MB .glb into main (2026-09-05).
 # The nine models already tracked on origin stay tracked (ignore rules do not untrack).
 docs/dev-notes/refs/**/*.glb
+
+# Capture output (screenshots, GIFs, clips) is local evidence, not repo content.
+# It reached 852 MB (2,800 files) checked out in every worktree, and was pruned
+# on 2026-11-09; the old frames are still in git history (`git show <commit>:<path>`).
+# Attach evidence to the PR instead. refs/ keeps its reference plates, which tests load.
+docs/dev-notes/**/*.png
+docs/dev-notes/**/*.jpg
+docs/dev-notes/**/*.jpeg
+docs/dev-notes/**/*.gif
+docs/dev-notes/**/*.mp4
+docs/dev-notes/**/*.webm
+docs/dev-notes/**/*.mov
+!docs/dev-notes/refs/**
+docs/dev-notes/refs/**/*.glb
 # Local manual gameplay captures (never assets or cross-session agent memory).
 telemetry/
 
