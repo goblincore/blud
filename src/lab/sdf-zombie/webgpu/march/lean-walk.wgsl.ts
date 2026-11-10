@@ -12,6 +12,7 @@
 //
 // NOT re-exported by the barrel (march.wgsl.ts): the golden snapshot hashes the barrel's export NAMES, so the text is
 // spliced into map-body.wgsl.ts / trace.wgsl.ts under the flag instead.
+import { TILE_REF as TR } from './tile-ref-flag';
 import { MAX_CROWD_INSTANCES, REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_HEAD_WCOUNT, REC_SPLIT_N, REC_VEC4S, REC_VOL_POSE0, REC_WIND_ALIVE } from '../crowd-records';
 
 export const MAP_LEAN = /* wgsl */ `fn mapLean(pIn: vec3<f32>, data: texture_2d<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
@@ -27,10 +28,16 @@ export const MAP_LEAN = /* wgsl */ `fn mapLean(pIn: vec3<f32>, data: texture_2d<
   var carvedU = 0.0;
   var splitFU = 1e9;
   let base = i32(instCfg.z);
-  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
+${TR ? `  var tRun = 0;
+` : ''}  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
     if (k >= gPixN) { break; }
-    let s = gPixSlot[k];
-    // THREE record reads a slot, not loadInstance's twenty-two: what the fold and the carves read.
+${TR ? `    // THE TILE REFERENCE LIST (tile-ref-flag.ts): this slot's run of the pixel's list, as mapBody finds it.
+    let rFirst = tRun;
+    let rEnd = tileRunEnd(rFirst);
+    tRun = rEnd;
+    let s = i32(gTileRef[rFirst] >> 8u);
+` : `    let s = gPixSlot[k];
+`}    // THREE record reads a slot, not loadInstance's twenty-two: what the fold and the carves read.
     let rb = (base + s) * ${REC_VEC4S};
     let wa = (*inst)[rb + ${REC_WIND_ALIVE}];
     if (wa.w < 0.5) { continue; }
@@ -48,10 +55,13 @@ export const MAP_LEAN = /* wgsl */ `fn mapLean(pIn: vec3<f32>, data: texture_2d<
     gFoldBestDistort = 1.0;
     // UPPER-BOUND CULL, mapBody's expression for a closed slot (piece 0, no limb mode).
     gCullRef = select(1e9, gCullUB, base + s == gCullSlot && gCullPiece == 0);
-    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
+${TR ? `    for (var e = rFirst; e < rEnd; e = e + 1) {
+      d = foldGroup(d, pIn, data, counts, band, tileBounds(data, e, band), tileRange(data, e, band));
+    }
+` : `    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
       d = foldGroup(d, pIn, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
-    gCullRef = 1e9;
+`}    gCullRef = 1e9;
     let carved = applyCarves(d, pIn, data, counts, band);
     if (carved < dUnion) {
       dUnion = carved;
@@ -90,10 +100,14 @@ export const LEAN_TEST_BLOCK = /* wgsl */ `  // LEAN WALK (lean-walk-flag.ts). O
   var leanOk = gTileActive > 0.5 && debugCfg.x > -0.5 && !(gWoundListOn > 0.5 && gWoundN > 0);
   if (leanOk) {
     let leanBase = i32(instCfg.z);
-    for (var lk = 0; lk < ${MAX_CROWD_INSTANCES}; lk = lk + 1) {
+${TR ? `    var lRun = 0;
+` : ''}    for (var lk = 0; lk < ${MAX_CROWD_INSTANCES}; lk = lk + 1) {
       if (lk >= gPixN) { break; }
-      let lrb = (leanBase + gPixSlot[lk]) * ${REC_VEC4S};
-      // A dead slot folds in neither function.
+${TR ? `      let lFirst = lRun;
+      lRun = tileRunEnd(lFirst);
+      let lrb = (leanBase + i32(gTileRef[lFirst] >> 8u)) * ${REC_VEC4S};
+` : `      let lrb = (leanBase + gPixSlot[lk]) * ${REC_VEC4S};
+`}      // A dead slot folds in neither function.
       if ((*inst)[lrb + ${REC_WIND_ALIVE}].w < 0.5) { continue; }
       let lc2 = (*inst)[lrb + ${REC_COUNTS2}];
       let lsn = (*inst)[lrb + ${REC_SPLIT_N}].xyz;

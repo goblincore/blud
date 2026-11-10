@@ -28,6 +28,7 @@
 // group exactly as pack.ts stored it; binning never recomputes or drops it.
 
 import * as THREE from 'three/webgpu';
+import { TILE_REF, TILE_REF_GROUPS } from './march/tile-ref-flag';
 
 /** Tile edge in pixels at SDF-pass resolution. */
 export const TILE_SIZE_PX = 16;
@@ -85,6 +86,19 @@ export interface TileGroupInput {
    *  (center + cullOffset, radius - |cullOffset|): the largest sphere about that centre inside this one
    *  (tile-preload.wgsl.ts). Absent = no offset: the sphere above, as for every body without a split. */
   cullOffset?: [number, number, number];
+  /** The group's index in its body's data rows (the column of ROW_GROUP_BOUNDS / ROW_GROUP_RANGE it was packed
+   *  from). Read only under `?tileref` (march/tile-ref-flag.ts), where the march keeps a reference to the group
+   *  and not a copy of it. Absent = 0. */
+  groupIndex?: number;
+}
+
+/** What an entry's meta lane carries in x: the body index, and under `?tileref` the group's index in that body
+ *  as a fraction beside it (index / TILE_REF_GROUPS, exact in float32). The one packer both binners use. */
+export function tileMetaX(g: TileGroupInput): number {
+  if (!TILE_REF) return g.bodyIndex;
+  const gi = g.groupIndex ?? 0;
+  if (!(gi >= 0 && gi < TILE_REF_GROUPS)) throw new Error(`tile reference: group index ${gi} does not fit ${TILE_REF_GROUPS}`);
+  return g.bodyIndex + gi / TILE_REF_GROUPS;
 }
 
 /** What a bound that carries a cullOffset is padded by (m): the march rebuilds the cull sphere in float32 as
@@ -327,7 +341,7 @@ export class TileBinner {
           this.entries[e + 6] = g.distort;
           this.entries[e + 7] = g.flags;
           // Texel C: meta, bodyIndex in x (merged pass row band); yzw the per-step cull sphere's offset (0 = none).
-          this.entries[e + 8] = g.bodyIndex;
+          this.entries[e + 8] = tileMetaX(g);
           this.entries[e + 9] = g.cullOffset?.[0] ?? 0;
           this.entries[e + 10] = g.cullOffset?.[1] ?? 0;
           this.entries[e + 11] = g.cullOffset?.[2] ?? 0;
@@ -364,7 +378,7 @@ export class TileBinner {
         const o = (base + i) * TILE_STRIDE * 4;
         const off: [number, number, number] = [this.entries[o + 9]!, this.entries[o + 10]!, this.entries[o + 11]!];
         return {
-          bodyIndex: this.entries[o + 8]!,
+          bodyIndex: Math.floor(this.entries[o + 8]!),
           start: this.entries[o + 4]!,
           count: this.entries[o + 5]!,
           distort: this.entries[o + 6]!,

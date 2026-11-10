@@ -1,0 +1,282 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "frozen=1",
+    "variant": "",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?frozen=1 xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "frozen=1",
+    "variant": "",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?frozen=1 xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/tileref/crowd-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "crowd",
+    "query": "frozen=1&tileref",
+    "variant": "",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "crowd ?frozen=1&tileref xb1",
+   "manifest": "manifest.json"
+  }
+ ],
+ "baseMedianMs": 15.5,
+ "table": [
+  {
+   "leg": "off",
+   "label": "crowd ?frozen=1 xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "medianMs": 15.5,
+   "lo": 13.610000002384187,
+   "hi": 19.440000009536742
+  },
+  {
+   "leg": "off2",
+   "label": "crowd ?frozen=1 xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "medianMs": 14.2,
+   "lo": 13.860000002384187,
+   "hi": 17.059999990463258,
+   "diffMedianMs": -0.36999999880790657,
+   "diffMinMs": -5.350000011920928,
+   "diffMaxMs": 1.299999999999999,
+   "diffMedianPct": -2.387096766502623,
+   "diffMinPct": -34.516129109167274,
+   "diffMaxPct": 8.387096774193541
+  },
+  {
+   "leg": "on",
+   "label": "crowd ?frozen=1&tileref xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/crowd-xb1-on",
+   "medianMs": 10.740000003576277,
+   "lo": 10.45,
+   "hi": 14.439999997615814,
+   "diffMedianMs": -3.8500000000000005,
+   "diffMinMs": -8.040000009536742,
+   "diffMaxMs": -1.8500000000000014,
+   "diffMedianPct": -24.83870967741936,
+   "diffMinPct": -51.870967803462854,
+   "diffMaxPct": -11.93548387096775
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "off": 16.939999997615814,
+    "off2": 17.059999990463258,
+    "on": 10.82000000476837
+   },
+   "minMs": {
+    "off": 15.730000007152558,
+    "off2": 13.610000002384187,
+    "on": 10.3
+   },
+   "diff": {
+    "off2": 0.11999999284744334,
+    "on": -6.119999992847443
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "off"
+   ],
+   "ms": {
+    "off2": 14.089999997615815,
+    "on": 11.4,
+    "off": 19.440000009536742
+   },
+   "minMs": {
+    "off2": 13.529999995231629,
+    "on": 10.539999997615814,
+    "off": 15.869999992847443
+   },
+   "diff": {
+    "off2": -5.350000011920928,
+    "on": -8.040000009536742
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 14.439999997615814,
+    "off": 16.289999997615816,
+    "off2": 14.189999997615814
+   },
+   "minMs": {
+    "on": 13.329999995231628,
+    "off": 15.8,
+    "off2": 13.779999995231629
+   },
+   "diff": {
+    "off2": -2.1000000000000014,
+    "on": -1.8500000000000014
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "off": 14.710000002384186,
+    "off2": 14.210000002384186,
+    "on": 10.45
+   },
+   "minMs": {
+    "off": 13.92999999523163,
+    "off2": 13.629999995231628,
+    "on": 10.269999992847442
+   },
+   "diff": {
+    "off2": -0.5,
+    "on": -4.260000002384187
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "off2",
+    "on",
+    "off"
+   ],
+   "ms": {
+    "off2": 14.910000002384185,
+    "on": 10.460000002384186,
+    "off": 13.610000002384187
+   },
+   "minMs": {
+    "off2": 13.9,
+    "on": 10.220000004768371,
+    "off": 13.420000004768372
+   },
+   "diff": {
+    "off2": 1.299999999999999,
+    "on": -3.1500000000000004
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "on",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 10.660000002384185,
+    "off": 14.1,
+    "off2": 13.860000002384187
+   },
+   "minMs": {
+    "on": 10.239999997615815,
+    "off": 13.45,
+    "off2": 13.4
+   },
+   "diff": {
+    "off2": -0.23999999761581314,
+    "on": -3.439999997615814
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "warmS": 0.784,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/tileref/crowd-xb1-off",
+   "warmS": 0.538,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/tileref/crowd-xb1-on",
+   "warmS": 0.592,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  }
+ }
+}

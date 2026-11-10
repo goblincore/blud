@@ -8,8 +8,9 @@ import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
 import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
+import { TILE_REF as TR } from '../tile-ref-flag';
 import { ablWgsl } from '../../split-ablate';
-import { ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
+import { ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
 // still bends the surface from 4x the authored blendK away. Using the unscaled
@@ -250,10 +251,12 @@ var<private> gTileN: f32 = 0.0;
 // sphere"; MARCH_TRACE_SETUP discards that fragment before stepping. Only read
 // when instCfg.y > 1 (quad mode) — the box path never touches it.
 var<private> gTileEntryT: f32 = 1e9;
-var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
+${TR ? `// THE TILE REFERENCE LIST (tile-ref-flag.ts): one u32 a kept entry, (slot << 8) | the group's index in its body.
+var<private> gTileRef: array<u32, ${TILE_MAX_ENTRIES}>;
+` : `var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
-// PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel at
+`}// PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel at
 // the march entry (see MARCH_BODY) and folded by APPLY_WOUNDS every step
 // through the gWoundListOn gate. Private vars are per-invocation and start
 // at their INITIALISERS (never at a previous fragment's value), so the
@@ -283,17 +286,17 @@ var<private> gHitSplitF: f32 = 0.0;
 // instance on exit. -1 = unpinned (the march loop, where the winner is what
 // matters). A one-slot pixel never reloads: gSlot already equals the slot.
 var<private> gPinSlot: i32 = -1;
-var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
-// Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
+${TR ? '' : `var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
+`}// Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
 // entry list: distinct slots present in this pixel's tile and each slot's
 // entry range. The per-step loop walks gPixN slots, not MAX_CROWD_INSTANCES,
 // and each slot folds only its own contiguous entry run — the old per-step
 // slot-membership scan over the full entry list is gone.
 var<private> gPixN: i32 = 0;
-var<private> gPixSlot: array<i32, ${TILE_MAX_ENTRIES}>;
+${TR ? '' : `var<private> gPixSlot: array<i32, ${TILE_MAX_ENTRIES}>;
 var<private> gPixFirst: array<i32, ${TILE_MAX_ENTRIES}>;
 var<private> gPixEnd: array<i32, ${TILE_MAX_ENTRIES}>;
-var<private> gInstCounts: vec4<f32> = vec4<f32>(0.0);
+`}var<private> gInstCounts: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstCounts2: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstWoundBound: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1e9);
 var<private> gInstAnchor: vec3<f32> = vec3<f32>(0.0);
@@ -363,7 +366,24 @@ var<private> gBurnOut: vec4<f32> = vec4<f32>(0.0);
 // past bound + 4k cannot reach the final fold, which is <= the bound. 1e9 =
 // off; mapBody sets it per slot and resets it before the owner re-fold,
 // whose limb-only field the whole-body bound does not bound.
-var<private> gCullRef: f32 = 1e9;`;
+var<private> gCullRef: f32 = 1e9;${TR ? `
+// THE TILE REFERENCE LIST's readers (tile-ref-flag.ts). A kept entry's group bound and range, from its body's data
+// rows; and where the slot run that starts at entry e ends (entries are sorted by slot).
+fn tileBounds(data: texture_2d<f32>, e: i32, band: i32) -> vec4<f32> {
+  return textureLoad(data, vec2<i32>(i32(gTileRef[e] & 255u), ${ROW_GROUP_BOUNDS} + band), 0);
+}
+fn tileRange(data: texture_2d<f32>, e: i32, band: i32) -> vec4<f32> {
+  return textureLoad(data, vec2<i32>(i32(gTileRef[e] & 255u), ${ROW_GROUP_RANGE} + band), 0);
+}
+fn tileRunEnd(first: i32) -> i32 {
+  let s = gTileRef[first] >> 8u;
+  var e = first + 1;
+  for (var q = 0; q < ${TILE_MAX_ENTRIES}; q = q + 1) {
+    if (f32(e) >= gTileN || (gTileRef[e] >> 8u) != s) { break; }
+    e = e + 1;
+  }
+  return e;
+}` : ''}`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the
