@@ -20,6 +20,7 @@ for s in $SCENES; do
     closeup) SPIKE_SCENE=closeup SPIKE_PRELUDE="$(cat "$NOTE/prelude-closeup.js")" cap closeup ;;
     crowd) SPIKE_SCENE=crowd SPIKE_CROWD=12 SPIKE_PRELUDE='__sdfGame.setHullExitBound(true); __sdfGame.step(4);' cap crowd ;;
     mob) SPIKE_SCENE=asis SPIKE_PRELUDE="$(cat "$NOTE/prelude-mob.js")" cap mob ;;
+    mobw) SPIKE_SCENE=asis SPIKE_PRELUDE="$(cat "$NOTE/prelude-mob-wounded.js")" cap mobw ;;
     *) echo "compute-capture: unknown scene $s" >&2; exit 2 ;;
   esac
 done

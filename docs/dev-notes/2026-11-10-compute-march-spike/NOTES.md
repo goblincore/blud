@@ -136,6 +136,18 @@ Run 2 of the three shipped frames, a few minutes later, reads the same: `port` �
 - Here skipping empty tiles is worth about 4 ms on the mob, because every invocation of an empty tile still paid
   for the arrays. With the reference list the same skip is worth 0 to 0.2 ms.
 
+**A wounded mob** (added the same day; `prelude-mob-wounded.js`, scene `mobw`: the same 22 bodies with a 9 × 5 fan
+of pellet and slug shots from the eye, each stamped on the nearest body it hits)
+
+| Frame | `frag` | `list` (16 × 16) | `list8` (8 × 8) | A/A |
+| --- | --- | --- | --- | --- |
+| Wounded mob, shipped | 61.09 | 44.98, −26.0 % (−29.7 to −23.9) | 40.45, −33.9 % (−37.1 to −31.4) | −1.7 % (−15.1 to +4.4) |
+
+- The gain holds on the heavier path: the same percentages as the clean mob, on a pass that is 23 ms dearer.
+- The machine was noisier for this run (see the A/A range); the sign held in every repeat.
+- The staging asserts at least 12 wounds on at least 5 bodies; the exact count was not recorded.
+- Its comparison: 83 texels over 1e-4, largest difference 1.2e-3, no pixel over 0.02, no hit/miss change.
+
 ## The comparison
 
 Every compute leg of a frame gives the same numbers, whatever its list handling or workgroup size, so the
@@ -187,8 +199,10 @@ No compile or validation error stopped any leg. Each new compute text took 25 to
 
 - **The live game.** Every number is a replayed pass: the game's frame time, the three.js node path (the march is a
   node material there), and whatever reads the march's depth attachment after the pass were not looked at.
-- **Wounded bodies, an open head split, any body but the zombie.** All three frames are clean zombies, so the walk
-  is the lean walk throughout.
+- **An open head split, any body but the zombie, a wounded close-up.** The three main frames are clean zombies, so
+  the walk is the lean walk throughout; one wounded mob was timed afterwards (above).
+- **three r187.** Everything ran on three r186: the worktree links the primary checkout's `node_modules`, which
+  holds 0.186.0 while `package.json` asks for `^0.187.0`.
 - **Why it is faster**, and why 4 × 4 is slower. Metal's execution width cannot be read through WebGPU and no
   counter was taken.
 - **The cause of the float differences**, and a look at the two pictures side by side by a person.
@@ -235,6 +249,7 @@ them locally and are not committed (`*.log` is ignored):
 | `sizes-*` | `frag,frag2,list,list8,list4,mask8` on five frames |
 | `shapes-*` | `frag,frag2,list8,list8x4,list4x8,list16x2,list16x4` on the three shipped frames |
 | `arrays-*` | The `?tileref=0` captures, `frag,frag2,port,list` |
+| `wounded-mob-ship.json` | The wounded mob, `frag,frag2,list,list8` |
 | `sweep-small-workgroups-mob-ship.txt` | The one repeat that holds 2 × 2 and 1 × 1, stopped by hand |
 
 `prelude-closeup.js` and `prelude-mob.js` beside this note stage the close-up and the mob.

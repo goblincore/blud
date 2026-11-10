@@ -66,7 +66,8 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     workgroup's size, not the shared list (skipping empty tiles, a workgroup copy of the list and a per-pixel mask add
     0 to 2 points), and it needs the reference list (on the old arrays the port is no faster on the close-up). Not
     to the bit: 48 to 143 texels of 120,000 over 1e-4 on shipped frames, no hit/miss change. Not built in the game;
-    why it is faster is not established. Driver: `scripts/native-spike/compute-march.mjs`.
+    why it is faster is not established. A wounded 22-body mob holds the same gain (61.1 ms to 45.0, and 40.5 in
+    8 × 8). All on three r186. Driver: `scripts/native-spike/compute-march.mjs`.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
