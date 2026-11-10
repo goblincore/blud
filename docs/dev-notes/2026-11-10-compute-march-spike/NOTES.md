@@ -225,7 +225,8 @@ rm -rf /tmp/blud-gpu-timing.lock
 
 ## Raw results
 
-`results/`, one `.json` (every repeat, the comparison, the tile counts) and one `.log` a run:
+`results/`, one `.json` a run (every repeat, the comparison, the tile counts). The runs' console logs sit beside
+them locally and are not committed (`*.log` is ignored):
 
 | Files | Run |
 | --- | --- |
@@ -234,6 +235,6 @@ rm -rf /tmp/blud-gpu-timing.lock
 | `sizes-*` | `frag,frag2,list,list8,list4,mask8` on five frames |
 | `shapes-*` | `frag,frag2,list8,list8x4,list4x8,list16x2,list16x4` on the three shipped frames |
 | `arrays-*` | The `?tileref=0` captures, `frag,frag2,port,list` |
-| `sweep-small-workgroups-mob-ship.log` | The one repeat that holds 2 × 2 and 1 × 1, stopped by hand |
+| `sweep-small-workgroups-mob-ship.txt` | The one repeat that holds 2 × 2 and 1 × 1, stopped by hand |
 
 `prelude-closeup.js` and `prelude-mob.js` beside this note stage the close-up and the mob.
