@@ -36,6 +36,7 @@ const DEFAULTS = {
   query: process.env.CENSUS_QUERY ?? 'pipelinelog=1&seed=20260919', // CENSUS_QUERY: e.g. append &limbs for a variant
   bootTimeoutMs: 240000, // plan: wait for ready OR a 240 s timeout, record which
 };
+const BG_WAIT_S = Number(process.env.CENSUS_BG_WAIT_S ?? 0);
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LAB_TMP = resolve('.lab-tmp');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -335,6 +336,20 @@ async function bootOnce(index) {
     result.warm = await evaluate('window.__warmDone ? JSON.parse(JSON.stringify(window.__warmDone)) : null').catch(() => null);
     result.bootMarks = await evaluate('window.__sdfGame.bootMarks()').catch(() => null);
     result.gpuDiagnostics = await evaluate('window.__sdfGame.gpuDiagnostics()').catch(() => null);
+    // CENSUS_BG_WAIT_S=<s> (2026-11-09, the lean walk's cold cost): also wait for the BACKGROUND compiles, the crowd
+    // program above all (the quad tile march, built after the loader lets go), and record when it was ready,
+    // measured from navigation. Off by default: the boot census stops at the loader gate as before.
+    if (BG_WAIT_S > 0) {
+      let bg = null;
+      const bgDeadline = Date.now() + BG_WAIT_S * 1000;
+      while (Date.now() < bgDeadline) {
+        bg = await evaluate('JSON.stringify(window.__sdfGame.warmBackground())').then((v) => JSON.parse(v)).catch(() => null);
+        if (bg && (bg.crowd === 'ready' || bg.crowd === 'failed')) break;
+        await sleep(500);
+      }
+      result.background = { state: bg, msFromNav: Date.now() - tNav, timedOut: !(bg && (bg.crowd === 'ready' || bg.crowd === 'failed')) };
+      result.bootMarks = await evaluate('window.__sdfGame.bootMarks()').catch(() => result.bootMarks);
+    }
     const json = await evaluate('JSON.stringify(window.__sdfGame.pipelineCensus())', 60000);
     result.census = json ? JSON.parse(json) : null;
     if (SOURCES > 0 && result.census) {

@@ -44,14 +44,31 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   steps, no time, not sound for a limb that moves in front of another surface. Closed.
 - [ ] The temporal start no longer pays: off, a still frame (its best case) is 2 to 7 % faster and 500 to 800
   pixels shift slightly. `?tstart=0` exists; needs a look in motion before any default change.
-- [x] **The clean-body fast path is built** on `claude/march-lean-walk-40ed5e` (`?leanwalk`, off): the same
-  picture to the bit, −15 % of the march pass on a clean close-up and a 12-body crowd, +2 % on a wounded close-up,
-  +3 to 6 s of cold compile. Not merged; the owner's call.
-- [ ] **Next: the clean-body fast path in the real shader** (`mapLean` beside `mapBody`, chosen per pixel when every
-  slot in the tile is clean; the clean `march-hash` pins should not move). Then per sample for wounded bodies
-  (outside the wound bound a sample is `mapLean`'s exactly). Owner's go-ahead pending.
-- [ ] Not measured: a wounded frame, a crowd frame, other bodies, the live game, the cold compile of the extra call
-  sites, and why untaken code costs.
+- [x] **The clean-body fast path (the lean walk) is on by default, walk only** (owner's call 2026-11-09;
+  [notes](../dev-notes/2026-11-09-march-lean-walk/NOTES.md),
+  [spec](../superpowers/specs/2026-11-09-march-lean-walk-design.md)). `mapLean` beside `mapBody`, chosen once per
+  pixel when every body in the pixel's tile is clean; the walk calls it. `?leanwalk=0` is the march without it,
+  `?leanwalk` moves the temporal start's probe too, `__sdfGame.setLeanWalk(on)` is the runtime A/B, debug mode 23 the
+  census. The march golden snapshot was re-recorded for it (seven entries; the `?leanwalk=0` text is held to the old
+  values by a second snapshot).
+  - Same picture to the bit: `march-hash` in its three modes, clean and wounded, default page against `?leanwalk=0`
+    against the base commit; a 12-body frame with one wounded body (62 % of its pixels on the fast path), hull exit
+    bound off and on.
+  - The `sdf:march` pass on the default boot (exit bound on), paired differences over 6 repeats against
+    `?leanwalk=0` on the same frame: clean close-up 16.9 ms, −2.44 ms (−14.5 %); 12-zombie crowd 16.8 ms, −2.55 ms
+    (−15.2 %); **wounded close-up 21.9 ms, +0.43 ms (+1.9 %)**. With the exit bound off the close-up read −19 % (the
+    ladder's frame; its captures had the bound off).
+  - Cold compile of the program the loader waits for: 42.0 s → 44.9 s (the default). With the probe too
+    (`?leanwalk`): 46.8 to 48.0 s, for −16.1 % on the close-up and no more on the crowd.
+  - Measured on three r186: this worktree links the primary checkout's `node_modules`, which is behind
+    `package.json`'s r187.
+- [ ] **`march-hash` pins are stale** (Chrome 154 → 157; base `3f0c65eb` gives `07f628a3…` / `e0a128e7…` /
+  `565aaad4…`). Not re-pinned, not bisected. `MARCH_HASH_NOPIN=1` reports and carries on.
+- [x] **Per sample on wounded bodies: measured, and it skips nothing up close** (WOUNDS.md). Outside a body's
+  wound bound a sample is `mapLean`'s exactly (bit-identical on 5- and 20-wound frames), but the bound is one
+  sphere round all the wounds and at close range every walk sample is inside it.
+- [ ] Not measured: the live game's frame, other bodies (cloth, kits, the bare-bones bypass), the capture gates with
+  the flag on, why the flag-on program costs 2 % on the `mapBody` path, and why untaken code costs.
 
 ## three r187 — 2026-10-30
 
