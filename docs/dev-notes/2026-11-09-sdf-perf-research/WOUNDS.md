@@ -87,6 +87,10 @@ Each removal draws a wrong picture; these are ceilings. Paired differences on th
   the changed one, the difference times 8). The skin's fine mottling shifts over the whole wounded
   area: the analytic normal and the taps carry the surface detail differently. Clean bodies already
   use the analytic one, so today a body's skin detail changes when it takes its first wound.
+  **Correction, 2026-11-10:** on a clean zombie the two normals differ on only 2 % of pixels (mean
+  0.004), so that last change is not visible there. On the soldier it was large, and the cause was
+  its skin detail layer, since turned off:
+  [the soldier note](../2026-11-10-soldier-skin-detail/NOTES.md).
 - Chops and the split get nothing from those two: a cut always takes the taps, and its reach is a
   sphere round the whole slot (at least twice its half-length), so one torso chop covers the torso.
 

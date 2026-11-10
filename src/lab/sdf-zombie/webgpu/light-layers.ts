@@ -53,8 +53,8 @@ export const LIGHT_LAYERS: readonly LightLayer[] = [
   { key: 'sCurve', label: 'final S-curve',
     help: 'The gentle 0.25 contrast curve at the final blit (pivot 0.18).',
     since: '80946978, 3a49f1eb' },
-  { key: 'skinDetail', label: 'skin detail (soldier)',
-    help: 'Detail-preserving highlight compression, k 1 on the soldier.',
+  { key: 'skinDetail', label: 'skin detail (no body uses it)',
+    help: 'Detail-preserving highlight compression. Off for every character since 2026-11-10 (soldier: grey mottling); ?skinDetail=k forces it on all bodies.',
     since: '032f3878, 8aeb57a7' },
 ];
 
