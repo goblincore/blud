@@ -1,6 +1,12 @@
-# The clean-body fast path for the march's walk (`?leanwalk`), 2026-11-09
+# The clean-body fast path for the march's walk (the lean walk), 2026-11-09
 
-Built behind a compile-time flag, default off. Spec:
+**On by default since the evening of 2026-11-09, in the walk-only form (owner's call: "i think we can
+turn it on").** `?leanwalk=0` is the march without it; `?leanwalk` moves the temporal probe too. The
+sections from "What was built" to "Cold compile" were written while it was still an opt-in flag and
+read `?leanwalk` as "on (walk and probe)" and `?leanwalk=walk` as what is now the default.
+[The default, re-verified](#the-default-re-verified) is the state as shipped on the branch.
+
+Spec:
 [`2026-11-09-march-lean-walk-design.md`](../../superpowers/specs/2026-11-09-march-lean-walk-design.md);
 plan: [`2026-11-09-march-lean-walk.md`](../../superpowers/plans/2026-11-09-march-lean-walk.md); the
 measurement it follows: [LADDER.md](../2026-11-09-sdf-perf-research/LADDER.md).
@@ -10,7 +16,42 @@ measurement it follows: [LADDER.md](../2026-11-09-sdf-perf-research/LADDER.md).
 crowd, both about −2.3 to −2.5 ms). It costs: about 2 % more on a wounded close-up (+0.3 to
 +0.4 ms), and 3 to 5 s more cold compile on the program the loader waits for (42 s today).
 `?leanwalk=walk` (the walk only, the temporal probe left on `mapBody`) keeps nearly all of the gain
-for the smaller compile cost. Nothing is on by default; no pin was changed.
+for the smaller compile cost. No pin was changed.
+
+**Everything here ran on three r186.** `package.json` asks for `^0.187.0`; the primary checkout's
+`node_modules`, which this worktree links, holds 0.186.0. Base and branch were compared on the same
+install, so the differences stand; the absolute cold-compile times may not carry to r187, and it is a
+second reason (with Chrome 154 → 157) the `march-hash` pins may not reproduce.
+
+## The default, re-verified
+
+After the flip (`0f6f0db1`): no parameter is the walk-only form.
+
+- **The golden snapshot was re-recorded on purpose.** `MAP_BODY`, `MARCH_TRACE_SETUP`,
+  `MARCH_TRACE_LOOP`, `MARCH_BODY`, `MARCH_BODY_TRACE`, `REFINE_BODY` and the joined helpers moved;
+  the other 100 entries did not. A second snapshot holds the `?leanwalk=0` text to the 107 values
+  the first one had before.
+- **`march-hash`, three modes, clean and wounded:** the default page and `?leanwalk=0` give the base
+  commit's six hashes ([`default-march-hash.txt`](default-march-hash.txt)). Pins untouched.
+- **The 12-body frame**, `?leanwalk=0` against the default page, exit bound on and off: 0 texels
+  differ in every pair; 62 % of its pixels lean; 0 lean pixels with the switch held
+  ([`default-parity.txt`](default-parity.txt)).
+- **One timing rotation on the default boot** (exit bound on, 6 repeats, paired differences against
+  the march without the lean walk on the same frame; `ab-default-*.json`):
+
+| Frame | `?leanwalk=0` | The default (walk only) | `?leanwalk` (walk and probe) | Default, switch held | A/A |
+| --- | --- | --- | --- | --- | --- |
+| Clean close-up (377,202 steps, 100 % lean) | 16.87 ms | −2.44 (−2.54 to −2.31), −14.5 % | −2.72 (−2.78 to −2.66), −16.1 % | +0.39 (+0.34 to +0.55) | +0.01 (−0.03 to +0.08) |
+| Crowd, 12 zombies (64,489 steps, 100 % lean) | 16.76 ms | −2.55 (−2.98 to −2.27), −15.2 % | −2.30 (−2.79 to −2.09), −13.7 % | +0.11 (+0.03 to +1.10) | +0.02 (−3.45 to +1.06) |
+| **Wounded close-up** (400,045 steps, 0 % lean) | 21.92 ms | **+0.43 (+0.39 to +0.60), +1.9 %** | +0.50 (+0.03 to +0.81), +2.3 % | +0.50 (+0.32 to +0.99) | −0.09 (−0.40 to +0.07) |
+
+- **The wounded close-up still pays about 2 % with the walk-only default**: +0.4 ms or more in every
+  repeat, where the A/A control stays within −0.4 to +0.1. Leaving the probe on `mapBody` did not
+  remove it. It is the cost of the walk's call sitting in a branch, and it is on every frame whose
+  pixels cannot take the fast path.
+- The crowd's first three repeats were disturbed (its A/A read −3.45 in one of them); the last
+  three read 15.5 ms against 13.1 to 13.2 ms. A first close-up rotation staged a different frame
+  (38 % cover) on a busy machine and was retaken; the table has the retake.
 
 ## What was built
 
@@ -135,6 +176,9 @@ new in the census: `CENSUS_BG_WAIT_S`.)
 
 ## Seen on the way (not fixed)
 
+- `ladder.mjs`'s rungs edit the march's text as it was without the lean walk. Its captures now need
+  `SPIKE_QUERY=leanwalk=0` (its header and its error say so).
+
 - `__sdfGame.setHullExitBound` writes the actors that exist. A body spawned later gets the shipped
   default (on), so `applyShipDefaults`' "off" does not hold for a crowd spawned after it: the crowd
   frames here had the bound on at both settings (steps differed by under 1 %).
@@ -153,21 +197,21 @@ new in the census: `CENSUS_BG_WAIT_S`.)
 until mkdir /tmp/blud-gpu-timing.lock 2>/dev/null; do sleep 10; done
 export LAB_TMP=.lab-tmp LAB_VITE_PORT=5377 LAB_CDP_PORT=9377
 
-# bit identity: a mode's hashes with the flag off and on (pins reported, not asserted)
+# bit identity: a mode's hashes on the default page and without the lean walk (pins reported, not asserted)
 scripts/native-spike/servers.sh env MARCH_HASH_NOPIN=1 node scripts/march-hash.mjs
-scripts/native-spike/servers.sh env MARCH_HASH_NOPIN=1 MARCH_HASH_FLAGS=leanwalk node scripts/march-hash.mjs
-# the multi-body frame (LEAN_PARITY_AA=1 first: two flag-off boots must agree)
+scripts/native-spike/servers.sh env MARCH_HASH_NOPIN=1 MARCH_HASH_FLAGS=leanwalk=0 node scripts/march-hash.mjs
+# the multi-body frame: ?leanwalk=0 against the default page (LEAN_PARITY_AA=1 first: two off boots must agree)
 scripts/native-spike/servers.sh env LEAN_PARITY_EXITBOUND=1 node scripts/lean-walk-parity.mjs
 
 # time: captures, then alternation (the commands for every scene are in lean-ab.mjs's header)
 D=.scratch/lean/crowd-xb1
 scripts/native-spike/servers.sh node scripts/native-spike/lean-ab.mjs 6 \
-  off=$D-on@$D-off off2=$D-on@$D-off on=$D-on held=$D-held walk=$D-on@$D-walk-on
+  off=$D-on@$D-off off2=$D-on@$D-off on=$D-on held=$D-held probe=$D-on@$D-probe-on
 node scripts/native-spike/lean-census.mjs $D-census
 
 rm -rf /tmp/blud-gpu-timing.lock
 ```
 
 Do not edit anything under `src/` while a run is up: vite reloads the page under the script.
-In the game: `/sdf-game.html?leanwalk` (or `?leanwalk=walk`), then `__sdfGame.setLeanWalk(false)` /
-`(true)` and `__sdfGame.setMarchDebugMode(23)` for the census.
+In the game: `__sdfGame.setLeanWalk(false)` / `(true)` on any page but `?leanwalk=0`, and
+`__sdfGame.setMarchDebugMode(23)` for the census (`-23` with the switch held).

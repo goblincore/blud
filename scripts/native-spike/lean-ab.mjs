@@ -112,18 +112,20 @@ for (const leg of LEGS) {
   const theirs = marchModules(JSON.parse(readFileSync(join(leg.shaderFrom, 'manifest.json'), 'utf8'))).map((o) => o.desc.code);
   const mine = marchModules(manifest);
   if (mine.length === 0 || mine.length !== theirs.length) throw new Error(`lean-ab: ${leg.name}: ${leg.dir} has ${mine.length} march programs, ${leg.shaderFrom} has ${theirs.length}`);
-  // A crowd frame draws several march programs (one per crowd type and material variant): each takes its nearest
-  // counterpart, which must be that near and must be taken once.
-  const taken = new Set();
+  // A crowd frame draws several march programs (one per crowd type and material variant; two variants differ by 16
+  // to 20 lines, the lean walk's forms by 2 to 60). Pair them nearest first over the whole table, each taken once.
+  // The warm run's parity against the game's own readback is the check that every pairing drew the frame.
+  const pairs = [];
+  mine.forEach((mod, i) => theirs.forEach((code, j) => pairs.push({ i, j, d: textDistance(mod.desc.code, code) })));
+  pairs.sort((x, y) => x.d - y.d);
+  const usedI = new Set(), usedJ = new Set();
   leg.swapped = [];
-  for (const mod of mine) {
-    let best = -1, bestD = Infinity;
-    theirs.forEach((code, i) => { const d = textDistance(mod.desc.code, code); if (d < bestD) { bestD = d; best = i; } });
-    if (bestD > 70) throw new Error(`lean-ab: ${leg.name}: a march program of ${leg.dir} has no counterpart in ${leg.shaderFrom} (nearest differs in ${bestD} lines)`);
-    if (taken.has(best)) throw new Error(`lean-ab: ${leg.name}: two march programs of ${leg.dir} map to one of ${leg.shaderFrom}`);
-    taken.add(best);
-    leg.swapped.push({ lines: bestD, bytes: [mod.desc.code.length, theirs[best].length] });
-    mod.desc.code = theirs[best];
+  for (const { i, j, d } of pairs) {
+    if (usedI.has(i) || usedJ.has(j)) continue;
+    if (d > 70) throw new Error(`lean-ab: ${leg.name}: a march program of ${leg.dir} has no counterpart in ${leg.shaderFrom} (nearest free one differs in ${d} lines)`);
+    usedI.add(i); usedJ.add(j);
+    leg.swapped.push({ lines: d, bytes: [mine[i].desc.code.length, theirs[j].length] });
+    mine[i].desc.code = theirs[j];
   }
   leg.manifest = `manifest.${leg.name}.json`;
   writeFileSync(join(leg.dir, leg.manifest), JSON.stringify(manifest));

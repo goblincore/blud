@@ -1,6 +1,8 @@
 # The clean-body fast path for the march's walk (`?leanwalk`)
 
-2026-11-09. Follows the cost ladder
+2026-11-09. **On by default since that evening (owner's call), walk only: no parameter is what this
+spec calls `?leanwalk=walk`, `?leanwalk` is the walk and the probe, `?leanwalk=0` is off.** The text
+below is the design as written, when the flag was an opt-in. Follows the cost ladder
 ([LADDER.md](../../dev-notes/2026-11-09-sdf-perf-research/LADDER.md)): on a clean close-up a field
 call in the walk costs 11 ns through `mapBody` and 3.6 ns through a function that only folds the
 tile list and applies the carves, with the same picture to the bit.
