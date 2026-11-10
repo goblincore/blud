@@ -54,6 +54,11 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   `doom-map28`, 22 bodies drawn, went from 104.6 ms a frame to about 70 at worst). `?tileref=0` is the arrays,
   byte for byte (the golden test holds that text). The lab page's tile-list check now compares the body index and
   not the raw meta lane.
+- [ ] **Next to try (owner, 2026-11-10): the march as a compute pass, one tile a workgroup**
+  ([`NOTES.md` §3 D](../dev-notes/2026-11-09-sdf-perf-research/NOTES.md)). A tile's pixels share one copy of its
+  list; empty tiles are never dispatched. Nothing measured. First step is a spike in the replay harness, timed
+  against the fragment pass on the close-up and crowd captures; no game code. Goal behind it: dense close mobs at
+  30 FPS on an M3 (the playtest mob is at about 70 ms).
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).

@@ -136,6 +136,48 @@ this is the hybrid sparse re-march that was a no-go.
   sweep found.
 - The 48 B/px MRT diet (about 40 % of a far body's march scales with target pixels, per the floor note).
 
+### D. The march as a compute pass, one tile a workgroup (idea, 2026-11-10; owner: try this first)
+
+Nothing here is measured. It is the idea to try before A's later stages and B, on the owner's call: those are
+better understood, this one is not.
+
+**Why it might pay.** The march is a fragment shader, so every pixel carries its own copy of what its tile shares.
+That per-pixel storage turned out to be the largest fixed cost in the pass:
+
+- The first field call of a pixel was about 7 ms of a 9.5 ms clean walk, and the cause was 3.3 KB of private
+  arrays a fragment ([ONE-CALL.md](ONE-CALL.md)).
+- Cutting them to 256 bytes took 51 % off the pass on a clean close-up and 25 % on a 12-body crowd
+  ([TILE-REF.md](TILE-REF.md)), and a dense close mob in the live game from 104.6 ms a frame to about 70.
+- What a pixel still keeps for itself: the reference list (256 bytes), the per-ray wound list, and the preload
+  that reads its tile's entries and culls them against its own ray.
+
+**The idea.** One compute workgroup per screen tile (`TILE_SIZE_PX` = 16, so 256 pixels):
+
+- What the tile shares (its entry list, its slot runs, which bodies are clean) is read once for the tile, not
+  once a pixel. A pixel's own cull could be a 64-bit mask over the tile's list in place of a list of its own.
+- Tiles with an empty list are never dispatched. The crowd quad rasterises fragments that run the setup and
+  discard ([crowd firefight cost](../2026-09-14-crowd-firefight-cost.md) measured 78 to 92 % of them in September,
+  before the tile work; not re-measured).
+- The pass writes storage textures, so the output layout is ours to choose (the 48 B/px MRT of C).
+- Rays can be grouped before the walk (clean against wounded, one body against several), which a fragment
+  shader cannot do.
+
+**What could sink it.**
+
+- No depth test in a compute pass: the depth goes to a texture and a full-screen pass composes it with the
+  polygon scene. Early-Z on the quad was already a dead end, so nothing is lost there.
+- Whether a compute walk is faster than a fragment walk on Apple's GPUs at all. Not known.
+- A second pipeline to compile cold, and three.js's node material path does not give this for free. The release
+  target (Rust + wgpu) has no such problem.
+- The half of the gain that is "less private memory" may already be taken by the reference list.
+
+**First step, no game code.** The replay harness (`scripts/native-spike/replay.html`, `capture.mjs`,
+`lean-ab.mjs`) runs a captured `sdf:march` pass in bare WebGPU over the game's own buffers. Port the walk to a
+compute entry point there, one workgroup a tile, and time it in alternation against the fragment pass on the
+clean close-up and the 12-body crowd captures, with the output compared texel for texel. That says whether the
+idea has a number before any of the integration cost is paid. A denser capture than 12 bodies is worth staging
+too: the mob that prompted this drew 22.
+
 ### Not worth pursuing
 
 Over-relaxation and auto-relaxation (dead here; Claybook lists it as failed), segment tracing (it
