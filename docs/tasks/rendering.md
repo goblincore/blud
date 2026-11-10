@@ -73,6 +73,14 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
     runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
     compile moved into the background warm-up, a look in motion, the paths it does not cover.
+- [x] **Silhouettes from the field (research note §3 B), spiked 2026-11-10: no, as a speed lever**
+  ([`NOTES.md`](../dev-notes/2026-11-10-silhouette-spike/NOTES.md)). Edge rays at output resolution fix the
+  edges (band error 0.40 to 0.06 on a close-up from 400 × 300, 300 × 225 and 200 × 150 alike; 0.24 to 0.11 on a
+  22-body mob at 400 × 300, worse below), but as masked fragment rays at the production walk's cost they are dearer
+  than the lower resolution saves: every combination is slower than the shipped pass (close-up +21 to +54 %, mob +84
+  to +121 %). The edge texels are 7 to 24 % of the frame and hold the costly rays; the inside of surfaces gets 30 to
+  50 % worse at 300 × 225 whatever the edges do. Not tried: the edge rays as a compute pass over a packed list, or a
+  lean kernel. Driver: `scripts/native-spike/silhouette.mjs`.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
