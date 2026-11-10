@@ -59,6 +59,14 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   list; empty tiles are never dispatched. Nothing measured. First step is a spike in the replay harness, timed
   against the fragment pass on the close-up and crowd captures; no game code. Goal behind it: dense close mobs at
   30 FPS on an M3 (the playtest mob is at about 70 ms).
+  - **Spike done, 2026-11-10: faster** ([`NOTES.md`](../dev-notes/2026-11-10-compute-march-spike/NOTES.md)). The
+    replayed `sdf:march` pass as a compute pass from the same shader text: clean close-up 5.1 to 4.2 ms (−17 to
+    −19 %), 12-body crowd 13.6 to 7.8 (−43 to −45 %), a 22-body close mob 37.7 to 27.8 (−26 to −27 %); in 8 × 8
+    workgroups −24 to −26 %, −50 to −55 % and −33 to −35 % (the mob at about 25 ms). The gain is the stage and the
+    workgroup's size, not the shared list (skipping empty tiles, a workgroup copy of the list and a per-pixel mask add
+    0 to 2 points), and it needs the reference list (on the old arrays the port is no faster on the close-up). Not
+    to the bit: 48 to 143 texels of 120,000 over 1e-4 on shipped frames, no hit/miss change. Not built in the game;
+    why it is faster is not established. Driver: `scripts/native-spike/compute-march.mjs`.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
