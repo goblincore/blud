@@ -42,7 +42,7 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   of 64 that hold a copy of the pixel's tile list (3.3 KB a fragment): sized to 16, the shipped pass is 37 to
   40 % faster on a clean close-up and 13 to 16 % on wounded ones with the picture identical, and a 12-body crowd
   pass is 26 % faster at 32 (207 px move) and 53 % at 16 (wrong: its tiles list more).
-- [x] **Built: the tile reference list, `?tileref`, off by default**
+- [x] **Built: the tile reference list** (on by default since 2026-11-10, next item; `?tileref=0` is off)
   ([`TILE-REF.md`](../dev-notes/2026-11-09-sdf-perf-research/TILE-REF.md)). A pixel keeps one `u32` a tile entry
   (slot and the group's index in its body) and the fold reads the group's bound and range from the body's data
   rows; no slot table. 3.3 KB a fragment becomes 256 bytes. Same picture to the bit: `march-hash` in its three
@@ -50,10 +50,18 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   flag on against off (replayed, exit bound on, lean walk on in both): clean close-up 10.6 ms, −5.4 ms (−51 %);
   20 wounds −31 %; chop and split head −40 %; 12-body crowd −25 % (the last three on a busy machine: the sign
   held in every repeat, the sizes are loose).
-- [ ] **Owner's call: turn `?tileref` on.** Before that: the cold compile on a quiet machine (about +1 s on the
-  loader's program in two noisy pairs; the crowd program not resolved), the split head shown exact (a pinned
-  capture found no sign of a difference, and could not prove identity), and the live game's frame time.
-- [ ] Under the flag the lab page's own group inputs carry no group index (`lab-main.ts`): wrong there, not touched.
+- [x] **The tile reference list is on by default** (owner, 2026-11-10, after a playtest: a dense close mob on
+  `doom-map28`, 22 bodies drawn, went from 104.6 ms a frame to about 70 at worst). `?tileref=0` is the arrays,
+  byte for byte (the golden test holds that text). The lab page's tile-list check now compares the body index and
+  not the raw meta lane.
+- [ ] **Next to try (owner, 2026-11-10): the march as a compute pass, one tile a workgroup**
+  ([`NOTES.md` §3 D](../dev-notes/2026-11-09-sdf-perf-research/NOTES.md)). A tile's pixels share one copy of its
+  list; empty tiles are never dispatched. Nothing measured. First step is a spike in the replay harness, timed
+  against the fragment pass on the close-up and crowd captures; no game code. Goal behind it: dense close mobs at
+  30 FPS on an M3 (the playtest mob is at about 70 ms).
+- [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
+  two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
+  of a difference, and could not prove identity).
 - [x] The one-call walk (predict a pixel's hit from last frame, verify with one field call): a third fewer
   steps, no time, not sound for a limb that moves in front of another surface. Closed.
 - [ ] The temporal start no longer pays: off, a still frame (its best case) is 2 to 7 % faster and 500 to 800

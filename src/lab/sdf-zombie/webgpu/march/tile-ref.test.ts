@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/webgpu/march/tile-ref.test.ts
 //
-// The tile reference list (tile-ref-flag.ts). Off, the march's text and the entry records are what they were (the
-// golden snapshot holds the text). With `?tileref` no reader of the per-pixel tile arrays is left, the one array
-// that replaces them is declared, and the packers put the group's index on the meta lane beside the body's.
+// The tile reference list (tile-ref-flag.ts), on by default since 2026-11-10. Off (`?tileref=0`), the march's text
+// and the entry records are what they were (the golden snapshot holds the text). On, no reader of the per-pixel
+// tile arrays is left, the one array that replaces them is declared, and the packers put the group's index on the
+// meta lane beside the body's.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const ARRAYS = ['gTileBounds', 'gTileGrp', 'gTileBand', 'gTileSlot', 'gPixSlot', 'gPixFirst', 'gPixEnd'];
@@ -25,8 +26,17 @@ async function load(search: string) {
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
 describe('the tile reference list', () => {
-  it('is off without the parameter: the arrays are declared and the meta lane is the body index', async () => {
-    const { flag, groups, cull } = await load('');
+  it('is on without the parameter, and for any value but 0', async () => {
+    for (const search of ['', '?level=arena', '?tileref', '?tileref=1']) {
+      const { flag, text, groups } = await load(search);
+      expect(flag.TILE_REF, search).toBe(true);
+      for (const name of ARRAYS) expect(text, search).not.toContain(name);
+      expect(groups.FOLD_GROUP, search).toContain('var<private> gTileRef: array<u32, 64>;');
+    }
+  });
+
+  it('?tileref=0 is off: the arrays are declared and the meta lane is the body index', async () => {
+    const { flag, groups, cull } = await load('?tileref=0');
     expect(flag.TILE_REF).toBe(false);
     for (const name of ARRAYS) expect(groups.FOLD_GROUP).toContain(`var<private> ${name}:`);
     expect(groups.FOLD_GROUP).not.toContain('gTileRef');

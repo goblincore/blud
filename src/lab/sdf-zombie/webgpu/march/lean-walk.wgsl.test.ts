@@ -82,7 +82,9 @@ describe('LEAN_TEST_BLOCK: the same conditions, read from the record layout', ()
   it('walks the slot table with mapBody\'s own bound', () => {
     expect(LEAN_TEST_BLOCK).toContain(`lk < ${MAX_CROWD_INSTANCES};`);
     expect(LEAN_TEST_BLOCK).toContain('if (lk >= gPixN) { break; }');
-    expect(LEAN_TEST_BLOCK).toContain('gPixSlot[lk]');
+    // The slot comes off the tile reference list (tile-ref-flag.ts, on by default), not a slot table.
+    expect(LEAN_TEST_BLOCK).toContain('i32(gTileRef[lFirst] >> 8u)');
+    expect(LEAN_TEST_BLOCK).not.toContain('gPixSlot');
   });
 });
 
@@ -99,8 +101,9 @@ describe('MAP_LEAN: the tile-list fold and the carves, and mapBody\'s exit state
   it('folds the slot\'s tile run through foldGroup, once, then the carves, once', () => {
     expect(MAP_LEAN.split('foldGroup(').length - 1).toBe(1);
     expect(MAP_LEAN.split('applyCarves(').length - 1).toBe(1);
-    expect(MAP_LEAN).toContain('for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {');
-    expect(MAP_LEAN).toContain('d = foldGroup(d, pIn, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    // The run is the slot's stretch of the tile reference list; the group's bound and range are its own data rows.
+    expect(MAP_LEAN).toContain('for (var e = rFirst; e < rEnd; e = e + 1) {');
+    expect(MAP_LEAN).toContain('d = foldGroup(d, pIn, data, counts, band, tileBounds(data, e, band), tileRange(data, e, band));');
     expect(MAP_LEAN.indexOf('foldGroup(')).toBeLessThan(MAP_LEAN.indexOf('applyCarves('));
   });
   it('keeps mapBody\'s piece skip for a closed slot', () => {

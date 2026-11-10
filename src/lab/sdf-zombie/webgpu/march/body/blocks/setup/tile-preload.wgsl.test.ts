@@ -18,10 +18,11 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(pre).toBeLessThan(MARCH_BODY.indexOf('dres = mapBody(camPos + rd * t, '));
     // One read loop, bounded by the same cap the CPU binner clamps to.
     expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
-    // The per-pixel slot table (perf 7d) is built in SETUP, once, from that
-    // same preloaded, slot-sorted entry list.
-    expect(MARCH_TRACE_SETUP).toContain('gPixSlot[gPixN] = s;');
-    expect(MARCH_TRACE_SETUP).toContain('gPixEnd[gPixN - 1] = e + 1;');
+    // The slot runs (perf 7d) are counted in SETUP, once, from that same preloaded, slot-sorted list. Since the
+    // tile reference list (tile-ref-flag.ts, on by default) there is no table: a run is found by walking the list.
+    expect(MARCH_TRACE_SETUP).toContain('let s = gTileRef[e] >> 8u;');
+    expect(MARCH_TRACE_SETUP).toContain('if (s != prev) { gPixN = gPixN + 1; prev = s; }');
+    expect(MARCH_TRACE_SETUP).not.toContain('gPixSlot');
     expect(MARCH_BODY).toContain('if (e >= i32(n)) { break; }');
   });
 
@@ -40,15 +41,15 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(MARCH_BODY).toContain('let lin = (head.x + u32(e)) * 3u;');
   });
 
-  it('the per-step cull takes the sphere the entry names by its offset; the per-ray tests keep the entry\'s own', () => {
-    // tile-cull.ts cullOffset (the head split's grown groups): the cull sphere is rebuilt ONCE per pixel, here, so
-    // mapBody's per-sample path has no new work. With no offset (every other body) it is b itself: b.xyz + 0 and
-    // b.w - length(0).
+  it('the pixel keeps a reference to the entry\'s group; the per-ray tests read the entry\'s own bound', () => {
+    // The tile reference list (tile-ref-flag.ts, on by default): the entry is kept as (slot << 8) | the group's index,
+    // and the per-step cull reads the group's own data row (its closed sphere), not a sphere rebuilt from the
+    // entry's cullOffset. `?tileref=0` is the rebuilt copy; the golden test holds that text.
     expect(MARCH_BODY).toContain('let entMeta = (*tileEnt)[lin + 2u];');
-    expect(MARCH_BODY).toContain('gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw, b.w - length(entMeta.yzw));');
-    expect(MARCH_BODY).not.toContain('gTileBounds[w] = b;');
-    // Both ray tests (the per-ray cull, the quad's entry distance) come before the rebuild and read b.
-    const rebuild = MARCH_BODY.indexOf('gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw');
+    expect(MARCH_BODY).toContain('gTileRef[w] = u32(floor(entMeta.x)) * 256u + u32(fract(entMeta.x) * 256.0 + 0.5);');
+    expect(MARCH_BODY).not.toContain('gTileBounds');
+    // Both ray tests (the per-ray cull, the quad's entry distance) come before the reference is kept and read b.
+    const rebuild = MARCH_BODY.indexOf('gTileRef[w] = u32(floor(entMeta.x))');
     for (const line of ['let rInf = b.w + reach * max(g.z, 1.0);', 'let ocQ = b.xyz - camPos;']) {
       const at = MARCH_BODY.indexOf(line);
       expect(at, line).toBeGreaterThan(-1);
@@ -64,12 +65,13 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(MAP_BODY).toContain('loadInstance(inst, base + s);');
     expect(MAP_BODY).toContain('bestSlot = base + s;');
     expect(MAP_BODY).toContain('let nIter = select(nInst, gPixN, tiled);');
-    expect(MAP_BODY).toContain('let s = select(k, gPixSlot[k], tiled);');
-    // The range walk folds exactly this slot's contiguous entry run; the
+    expect(MAP_BODY).toContain('let s = select(k, i32(gTileRef[rFirst] >> 8u), tiled);');
+    // The range walk folds exactly this slot's contiguous run of the tile reference list; the
     // per-step slot scan is gone.
-    expect(MAP_BODY).toContain('for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {');
+    expect(MAP_BODY).toContain('if (tiled) { rFirst = tRun; rEnd = tileRunEnd(rFirst); tRun = rEnd; }');
+    expect(MAP_BODY).toContain('for (var e = rFirst; e < rEnd; e = e + 1) {');
     expect(MAP_BODY).not.toContain('tileHasSlot');
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, tileBounds(data, e, band), tRange);');
     expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
   });
 
