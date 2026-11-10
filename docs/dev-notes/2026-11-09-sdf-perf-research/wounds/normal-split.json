@@ -1,0 +1,246 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "table": [
+  {
+   "rung": "ship",
+   "quietMs": 23.144999998807908,
+   "medianMs": 23.660000002384187,
+   "bestMs": 22.089999997615813,
+   "lo": 22.810000002384186,
+   "hi": 23.8
+  },
+  {
+   "rung": "ship-no-fd",
+   "quietMs": 19.07000000476837,
+   "medianMs": 19.279999995231627,
+   "bestMs": 18.419999992847444,
+   "lo": 19.02000000476837,
+   "hi": 19.53000000715256
+  },
+  {
+   "rung": "ship-ng-exact",
+   "quietMs": 22.845000004768373,
+   "medianMs": 23.35999999046326,
+   "bestMs": 22.080000007152556,
+   "lo": 22.660000002384187,
+   "hi": 23.439999997615814
+  },
+  {
+   "rung": "ship-ng-owned",
+   "quietMs": 23.06000000834465,
+   "medianMs": 23.420000004768372,
+   "bestMs": 22.410000002384187,
+   "lo": 22.930000007152557,
+   "hi": 23.7
+  },
+  {
+   "rung": "ship-ng-both",
+   "quietMs": 23.09499999284744,
+   "medianMs": 23.860000002384187,
+   "bestMs": 21.919999992847444,
+   "lo": 22.97999999523163,
+   "hi": 24.519999992847442
+  }
+ ],
+ "runs": {
+  "ship": [
+   {
+    "medianMs": 22.810000002384186,
+    "minMs": 22.55
+   },
+   {
+    "medianMs": 23.660000002384187,
+    "minMs": 22.62000000476837
+   },
+   {
+    "medianMs": 23.489999997615815,
+    "minMs": 22.089999997615813
+   },
+   {
+    "medianMs": 23.8,
+    "minMs": 23.14000000953674
+   },
+   {
+    "medianMs": 23.720000004768373,
+    "minMs": 22.170000004768372
+   },
+   {
+    "medianMs": 23.47999999523163,
+    "minMs": 22.989999997615815
+   }
+  ],
+  "ship-no-fd": [
+   {
+    "medianMs": 19.02000000476837,
+    "minMs": 18.510000002384185
+   },
+   {
+    "medianMs": 19.169999992847444,
+    "minMs": 18.720000004768373
+   },
+   {
+    "medianMs": 19.12000000476837,
+    "minMs": 18.760000002384185
+   },
+   {
+    "medianMs": 19.279999995231627,
+    "minMs": 18.9
+   },
+   {
+    "medianMs": 19.53000000715256,
+    "minMs": 18.87000000476837
+   },
+   {
+    "medianMs": 19.410000002384187,
+    "minMs": 18.419999992847444
+   }
+  ],
+  "ship-ng-exact": [
+   {
+    "medianMs": 22.660000002384187,
+    "minMs": 22.080000007152556
+   },
+   {
+    "medianMs": 23.03000000715256,
+    "minMs": 22.420000004768372
+   },
+   {
+    "medianMs": 23.37999999523163,
+    "minMs": 22.610000002384187
+   },
+   {
+    "medianMs": 23.35999999046326,
+    "minMs": 22.539999997615816
+   },
+   {
+    "medianMs": 23.439999997615814,
+    "minMs": 22.65
+   },
+   {
+    "medianMs": 23.039999997615816,
+    "minMs": 22.55
+   }
+  ],
+  "ship-ng-owned": [
+   {
+    "medianMs": 23.420000004768372,
+    "minMs": 23.089999997615813
+   },
+   {
+    "medianMs": 22.930000007152557,
+    "minMs": 22.45
+   },
+   {
+    "medianMs": 23.5,
+    "minMs": 22.560000002384186
+   },
+   {
+    "medianMs": 23.239999997615815,
+    "minMs": 22.85
+   },
+   {
+    "medianMs": 23.190000009536742,
+    "minMs": 22.410000002384187
+   },
+   {
+    "medianMs": 23.7,
+    "minMs": 22.95
+   }
+  ],
+  "ship-ng-both": [
+   {
+    "medianMs": 22.97999999523163,
+    "minMs": 22.55
+   },
+   {
+    "medianMs": 23.480000007152558,
+    "minMs": 22.410000002384187
+   },
+   {
+    "medianMs": 23.860000002384187,
+    "minMs": 22.579999995231628
+   },
+   {
+    "medianMs": 24.02000000476837,
+    "minMs": 22.789999997615816
+   },
+   {
+    "medianMs": 24.519999992847442,
+    "minMs": 21.919999992847444
+   },
+   {
+    "medianMs": 23.209999990463256,
+    "minMs": 22.220000004768373
+   }
+  ]
+ },
+ "info": {
+  "ship": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-no-fd": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 27.495030673220754,
+    "meanDiff": 0.05638457601314228,
+    "differingFrac": 0.3002916666666667,
+    "nonZeroFrac": 1,
+    "over02": 43011,
+    "over10": 32858,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-ng-exact": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-ng-owned": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-ng-both": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 1.261708751320839,
+    "meanDiff": 0.00006273779243541261,
+    "differingFrac": 0.0004,
+    "nonZeroFrac": 1,
+    "over02": 45,
+    "over10": 28,
+    "classes": {}
+   },
+   "errors": []
+  }
+ }
+}

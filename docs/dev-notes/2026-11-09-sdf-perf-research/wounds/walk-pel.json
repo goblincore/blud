@@ -1,0 +1,447 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "table": [
+  {
+   "rung": "ship",
+   "quietMs": 24.365000003576277,
+   "medianMs": 24.67999999523163,
+   "bestMs": 23.489999997615815,
+   "lo": 24.330000007152556,
+   "hi": 25.480000007152558
+  },
+  {
+   "rung": "flat",
+   "quietMs": 14.764999997615813,
+   "medianMs": 15.060000002384186,
+   "bestMs": 13.710000002384186,
+   "lo": 14.7,
+   "hi": 15.129999995231628
+  },
+  {
+   "rung": "flat-noop",
+   "quietMs": 14.594999998807907,
+   "medianMs": 15.159999990463257,
+   "bestMs": 13.789999997615814,
+   "lo": 14.32000000476837,
+   "hi": 15.880000007152557
+  },
+  {
+   "rung": "walk2x",
+   "quietMs": 20.080000001192094,
+   "medianMs": 20.37000000476837,
+   "bestMs": 19.189999997615814,
+   "lo": 20,
+   "hi": 20.6
+  },
+  {
+   "rung": "no-wounds",
+   "quietMs": 11.14000000357628,
+   "medianMs": 12.010000002384185,
+   "bestMs": 10.270000004768372,
+   "lo": 11.080000007152558,
+   "hi": 12.810000002384186
+  },
+  {
+   "rung": "no-refold",
+   "quietMs": 12.884999996423721,
+   "medianMs": 13.6,
+   "bestMs": 12.3,
+   "lo": 12.829999995231628,
+   "hi": 14.539999997615814
+  },
+  {
+   "rung": "wounds-nocut",
+   "quietMs": 14.269999998807908,
+   "medianMs": 14.810000002384186,
+   "bestMs": 13.420000004768372,
+   "lo": 14.079999995231628,
+   "hi": 15.219999992847443
+  },
+  {
+   "rung": "ship-wounds-nocut",
+   "quietMs": 24.314999997615814,
+   "medianMs": 24.67999999523163,
+   "bestMs": 23.37000000476837,
+   "lo": 24.310000002384186,
+   "hi": 25.439999997615814
+  }
+ ],
+ "runs": {
+  "ship": [
+   {
+    "medianMs": 25.480000007152558,
+    "minMs": 24.8
+   },
+   {
+    "medianMs": 24.4,
+    "minMs": 24.010000002384185
+   },
+   {
+    "medianMs": 24.8,
+    "minMs": 24.37999999523163
+   },
+   {
+    "medianMs": 24.67999999523163,
+    "minMs": 23.970000004768373
+   },
+   {
+    "medianMs": 24.330000007152556,
+    "minMs": 23.489999997615815
+   },
+   {
+    "medianMs": 24.619999992847443,
+    "minMs": 24.139999997615813
+   }
+  ],
+  "flat": [
+   {
+    "medianMs": 14.970000004768371,
+    "minMs": 13.82000000476837
+   },
+   {
+    "medianMs": 14.829999995231628,
+    "minMs": 14.010000002384185
+   },
+   {
+    "medianMs": 15.069999992847443,
+    "minMs": 13.790000009536744
+   },
+   {
+    "medianMs": 15.129999995231628,
+    "minMs": 13.710000002384186
+   },
+   {
+    "medianMs": 15.060000002384186,
+    "minMs": 13.739999997615815
+   },
+   {
+    "medianMs": 14.7,
+    "minMs": 13.719999992847443
+   }
+  ],
+  "flat-noop": [
+   {
+    "medianMs": 15.159999990463257,
+    "minMs": 13.9
+   },
+   {
+    "medianMs": 14.869999992847443,
+    "minMs": 14.310000002384186
+   },
+   {
+    "medianMs": 15.230000007152558,
+    "minMs": 14.260000002384185
+   },
+   {
+    "medianMs": 14.989999997615815,
+    "minMs": 13.789999997615814
+   },
+   {
+    "medianMs": 14.32000000476837,
+    "minMs": 13.970000004768371
+   },
+   {
+    "medianMs": 15.880000007152557,
+    "minMs": 13.95
+   }
+  ],
+  "walk2x": [
+   {
+    "medianMs": 20.6,
+    "minMs": 19.989999997615815
+   },
+   {
+    "medianMs": 20.439999997615814,
+    "minMs": 19.709999990463256
+   },
+   {
+    "medianMs": 20.37000000476837,
+    "minMs": 19.189999997615814
+   },
+   {
+    "medianMs": 20.180000007152557,
+    "minMs": 19.2
+   },
+   {
+    "medianMs": 20,
+    "minMs": 19.4
+   },
+   {
+    "medianMs": 20.160000002384187,
+    "minMs": 19.480000007152558
+   }
+  ],
+  "no-wounds": [
+   {
+    "medianMs": 11.459999990463256,
+    "minMs": 10.389999997615813
+   },
+   {
+    "medianMs": 11.080000007152558,
+    "minMs": 10.3
+   },
+   {
+    "medianMs": 12.219999992847443,
+    "minMs": 10.329999995231628
+   },
+   {
+    "medianMs": 12.810000002384186,
+    "minMs": 10.589999997615815
+   },
+   {
+    "medianMs": 12.010000002384185,
+    "minMs": 10.45
+   },
+   {
+    "medianMs": 11.2,
+    "minMs": 10.270000004768372
+   }
+  ],
+  "no-refold": [
+   {
+    "medianMs": 12.939999997615814,
+    "minMs": 12.330000007152558
+   },
+   {
+    "medianMs": 13.789999997615814,
+    "minMs": 12.57000000476837
+   },
+   {
+    "medianMs": 12.829999995231628,
+    "minMs": 12.460000002384186
+   },
+   {
+    "medianMs": 13.6,
+    "minMs": 12.620000004768372
+   },
+   {
+    "medianMs": 13.45,
+    "minMs": 12.789999997615814
+   },
+   {
+    "medianMs": 14.539999997615814,
+    "minMs": 12.3
+   }
+  ],
+  "wounds-nocut": [
+   {
+    "medianMs": 14.810000002384186,
+    "minMs": 14.280000007152557
+   },
+   {
+    "medianMs": 15.219999992847443,
+    "minMs": 13.989999997615815
+   },
+   {
+    "medianMs": 14.85,
+    "minMs": 14.180000007152557
+   },
+   {
+    "medianMs": 14.460000002384186,
+    "minMs": 13.57000000476837
+   },
+   {
+    "medianMs": 14.629999995231628,
+    "minMs": 14.010000002384185
+   },
+   {
+    "medianMs": 14.079999995231628,
+    "minMs": 13.420000004768372
+   }
+  ],
+  "ship-wounds-nocut": [
+   {
+    "medianMs": 25.32000000476837,
+    "minMs": 24.420000004768372
+   },
+   {
+    "medianMs": 24.439999997615814,
+    "minMs": 23.9
+   },
+   {
+    "medianMs": 24.67999999523163,
+    "minMs": 24.089999997615813
+   },
+   {
+    "medianMs": 24.310000002384186,
+    "minMs": 23.37000000476837
+   },
+   {
+    "medianMs": 24.319999992847443,
+    "minMs": 23.62999999523163
+   },
+   {
+    "medianMs": 25.439999997615814,
+    "minMs": 24.189999997615814
+   }
+  ]
+ },
+ "info": {
+  "ship": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {
+     "1": {
+      "pixels": 7,
+      "r": 7.2115607261657715,
+      "g": 7.105389833450317
+     }
+    }
+   },
+   "errors": []
+  },
+  "flat": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "flat-noop": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "walk2x": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "no-wounds": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.00035124160049793623,
+    "differingFrac": 0.025935416666666666,
+    "nonZeroFrac": 1,
+    "over02": 100,
+    "over10": 100,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "no-refold": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.00005005553661612794,
+    "differingFrac": 0.0077083333333333335,
+    "nonZeroFrac": 1,
+    "over02": 11,
+    "over10": 11,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "wounds-nocut": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-wounds-nocut": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {
+     "1": {
+      "pixels": 7,
+      "r": 7.2115607261657715,
+      "g": 7.105389833450317
+     }
+    }
+   },
+   "errors": []
+  },
+  "count": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 210.99086594115943,
+    "meanDiff": 6.508818591215749,
+    "differingFrac": 0.6208125,
+    "nonZeroFrac": 1,
+    "over02": 99330,
+    "over10": 99330,
+    "classes": {
+     "1": {
+      "pixels": 16422,
+      "r": 116026,
+      "g": 565520
+     },
+     "2": {
+      "pixels": 82908,
+      "r": 266396,
+      "g": 2100554
+     }
+    }
+   },
+   "errors": []
+  },
+  "count-rows": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 766.991976806894,
+    "meanDiff": 4.661831373328195,
+    "differingFrac": 0.6208125,
+    "nonZeroFrac": 1,
+    "over02": 99330,
+    "over10": 99330,
+    "classes": {
+     "1": {
+      "pixels": 16422,
+      "r": 421585,
+      "g": 7856
+     },
+     "2": {
+      "pixels": 82908,
+      "r": 1625975,
+      "g": 42016
+     }
+    }
+   },
+   "errors": []
+  }
+ }
+}

@@ -15,6 +15,38 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   −29 % over three runs); with the call chosen per pixel inside the loop, −16 to −22 %.
 - [x] Rays that walk and miss: 15 % of the walked pixels, 60 % of the steps, 48 % of the folds (24 steps a ray).
 - [x] The per-pixel setup without the temporal start's probe is 0.2 ms.
+- [x] **Corrected the same day:** the capture harness's `applyShipDefaults` switches the hull exit bound OFF; the
+  game ships it ON. On the shipped setting the stripped walk is −11 to −20 % of the pass on a clean close-up, and
+  missed rays are a third of the walk (22 % of walked pixels, 7 steps a ray, 97 % of them never within 1 cm of
+  the body: rays in the hull's slack). `march-hash` and `march-parity` use the same helper: their pins are the
+  bound-off setting.
+- [x] **Wounded bodies** ([`WOUNDS.md`](../dev-notes/2026-11-09-sdf-perf-research/WOUNDS.md)): 20 pellet and slug
+  wounds add 4.9 ms to a 16.4 ms close-up and none of it is the walk. It is the finite-difference normal: the
+  analytic one gives up on about 90 % of a wounded body's hit pixels (an owned wound within reach, and the reach
+  still carries the old fixed 0.25 m). The AO and scatter probes are 2 to 3 ms on every body. The split head's
+  walk costs 67 % more per pixel.
+- [x] **Every hit pixel of a wounded body takes the four-tap normal today** (reason code 1, exact count). With
+  `ngWounds` on the exact reach, analytic near owned wounds, and a cut bounded by its slab: 85 % of a pellet body's
+  pixels and 68 % of a chopped one's go back to the analytic normal, −13 % and −8 % of the pass. The skin's
+  mottling shifts over the wounded area ([sheet](../dev-notes/2026-11-09-sdf-perf-research/look/pelship-ng-both.png));
+  owner 2026-11-09: not a big deal. **Not built in the game yet** (ladder rungs only).
+- [ ] The open head's region sphere keeps half of a split frame's pixels on the taps (no analytic normal there by
+  design). The probes on the stripped call for clean pixels. The hull's fit, for the missed rays.
+- [x] **The walk's time is a fixed cost per fragment, not its steps**
+  ([`ONE-CALL.md`](../dev-notes/2026-11-09-sdf-perf-research/ONE-CALL.md)). The first field call of a pixel is
+  about 7 ms of a 9.5 ms clean walk; every later step together about 2 ms. The cost is the seven private arrays
+  of 64 that hold a copy of the pixel's tile list (3.3 KB a fragment): sized to 16, the shipped pass is 37 to
+  40 % faster on a clean close-up and 13 to 16 % on wounded ones with the picture identical, and a 12-body crowd
+  pass is 26 % faster at 32 (207 px move) and 53 % at 16 (wrong: its tiles list more).
+- [ ] **Next: read the tile entries from the buffer and drop the arrays** (a 64-bit mask for the per-ray cull,
+  no slot table). Ladder rungs only so far; not built in the game.
+- [x] The one-call walk (predict a pixel's hit from last frame, verify with one field call): a third fewer
+  steps, no time, not sound for a limb that moves in front of another surface. Closed.
+- [ ] The temporal start no longer pays: off, a still frame (its best case) is 2 to 7 % faster and 500 to 800
+  pixels shift slightly. `?tstart=0` exists; needs a look in motion before any default change.
+- [x] **The clean-body fast path is built** on `claude/march-lean-walk-40ed5e` (`?leanwalk`, off): the same
+  picture to the bit, −15 % of the march pass on a clean close-up and a 12-body crowd, +2 % on a wounded close-up,
+  +3 to 6 s of cold compile. Not merged; the owner's call.
 - [ ] **Next: the clean-body fast path in the real shader** (`mapLean` beside `mapBody`, chosen per pixel when every
   slot in the tile is clean; the clean `march-hash` pins should not move). Then per sample for wounded bodies
   (outside the wound bound a sample is `mapLean`'s exactly). Owner's go-ahead pending.

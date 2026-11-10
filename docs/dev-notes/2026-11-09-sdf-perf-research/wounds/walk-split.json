@@ -1,0 +1,435 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "table": [
+  {
+   "rung": "ship",
+   "quietMs": 23.589999997615813,
+   "medianMs": 25.65,
+   "bestMs": 22.669999992847444,
+   "lo": 23.539999997615816,
+   "hi": 26.810000002384186
+  },
+  {
+   "rung": "flat",
+   "quietMs": 13.690000003576278,
+   "medianMs": 17.089999997615813,
+   "bestMs": 13.229999995231628,
+   "lo": 13.639999997615813,
+   "hi": 18.329999995231628
+  },
+  {
+   "rung": "flat-noop",
+   "quietMs": 14.480000001192092,
+   "medianMs": 15.539999997615814,
+   "bestMs": 13.229999995231628,
+   "lo": 14.420000004768372,
+   "hi": 17.060000002384186
+  },
+  {
+   "rung": "walk2x",
+   "quietMs": 21.475,
+   "medianMs": 22.62999999523163,
+   "bestMs": 19.8,
+   "lo": 21.35,
+   "hi": 25.45
+  },
+  {
+   "rung": "no-wounds",
+   "quietMs": 10.7,
+   "medianMs": 14.640000009536744,
+   "bestMs": 10.35,
+   "lo": 10.529999995231629,
+   "hi": 16.839999997615813
+  },
+  {
+   "rung": "no-refold",
+   "quietMs": 13.279999995231629,
+   "medianMs": 14.670000004768372,
+   "bestMs": 12.25,
+   "lo": 12.689999997615814,
+   "hi": 15.769999992847442
+  },
+  {
+   "rung": "wounds-nocut",
+   "quietMs": 17.714999997615813,
+   "medianMs": 19.55,
+   "bestMs": 16.730000007152558,
+   "lo": 17.339999997615813,
+   "hi": 19.829999995231628
+  },
+  {
+   "rung": "ship-wounds-nocut",
+   "quietMs": 27.915000003576278,
+   "medianMs": 31.220000004768373,
+   "bestMs": 25.970000004768373,
+   "lo": 26.930000007152557,
+   "hi": 32.3
+  }
+ ],
+ "runs": {
+  "ship": [
+   {
+    "medianMs": 23.539999997615816,
+    "minMs": 23.089999997615813
+   },
+   {
+    "medianMs": 24.5,
+    "minMs": 23.959999990463256
+   },
+   {
+    "medianMs": 26.810000002384186,
+    "minMs": 25.569999992847443
+   },
+   {
+    "medianMs": 26.389999997615813,
+    "minMs": 25.659999990463255
+   },
+   {
+    "medianMs": 25.65,
+    "minMs": 24.05
+   },
+   {
+    "medianMs": 23.639999997615813,
+    "minMs": 22.669999992847444
+   }
+  ],
+  "flat": [
+   {
+    "medianMs": 13.639999997615813,
+    "minMs": 13.229999995231628
+   },
+   {
+    "medianMs": 13.740000009536743,
+    "minMs": 13.270000004768372
+   },
+   {
+    "medianMs": 18.329999995231628,
+    "minMs": 16.760000002384185
+   },
+   {
+    "medianMs": 17.089999997615813,
+    "minMs": 15.6
+   },
+   {
+    "medianMs": 17.55,
+    "minMs": 15.989999997615815
+   },
+   {
+    "medianMs": 15.7,
+    "minMs": 14.489999997615815
+   }
+  ],
+  "flat-noop": [
+   {
+    "medianMs": 14.539999997615814,
+    "minMs": 13.229999995231628
+   },
+   {
+    "medianMs": 14.420000004768372,
+    "minMs": 13.989999997615815
+   },
+   {
+    "medianMs": 15.539999997615814,
+    "minMs": 15.020000004768372
+   },
+   {
+    "medianMs": 17.060000002384186,
+    "minMs": 16.189999997615814
+   },
+   {
+    "medianMs": 16.07000000476837,
+    "minMs": 15.370000004768372
+   },
+   {
+    "medianMs": 14.630000007152557,
+    "minMs": 14.189999997615814
+   }
+  ],
+  "walk2x": [
+   {
+    "medianMs": 21.35,
+    "minMs": 19.8
+   },
+   {
+    "medianMs": 21.829999995231628,
+    "minMs": 20.080000007152556
+   },
+   {
+    "medianMs": 22.62999999523163,
+    "minMs": 22
+   },
+   {
+    "medianMs": 25.45,
+    "minMs": 22.65
+   },
+   {
+    "medianMs": 22.7,
+    "minMs": 21.160000002384187
+   },
+   {
+    "medianMs": 21.6,
+    "minMs": 20.62000000476837
+   }
+  ],
+  "no-wounds": [
+   {
+    "medianMs": 10.529999995231629,
+    "minMs": 10.35
+   },
+   {
+    "medianMs": 10.870000004768372,
+    "minMs": 10.430000007152557
+   },
+   {
+    "medianMs": 14.669999992847442,
+    "minMs": 11.129999995231628
+   },
+   {
+    "medianMs": 16.839999997615813,
+    "minMs": 11.430000007152557
+   },
+   {
+    "medianMs": 14.640000009536744,
+    "minMs": 12.659999990463257
+   },
+   {
+    "medianMs": 11.279999995231629,
+    "minMs": 10.55
+   }
+  ],
+  "no-refold": [
+   {
+    "medianMs": 12.689999997615814,
+    "minMs": 12.25
+   },
+   {
+    "medianMs": 13.869999992847443,
+    "minMs": 12.639999997615813
+   },
+   {
+    "medianMs": 14.760000002384185,
+    "minMs": 14.230000007152558
+   },
+   {
+    "medianMs": 14.639999997615813,
+    "minMs": 13.5
+   },
+   {
+    "medianMs": 15.769999992847442,
+    "minMs": 15.2
+   },
+   {
+    "medianMs": 14.670000004768372,
+    "minMs": 13.410000002384185
+   }
+  ],
+  "wounds-nocut": [
+   {
+    "medianMs": 17.339999997615813,
+    "minMs": 16.730000007152558
+   },
+   {
+    "medianMs": 18.089999997615813,
+    "minMs": 17.72999999523163
+   },
+   {
+    "medianMs": 19.55,
+    "minMs": 19.010000002384185
+   },
+   {
+    "medianMs": 19.7,
+    "minMs": 18.920000004768372
+   },
+   {
+    "medianMs": 19.829999995231628,
+    "minMs": 19.089999997615813
+   },
+   {
+    "medianMs": 18.239999997615815,
+    "minMs": 17.65
+   }
+  ],
+  "ship-wounds-nocut": [
+   {
+    "medianMs": 26.930000007152557,
+    "minMs": 25.970000004768373
+   },
+   {
+    "medianMs": 28.9,
+    "minMs": 27.960000002384184
+   },
+   {
+    "medianMs": 31.220000004768373,
+    "minMs": 30.209999990463256
+   },
+   {
+    "medianMs": 32.3,
+    "minMs": 30.7
+   },
+   {
+    "medianMs": 31.389999997615813,
+    "minMs": 29.7
+   },
+   {
+    "medianMs": 29.539999997615816,
+    "minMs": 28.439999997615814
+   }
+  ]
+ },
+ "info": {
+  "ship": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "flat": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "flat-noop": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "walk2x": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "no-wounds": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.0009544922268212152,
+    "differingFrac": 0.03401666666666667,
+    "nonZeroFrac": 1,
+    "over02": 275,
+    "over10": 275,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "no-refold": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.00018687805694838364,
+    "differingFrac": 0.0054645833333333334,
+    "nonZeroFrac": 1,
+    "over02": 64,
+    "over10": 64,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "wounds-nocut": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.003830714746917753,
+    "differingFrac": 0.06842083333333333,
+    "nonZeroFrac": 1,
+    "over02": 1117,
+    "over10": 1117,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-wounds-nocut": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 27.47556052915752,
+    "meanDiff": 0.01791529779509032,
+    "differingFrac": 0.24714583333333334,
+    "nonZeroFrac": 1,
+    "over02": 20136,
+    "over10": 9672,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "count": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 320.9908659411594,
+    "meanDiff": 7.062478666806982,
+    "differingFrac": 0.38678125,
+    "nonZeroFrac": 1,
+    "over02": 61885,
+    "over10": 61885,
+    "classes": {
+     "1": {
+      "pixels": 13228,
+      "r": 76549,
+      "g": 628009
+     },
+     "2": {
+      "pixels": 48657,
+      "r": 217706,
+      "g": 2419788
+     }
+    }
+   },
+   "errors": []
+  },
+  "count-rows": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 720.477999985218,
+    "meanDiff": 4.694260804884562,
+    "differingFrac": 0.38678125,
+    "nonZeroFrac": 1,
+    "over02": 61885,
+    "over10": 61885,
+    "classes": {
+     "1": {
+      "pixels": 13228,
+      "r": 428064,
+      "g": 5652
+     },
+     "2": {
+      "pixels": 48657,
+      "r": 1701072,
+      "g": 34210
+     }
+    }
+   },
+   "errors": []
+  }
+ }
+}
