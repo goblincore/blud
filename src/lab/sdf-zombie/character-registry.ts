@@ -503,6 +503,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   cerebrax: {
     name: 'cerebrax', src: cerebraxBlobSrc,
     kit: '/assets/lab/cerebrax-kit.gltf',
+    kitSheds: true,
     // The gyri and sulci (a random-wave labyrinth of folds), the fissures, cortical veins and the snarl's wrinkles
     // (characters/cerebrax.detail, baked round a vertical axis through the brain: scripts/cerebrax-detail-gen.ts has
     // the bake command; never marched).
