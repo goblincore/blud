@@ -62,6 +62,9 @@
 //   LEAN_PARITY_EXITBOUND=1       the shipped hull exit bound ON on both boots (default off, the
 //                                 march-hash.mjs regime); echoed as hullExitBound in the JSON line
 //   LEAN_PARITY_FLAG=<query>     the on boot's flag (default none: the shipped page, walk only; leanwalk = walk and probe)
+//   LEAN_PARITY_OFF_FLAG=<query>  extra query on the OFF boot only. `tileref=0` makes this the tile reference list's
+//                                 gate too (tile-ref-flag.ts, on by default since 2026-11-10): the arrays without
+//                                 the lean walk against the shipped page. Each boot's TILE_REF is echoed as tileRef.
 //   LEAN_PARITY_OUT=<dir>         also write each buffer as <dir>/<name>.f32 + .f32.json ({w,h}),
 //                                 the layout scripts/march-raw-diff.mjs reads
 //   MARCH_HASH_BG_WAIT_S          the background-compile ceiling (default 600), as march-hash.mjs
@@ -89,6 +92,7 @@ const OUT = process.env.LEAN_PARITY_OUT ?? '';
 // `?leanwalk=0` and the "on" boot is the DEFAULT page. LEAN_PARITY_FLAG names another form for the on boot
 // (`leanwalk`: the temporal probe on mapLean too).
 const LEAN_FLAG = process.env.LEAN_PARITY_FLAG ?? '';
+const OFF_FLAG = process.env.LEAN_PARITY_OFF_FLAG ?? '';
 // LEAN_PARITY_EXITBOUND=1 — the SHIPPED hull exit bound. applyShipDefaults turns it
 // off (the march-hash.mjs regime, where its pins were taken); the game ships it on.
 // Set after the ship defaults on both boots, before staging; the JSON line says which.
@@ -260,9 +264,11 @@ const tilesOf = (box, W, H) => {
 
 // ---- one boot: pin, stage the crowd, wound one body, read ----
 const boot = async (lean) => {
-  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? (LEAN_FLAG ? `&${LEAN_FLAG}` : '') : '&leanwalk=0'}`;
+  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? (LEAN_FLAG ? `&${LEAN_FLAG}` : '') : `&leanwalk=0${OFF_FLAG ? `&${OFF_FLAG}` : ''}`}`;
   await bootCloseupPage({ send, evaluate, fail, url });
   const state = await evaluate('typeof __sdfGame.leanWalkState === "function" ? JSON.stringify(__sdfGame.leanWalkState()) : "null"').then(JSON.parse);
+  // The page's own copy of the compile-time flag (the dev server serves one module instance per path).
+  const tileRef = await evaluate('import("/src/lab/sdf-zombie/webgpu/march/tile-ref-flag.ts").then((m) => m.TILE_REF)');
   if (lean && (!state || state.compiled !== true)) {
     fail(`the lean walk is not compiled into the on boot's page (leanWalkState ${state ? JSON.stringify(state) : 'missing'})`);
   }
@@ -388,7 +394,7 @@ const boot = async (lean) => {
     gameTileSlotMaskMulti: await evaluate('__sdfGameDebug.readTileSlotMask().mask.reduce((n, v) => n + v, 0)'),
   };
 
-  const rec = { lean, state, url, spawned: spawned.ok, ids, crowdTypes: zt.types, wounded: { id: pick.id, sharedTiles: pick.shared, box: body.box, dist: body.dist, stamped: stamp.stamped, wounds: stamp.wounds, rays: stamp.rays }, overlap, boxes: geo.boxes.map((b) => ({ id: b.id, box: b.box })), clean, woundedCap: wounded };
+  const rec = { lean, state, tileRef, url, spawned: spawned.ok, ids, crowdTypes: zt.types, wounded: { id: pick.id, sharedTiles: pick.shared, box: body.box, dist: body.dist, stamped: stamp.stamped, wounds: stamp.wounds, rays: stamp.rays }, overlap, boxes: geo.boxes.map((b) => ({ id: b.id, box: b.box })), clean, woundedCap: wounded };
   if (!lean) return rec;
 
   // Flag-on legs: HELD (forced onto mapBody), ON2 (back), the census.
@@ -442,8 +448,8 @@ const out = {
   mode: AA ? 'aa' : 'off-vs-on',
   hullExitBound: EXITBOUND,
   size: `${A.woundedCap.w}x${A.woundedCap.h}`,
-  bootA: { lean: A.lean, state: A.state, clean: A.clean.sha1, wounded: A.woundedCap.sha1, settleFrames: { clean: A.clean.settleFrames, wounded: A.woundedCap.settleFrames } },
-  bootB: { lean: B.lean, state: B.state, clean: B.clean.sha1, wounded: B.woundedCap.sha1, settleFrames: { clean: B.clean.settleFrames, wounded: B.woundedCap.settleFrames }, held: B.held?.sha1, on2: B.on2?.sha1, heldState: B.heldState, on2State: B.on2State },
+  bootA: { lean: A.lean, state: A.state, tileRef: A.tileRef, clean: A.clean.sha1, wounded: A.woundedCap.sha1, settleFrames: { clean: A.clean.settleFrames, wounded: A.woundedCap.settleFrames } },
+  bootB: { lean: B.lean, state: B.state, tileRef: B.tileRef, clean: B.clean.sha1, wounded: B.woundedCap.sha1, settleFrames: { clean: B.clean.settleFrames, wounded: B.woundedCap.settleFrames }, held: B.held?.sha1, on2: B.on2?.sha1, heldState: B.heldState, on2State: B.on2State },
   staging: { spawned: A.spawned, ids: A.ids, crowdTypes: A.crowdTypes, wounded: A.wounded, overlap: A.overlap, overlapB: B.overlap, boxes: A.boxes },
 };
 save(AA ? 'aa-a-clean' : 'off-clean', A.clean); save(AA ? 'aa-a-wounded' : 'off', A.woundedCap);

@@ -50,7 +50,8 @@ describe('?leanwalk=0: the march without the lean walk', () => {
   it('carries no trace of it', async () => {
     const OFF = await loadOff();
     const all = [OFF.MAP_BODY, OFF.MARCH_TRACE_SETUP, OFF.MARCH_TRACE_LOOP, OFF.MARCH_TRACE_POST, (OFF.HELPERS as string[]).join('\n')].join('\n');
-    expect(all).not.toMatch(/mapLean|leanOk|debugCfg\.x\) > 22\.5/);
+    // Code only: the tile reference list's comments (on by default, tile-ref-flag.ts) name mapLean as a reader.
+    expect(all.replace(/\/\/.*$/gm, '')).not.toMatch(/mapLean|leanOk|debugCfg\.x\) > 22\.5/);
     expect(OFF.MARCH_TRACE_LOOP).toContain('    let dres = mapBody(camPos + rd * t, ');
   });
   it('exports the same names and the same number of helpers', async () => {

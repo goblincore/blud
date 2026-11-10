@@ -4373,7 +4373,9 @@ async function main() {
               ce!.center[2] === gpu.entries[o + 2] && ce!.radius === gpu.entries[o + 3] &&
               ce!.start === gpu.entries[o + 4] && ce!.count === gpu.entries[o + 5] &&
               ce!.distort === gpu.entries[o + 6] && ce!.flags === gpu.entries[o + 7] &&
-              ce!.bodyIndex === gpu.entries[o + 8];
+              // The meta lane's x is the body index, with the group's index as a fraction beside it under the tile
+              // reference list (tile-cull.ts tileMetaX); entryAt gives the body index alone.
+              ce!.bodyIndex === Math.floor(gpu.entries[o + 8]!);
             if (same) { gi++; gj++; }
             else { gj++; extraEntries++; }
           }

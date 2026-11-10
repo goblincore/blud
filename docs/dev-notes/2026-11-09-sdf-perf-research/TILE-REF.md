@@ -1,6 +1,9 @@
 # The tile reference list: a pixel keeps references to its tile's groups, not copies (2026-11-09)
 
-Built from the finding in [ONE-CALL.md](ONE-CALL.md) §3. Behind `?tileref`, off by default
+> **On by default since 2026-11-10** (owner's call, after a playtest; see the last section). `?tileref=0` is off.
+> Below, "flag off" and "`?tileref`" are the two sides as they were measured, when off was the default.
+
+Built from the finding in [ONE-CALL.md](ONE-CALL.md) §3. Behind `?tileref`, off by default when this was written
 (`march/tile-ref-flag.ts`). On top of the lean walk (`claude/march-lean-walk-40ed5e`, PR 107),
 which is on in every boot below.
 
@@ -109,3 +112,33 @@ default change.
   compile from the same templates; not booted).
 - The capture gates (wound, head-split, axe, crowd) with the flag on.
 - Three r186: the worktree links the primary checkout's `node_modules`.
+
+## On by default (2026-11-10)
+
+The owner's call after a playtest: a dense close mob on `doom-map28` (22 bodies drawn of 102, the HUD's frame
+time) read 104.6 ms with the arrays and about 70 ms at worst with `&tileref`, on an M3 with other work running.
+That is the live game's frame time, which was not verified above; it is one scene, read off the HUD, not a bench.
+
+What changed:
+
+- `TILE_REF` is true unless the page has `?tileref=0` (`march/tile-ref-flag.ts`). Off is the arrays, the shader
+  text and the records of before: `march-golden.test.ts` holds the `?tileref=0` text to the snapshot the default
+  had, and the `?leanwalk=0&tileref=0` text to the snapshot of before the lean walk.
+- The lab page's tile-list check (`lab-main.ts`) compared the raw meta lane with the body index; it now compares
+  the lane's whole part. Its group inputs come from `view.getTileGroups()` and carry the group index already.
+- A body cannot have more than 256 groups (`MAX_GROUPS` in `march/layout.ts`), so `tileMetaX` cannot throw on one.
+- `lean-walk-parity.mjs` takes `LEAN_PARITY_OFF_FLAG` (a query for the off boot only) and prints each boot's
+  `TILE_REF`. `native-spike/ladder.mjs` edits the arrays, so its captures need `tileref=0`.
+
+Checked on the default page: the 12-body frame, one body wounded, hull exit bound on, the arrays without the lean
+walk (`?leanwalk=0&tileref=0`) against the shipped page. 0 texels differ, clean and wounded; the on boot reports
+`tileRef: true`, the off boot `false` (`tileref/parity-default-on.json`).
+
+```bash
+LAB_TMP=.lab-tmp LAB_VITE_PORT=5393 LAB_CDP_PORT=9393 LEAN_PARITY_EXITBOUND=1 LEAN_PARITY_OFF_FLAG=tileref=0 \
+  scripts/native-spike/servers.sh node scripts/lean-walk-parity.mjs
+```
+
+Still not verified: the cold compile on a quiet machine, the split head shown exact, bodies other than the zombie
+under a gate (the playtest mob was soldiers, by eye), the `?limbs`, `?shadebound`, `?raymask` and `?splitablate`
+builds, and the capture gates (wound, head-split, axe, crowd, the night-train light gate).

@@ -87,12 +87,12 @@ export interface TileGroupInput {
    *  (tile-preload.wgsl.ts). Absent = no offset: the sphere above, as for every body without a split. */
   cullOffset?: [number, number, number];
   /** The group's index in its body's data rows (the column of ROW_GROUP_BOUNDS / ROW_GROUP_RANGE it was packed
-   *  from). Read only under `?tileref` (march/tile-ref-flag.ts), where the march keeps a reference to the group
-   *  and not a copy of it. Absent = 0. */
+   *  from). Read by the tile reference list (march/tile-ref-flag.ts, on by default), where the march keeps a
+   *  reference to the group and not a copy of it. Absent = 0. */
   groupIndex?: number;
 }
 
-/** What an entry's meta lane carries in x: the body index, and under `?tileref` the group's index in that body
+/** What an entry's meta lane carries in x: the body index, and with the tile reference list (the default) the group's index in that body
  *  as a fraction beside it (index / TILE_REF_GROUPS, exact in float32). The one packer both binners use. */
 export function tileMetaX(g: TileGroupInput): number {
   if (!TILE_REF) return g.bodyIndex;

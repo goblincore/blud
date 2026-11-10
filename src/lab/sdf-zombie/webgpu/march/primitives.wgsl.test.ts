@@ -433,7 +433,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(foldGroup).toContain('if (shaped) {');
     // BOTH fold paths call foldGroup with the group texels, so neither can
     // drift from the other's sphere-cull or flag semantics.
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, tileBounds(data, e, band), tRange);');
     expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
     // The carve pass reads the same bitfield, so a tapered carve is a taper in
     // BOTH fields. This one backs click-to-shoot; a divergence here lands

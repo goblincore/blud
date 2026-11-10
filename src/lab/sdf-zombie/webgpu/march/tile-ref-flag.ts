@@ -8,7 +8,11 @@
 // sized to 16 the shipped pass measured 37 to 40 % faster on a clean close-up and 13 to 16 % on wounded ones, the
 // same picture to the bit (ladder rungs `arrN`).
 //
-// With `?tileref` a pixel keeps ONE array: a u32 a kept entry, (slot << 8) | the group's index in its body. The
+// ON BY DEFAULT since 2026-11-10 (owner's call, after a playtest: a dense close mob on doom-map28 went from 104.6 ms
+// a frame to about 70 at worst). `?tileref=0` is off: the arrays, the shader text and the records of before, byte
+// for byte. Any other value, or no parameter, is on.
+//
+// With the reference list a pixel keeps ONE array: a u32 a kept entry, (slot << 8) | the group's index in its body. The
 // fold reads the group's bound and range from the body's data rows (ROW_GROUP_BOUNDS, ROW_GROUP_RANGE), which is
 // where the tile entry's copy of them came from, and a slot's run is found by walking the list (entries are sorted
 // by slot). 256 bytes.
@@ -19,13 +23,14 @@
 // Both are sound, and a group a sound cull drops is one whose fold is exactly min.
 //
 // The group's index rides the entry's meta lane as a fraction (tile-cull.ts tileMetaX), so this is a boot switch
-// for the CPU's packers as well as the shader. Off (the default), the shader text and the records are byte-identical.
+// for the CPU's packers as well as the shader. Off (`?tileref=0`), the shader text and the records are byte-identical
+// to what they were before the list existed.
 export const TILE_REF: boolean = (() => {
   try {
     const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
-    return new URLSearchParams(search).has('tileref');
+    return new URLSearchParams(search).get('tileref') !== '0';
   } catch {
-    return false;
+    return true;
   }
 })();
 

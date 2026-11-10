@@ -28,16 +28,29 @@ describe('march.wgsl split golden', () => {
   // THE SHIPPED TEXT. Re-recorded 2026-11-09 on the owner's call: the lean walk (lean-walk-flag.ts) is on by default,
   // walk only, so MAP_BODY, the trace setup and loop, the bodies built from them and the joined helpers moved, and
   // nothing else did (the next test holds the text without it to the snapshot this one had before).
+  // Re-recorded again 2026-11-10 on the owner's call: the tile reference list (tile-ref-flag.ts) is on by default, so
+  // the fold's tail, MAP_BODY, MAP_LEAN, the tile preload, the analytic normal's tile walk and what is built from
+  // them moved (the next test holds the text without it to the snapshot this one had before).
   it('keeps every string export byte-identical', () => {
     expect(digest(M)).toMatchSnapshot();
   });
-  // THE MARCH WITHOUT THE LEAN WALK (`?leanwalk=0`): the snapshot the test above held until 2026-11-09, value for
-  // value. The flag's off side must stay the old text to the byte.
-  it('keeps the ?leanwalk=0 text byte-identical', async () => {
+  // THE MARCH WITHOUT THE TILE REFERENCE LIST (`?tileref=0`): the snapshot the test above held until 2026-11-10,
+  // value for value. The flag's off side must stay the old text to the byte.
+  it('keeps the ?tileref=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?leanwalk=0' });
+    vi.stubGlobal('location', { search: '?tileref=0' });
+    const flag = await import('./tile-ref-flag');
+    expect(flag.TILE_REF).toBe(false);
+    expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
+  });
+  // THE MARCH WITHOUT THE LEAN WALK OR THE REFERENCE LIST (`?leanwalk=0&tileref=0`): the snapshot the first test
+  // held until 2026-11-09, value for value. With both flags off the text must stay the old text to the byte.
+  it('keeps the ?leanwalk=0&tileref=0 text byte-identical', async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?leanwalk=0&tileref=0' });
     const flag = await import('./lean-walk-flag');
     expect(flag.LEAN_WALK).toBe(false);
+    expect((await import('./tile-ref-flag')).TILE_REF).toBe(false);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
   });
   it('still exports the same functions', () => {
