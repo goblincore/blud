@@ -81,6 +81,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   to +121 %). The edge texels are 7 to 24 % of the frame and hold the costly rays; the inside of surfaces gets 30 to
   50 % worse at 300 × 225 whatever the edges do. Not tried: the edge rays as a compute pass over a packed list, or a
   lean kernel. Driver: `scripts/native-spike/silhouette.mjs`.
+  - **Census by pixel, 2026-11-10** ([`CENSUS.md`](../dev-notes/2026-11-10-silhouette-spike/CENSUS.md)): on the
+    22-body mob the hit pixels alone cost the whole pass (34.3 of 34.9 ms); the misses beside the silhouettes are
+    5.5 ms alone but about 0.6 ms in the pass. Of a hit pixel's 421 ns, the walk is 225 and the shading after the hit
+    the rest (15 ms of 35). Wounded: 1,009 ns a hit pixel. Next: take the post-hit chain apart on the mob.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
