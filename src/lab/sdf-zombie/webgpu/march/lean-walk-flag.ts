@@ -6,11 +6,16 @@
 // volume or head-split code. The setup decides once per pixel whether mapLean is exact for every slot in the pixel's
 // table, and the walk and the temporal start's probe call it there. The picture is the same to the bit. Without the
 // flag the shader text is byte-identical (the march-hash golden), the same contract as shade-bound-flag.ts.
-export const LEAN_WALK: boolean = (() => {
+const leanWalkParam: string | null = (() => {
   try {
     const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
-    return new URLSearchParams(search).has('leanwalk');
+    return new URLSearchParams(search).get('leanwalk');
   } catch {
-    return false;
+    return null;
   }
 })();
+export const LEAN_WALK: boolean = leanWalkParam !== null;
+/** `?leanwalk=walk`: the walk only; the temporal start's probe stays on mapBody. Each mapLean call site is one more
+ *  inlined copy of the fold and the carves in every march program's cold compile (2026-11-09: both sites cost the
+ *  loader's program +4.8 s cold, 42 -> 47 s), and the probe is one to four calls a pixel against the walk's many. */
+export const LEAN_WALK_PROBE: boolean = LEAN_WALK && leanWalkParam !== 'walk';

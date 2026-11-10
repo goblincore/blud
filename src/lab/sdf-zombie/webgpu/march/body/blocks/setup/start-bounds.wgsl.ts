@@ -3,7 +3,7 @@
 // Task-3 split of the march body (2026-09-19): cone, depth-prepass and temporal ray start bounds.
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
-import { LEAN_WALK as LEAN } from '../../../lean-walk-flag';
+import { LEAN_WALK_PROBE as LEAN } from '../../../lean-walk-flag';
 
 export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can

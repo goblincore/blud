@@ -74,3 +74,32 @@ describe('lean walk wiring, ?leanwalk', () => {
     expect(count(ON.MARCH_TRACE_LOOP, LEAN_CENSUS_BLOCK)).toBe(1);
   });
 });
+
+describe('lean walk wiring, ?leanwalk=walk (the temporal probe stays on mapBody)', () => {
+  const loadWalk = async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?leanwalk=walk' });
+    const flag = await import('./lean-walk-flag');
+    expect(flag.LEAN_WALK).toBe(true);
+    expect(flag.LEAN_WALK_PROBE).toBe(false);
+    return await import('../march.wgsl');
+  };
+  it('the setup still decides leanOk and the probe is the shipped line', async () => {
+    const W = await loadWalk();
+    expect(count(W.MARCH_TRACE_SETUP, 'mapLean(')).toBe(0);
+    expect(W.MARCH_TRACE_SETUP.replace(`${LEAN_TEST_BLOCK}\n`, '')).toBe(OFF.MARCH_TRACE_SETUP);
+  });
+  it('the walk and mapBody\'s tail are the full flag\'s', async () => {
+    const W = await loadWalk();
+    const walkLoop = W.MARCH_TRACE_LOOP;
+    const walkBody = W.MAP_BODY;
+    const ON = await loadOn();
+    expect(walkLoop).toBe(ON.MARCH_TRACE_LOOP);
+    expect(walkBody).toBe(ON.MAP_BODY);
+  });
+  it('plain ?leanwalk moves the probe too', async () => {
+    await loadOn();
+    const flag = await import('./lean-walk-flag');
+    expect(flag.LEAN_WALK_PROBE).toBe(true);
+  });
+});

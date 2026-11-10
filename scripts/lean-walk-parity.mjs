@@ -61,6 +61,7 @@
 //   LEAN_PARITY_QUERY=<query>     extra page query on both boots (e.g. crowddispatch=boxes)
 //   LEAN_PARITY_EXITBOUND=1       the shipped hull exit bound ON on both boots (default off, the
 //                                 march-hash.mjs regime); echoed as hullExitBound in the JSON line
+//   LEAN_PARITY_FLAG=<query>     the flag-on boot's flag (default leanwalk; leanwalk=walk is the walk-only build)
 //   LEAN_PARITY_OUT=<dir>         also write each buffer as <dir>/<name>.f32 + .f32.json ({w,h}),
 //                                 the layout scripts/march-raw-diff.mjs reads
 //   MARCH_HASH_BG_WAIT_S          the background-compile ceiling (default 600), as march-hash.mjs
@@ -84,6 +85,8 @@ const AA = process.env.LEAN_PARITY_AA === '1';
 const CROWD = Number(process.env.LEAN_PARITY_CROWD ?? 12);
 const EXTRA = process.env.LEAN_PARITY_QUERY ? `&${process.env.LEAN_PARITY_QUERY}` : '';
 const OUT = process.env.LEAN_PARITY_OUT ?? '';
+// LEAN_PARITY_FLAG — the flag-on boot's query (default `leanwalk`; `leanwalk=walk` leaves the temporal probe on mapBody).
+const LEAN_FLAG = process.env.LEAN_PARITY_FLAG ?? 'leanwalk';
 // LEAN_PARITY_EXITBOUND=1 — the SHIPPED hull exit bound. applyShipDefaults turns it
 // off (the march-hash.mjs regime, where its pins were taken); the game ships it on.
 // Set after the ship defaults on both boots, before staging; the JSON line says which.
@@ -255,7 +258,7 @@ const tilesOf = (box, W, H) => {
 
 // ---- one boot: pin, stage the crowd, wound one body, read ----
 const boot = async (lean) => {
-  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? '&leanwalk' : ''}`;
+  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? `&${LEAN_FLAG}` : ''}`;
   await bootCloseupPage({ send, evaluate, fail, url });
   const state = await evaluate('typeof __sdfGame.leanWalkState === "function" ? JSON.stringify(__sdfGame.leanWalkState()) : "null"').then(JSON.parse);
   if (lean && (!state || state.compiled !== true)) {
