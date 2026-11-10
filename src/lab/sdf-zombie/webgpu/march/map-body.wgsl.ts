@@ -6,6 +6,7 @@
 import { SHADE_BOUND as SHADE } from './shade-bound-flag';
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { LEAN_WALK as LEAN } from './lean-walk-flag';
+import { TILE_REF as TR } from './tile-ref-flag';
 import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
@@ -61,10 +62,17 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
   let base = i32(instCfg.z);
   let tiled = gTileActive > 0.5;
   let nIter = select(nInst, gPixN, tiled);
-  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
+${TR ? `  // THE TILE REFERENCE LIST (tile-ref-flag.ts): the k-th slot's run of the pixel's list is [rFirst, rEnd), found by
+  // walking the list from where the last run ended.
+  var tRun = 0;
+` : ''}  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
     if (k >= nIter) { break; }
-    let s = select(k, gPixSlot[k], tiled);
-    loadInstance(inst, base + s);
+${TR ? `    var rFirst = 0;
+    var rEnd = 0;
+    if (tiled) { rFirst = tRun; rEnd = tileRunEnd(rFirst); tRun = rEnd; }
+    let s = select(k, i32(gTileRef[rFirst] >> 8u), tiled);
+` : `    let s = select(k, gPixSlot[k], tiled);
+`}    loadInstance(inst, base + s);
     if (gInstAlive < 0.5) { continue; }
     let counts = gInstCounts;
     let counts2 = gInstCounts2;
@@ -211,11 +219,16 @@ ${SHADE ? `  // POST-HIT BOUND (shade-bound-flag.ts): outside the walk (gCullUB 
     // through the SAME foldGroup the cluster walk uses, so the two paths
     // cannot drift. No per-step bound texel reads before the prim work and
     // no per-step slot scan — one table lookup plus the run's own fold.
-    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
+${TR ? `    for (var e = rFirst; e < rEnd; e = e + 1) {
+      let tRange = tileRange(data, e, band);
+${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(tRange.w) * 32.0 + 0.5) - 1); }
+` : ''}      d = foldGroup(d, p, data, counts, band, tileBounds(data, e, band), tRange);
+    }
+` : `    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
 ${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.5) - 1); }
 ` : ''}      d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
-  } else {
+`}  } else {
   // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
   // always been; a cluster that survives walks its own BOUND GROUPS
   // (pack.ts boundGroups) — contiguous runs of two to four prims in fold

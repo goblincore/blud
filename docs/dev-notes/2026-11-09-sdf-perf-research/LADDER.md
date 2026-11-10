@@ -2,6 +2,12 @@
 
 Stage 0 of [NOTES.md](NOTES.md). Measurement only; no renderer code changed.
 
+> **Read [WOUNDS.md](WOUNDS.md) with this.** This capture had the hull exit bound OFF (the capture harness's
+> stale default; the game ships it ON). The per-call results below hold either way. The missed-ray share and the
+> whole-pass percentages are larger here than on the shipped setting, where the stripped walk measured −11 to
+> −20 % of the pass on a clean close-up (and −12 % and −14.5 % for the real implementation on a close-up and a
+> 12-body crowd, per the `claude/march-lean-walk-40ed5e` branch's own timing).
+
 **Answer.** On a clean body the field itself (the primitive folds and the carves) is about a seventh
 of the walk-only frame. Most of the rest is what `mapBody` carries around each call for features
 this body does not use. Calling a stripped field function from the walk gives the same picture to

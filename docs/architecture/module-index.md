@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 59 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 60 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -130,6 +130,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/raymask-flag.ts` — COMPILE-TIME switch for the per-ray primitive mask PROBE (2026-10-08).
 - `webgpu/march/shade-bound-flag.ts` — COMPILE-TIME switch for the POST-HIT UPPER-BOUND CULL (SDF-cloth cost spike, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/march/shade-helpers.wgsl.ts` — Small shading helpers — texel fetch, soft shoulder, flicker and the level-only shadow lookup — split out of march.wgsl.ts (phase 1, move-only).
+- `webgpu/march/tile-ref-flag.ts` — COMPILE-TIME switch for the TILE REFERENCE LIST (2026-11-09; docs/dev-notes/2026-11-09-sdf-perf-research/ONE-CALL.md).
 
 ## webgpu/earlyz/
 
