@@ -14,7 +14,8 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     const pre = MARCH_BODY.indexOf('gTileActive = select(0.0, 1.0, tileCfg.x > 0.5);');
     expect(pre).toBeGreaterThan(-1);
     // The preload must precede the march loop and its mapBody call.
-    expect(pre).toBeLessThan(MARCH_BODY.indexOf('let dres = mapBody('));
+    expect(MARCH_BODY.indexOf('dres = mapBody(camPos + rd * t, ')).toBeGreaterThan(-1);
+    expect(pre).toBeLessThan(MARCH_BODY.indexOf('dres = mapBody(camPos + rd * t, '));
     // One read loop, bounded by the same cap the CPU binner clamps to.
     expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
     // The per-pixel slot table (perf 7d) is built in SETUP, once, from that

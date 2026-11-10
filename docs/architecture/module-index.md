@@ -120,8 +120,8 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/fields/wounds.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): wound field, mask and shadow.
 - `webgpu/march/helpers.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): the HELPERS include list.
 - `webgpu/march/layout.ts` — Data-texture row layout, group capacity, culling slack and the CPU face damage mirror — split out of march.wgsl.ts (phase 1, move-only).
-- `webgpu/march/lean-walk-flag.ts` — COMPILE-TIME switch for the CLEAN-BODY FAST PATH of the march's walk (2026-11-09; docs/superpowers/specs/2026-11-09-march-lean-walk-design.md).
-- `webgpu/march/lean-walk.wgsl.ts` — The CLEAN-BODY FAST PATH of the march's walk (`?leanwalk`, lean-walk-flag.ts): mapLean, the per-pixel test that chooses it, the census that counts…
+- `webgpu/march/lean-walk-flag.ts` — COMPILE-TIME switch for the CLEAN-BODY FAST PATH of the march's walk (2026-11-09; docs/superpowers/specs/2026-11-09-march-lean-walk-design.md,…
+- `webgpu/march/lean-walk.wgsl.ts` — The CLEAN-BODY FAST PATH of the march's walk: mapLean, the per-pixel test that chooses it, the census that counts it, and the test's CPU mirror.
 - `webgpu/march/limbs-flag.ts` — COMPILE-TIME switch for the per-limb fold accumulators (owner re-fold mode 4, 2026-09-21 wound-cost work).
 - `webgpu/march/map-body.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): the signed-distance body field and its normal.
 - `webgpu/march/math.wgsl.ts` — Hash, value noise, fbm and the quaternion helpers — split out of march.wgsl.ts (phase 1, move-only).

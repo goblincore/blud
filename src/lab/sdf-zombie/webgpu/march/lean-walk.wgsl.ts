@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/march/lean-walk.wgsl.ts
 //
-// The CLEAN-BODY FAST PATH of the march's walk (`?leanwalk`, lean-walk-flag.ts): mapLean, the per-pixel test that
-// chooses it, the census that counts it, and the test's CPU mirror. Spec, with the exactness argument branch by
+// The CLEAN-BODY FAST PATH of the march's walk: mapLean, the per-pixel test that chooses it, the census that counts
+// it, and the test's CPU mirror. On by default; `?leanwalk=0` is the march without it (lean-walk-flag.ts). Spec, with the exactness argument branch by
 // branch: docs/superpowers/specs/2026-11-09-march-lean-walk-design.md.
 //
 // In brief: on a walk call (noise 0, unpinned, no normal hint, no probe pass, before the hit) for a tile-list pixel
@@ -82,7 +82,7 @@ export const MAP_LEAN = /* wgsl */ `fn mapLean(pIn: vec3<f32>, data: texture_2d<
   return vec4<f32>(dUnion, bestIdxU, 0.0, carvedU);
 }`;
 
-export const LEAN_TEST_BLOCK = /* wgsl */ `  // LEAN WALK (?leanwalk, lean-walk-flag.ts). Once per pixel, after the tile preload, the slot table and the wound
+export const LEAN_TEST_BLOCK = /* wgsl */ `  // LEAN WALK (lean-walk-flag.ts). Once per pixel, after the tile preload, the slot table and the wound
   // list. True only when mapLean is exact for EVERY slot of the pixel's table (the argument, branch by branch, is in
   // docs/superpowers/specs/2026-11-09-march-lean-walk-design.md). debugCfg.x == -1 is the runtime A/B switch
   // (__sdfGame.setLeanWalk(false)). A non-empty per-ray wound list rules the pixel out whatever its bodies carry,
@@ -104,7 +104,7 @@ export const LEAN_TEST_BLOCK = /* wgsl */ `  // LEAN WALK (?leanwalk, lean-walk-
   }`;
 
 export const LEAN_CENSUS_BLOCK = /* wgsl */ `
-  // LEAN WALK CENSUS (debugCfg.x == 23, ?leanwalk only). Raw counters, returned before the miss discard.
+  // LEAN WALK CENSUS (debugCfg.x == 23). Raw counters, returned before the miss discard.
   // r = 1 where the walk took mapLean, g = slots in the pixel's table, b = steps + 1000 * hit. Only ever read back.
   // -23 is the same census with the runtime switch held (any negative mode holds it): r must then be 0 on every
   // pixel, which is how the switch is shown to reach the shader. The step counter only runs for a positive mode.

@@ -2,7 +2,7 @@
 //
 // THE LEAN WALK'S CENSUS of a captured frame (docs/superpowers/specs/2026-11-09-march-lean-walk-design.md): which
 // pixels' walks took mapLean. Reads the march target the GAME drew for a capture taken with debug mode 23 on a
-// `?leanwalk` page (capture.mjs, SPIKE_VARIANTS='...;census=__sdfGame.setMarchDebugMode(23)'): r = 1 where the walk
+// page with the lean walk compiled in (the default; not `?leanwalk=0`) (capture.mjs, SPIKE_VARIANTS='...;census=__sdfGame.setMarchDebugMode(23)'): r = 1 where the walk
 // took mapLean, g = the slots in the pixel's tile table, b = steps + 1000 x hit. No GPU: it reads the capture's files.
 //
 //   node scripts/native-spike/lean-census.mjs <captureDir-census>
@@ -17,7 +17,7 @@ if (!dir) { console.error('usage: node scripts/native-spike/lean-census.mjs <cap
 const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
 const sc = manifest.meta?.scene ?? {};
 if (!/setMarchDebugMode\(\s*23\s*\)/.test(sc.variant?.js ?? '')) { console.error(`lean-census: ${dir} was not captured with setMarchDebugMode(23)`); process.exit(1); }
-if (!/(^|&)leanwalk\b/.test(sc.query ?? '')) { console.error(`lean-census: ${dir} was not captured on a ?leanwalk page`); process.exit(1); }
+if (/(^|&)leanwalk=0\b/.test(sc.query ?? '')) { console.error(`lean-census: ${dir} was captured on a ?leanwalk=0 page, which has no census`); process.exit(1); }
 const pass = manifest.passes[0];
 const post = Object.values(pass.post)[0]?.mips?.[0];
 if (!post) { console.error('lean-census: the capture holds no readback of the pass output'); process.exit(1); }

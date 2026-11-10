@@ -4,7 +4,7 @@ import {
   REC_VOL_POSE0, REC_WIND_ALIVE, createCrowdRecords, type RecordSource,
 } from '../crowd-records';
 import type { SplitWarp } from '../../head-split';
-import { LEAN_WALK } from './lean-walk-flag';
+import { LEAN_WALK, LEAN_WALK_PROBE } from './lean-walk-flag';
 import { LEAN_CENSUS_BLOCK, LEAN_TEST_BLOCK, MAP_LEAN, leanSlotExact } from './lean-walk.wgsl';
 
 const clean = (): RecordSource => ({
@@ -23,8 +23,11 @@ const slotOk = (edit: (s: RecordSource) => void, slot = 1) => {
   return leanSlotExact(rec.floats, slot);
 };
 
-describe('the lean walk is compile-time gated (?leanwalk)', () => {
-  it('is off without the flag', () => { expect(LEAN_WALK).toBe(false); });
+describe('the lean walk is compile-time gated (lean-walk-flag.ts)', () => {
+  it('is on by default, walk only', () => {
+    expect(LEAN_WALK).toBe(true);
+    expect(LEAN_WALK_PROBE).toBe(false);
+  });
 });
 
 describe('leanSlotExact: the per-slot conditions of the per-pixel test', () => {

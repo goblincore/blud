@@ -9,8 +9,8 @@
 // with a wounded one (the whole pixel must stay on mapBody). This script stages
 // such a frame and compares the EXACT float march target, float for float:
 //
-//   boot 1, no flag    stage, read OFF
-//   boot 2, ?leanwalk  stage the same way, read ON (lean enabled), HELD after
+//   boot 1, ?leanwalk=0   stage, read OFF (the march without the lean walk)
+//   boot 2, the default   stage the same way, read ON (lean enabled), HELD after
 //                      __sdfGame.setLeanWalk(false), ON2 after setLeanWalk(true),
 //                      then the census (debug mode 23: r = 1 where the walk took
 //                      mapLean, g = the pixel's slot count, b = steps + 1000*hit)
@@ -39,7 +39,7 @@
 // point feeds the ray), aimed from 2 m in front of the body along the view ray,
 // stamped through __sdfGame.stampWoundAt(..., bodyId) on that body alone.
 //
-// OVERLAP ON A FLAG-OFF PAGE. Without the flag there is no census, so the
+// OVERLAP ON THE OFF BOOT. `?leanwalk=0` has no census, so the
 // script reports overlap from the per-body proxy boxes (actorDump centre +
 // bodyHalf from normalCaptureState, projected with the page's own camera and
 // projection, the method of __sdfGameDebug.readTileSlotMask): tiles covered by
@@ -47,7 +47,7 @@
 // A box overlap is a necessary condition for a shared tile table, not proof of
 // one; the census on the flag-on boot is the proof.
 //
-// LEAN_PARITY_AA=1 — the determinism check: both boots WITHOUT the flag, and
+// LEAN_PARITY_AA=1 — the determinism check: both boots `?leanwalk=0`, and
 // the comparison is OFF(boot 1) against OFF(boot 2) (clean and wounded). Run it
 // before trusting an off-vs-on comparison: two boots that do not agree with the
 // flag off make any flag-on difference meaningless. Do not loosen anything if
@@ -61,13 +61,13 @@
 //   LEAN_PARITY_QUERY=<query>     extra page query on both boots (e.g. crowddispatch=boxes)
 //   LEAN_PARITY_EXITBOUND=1       the shipped hull exit bound ON on both boots (default off, the
 //                                 march-hash.mjs regime); echoed as hullExitBound in the JSON line
-//   LEAN_PARITY_FLAG=<query>     the flag-on boot's flag (default leanwalk; leanwalk=walk is the walk-only build)
+//   LEAN_PARITY_FLAG=<query>     the on boot's flag (default none: the shipped page, walk only; leanwalk = walk and probe)
 //   LEAN_PARITY_OUT=<dir>         also write each buffer as <dir>/<name>.f32 + .f32.json ({w,h}),
 //                                 the layout scripts/march-raw-diff.mjs reads
 //   MARCH_HASH_BG_WAIT_S          the background-compile ceiling (default 600), as march-hash.mjs
 //
 // Output: ONE JSON line to stdout; exit 0 on pass, 1 on any difference, an
-// unexercised frame, or a page without the flag compiled in.
+// unexercised frame, or an on boot without the lean walk (or an off boot with it).
 //
 // Run (under the machine's GPU lock, LAB_TMP=.lab-tmp):
 //   LAB_TMP=.lab-tmp LAB_VITE_PORT=5377 LAB_CDP_PORT=9377 scripts/native-spike/servers.sh \
@@ -85,8 +85,10 @@ const AA = process.env.LEAN_PARITY_AA === '1';
 const CROWD = Number(process.env.LEAN_PARITY_CROWD ?? 12);
 const EXTRA = process.env.LEAN_PARITY_QUERY ? `&${process.env.LEAN_PARITY_QUERY}` : '';
 const OUT = process.env.LEAN_PARITY_OUT ?? '';
-// LEAN_PARITY_FLAG — the flag-on boot's query (default `leanwalk`; `leanwalk=walk` leaves the temporal probe on mapBody).
-const LEAN_FLAG = process.env.LEAN_PARITY_FLAG ?? 'leanwalk';
+// THE LEAN WALK IS ON BY DEFAULT since 2026-11-09 (walk only; lean-walk-flag.ts). So the "off" boot of this gate is
+// `?leanwalk=0` and the "on" boot is the DEFAULT page. LEAN_PARITY_FLAG names another form for the on boot
+// (`leanwalk`: the temporal probe on mapLean too).
+const LEAN_FLAG = process.env.LEAN_PARITY_FLAG ?? '';
 // LEAN_PARITY_EXITBOUND=1 — the SHIPPED hull exit bound. applyShipDefaults turns it
 // off (the march-hash.mjs regime, where its pins were taken); the game ships it on.
 // Set after the ship defaults on both boots, before staging; the JSON line says which.
@@ -258,12 +260,13 @@ const tilesOf = (box, W, H) => {
 
 // ---- one boot: pin, stage the crowd, wound one body, read ----
 const boot = async (lean) => {
-  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? `&${LEAN_FLAG}` : ''}`;
+  const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA}${lean ? (LEAN_FLAG ? `&${LEAN_FLAG}` : '') : '&leanwalk=0'}`;
   await bootCloseupPage({ send, evaluate, fail, url });
   const state = await evaluate('typeof __sdfGame.leanWalkState === "function" ? JSON.stringify(__sdfGame.leanWalkState()) : "null"').then(JSON.parse);
   if (lean && (!state || state.compiled !== true)) {
-    fail(`page was not compiled with ?leanwalk (leanWalkState ${state ? JSON.stringify(state) : 'missing'}) — tasks 1 and 2 have not landed, or the flag did not reach the march`);
+    fail(`the lean walk is not compiled into the on boot's page (leanWalkState ${state ? JSON.stringify(state) : 'missing'})`);
   }
+  if (!lean && (!state || state.compiled !== false)) fail(`the off boot's page (?leanwalk=0) still has the lean walk compiled in (leanWalkState ${state ? JSON.stringify(state) : 'missing'})`);
   // WAIT FOR THE BACKGROUND COMPILES (march-hash.mjs): until the crowd job is
   // ready every member is drawn through the per-body fallback.
   const BG_WAIT_S = Number(process.env.MARCH_HASH_BG_WAIT_S ?? 600);
@@ -390,7 +393,7 @@ const boot = async (lean) => {
 
   // Flag-on legs: HELD (forced onto mapBody), ON2 (back), the census.
   const leanState = async () => JSON.parse(await evaluate('JSON.stringify(__sdfGame.leanWalkState())'));
-  if (!(await leanState()).enabled) fail(`?leanwalk page has the fast path disabled before the first read: ${JSON.stringify(await leanState())}`);
+  if (!(await leanState()).enabled) fail(`the on boot has the fast path disabled before the first read: ${JSON.stringify(await leanState())}`);
   await evaluate('__sdfGame.setLeanWalk(false)');
   await redraw();
   rec.heldState = await leanState();

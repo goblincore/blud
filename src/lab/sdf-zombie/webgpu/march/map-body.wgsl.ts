@@ -13,8 +13,8 @@ import { REGION_MARGIN } from '../../head-split';
 import { SPLIT_ABL, ablWgsl } from '../split-ablate';
 import { CUT_NEAR } from '../../cut-wound';
 
-// Under `?leanwalk` (lean-walk-flag.ts) the tail also carries mapLean (lean-walk.wgsl.ts), the walk's clean-body
-// fast path, the way FOLD_GROUP's tail carries limbLoad under `?limbs`.
+// The tail also carries mapLean (lean-walk.wgsl.ts), the walk's clean-body fast path, the way FOLD_GROUP's tail
+// carries limbLoad under `?limbs`. `?leanwalk=0` (lean-walk-flag.ts) leaves it out.
 export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
   gWalkGapNew = 1e9;

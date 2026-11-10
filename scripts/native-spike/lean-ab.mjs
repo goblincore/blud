@@ -36,21 +36,16 @@
 //   (WOUND: three shots at body 1, the close-up's body, from the eye along the view axis and beside it. march-hash.mjs's
 //   fixed room1-wounded rays are for ITS page and missed on this one.)
 //
-//   # clean close-up (the ladder's frame): flag off; flag on with the switch released (-on) and held (-held)
-//   LAB_TMP=.lab-tmp $S .scratch/lean/closeup-xb0-off
-//   LAB_TMP=.lab-tmp SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/closeup-xb0
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB" $S .scratch/lean/closeup-xb1-off
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB" SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/closeup-xb1
-//   # crowd (capture.mjs's SPIKE_SCENE=crowd: 12 zombies in room 1's far half)
-//   LAB_TMP=.lab-tmp SPIKE_SCENE=crowd $S .scratch/lean/crowd-xb0-off
-//   LAB_TMP=.lab-tmp SPIKE_SCENE=crowd SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/crowd-xb0
-//   LAB_TMP=.lab-tmp SPIKE_SCENE=crowd SPIKE_PRELUDE="$XB" $S .scratch/lean/crowd-xb1-off
-//   LAB_TMP=.lab-tmp SPIKE_SCENE=crowd SPIKE_PRELUDE="$XB" SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/crowd-xb1
-//   # wounded close-up
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$WOUND" $S .scratch/lean/wounded-xb0-off
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$WOUND" SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/wounded-xb0
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB $WOUND" $S .scratch/lean/wounded-xb1-off
-//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB $WOUND" SPIKE_QUERY=leanwalk SPIKE_VARIANTS="$ON" $S .scratch/lean/wounded-xb1
+//   # THE LEAN WALK IS ON BY DEFAULT since 2026-11-09 (walk only). A capture with no SPIKE_QUERY is the shipped page;
+//   # SPIKE_QUERY=leanwalk=0 is the march without it; SPIKE_QUERY=leanwalk is the walk and the probe.
+//   # clean close-up (the ladder's frame): the march without the lean walk; the default with the switch released
+//   # (-on) and held (-held), and its census; the walk-and-probe form
+//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB" SPIKE_QUERY=leanwalk=0 $S .scratch/lean/closeup-xb1-off
+//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB" SPIKE_VARIANTS="$ON" $S .scratch/lean/closeup-xb1
+//   LAB_TMP=.lab-tmp SPIKE_PRELUDE="$XB" SPIKE_QUERY=leanwalk SPIKE_VARIANTS='on=__sdfGame.setLeanWalk(true)' $S .scratch/lean/closeup-xb1-probe
+//   # the same without SPIKE_PRELUDE="$XB" as -xb0 (the bound off: the ladder's and march-hash.mjs's regime)
+//   # crowd (capture.mjs's SPIKE_SCENE=crowd: 12 zombies in room 1's far half): add SPIKE_SCENE=crowd, name it crowd-xb1
+//   # wounded close-up: SPIKE_PRELUDE="$XB $WOUND", name it wounded-xb1
 //
 // The flag-off and flag-on captures are separate boots, so they are separate stagings of the same frozen scene, and
 // timing one against the other compares frames as well as programs. So the flag-off leg is the flag-on boot's FRAME
@@ -61,7 +56,7 @@
 //
 //   LAB_TMP=.lab-tmp scripts/native-spike/servers.sh node scripts/native-spike/lean-ab.mjs 6 \
 //     off=.scratch/lean/closeup-xb1-on@.scratch/lean/closeup-xb1-off off2=.scratch/lean/closeup-xb1-on@.scratch/lean/closeup-xb1-off \
-//     on=.scratch/lean/closeup-xb1-on held=.scratch/lean/closeup-xb1-held
+//     on=.scratch/lean/closeup-xb1-on held=.scratch/lean/closeup-xb1-held probe=.scratch/lean/closeup-xb1-on@.scratch/lean/closeup-xb1-probe-on
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -93,7 +88,7 @@ for (const leg of LEGS) {
   const xb = /setHullExitBound\(\s*true\s*\)/.test(sc.prelude ?? '') ? 1 : 0;
   leg.hullExitBound = xb === 1;
   leg.scene = { scene: sc.scene, query: sc.query, variant: sc.variant?.name ?? '', prelude: sc.prelude ?? '' };
-  leg.label = [`${sc.scene ?? '?'}`, sc.query ? `?${sc.query}` : 'no flag', sc.variant?.name || null, `xb${xb}`, leg.note || null].filter(Boolean).join(' ');
+  leg.label = [`${sc.scene ?? '?'}`, sc.query ? `?${sc.query}` : 'default page', sc.variant?.name || null, `xb${xb}`, leg.note || null].filter(Boolean).join(' ');
 }
 
 // name=<dir>@<shaderDir>: replay <dir>'s FRAME with <shaderDir>'s march PROGRAM (the shader module that declares

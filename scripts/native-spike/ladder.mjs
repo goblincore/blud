@@ -24,7 +24,9 @@
 //   lean-direct    mapLean reads the tile entries from the storage buffer, not the private arrays
 //   count          not timed: steps and primitive folds per pixel, read back from the target
 //
-// Captures: SPIKE_VARIANTS='ship=0;flat=__sdfGame.setFlatAlbedo(true)' capture.mjs ... <out>
+// THE LEAN WALK (lean-walk-flag.ts) is on by default since 2026-11-09, and the rungs below edit the march's text as it
+// was WITHOUT it: capture with SPIKE_QUERY=leanwalk=0.
+// Captures: SPIKE_QUERY=leanwalk=0 SPIKE_VARIANTS='ship=0;flat=__sdfGame.setFlatAlbedo(true)' capture.mjs ... <out>
 // gives <out>-ship and <out>-flat from one boot. Run under servers.sh so the Chrome stays up:
 //
 //   scripts/native-spike/servers.sh node scripts/native-spike/ladder.mjs <out> [reps] [rung,rung,...]
@@ -49,7 +51,7 @@ const once = (code, find, repl) => {
 const WALK_CALL = /    let dres = mapBody\(camPos \+ rd \* t, ([^\n]*)\);\n/;
 const walkArgs = (code) => {
   const m = WALK_CALL.exec(code);
-  if (!m) throw new Error('ladder: the walk\'s mapBody call was not found');
+  if (!m) throw new Error('ladder: the walk\'s mapBody call was not found (capture with SPIKE_QUERY=leanwalk=0: the rungs edit the march without the lean walk)');
   return m[1];
 };
 
