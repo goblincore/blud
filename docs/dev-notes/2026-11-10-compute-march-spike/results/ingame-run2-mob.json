@@ -1,0 +1,237 @@
+{
+ "query": "frozen=1&marchcompute",
+ "prelude": "docs/dev-notes/2026-11-10-compute-march-spike/prelude-mob.js",
+ "frames": 30,
+ "rounds": 12,
+ "ship": {
+  "sdfScale": 0.5,
+  "upscale": true
+ },
+ "settleS": 1.716,
+ "state": {
+  "compiled": true,
+  "enabled": true,
+  "types": [
+   {
+    "frames": 22,
+    "groups": [
+     32,
+     35
+    ],
+    "rect": [
+     72,
+     30,
+     328,
+     300
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 4,
+    "groups": [
+     16,
+     17
+    ],
+    "rect": [
+     0,
+     118,
+     124,
+     246
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 22,
+    "groups": [
+     17,
+     14
+    ],
+    "rect": [
+     158,
+     89,
+     281,
+     195
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 18,
+    "groups": [
+     50,
+     38
+    ],
+    "rect": [
+     0,
+     0,
+     400,
+     300
+    ],
+    "drawing": true
+   }
+  ]
+ },
+ "baseMs": 50.96833333571752,
+ "summary": {
+  "off2": {
+   "medianMs": 50.769999998807904,
+   "diffMedianMs": 0.21333333452542647,
+   "diffMinMs": -23.683333329359684,
+   "diffMaxMs": 16.186666667461395,
+   "diffMedianPct": 0.4185605464480178
+  },
+  "on": {
+   "medianMs": 48.88999999960264,
+   "diffMedianMs": -2.784999998410541,
+   "diffMinMs": -11.533333333333331,
+   "diffMaxMs": 8.616666662693028,
+   "diffMedianPct": -5.4641771000561095
+  }
+ },
+ "rows": [
+  {
+   "off": 66.97999999920528,
+   "off2": 72.68333333333334,
+   "on": 69.02000000079472
+  },
+  {
+   "on": 80.62333333094915,
+   "off": 74.62999999920527,
+   "off2": 50.946666669845584
+  },
+  {
+   "off": 52.23666666348775,
+   "off2": 53.65666666825612,
+   "on": 49.480000003178915
+  },
+  {
+   "on": 59.19333333174388,
+   "off": 50.57666666905085,
+   "off2": 51.416666666666664
+  },
+  {
+   "off": 50.48666666348775,
+   "off2": 50.793333331743874,
+   "on": 41.34000000158946
+  },
+  {
+   "on": 49.233333333333334,
+   "off": 52.18666666348775,
+   "off2": 50.746666665871935
+  },
+  {
+   "off": 50.253333334128065,
+   "off2": 48.26000000238419,
+   "on": 44.41000000238419
+  },
+  {
+   "on": 48.54666666587194,
+   "off": 51.36000000238418,
+   "off2": 47.106666668256125
+  },
+  {
+   "off": 45.870000000794725,
+   "off2": 62.05666666825612,
+   "on": 45.35333333412806
+  },
+  {
+   "on": 50.28333333333333,
+   "off": 50.55,
+   "off2": 50.67000000079473
+  },
+  {
+   "off": 47.129999999205275,
+   "off2": 50.05666666825612,
+   "on": 43.006666664282484
+  },
+  {
+   "on": 44.82999999920527,
+   "off": 56.3633333325386,
+   "off2": 45.53333333333333
+  }
+ ],
+ "passes": "{\"installed\":true,\"samples\":[{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":2.797374,\"start\":0,\"end\":2.797374},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.272329,\"start\":0,\"end\":0.272329},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.021792,\"start\":1.118441,\"end\":1.140233},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":2.316422,\"start\":7.316056,\"end\":9.632478},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":0.831237,\"start\":8.937656,\"end\":9.768893},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":36.529485,\"start\":9.681852,\"end\":46.211337},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":36.982603,\"start\":9.687477,\"end\":46.67008},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":37.517553,\"start\":9.693435,\"end\":47.210988},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":37.55526,\"start\":9.714727,\"end\":47.269987},{\"frame\":0,\"label\":\"sdf:upscale:L1a\",\"kind\":\"render\",\"ms\":37.69255,\"start\":9.744351,\"end\":47.436901},{\"frame\":0,\"label\":\"sdf:upscale:L2a\",\"kind\":\"render\",\"ms\":38.000836,\"start\":9.758768,\"end\":47.759604},{\"frame\":0,\"label\":\"sdf:upscale:L3a\",\"kind\":\"render\",\"ms\":38.326873,\"start\":9.772976,\"end\":48.099849},{\"frame\":0,\"label\":\"sdf:upscale:L4a\",\"kind\":\"render\",\"ms\":39.266984,\"start\":9.810892,\"end\":49.077876},{\"frame\":0,\"label\":\"sdf:upscale:shuffle\",\"kind\":\"render\",\"ms\":39.449856,\"start\":9.842392,\"end\":49.292248},{\"frame\":0,\"label\":\"sdf:upscale:sharpen\",\"kind\":\"render\",\"ms\":37.156475,\"start\":12.269813,\"end\":49.426288},{\"frame\":0,\"label\":\"sdf:composite\",\"kind\":\"render\",\"ms\":2.262965,\"start\":47.288029,\"end\":49.550994},{\"frame\":0,\"label\":\"goo:surface\",\"kind\":\"render\",\"ms\":2.458754,\"start\":47.345653,\"end\":49.804407},{\"frame\":0,\"label\":\"effects\",\"kind\":\"render\",\"ms\":2.506462,\"start\":47.360944,\"end\":49.867406},{\"frame\":0,\"label\":\"post:fxaa\",\"kind\":\"render\",\"ms\":2.796707,\"start\":47.391694,\"end\":50.188401},{\"frame\":0,\"label\":\"post:vhs-input\",\"kind\":\"render\",\"ms\":2.867248,\"start\":47.41411,\"end\":50.281358},{\"frame\":0,\"label\":\"post:vhs\",\"kind\":\"render\",\"ms\":2.971413,\"start\":47.428151,\"end\":50.399564},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":3.092036,\"start\":47.442151,\"end\":50.534187},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":3.133577,\"start\":47.487359,\"end\":50.620936},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":2.890165,\"start\":49.809448,\"end\":52.699613},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":2.491045,\"start\":50.371857,\"end\":52.862902},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":1.824138,\"start\":51.149387,\"end\":52.973525},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":32.172509,\"start\":52.465825,\"end\":84.638334},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":33.066746,\"start\":52.472449,\"end\":85.539195},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":33.578071,\"start\":52.476616,\"end\":86.054687},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":33.589696,\"start\":5"
+}

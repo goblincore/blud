@@ -195,6 +195,39 @@ No compile or validation error stopped any leg. Each new compute text took 25 to
 - The gain is on top of the reference list and needs it. Whether it stacks with the levers still open (the
   field-derived silhouettes, the analytic normal on wounded bodies) is not measured.
 
+## In the game, behind `?marchcompute` (added the same day)
+
+Built as the form above suggests: `src/lab/sdf-zombie/webgpu/march-compute.ts`, switch in
+`march/compute-flag.ts`. Off by default; off, no node of it is created and the golden shader snapshot is unchanged.
+
+- **What it does.** Each quad-dispatch crowd type gets a compute twin of its march material: the same `marchBody`
+  call with the same arguments, on a compute stage's pixel and camera (uniforms), in 8 × 8 workgroups over the
+  quad's pixel rect, with every `discard` of the entry turned into a flag. It writes a storage texture. Around the
+  march's render the layer swaps the type's quad onto a material that copies that texture into the march target
+  and writes the hit depth through the depth test. The target, its depth, and everything after them are untouched.
+- **What it does not cover.** Per-body views, chunks, the first-person hands, box dispatch, the per-body gate, and
+  the march's extra attachments (`graphics=high`): all stay on the fragment march. The compute program compiles on
+  its first frame, on the main thread; it is not in the background warm-up.
+- **Picture** (22-body mob, light and probe clocks pinned as `march-hash.mjs` pins them, five captures from one
+  boot): fragment against fragment 0 texels differ, compute against compute 0, fragment against compute 145 texels
+  over 1e-4 (largest 0.048, one pixel over 0.02, no hit/miss change). That is the replay's stage difference and
+  nothing more. Unpinned, two fragment captures of the frozen frame differ in 80,000 texels, so an unpinned
+  comparison says nothing.
+- **Whole frames** (`scripts/native-spike/compute-ingame.mjs`: one compiled page, `__sdfGame.setMarchCompute`
+  flipped in alternation, 30 hand-stepped frames a sample to the GPU fence, headless):
+
+  | Scene | Run | Fragment march | Compute march | A/A |
+  | --- | --- | --- | --- | --- |
+  | Clean mob | 1 (8 rounds) | 52.4 ms | −5.2 ms, −9.9 % (−17.6 to +2.1) | −0.1 % (−6.4 to +5.7 ms) |
+  | Clean mob | 2 (12 rounds) | 51.0 ms | −2.8 ms, −5.5 % (−11.5 to +8.6) | +0.4 % (−23.7 to +16.2 ms) |
+  | Wounded mob | 1 (8 rounds) | 71.0 ms | −10.9 ms, −15.4 % (−17.6 to +21.6) | −3.4 % (−10.1 to +28.2 ms) |
+  | Wounded mob | 2 (12 rounds) | 70.6 ms | −8.6 ms, −12.1 % (−16.9 to +21.5) | −0.7 % (−10.2 to +21.0 ms) |
+
+  **Faster in both scenes in both runs, and the size is not pinned down.** The machine was busy for both runs
+  (1-minute load 8 to 12 at the start of run 2) and single rounds of the control swing as far as the effect. The
+  medians are also about half what the replayed pass predicts (12 and 20 ms). Whether that is noise or the frame
+  (the copy, the passes that share the GPU) is not established: a quiet-machine run is owed.
+
 ## Not verified
 
 - **The live game.** Every number is a replayed pass: the game's frame time, the three.js node path (the march is a

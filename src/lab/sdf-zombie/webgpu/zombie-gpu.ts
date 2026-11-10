@@ -70,6 +70,8 @@ export const WOUND_EXACT_BIT = 8;
 export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32 + WOUND_EXACT_BIT;
 import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
+import { MARCH_COMPUTE, MARCH_DISCARD_READ, marchBodyForCompute } from './march/compute-flag';
+import type { MarchStage, MarchComputeNodes } from './march-compute';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
@@ -301,7 +303,7 @@ export const detailFieldFn = (() => {
   return wgslFn(DETAIL_FIELD, chain.slice(-1));
 })();
 
-function buildEntryFn(entry: string) {
+function buildEntryFn(entry: string, seed: ReturnType<typeof wgslFn> = marchNormalRead) {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,
   // before calcNormal which calls it — so any future per-body variant of it
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
@@ -319,9 +321,21 @@ function buildEntryFn(entry: string) {
   // At 26 helpers that is 25 edges rather than 325, and three's NodeBuilder
   // walks those edges repeatedly (NodeBuilder.get was 37.6% of a boot profile).
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [seed],
   );
   return wgslFn(entry, nodes.slice(-1));
+}
+
+/** THE COMPUTE MARCH (march/compute-flag.ts): the march entry with its discards as a flag, and the flag's read.
+ *  LAZY, as earlyzBoxExitFn below and for the same reason: built at import these would renumber the shipped
+ *  programs' buffers. First use is a crowd type's compute twin, which only exists under ?marchcompute. */
+let marchComputeFns: { march: ReturnType<typeof wgslFn>; discardRead: ReturnType<typeof wgslFn> } | null = null;
+function marchComputeEntry() {
+  if (!marchComputeFns) {
+    const discardRead = wgslFn(MARCH_DISCARD_READ, [marchNormalRead] as never);
+    marchComputeFns = { march: buildEntryFn(marchBodyForCompute(MARCH_BODY), discardRead), discardRead };
+  }
+  return marchComputeFns;
 }
 
 /** The default march entry (plus its dependency-ordered helpers), shared by
@@ -1317,6 +1331,9 @@ function fallbackDepthPreUniform() {
  *  the hull point's own distance; `marchCfg` a separate steps uniform so
  *  the inner view's 96 stays untouched; `side` FrontSide for a hull. */
 export interface MarchRayOverride {
+  /** THE COMPUTE MARCH: the nodes that stand in for the fragment stage's own (the pixel's screenUV, the camera),
+   *  and where the march node is handed back. Absent on every material that is drawn. */
+  stage?: MarchStage;
   worldPos: unknown;
   startT: unknown;
   marchCfg: unknown;
@@ -1414,10 +1431,19 @@ export function createMarchMaterial(
   // The ray's world direction. Per-body/box materials derive it from the
   // fragment's interpolated positionWorld; a quad-dispatch crowd reconstructs
   // it from screenUV and passes it through `rays` (see crowdRayNodes).
-  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, cameraPosition))) as never;
+  // THE STAGE'S NODES. A drawn material reads the fragment stage's own; the compute twin (rays.stage) brings its
+  // pixel and camera as uniforms. Undefined, every name below is the node it always was.
+  const st = rays?.stage;
+  const stCamPos = (st?.camPos ?? cameraPosition) as typeof cameraPosition;
+  const stView = (st?.view ?? cameraViewMatrix) as typeof cameraViewMatrix;
+  const stProj = (st?.proj ?? cameraProjectionMatrix) as typeof cameraProjectionMatrix;
+  const stNear = (st?.near ?? cameraNear) as typeof cameraNear;
+  const stFar = (st?.far ?? cameraFar) as typeof cameraFar;
+  const stUV = (st?.screenUV ?? screenUV) as typeof screenUV;
+  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, stCamPos))) as never;
   /** The ray's cosine against the view axis — one definition, shared by the prev-depth
    *  fetch and (via `extra`) any entry that needs it. */
-  const cosRay = mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate();
+  const cosRay = mul(stView, vec4(rayDir, 0.0)).z.negate();
   // Level-only shadow map (perf round 2 task 7). The node rides the march's
   // last three slots; its .value starts on the 1×1 fallback whenever the
   // twin light has not rendered yet (shadow.map is null before three's
@@ -1431,7 +1457,7 @@ export function createMarchMaterial(
   );
   const callMarch = () => (output === 'surface' ? sdfSurfaceMarch : march)({
     worldPos: (rays?.worldPos ?? positionWorld) as never,
-    camPos: cameraPosition,
+    camPos: stCamPos,
     data: dataNode,
     volumeTex: volumeNode,
     faceTex: u.faceTex,
@@ -1500,20 +1526,20 @@ export function createMarchMaterial(
     tileHdr: (tiles?.header ?? fallbackTileBindings().header) as never,
     tileEnt: (tiles?.entries ?? fallbackTileBindings().entries) as never,
     tileCfg: u.tileCfg,
-    screenUV: screenUV,
+    screenUV: stUV,
     startT: rays
       ? (rays.startT as never)
       : cone
         ? coneFetch({
             coneTex: texture(cone.texture),
-            screenUV: screenUV,
+            screenUV: stUV,
             enabled: cone.uniforms.enabled,
           })
         : float(0),
     occT: occluder
       ? occFetchNode({
           occTex: texture(occluder.texture),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: occluder.uniforms.enabled,
         })
       : float(1e9),
@@ -1522,7 +1548,7 @@ export function createMarchMaterial(
     shellIn: shell
       ? shellFetchNode({
           shellTex: texture(shell.entry),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: shell.uniforms.enabled,
           disabledValue: float(0),
         })
@@ -1530,7 +1556,7 @@ export function createMarchMaterial(
     shellOut: shell
       ? shellFetchNode({
           shellTex: texture(shell.exit),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: shell.uniforms.enabled,
           disabledValue: float(1e9),
         })
@@ -1545,10 +1571,10 @@ export function createMarchMaterial(
     prevT: prev
       ? prevFetchNode({
           prevTex: texture(prev.texture),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: prev.uniforms.enabled,
-          near: cameraNear,
-          far: cameraFar,
+          near: stNear,
+          far: stFar,
           cosRay,
         })
       : float(1e9),
@@ -1640,9 +1666,17 @@ export function createMarchMaterial(
     const tileEmpty = quadTileEmptyNode({
       tileHdr: tiles.header as never,
       tileCfg: u.tileCfg as never,
-      screenUV,
+      screenUV: stUV,
     });
-    marched = Fn(() => {
+    // THE COMPUTE MARCH has no discard: the kernel takes the same gate as a condition and skips the march.
+    if (st) {
+      marched = callMarch();
+      st.capture({
+        marched,
+        emptyTile: (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)),
+        discarded: (dep: unknown) => marchComputeEntry().discardRead({ dep: dep as never }),
+      } as MarchComputeNodes);
+    } else marched = Fn(() => {
       If(
         (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)) as never,
         () => { Discard(); },
@@ -1677,8 +1711,8 @@ export function createMarchMaterial(
   const tracedHit = output === 'surface'
     ? (marched as unknown as { toVar: (name: string) => Swizzled }).toVar('sdfTrace')
     : marched;
-  const hitPos = add(cameraPosition, mul(rayDir, tracedHit.w as never));
-  const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
+  const hitPos = add(stCamPos, mul(rayDir, tracedHit.w as never));
+  const clip = mul(stProj, mul(stView, vec4(hitPos, 1.0)));
   const depth = clip.z.div(clip.w);
 
   if (output === 'surface') {
@@ -1745,6 +1779,11 @@ export interface CrowdMaterialHandles {
   /** The quad dispatch's NDC rasterisation rect — the SAME uniform node the
    *  lit material and its depth-pre twin read. Undefined on the box material. */
   quadRect?: { value: THREE.Vector4 };
+  /** THE COMPUTE MARCH (?marchcompute, quad dispatch with tile lists only): wires the SAME march call this
+   *  material makes onto a compute stage's nodes, and hands the march node back through stage.capture. */
+  buildCompute?: (stage: MarchStage, ray: { worldPos: unknown; rayDir: unknown }) => void;
+  /** The quad's clip-space vertex node, for the material that copies the compute march's result. */
+  quadClip?: unknown;
 }
 
 /** TSL's `attribute` factory is untyped at runtime; this names the node
@@ -1998,6 +2037,28 @@ export function createCrowdMaterial(
     depthPreMaterial,
     quadRect: quad
       ? (quadNodes!.quadRect as unknown as { value: THREE.Vector4 })
+      : undefined,
+    quadClip: quad ? quadNodes!.clip : undefined,
+    // The compute twin binds what the drawn material binds, argument for argument, and SHARES its level-shadow and
+    // segment-volume nodes: the owner rebinds those per frame through the drawn material only.
+    buildCompute: quad && MARCH_COMPUTE && tiles
+      ? (stage, ray) => {
+          createMarchMaterial(
+            dataTex, volumeTex, u,
+            marchComputeEntry().march as unknown as typeof marchBody,
+            undefined, sources?.occluder,
+            { header: tiles.headerNode, entries: tiles.entryNode },
+            sources?.shell, sources?.prev, undefined,
+            { stage, worldPos: ray.worldPos, rayDir: ray.rayDir, startT: float(0), marchCfg: u.marchCfg, side: THREE.DoubleSide },
+            sources?.depthPre, 'lit', undefined,
+            sources?.probeDyn?.node, sources?.lastFrame,
+            undefined,
+            (material as unknown as MaterialWithLevelShadowTex).levelShadowTex as never,
+            mainSegVolume.segVolumeAtlas as never, mainSegVolume.segVolumeMeta as never,
+            { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+            sources?.lightList?.node,
+          );
+        }
       : undefined,
     setSkeletonVolume(atlas, meta) {
       mainSegVolume.segVolumeAtlas.value = atlas;

@@ -68,6 +68,11 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     to the bit: 48 to 143 texels of 120,000 over 1e-4 on shipped frames, no hit/miss change. Not built in the game;
     why it is faster is not established. A wounded 22-body mob holds the same gain (61.1 ms to 45.0, and 40.5 in
     8 × 8). All on three r186. Driver: `scripts/native-spike/compute-march.mjs`.
+  - **Built behind `?marchcompute`, 2026-11-10** (`march-compute.ts`; quad-dispatch crowd types only, off by
+    default, the flag-off shader text unchanged). In the game it draws the fragment march's picture but for the
+    replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
+    runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
+    compile moved into the background warm-up, a look in motion, the paths it does not cover.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).

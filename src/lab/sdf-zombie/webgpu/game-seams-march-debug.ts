@@ -12,6 +12,8 @@ import * as THREE from 'three/webgpu';
 import { REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_MELT, REC_VEC4S, REC_VOL_POSE0, REC_WIND_ALIVE, REC_WOUND_BOUND } from './crowd-records';
 import { classifyNormalSupport } from './normal-gradient-support';
 import { LEAN_WALK } from './march/lean-walk-flag';
+import { MARCH_COMPUTE } from './march/compute-flag';
+import { marchComputeInfo, setMarchComputeEnabled } from './march-compute';
 
 export function createMarchDebugSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;
@@ -165,6 +167,12 @@ export function createMarchDebugSeams(ctx: GameContext) {
       for (const c of ctx.bake.views) c.uniforms.debugCfg.value.x = x;
       for (const t of ctx.crowd.types.values()) t.uniforms.debugCfg.value.x = x;
     },
+    /** THE COMPUTE MARCH runtime A/B (march-compute.ts; a `?marchcompute` page only). false draws the fragment march
+     *  again from the next frame; both programs stay compiled. */
+    setMarchCompute(on: boolean) { setMarchComputeEnabled(on); },
+    /** Whether this page built the compute march, whether the switch leaves it on, and each crowd type's last
+     *  dispatch (frames, workgroups, the pixel rect). */
+    marchComputeState() { return { compiled: MARCH_COMPUTE, ...marchComputeInfo() }; },
     /** Whether this page compiled the lean walk in, and whether the runtime switch leaves it on. */
     leanWalkState() {
       const x = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
