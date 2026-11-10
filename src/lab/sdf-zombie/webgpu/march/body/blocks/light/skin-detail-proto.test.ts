@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { SKIN_DETAIL_BY_CHARACTER, SKIN_POST, SKIN_PRE, skinDetailFor } from './skin-detail-proto';
 import { COMPOSE_BLOCK } from './compose.wgsl';
 
-describe('skin detail (owner 2026-09-28: zombie off, soldier 1)', () => {
-  it('soldier at 1, everyone else (the zombie included) off', () => {
-    expect(SKIN_DETAIL_BY_CHARACTER).toEqual({ soldier: 1 });
+describe('skin detail (owner 2026-09-28: zombie off; 2026-11-10: soldier off)', () => {
+  it('off for every character, the soldier included', () => {
+    expect(SKIN_DETAIL_BY_CHARACTER).toEqual({});
     expect(skinDetailFor('zombie')).toBe(0);
-    expect(skinDetailFor('soldier')).toBe(1);
+    expect(skinDetailFor('soldier')).toBe(0);
     expect(skinDetailFor('warbull')).toBe(0);
   });
   it('reads the per-instance lane (no URL in node) and wraps the shoulder', () => {

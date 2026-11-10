@@ -30,6 +30,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   pixels and 68 % of a chopped one's go back to the analytic normal, −13 % and −8 % of the pass. The skin's
   mottling shifts over the wounded area ([sheet](../dev-notes/2026-11-09-sdf-perf-research/look/pelship-ng-both.png));
   owner 2026-11-09: not a big deal. **Not built in the game yet** (ladder rungs only).
+- [x] **The soldier's grey mottling was its skin detail layer, not the analytic normal** (2026-11-10). The layer
+  restored the 20 cm shell lumps only on analytic pixels, so the skin changed with the normal path and went smooth
+  at the first wounds. Soldier k is now 0; no character uses the layer.
+  [Note](../dev-notes/2026-11-10-soldier-skin-detail/NOTES.md).
 - [ ] The open head's region sphere keeps half of a split frame's pixels on the taps (no analytic normal there by
   design). The probes on the stripped call for clean pixels. The hull's fit, for the missed rays.
 - [x] **The walk's time is a fixed cost per fragment, not its steps**

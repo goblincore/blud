@@ -1,0 +1,73 @@
+{
+  "who": "zombie",
+  "w": 400,
+  "h": 300,
+  "staged": {
+    "d": 0.75,
+    "cov": 0.47786666666666666,
+    "body": 1
+  },
+  "status": {
+    "mode": 1,
+    "diagnostic": 0,
+    "supportedBodies": 1,
+    "legacyBodies": 0
+  },
+  "layers0": "{\"list\":true,\"listTorch\":false,\"presentKey\":true,\"roomFill\":true,\"stormKey\":true,\"bodyFog\":true,\"sCurve\":false,\"skinDetail\":true}",
+  "bodyPixels": 57344,
+  "reasons": {
+    "0": 52040,
+    "4": 5304
+  },
+  "analytic vs analytic again (determinism)": {
+    "over02": 0,
+    "over10": 0,
+    "meanAbs": 0.0008,
+    "max": 0.0047,
+    "meanLum": [
+      0.7389,
+      0.7384
+    ]
+  },
+  "layer ON: analytic vs original": {
+    "over02": 1272,
+    "over10": 42,
+    "meanAbs": 0.00441,
+    "max": 0.2366,
+    "meanLum": [
+      0.7389,
+      0.738
+    ]
+  },
+  "layer OFF: analytic vs original": {
+    "over02": 1209,
+    "over10": 43,
+    "meanAbs": 0.00386,
+    "max": 0.2345,
+    "meanLum": [
+      0.7376,
+      0.7374
+    ]
+  },
+  "original normals: layer ON vs OFF": {
+    "over02": 0,
+    "over10": 0,
+    "meanAbs": 0.00086,
+    "max": 0.0051,
+    "meanLum": [
+      0.738,
+      0.7374
+    ]
+  },
+  "analytic normals: layer ON vs OFF": {
+    "over02": 0,
+    "over10": 0,
+    "meanAbs": 0.00191,
+    "max": 0.0113,
+    "meanLum": [
+      0.7389,
+      0.7376
+    ]
+  },
+  "wounded": null
+}
