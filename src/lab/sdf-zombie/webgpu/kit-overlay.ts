@@ -51,7 +51,8 @@ import { createKitDamage, piecesOf, type KitArmorInput, type KitDamageEvent } fr
 import { KIT_BURST } from '../kit-burst';
 import { PLANE_GROUND, type DebrisGround, type DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
-import { addKitOccluders } from './kit-occluder';
+import { addKitOccluders, KIT_OCCLUDER_MATERIALS } from './kit-occluder';
+import { KIT_MERGED_NAME, kitMergeOn, mergeKitMeshes } from './kit-merge';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -483,6 +484,19 @@ export async function loadKit(
   const parse = async () => {
     const parsed = (await new GLTFLoader().loadAsync(url)).scene;
     if (opts.only) keepKitMaterials(parsed, opts.only);
+    // `?kitmerge` (kit-merge.ts): the kit's plain materials become one draw. Not the ones that glow, pulse or
+    // stand in the occluder pass by name, and not a breakable armour kit's plate (its look is the loader's override).
+    if (kitMergeOn(typeof location === 'undefined' ? '' : location.search)) {
+      mergeKitMeshes(parsed, {
+        environment: kitEnvironment(renderer),
+        look: (name) => {
+          if (GLOW_FROM_ATTRIBUTE[name] || (PULSED as readonly string[]).includes(name) || KIT_OCCLUDER_MATERIALS.has(name)) return null;
+          if (breakable === 'armour') return null;
+          const look = LOOK[name] ?? LOOK_DEFAULT;
+          return (look as { emissive?: unknown }).emissive ? null : look;
+        },
+      });
+    }
     return parsed;
   };
   const kitScene = kitShareOn(typeof location === 'undefined' ? '' : location.search)
@@ -537,6 +551,7 @@ export async function loadKit(
     const m = (o as THREE.Mesh).material;
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
+      if (mat.name === KIT_MERGED_NAME) continue; // its numbers and its environment are in its nodes (kit-merge.ts)
       const std = mat as THREE.MeshStandardMaterial;
       const look = breakable === 'armour' && mat.name === 'plate'
         ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
