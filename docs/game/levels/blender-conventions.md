@@ -22,6 +22,7 @@
 | `furniture` | box meshes | any | Sits on its room's floor |
 | `solids` | box meshes | any | Any other solid box |
 | `gates` | box meshes | `gate:<event>:<id>` | Solid until `<event>` fires |
+| `doors` | box meshes | `door:<key>:<id>` | The closed slab of a sliding door; `<key>` is `red`, `blue`, `yellow` or `none` (unlocked). Opens for the player, never for enemies (`doors.ts`) |
 | `triggers` | box meshes | `trigger:<event>:<id>` | Custom property `once` (default true) |
 | `windows` | thin box meshes | `window:<view>:<id>` | Straddles exactly one room wall |
 | `lights` | point lights | any | Custom properties: `power` (default energy ÷ 10); `fixture` (`bulb` default, `tube`, `beacon`, or `none`: no visible bulb, for a lamp the level's art draws) |
@@ -41,7 +42,7 @@ Any object's custom property `states` = comma-separated names it exists in.
 
 ## Scene custom properties
 `level_id` (required), `level_name`, `ammo` (`finite`|`infinite`), `loadout`
-(comma-separated), `complete_on` (default `pickup.cd`), `states`, `skyline`
+(comma-separated), `complete_on` (default `pickup.cd`), `lighting` (`dark` default, or `lit`), `states`, `skyline`
 (a skyline preset name; backdrops beyond every open-sky room's edges).
 
 Blender's duplicate suffix (`.001`) is ignored. Event names use dots, never

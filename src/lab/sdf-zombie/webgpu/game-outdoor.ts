@@ -11,7 +11,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, float, normalize, positionWorld, smoothstep, texture, uniform, uv, vec2, vec3, vec4, wgslFn } from 'three/tsl';
 import { edgeTexture, groundTexture, skylineTexture } from '../../../game/level/outdoor-textures';
-import { DUNGEON_RIG, GALLERY_RIG } from './dungeon-lighting';
+import { activeRig } from './game-ambient-rig';
 import type { GameContext } from './game-context';
 import type { LevelRoom } from './level-def';
 import { blendFog, moonRoomIds, moonShadowFrame, outdoorRoomAt, type Fog } from './outdoor-light';
@@ -182,7 +182,7 @@ export function stepOutdoor(ctx: GameContext, dt: number): void {
 
   const inside = roomIsOpenAt(ctx, px, pz);
   rt.fogT = Math.min(1, Math.max(0, rt.fogT + (inside ? dt : -dt) / FOG_BLEND_S));
-  const rig = ctx.lighting.dungeonOn ? DUNGEON_RIG : GALLERY_RIG;
+  const rig = activeRig(ctx);
   const indoor: Fog = { color: rig.fogColor, near: rig.fogNear, far: rig.fogFar };
   const outdoor: Fog = { color: rt.preset.fog.color, near: rt.preset.fog.near, far: rt.preset.fog.far };
   const fog = blendFog(indoor, outdoor, rt.fogT);

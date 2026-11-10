@@ -67,6 +67,24 @@ export const DUNGEON_RIG: AmbientRig = {
   practicalColor: [1.0, 0.46, 0.13],  // fire
 };
 
+/** Lights on (owner, 2026-10-22: the Night Train was "too dark and a bit too realistic"): a level
+ *  with `lighting: "lit"` keeps the dungeon's flashlight and fires but reads by its own ambient,
+ *  like the ring testbed. Warm-neutral floor, fog pushed back so a carriage reads end to end. */
+export const LIT_RIG: AmbientRig = {
+  ambientIntensity: 0.9,
+  hemiIntensity: 0.7,
+  /** The scene's unshadowed key (lab-renderer's sun): it gives the art its relief. */
+  sunIntensity: 0.6,
+  ambientColor: [0.96, 0.94, 0.9],
+  hemiSky: [0.96, 0.95, 0.94],
+  hemiGround: [0.56, 0.55, 0.52],
+  fogColor: [0.03, 0.03, 0.035],
+  fogNear: 10,
+  fogFar: 55,
+  flashlightColor: DUNGEON_RIG.flashlightColor,
+  practicalColor: DUNGEON_RIG.practicalColor,
+};
+
 /** Offset from the eye, in view space: right, up, forward.
  *
  *  LOAD-BEARING. A flashlight AT the eye casts no visible shadow — every

@@ -37,8 +37,12 @@ export const DEFAULT_PALETTE: LevelPalette = {
 
 export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art';
 export type WallSide = 'n' | 's' | 'e' | 'w';
-export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
-export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
+/** Coloured keys (placeholders, re-skinnable later): a `key-<colour>` pickup opens every door locked with it. */
+export type KeyColor = 'red' | 'blue' | 'yellow';
+export const KEY_COLORS: readonly KeyColor[] = ['red', 'blue', 'yellow'];
+export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight' | `key-${KeyColor}`;
+export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight',
+  'key-red', 'key-blue', 'key-yellow'];
 
 /** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
@@ -89,6 +93,9 @@ export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }
 export interface TriggerDef { id: string; event: string; once: boolean; box: Aabb }
 export interface GateDef { id: string; opensOn: string; box: Aabb }
+/** A door: the closed slab. It slides open when the player comes near (holding its key, if it has
+ *  one) and shuts again once its doorway is empty (doors.ts). Enemies never open doors. */
+export interface DoorDef { id: string; key: KeyColor | null; box: Aabb }
 /** Dynamic light §3: when `on` fires, the level also fires every event in `emit`. */
 export interface CueDef { on: string; emit: string[] }
 
@@ -113,6 +120,7 @@ export interface LevelDef {
   furniture: FurnitureDef[];
   solids: Aabb[];
   gates: GateDef[];
+  doors: DoorDef[];
   triggers: TriggerDef[];
   cues: CueDef[];
   windows: WindowDef[];
@@ -124,7 +132,12 @@ export interface LevelDef {
   portals: PortalDef[];
   /** Mesh key §3: the level's art file (beside the JSON), or null. */
   art: string | null;
+  /** The level's ambient rig: 'dark' (the dungeon rig, the default) or 'lit' (lights on: a bright
+   *  ambient floor, long fog, the storm never darkens the room; dungeon-lighting.ts LIT_RIG). */
+  lighting: LevelLighting;
 }
+
+export type LevelLighting = 'dark' | 'lit';
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }
 

@@ -99,21 +99,46 @@ describe('night-train.level.json', () => {
 
 describe('night-train dynamic light (dynamic light spec §3)', () => {
   const moods = (name: string) => room(name).accents.map(a => a.mood);
-  it('lamp moods and fires per carriage', () => {
-    expect(moods('guards-van')).toEqual(expect.arrayContaining(['flicker', 'stutter', 'fire']));
-    expect(moods('coat-check')).toEqual(['dead', 'dying']);
-    expect(moods('dining-car')).toEqual(expect.arrayContaining(['flicker', 'dead', 'fire']));
-    expect(moods('sleeper')).toEqual(expect.arrayContaining(['stutter', 'fire']));
-    expect(moods('control-room')).toEqual(expect.arrayContaining(['dying', 'fire']));
+  it('lights on (2026-10-22): the lit rig, every tube steady (the scripted moments do the drama), no tube shadow maps', () => {
+    expect(t.lighting).toBe('lit');
+    const tubes = t.rooms.flatMap(r => r.accents).filter(a => a.fixture === 'tube');
+    expect(tubes.every(a => a.mood === 'steady')).toBe(true);
+    expect(tubes.every(a => a.shadow === false)).toBe(true);
+    for (const name of ['guards-van', 'dining-car', 'sleeper', 'control-room']) expect(moods(name)).toContain('fire');
     expect(t.rooms.flatMap(r => r.accents).every(a => a.mood !== undefined)).toBe(true);
   });
-  it('the Boiler Room has two rows of tubes but no more shadow casters than one row (2026-09-29)', () => {
-    // WebGPU's default is 16 sampled textures per fragment stage; each shadow-casting tube spends one.
-    // Eight casters measured 18 and no pipeline compiled, so the second row only lights.
-    const tubes = room('boiler-room').accents.filter(a => a.fixture === 'tube');
-    expect(tubes).toHaveLength(8);
-    expect(new Set(tubes.map(a => a.pos[0]))).toEqual(new Set([-2, 2]));
-    expect(tubes.filter(a => a.shadow !== false)).toHaveLength(4);
+  it('every carriage hangs its tubes in two rows along the sides of the ceiling (2026-10-23)', () => {
+    for (const r of t.rooms) {
+      const tubes = r.accents.filter(a => a.fixture === 'tube');
+      const inset = (r.maxX - r.minX) / 2 - 0.45;
+      expect(new Set(tubes.map(a => a.pos[0]))).toEqual(new Set([-inset, inset].map(x => +x.toFixed(3))));
+      expect(tubes.length).toBeGreaterThanOrEqual(6);
+    }
+    expect(room('boiler-room').accents.filter(a => a.fixture === 'tube')).toHaveLength(18);
+  });
+  it('a door in every vestibule and one between the hold and the mail cage; red and blue keys lock two', () => {
+    expect(t.doors).toHaveLength(8);
+    for (const v of t.tunnels) {
+      expect(t.doors.some(d => d.box.min[0] >= v.minX - 1e-6 && d.box.max[0] <= v.maxX + 1e-6
+        && d.box.min[2] >= v.minZ && d.box.max[2] <= v.maxZ)).toBe(true);
+    }
+    expect(t.doors.filter(d => d.key).map(d => [d.id, d.key]).sort()).toEqual([['door-boiler-room', 'blue'], ['door-coat-check', 'red']]);
+    // Each key lies before (south of) its door, so the level can be finished.
+    for (const colour of ['red', 'blue'] as const) {
+      const key = t.pickups.find(p => p.item === `key-${colour}`)!;
+      const door = t.doors.find(d => d.key === colour)!;
+      expect(key.pos[2]).toBeGreaterThan(door.box.max[2]);
+    }
+    expect(roomAtPoint(t, t.pickups.find(p => p.item === 'key-red')!.pos[0], t.pickups.find(p => p.item === 'key-red')!.pos[2])?.name).toBe('dining-car');
+    expect(roomAtPoint(t, t.pickups.find(p => p.item === 'key-blue')!.pos[0], t.pickups.find(p => p.item === 'key-blue')!.pos[2])?.name).toBe('sleeper');
+  });
+  it('infinite ammo (2026-10-23): the magazine reloads, the reserve never runs dry', () => {
+    expect(t.ammo).toBe('infinite');
+  });
+  it('the start is safe: no enemy in the baggage hold, a shut door to the mail cage', () => {
+    const hold = t.spawns.filter(s => s.pos[2] > -5.5 && s.pos[2] <= 0);
+    expect(hold).toEqual([]);
+    expect(t.doors.find(d => d.id === 'hold-door')!.key).toBeNull();
   });
   it('the flashlight hangs behind the coat-check counter, mid-level', () => {
     const torch = t.pickups.find(p => p.item === 'flashlight')!;

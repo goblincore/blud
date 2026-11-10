@@ -6,14 +6,28 @@
 
 import type { Vec3 } from '../types';
 import { type GameContext } from './game-context';
-import type { RoomDef } from './game-level';
+import type { Aabb, RoomDef } from './game-level';
+import { doorCollider } from './doors';
 
-/** Rebuild the collider list in place from the level's static boxes and its
- *  closed gates. In place: movers hold the array reference for the session. */
+/** Rebuild the collider list in place from the level's static boxes, its
+ *  closed gates and what is left of each door in its doorway. In place: movers
+ *  and the encounter director's sight hold the array reference for the session. */
 export function refreshGateColliders(ctx: GameContext): void {
   const w = ctx.world;
   w.colliders.length = 0;
   w.colliders.push(...w.level.staticColliders, ...w.level.gateColliders(w.openGates));
+  const shut = closedDoors(ctx);
+  w.colliders.push(...shut);
+  // Enemies avoid furniture, not the collider list: each one's list gets the closed doors too.
+  for (const b of w.actorBlockers) { b.live.length = 0; b.live.push(...b.base, ...shut); }
+}
+
+/** What blocks each door's doorway right now (doors.ts), for the colliders and the enemies. */
+export function closedDoors(ctx: GameContext): Aabb[] {
+  const def = ctx.world.level.def, doors = ctx.world.loop?.doors;
+  const out: Aabb[] = [];
+  if (def && doors) def.doors.forEach((d, i) => { const c = doorCollider(d, doors[i]!); if (c) out.push(c); });
+  return out;
 }
 
 /** Open an authored level's gate by id: it stops colliding and its mesh hides.

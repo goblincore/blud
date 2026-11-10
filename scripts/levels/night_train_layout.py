@@ -28,8 +28,9 @@ T = 0.1  # internal partition thickness
 #   spawns:  (id, kind, x, u)
 #   pickups: (id, item, x, u)
 #   gates:   (id, event, x0, x1, u0, u1)
+#   doors:   (id, key, x0, x1, u0, u1, h)  sliding doors inside the carriage (key None = unlocked; doors.ts)
 #   pickups may add a height: (id, item, x, u, y)
-#   moods:    one per ceiling lamp, south to north (lamp-moods.ts; dynamic light spec §3)
+#   moods:    one per ceiling lamp, row by row south to north, or one mood for every lamp (lamp-moods.ts; dynamic light spec §3)
 #   fires:    (id, x, u, y, power)       orange fire lights (stoves, boilers, the firebox)
 #   triggers: (id, event, x0, x1, u0, u1) once, floor to 2.2 m
 #   beacons:  (x, u, y, spin)            red rotating emergency beacons, dead until the strobe ends
@@ -38,6 +39,22 @@ FIRE = (1.0, 0.42, 0.12)
 # When `on` fires, the level also fires `emit` (dynamic light spec §3).
 CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"]),
         ("egg.touch", ["sequence.ending"])]   # touching the egg starts the ending sequence (ending plan 3)
+# Lights on (owner, 2026-10-22: "too dark and a bit too realistic"): the level's lit rig (dungeon-lighting.ts
+# LIT_RIG), every tube steady except the scripted moments (the coat check dies when the torch is taken, the
+# sleeper blacks out, the Boiler Room strobes), and no tube shadow maps (the cheap list path; performance).
+# Infinite ammo (owner, 2026-10-23: "impossible not to run out"): the magazine still reloads, the reserve never runs dry.
+AMMO = "infinite"
+LIGHTING = "lit"
+TUBE_SHADOWS = False
+# Lit carriages hang their tubes in two rows along the sides of the ceiling (owner, 2026-10-23), one
+# every TUBE_SPACING metres, SIDE_INSET in from each wall, instead of the old single centre row.
+SIDE_ROWS = True
+SIDE_INSET = 0.45
+TUBE_SPACING = 3.0
+# A sliding door in the middle of every vestibule, keyed by the carriage it leads into; a colour locks it
+# (red key in the dining galley, blue key in sleeper C3). Enemies never open doors (doors.ts).
+VESTIBULE_DOORS = {"third-class": None, "dining-car": None, "coat-check": "red", "sleeper": None,
+                   "boiler-room": "blue", "tender": None, "control-room": None}
 # The level completes when the ending sequence ends (ending-sequence.ts SEQUENCES.ending.endEvent); the CD is a collectible.
 COMPLETE_ON = "ending.end"
 CARRIAGES = [
@@ -50,11 +67,13 @@ CARRIAGES = [
                 ("big trunk", 0.5, 1.6, 4.0, 4.9, 0.7),
                 ("coffin", -1.6, -0.9, 7.2, 9.2, 0.5), ("coffin", 0.9, 1.6, 6.0, 8.0, 0.5),
                 ("desk", -1.8, -1.0, 12.0, 13.6, 0.8), ("stove", 1.2, 1.8, 14.8, 15.6, 1.2)],
-         spawns=[("van-trunk", "zombie", 1.05, 4.45), ("van-coffin-w", "zombie", -1.25, 8.2),
+         # The hold is the safe start (owner, 2026-10-22): no one in it, a shut door to the cage.
+         spawns=[("van-cage", "zombie", 0.2, 9.8), ("van-coffin-w", "zombie", -1.25, 8.2),
                  ("van-coffin-e", "zombie", 1.25, 7.0), ("van-guard", "zombie", 0.6, 13.8)],
          pickups=[("sawn-off", "shotgun", 1.4, 2.9), ("van-shells", "shells", -1.4, 12.8),
                   ("van-health", "health", -1.4, 13.3)],
-         gates=[], moods=["flicker", "stutter"], fires=[("office-stove", 1.1, 15.2, 0.5, 0.8)], triggers=[]),
+         gates=[], doors=[("hold-door", None, -1.7, -0.3, 5.51, 5.59, 2.4)],
+         moods="steady", fires=[("office-stove", 1.1, 15.2, 0.5, 0.8)], triggers=[]),
     dict(rid=2, name="third-class", w=3.8, L=18.0, h=2.8,
          walls=[],
          areas=[("third class: benches both sides of a 1.5 m aisle", -1.9, 1.9, 0, 18.0)],
@@ -64,7 +83,7 @@ CARRIAGES = [
                  ("third-aisle", "zombie", 0.0, 11.4), ("third-slumped-3", "zombie", -1.3, 13.2),
                  ("third-soldier", "soldier", 0.0, 17.0)],
          pickups=[("third-shells", "shells", 1.3, 9.6), ("third-health", "health", -1.3, 15.0)],
-         gates=[], moods=["stutter", "flicker"], fires=[], triggers=[]),
+         gates=[], moods="steady", fires=[], triggers=[]),
     dict(rid=3, name="dining-car", w=4.2, L=18.0, h=3.0,
          walls=[(-2.1, -2.0, 15.4, 15.4 + T), (-0.6, 2.1, 15.4, 15.4 + T)],   # saloon | galley, door west
          areas=[("saloon (tables)", -2.1, 2.1, 0, 9.6), ("buffet lounge", -2.1, 2.1, 9.6, 15.4),
@@ -76,8 +95,9 @@ CARRIAGES = [
          spawns=[("waiter-1", "zombie", -1.1, 3.4), ("waiter-2", "zombie", 1.1, 7.2),
                  ("soldier-island", "soldier", 0.0, 15.0), ("soldier-lounge", "soldier", -1.4, 13.0),
                  ("cook", "zombie", 0.3, 16.8)],
-         pickups=[("galley-health", "health", -1.85, 17.2), ("galley-shells", "shells", 1.7, 17.2)],
-         gates=[], moods=["flicker", "dead"], fires=[("galley-stoves", 1.2, 16.6, 0.6, 0.8)], triggers=[]),
+         pickups=[("galley-health", "health", -1.85, 17.2), ("galley-shells", "shells", 1.7, 17.2),
+                  ("red-key", "key-red", 0.0, 17.5, 0.9)],
+         gates=[], moods="steady", fires=[("galley-stoves", 1.2, 16.6, 0.6, 0.8)], triggers=[]),
     dict(rid=6, name="coat-check", w=3.8, L=14.0, h=2.8,
          walls=[],
          areas=[("coat racks: a serpentine", -1.9, 1.9, 0, 9.0), ("attendant's counter", -1.9, 1.9, 9.0, 14.0)],
@@ -85,7 +105,7 @@ CARRIAGES = [
                 ("coat rack", -1.9, 0.5, 7.8, 8.2, 1.8), ("attendant counter", -1.9, 0.5, 10.4, 10.9, 1.0)],
          spawns=[("coats-1", "zombie", 1.2, 4.2), ("coats-2", "zombie", -1.2, 6.8), ("coats-3", "zombie", 1.2, 9.3)],
          pickups=[("torch", "flashlight", -1.2, 12.4, 1.4), ("coat-shells", "shells", 1.4, 12.8)],
-         gates=[], moods=["dead", "dying"], fires=[], triggers=[]),
+         gates=[], moods="steady", fires=[], triggers=[]),   # until the torch is taken (the cue)
     dict(rid=4, name="sleeper", w=4.0, L=18.0, h=2.8,
          walls=[(-0.6, 2.0, 1.6, 1.6 + T), (-0.6, 2.0, 16.3, 16.3 + T),       # lobbies | compartments
                 *[(-0.5, 2.0, u, u + T) for u in (4.56, 7.52, 10.48, 13.44)],  # between compartments
@@ -97,13 +117,13 @@ CARRIAGES = [
          props=[*[("bunk", 1.2, 2.0, a + 0.1, b - 0.1, 0.6) for a, b in ((1.7, 4.56), (4.66, 7.52), (7.62, 10.48), (10.58, 13.44))]],
          spawns=[("c1-sleeper", "zombie", 0.6, 3.1), ("c3-sleeper", "zombie", 0.6, 9.0),
                  ("soldier-c4", "soldier", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
-         pickups=[("c2-shells", "shells", 1.5, 6.0), ("new-weapon", "dynamite", 1.5, 9.0)],
+         pickups=[("c2-shells", "shells", 1.5, 6.0), ("new-weapon", "dynamite", 1.5, 9.0), ("blue-key", "key-blue", 0.4, 8.3)],
          gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)],
-         moods=["dying", "stutter"], fires=[("sleeper-boiler", 1.4, 0.6, 0.6, 1.0)],
+         moods="steady", fires=[("sleeper-boiler", 1.4, 0.6, 0.6, 1.0)],
          triggers=[("blackout", "light.blackout.room.4", -2.0, -0.6, 8.6, 9.4)]),
     # Resized 2026-09-28 to 8.0 x 28 m (owner-approved plan, docs/superpowers/plans/2026-09-27-boiler-room-resize.md):
-    # "bigger on the inside"; 14 window bays a side, no raised stage (the DJ end is floor), one centre
-    # row of 4 steady tubes (the strobe owns the beat), two beacons, a third favour table.
+    # "bigger on the inside"; 14 window bays a side, no raised stage (the DJ end is floor), two beacons,
+    # a third favour table. Its tubes follow SIDE_ROWS like every carriage (2026-10-23; was a centre row of 4, then two rows).
     dict(rid=5, name="boiler-room", w=8.0, L=28.0, h=3.4,
          walls=[],
          areas=[("favours + boiler (entrance)", -4.0, 4.0, 0, 8.3),
@@ -123,7 +143,7 @@ CARRIAGES = [
                  ("soldier-bar-1", "soldier", 2.9, 12.8), ("soldier-dj", "soldier", -2.0, 27.2)],
          pickups=[("favour-dynamite", "dynamite", -3.65, 3.0), ("bar-health", "health", 3.4, 16.8),
                   ("dj-cd", "cd", -3.5, 27.4)],
-         gates=[], moods=["steady"] * 8, rows=[-2.0, 2.0],   # two rows: the side walls read dark (owner call, 2026-09-29)
+         gates=[], moods="steady",
          fires=[("party-boiler", 3.4, 0.7, 0.6, 1.0)],
          triggers=[("strobe", "light.strobe.room.5", -4.0, 4.0, 5.5, 6.5)],
          beacons=[(0.0, 7.0, 2.95, 0.7), (0.0, 21.0, 2.95, -0.7)]),   # under the centre pipe (its bottom at h - 0.33)
@@ -133,7 +153,7 @@ CARRIAGES = [
          props=[("coal", -1.7, -0.2, 1.6, 8.4, 1.2)],
          spawns=[("coal-1", "zombie", 0.9, 3.5), ("tender-juggernaut", "juggernaut", 0.9, 7.2)],   # guards the way to the cab
          pickups=[("tender-health", "health", 1.2, 9.2)],
-         gates=[], moods=["dying"], fires=[], triggers=[]),
+         gates=[], moods="steady", fires=[], triggers=[]),
     # Control room (egg ending plan 1, spec 2026-09-30): the old 3 x 8 m cab becomes an 8 x 10 m room,
     # "bigger on the inside". CRT wall on the north, consoles and racks down both sides, the firebox door
     # in the east wall, the egg on its plinth at u 6.3. Touching the egg fires egg.touch, whose cue starts the ending sequence (plan 3).
@@ -146,7 +166,7 @@ CARRIAGES = [
                 ("firebox", 3.6, 4.0, 8.25, 9.55, 1.8),
                 ("egg", -1.2, 1.2, 5.1, 7.5, 2.9),
                 ("crt wall", -3.4, 3.4, 9.3, 10.0, 2.4)],
-         spawns=[], pickups=[], gates=[], moods=["dying"],
+         spawns=[], pickups=[], gates=[], moods="steady",
          fires=[("egg", 0.0, 6.3, 1.5, 4.0), ("firebox", 3.3, 8.9, 1.0, 4.0)],
          triggers=[("egg", "egg.touch", -1.6, 1.6, 4.7, 7.9)]),
 ]
@@ -164,16 +184,22 @@ BEACON_RED = (1.0, 0.08, 0.05)
 def lamps(c):
     """The ceiling lamps of a carriage, in its frame: ((x, y, u), mood, casts_shadow), south to north.
 
-    `rows` (optional, x offsets, default one centre row) puts a row of tubes at each x; moods run row by
-    row, south to north within a row."""
-    rows = c.get("rows", [0.0])
-    n = max(1, round(c["L"] / 8))
-    if len(c["moods"]) != n * len(rows):
-        raise SystemExit(f"{c['name']}: {n * len(rows)} lamps but {len(c['moods'])} moods")
+    With SIDE_ROWS, two rows along the sides of the ceiling, one tube every TUBE_SPACING m. Otherwise
+    `rows` (optional, x offsets, default one centre row) puts a row of tubes at each x, one every 8 m.
+    Moods run row by row, south to north within a row; a single string is every lamp's mood."""
+    if SIDE_ROWS:
+        rows = [-(c["w"] / 2 - SIDE_INSET), c["w"] / 2 - SIDE_INSET]
+        n = max(1, round(c["L"] / TUBE_SPACING))
+    else:
+        rows = c.get("rows", [0.0])
+        n = max(1, round(c["L"] / 8))
+    moods = [c["moods"]] * (n * len(rows)) if isinstance(c["moods"], str) else c["moods"]
+    if len(moods) != n * len(rows):
+        raise SystemExit(f"{c['name']}: {n * len(rows)} lamps but {len(moods)} moods")
     # WebGPU's default is 16 sampled textures per fragment stage and every shadow-casting tube spends one
     # (8 shadowed tubes in the Boiler Room measured 18 and no pipeline compiled). With more than one row
     # the shadows go on a checkerboard, so the shadowed count stays at n; the rest only light.
-    return [((x, c["h"] - 0.4, c["L"] * (i + 0.5) / n), c["moods"][r * n + i], len(rows) == 1 or (r + i) % 2 == 0)
+    return [((x, c["h"] - 0.4, c["L"] * (i + 0.5) / n), moods[r * n + i], TUBE_SHADOWS and (len(rows) == 1 or (r + i) % 2 == 0))
             for r, x in enumerate(rows) for i in range(n)]
 
 
@@ -187,9 +213,20 @@ def placed():
     return out
 
 
+def vestibule_door(c, zs):
+    """The door in the vestibule leading into carriage `c` (south end z `zs`): (id, key, gmin, gmax), game space."""
+    mid = zs + VESTIBULE / 2
+    return f"door-{c['name']}", VESTIBULE_DOORS[c["name"]], (-0.7, 0, mid - 0.05), (0.7, 2.1, mid + 0.05)
+
+
+def door_doc(did, key, gmin, gmax):
+    return {"id": did, **({"key": key} if key else {}), "min": list(gmin), "max": list(gmax)}
+
+
 def to_level() -> dict:
-    doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": "finite", "loadout": ["melee"], "completeOn": COMPLETE_ON,
-           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "triggers": [], "lights": [],
+    doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": AMMO, "loadout": ["melee"], "completeOn": COMPLETE_ON,
+           "lighting": LIGHTING,
+           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "doors": [], "triggers": [], "lights": [],
            "spawns": [], "pickups": [], "cues": [{"on": on, "emit": list(emit)} for on, emit in CUES]}
     prev = None
     for c, zs in placed():
@@ -199,6 +236,7 @@ def to_level() -> dict:
                              "height": c["h"], "shell": "art"})
         if prev is not None:
             doc["tunnels"].append({"a": prev, "b": c["rid"], "min": [-0.7, zs], "max": [0.7, zs + VESTIBULE], "height": 2.1})
+            doc["doors"].append(door_doc(*vestibule_door(c, zs)))
         prev = c["rid"]
         for x0, x1, u0, u1 in c["walls"]:
             doc["solids"].append({"min": [x0, 0, g(u1)], "max": [x1, c["h"], g(u0)]})
@@ -220,6 +258,8 @@ def to_level() -> dict:
             doc["triggers"].append({"id": tid, "event": event, "once": True, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
         for gid, event, x0, x1, u0, u1 in c["gates"]:
             doc["gates"].append({"id": gid, "opensOn": event, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
+        for did, key, x0, x1, u0, u1, h in c.get("doors", []):
+            doc["doors"].append(door_doc(did, key, (x0, 0, g(u1)), (x1, h, g(u0))))
     doc["start"] = {"pos": [0, 0, -1.0], "yaw": 0.0}
     return doc
 

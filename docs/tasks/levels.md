@@ -27,7 +27,8 @@ Night Train, the Wake, the Void and menu, level format, game design. Part of the
   Giger layer, hero props), through the Blender level route. [Spec](../../docs/superpowers/specs/2026-10-11-flat-room-design.md) · branch `claude/flat-room` ·
   [look-dev](../../docs/dev-notes/2026-10-01-flat-room-lookdev/) · [notes](../../docs/dev-notes/2026-10-11-flat-room/NOTES.md).
 - [ ] 4e Gameplay: encounters (wake-up triggers), the Stoker; dawn later.
-- [ ] 4d **Owner ideas (2026-09-25), for layout draft 2:** keys + locked doors to gate progress (retro FPS staple; **coloured keys as placeholders** — red/blue/yellow, re-skinnable later; format has gates, needs key pickups, locked-door feedback, a key HUD); the train a bit longer (**done in draft 2**, 4h).
+- [x] 4p **Night Train: lights on, a safe start, keys and doors** (owner, 2026-10-22) — [layout.md](../../docs/game/levels/01-night-train/layout.md) top section. Level format `lighting: "lit"` (`LIT_RIG`) and `doors` (`doors.ts`: slide open for the player, holding the key if locked, shut when the doorway empties; enemies never open them; closed doors collide, block sight and feed each enemy's furniture list); `key-red|blue|yellow` pickups, a key HUD, a "locked — needs the X key" notice. Every tube steady except the scripted moments; tube and window shadow maps off. The hold is the safe start. Shotgun ammo doubled. **Next:** owner playtest; door art in the kit; frame cost not measured yet (fewer shadow passes, more ambient).
+- [x] 4d **Owner ideas (2026-09-25), for layout draft 2:** keys + locked doors (**done 2026-10-22, 4p**) to gate progress (retro FPS staple; **coloured keys as placeholders** — red/blue/yellow, re-skinnable later; format has gates, needs key pickups, locked-door feedback, a key HUD); the train a bit longer (**done in draft 2**, 4h).
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 

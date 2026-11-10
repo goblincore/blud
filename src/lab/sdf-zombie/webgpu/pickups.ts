@@ -5,17 +5,18 @@
 // ammo; CDs are remembered by pickup id (the flat's collection reads them later).
 
 import type { Vec3 } from '../types';
-import type { PickupDef } from './level-def';
+import type { KeyColor, PickupDef } from './level-def';
 import { VITALS, heal, type Vitals } from './player-vitals';
 
 export const PICKUP = {
   /** Horizontal reach, metres, from the player's feet. */
   radius: 0.9,
-  shells: 8,
+  /** Doubled (owner, 2026-10-22: "too easy to run out of ammo"; tweak later). */
+  shells: 16,
   health: 25,
-  maxReserve: 40,
+  maxReserve: 80,
   /** A first shotgun comes loaded, with this many more in the reserve. */
-  shotgunReserve: 4,
+  shotgunReserve: 8,
 } as const;
 
 export interface Inventory {
@@ -25,10 +26,12 @@ export interface Inventory {
   cds: readonly string[];
   /** Dynamic light §2.1: the flashlight, found in the level (levels without one start with it on). */
   flashlight: boolean;
+  /** Coloured keys held, in pickup order (doors.ts opens the doors locked with them). */
+  keys: readonly KeyColor[];
 }
 
 export function makeInventory(weapons: readonly string[] = []): Inventory {
-  return { weapons: [...weapons], shellsReserve: 0, cds: [], flashlight: false };
+  return { weapons: [...weapons], shellsReserve: 0, cds: [], flashlight: false, keys: [] };
 }
 
 export interface PickupResult {
@@ -70,6 +73,13 @@ export function collectPickups(
       case 'cd':
         inv = { ...inv, cds: [...inv.cds, p.id] };
         break;
+      case 'key-red':
+      case 'key-blue':
+      case 'key-yellow': {
+        const colour = p.item.slice(4) as KeyColor;
+        if (!inv.keys.includes(colour)) inv = { ...inv, keys: [...inv.keys, colour] };
+        break;
+      }
       case 'shotgun':
       case 'melee':
       case 'dynamite':

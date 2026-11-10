@@ -208,11 +208,13 @@ def main():
         doc["loadout"] = csv(scene["loadout"])
     if scene.get("complete_on"):
         doc["completeOn"] = scene["complete_on"]
+    if scene.get("lighting"):
+        doc["lighting"] = scene["lighting"]
     if scene.get("states"):
         doc["states"] = csv(scene["states"])
     if scene.get("cues"):
         doc["cues"] = [{"on": on, "emit": list(emit)} for on, emit in json.loads(scene["cues"])]
-    for key in ("rooms", "tunnels", "stairs", "furniture", "solids", "gates", "triggers", "windows",
+    for key in ("rooms", "tunnels", "stairs", "furniture", "solids", "gates", "doors", "triggers", "windows",
                 "lights", "spawns", "graves", "pickups", "bells", "portals"):
         doc[key] = []
 
@@ -269,6 +271,11 @@ def main():
         _, event, gid = fields(o, "gate", 3)
         gmin, gmax = world_aabb(o)
         doc["gates"].append(with_states(o, {"id": gid, "opensOn": event, "min": gmin, "max": gmax}))
+
+    for o in objects("doors"):
+        _, key, did = fields(o, "door", 3)
+        gmin, gmax = world_aabb(o)
+        doc["doors"].append(with_states(o, {"id": did, **({"key": key} if key != "none" else {}), "min": gmin, "max": gmax}))
 
     for o in objects("triggers"):
         _, event, tid = fields(o, "trigger", 3)

@@ -2,11 +2,12 @@
   "version": 1,
   "id": "night-train",
   "name": "Night Train",
-  "ammo": "finite",
+  "ammo": "infinite",
   "loadout": [
     "melee"
   ],
   "completeOn": "ending.end",
+  "lighting": "lit",
   "cues": [
     {
       "on": "pickup.flashlight",
@@ -1365,6 +1366,114 @@
       ]
     }
   ],
+  "doors": [
+    {
+      "id": "door-boiler-room",
+      "key": "blue",
+      "min": [
+        -0.7,
+        0.0,
+        -89.45
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -89.35
+      ]
+    },
+    {
+      "id": "door-control-room",
+      "min": [
+        -0.7,
+        0.0,
+        -129.85
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -129.75
+      ]
+    },
+    {
+      "id": "door-dining-car",
+      "min": [
+        -0.7,
+        0.0,
+        -35.85
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -35.75
+      ]
+    },
+    {
+      "id": "door-sleeper",
+      "min": [
+        -0.7,
+        0.0,
+        -70.25
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -70.15
+      ]
+    },
+    {
+      "id": "door-tender",
+      "min": [
+        -0.7,
+        0.0,
+        -118.65
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -118.55
+      ]
+    },
+    {
+      "id": "door-third-class",
+      "min": [
+        -0.7,
+        0.0,
+        -16.65
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -16.55
+      ]
+    },
+    {
+      "id": "hold-door",
+      "min": [
+        -1.7,
+        0.0,
+        -5.59
+      ],
+      "max": [
+        -0.3,
+        2.4,
+        -5.51
+      ]
+    },
+    {
+      "id": "door-coat-check",
+      "key": "red",
+      "min": [
+        -0.7,
+        0.0,
+        -55.05
+      ],
+      "max": [
+        0.7,
+        2.1,
+        -54.95
+      ]
+    }
+  ],
   "triggers": [
     {
       "id": "egg",
@@ -1531,9 +1640,9 @@
     },
     {
       "pos": [
-        0.0,
+        -1.35,
         2.4,
-        -4.0
+        -1.6
       ],
       "color": [
         0.78,
@@ -1541,14 +1650,15 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "flicker",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        -1.35,
         2.4,
-        -12.0
+        -4.8
       ],
       "color": [
         0.78,
@@ -1556,12 +1666,157 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "stutter",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        -1.35,
+        2.4,
+        -8.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.35,
+        2.4,
+        -11.2
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.35,
+        2.4,
+        -14.4
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.35,
+        2.4,
+        -1.6
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.35,
+        2.4,
+        -4.8
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.35,
+        2.4,
+        -8.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.35,
+        2.4,
+        -11.2
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.35,
+        2.4,
+        -14.4
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -18.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
         2.4,
         -21.7
       ],
@@ -1571,12 +1826,13 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "stutter",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        1.45,
         2.4,
         -30.7
       ],
@@ -1586,12 +1842,173 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "flicker",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        1.45,
+        2.4,
+        -33.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -24.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -27.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -30.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -33.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -18.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -21.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -24.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -27.7
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
+        2.6,
+        -37.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
         2.6,
         -40.9
       ],
@@ -1601,12 +2018,13 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "flicker",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        1.65,
         2.6,
         -49.9
       ],
@@ -1616,12 +2034,173 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dead",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        1.65,
+        2.6,
+        -52.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
+        2.6,
+        -43.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
+        2.6,
+        -46.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
+        2.6,
+        -49.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.65,
+        2.6,
+        -52.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.65,
+        2.6,
+        -37.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.65,
+        2.6,
+        -40.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.65,
+        2.6,
+        -43.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.65,
+        2.6,
+        -46.9
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.55,
+        2.4,
+        -72.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.55,
         2.4,
         -75.3
       ],
@@ -1631,12 +2210,13 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dying",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        1.55,
         2.4,
         -84.3
       ],
@@ -1646,138 +2226,15 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "stutter",
-      "fixture": "tube"
-    },
-    {
-      "pos": [
-        -2.0,
-        3.0,
-        -93.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube"
-    },
-    {
-      "pos": [
-        -2.0,
-        3.0,
-        -100.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
       "mood": "steady",
       "fixture": "tube",
       "shadow": false
     },
     {
       "pos": [
-        -2.0,
-        3.0,
-        -107.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube"
-    },
-    {
-      "pos": [
-        -2.0,
-        3.0,
-        -114.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube",
-      "shadow": false
-    },
-    {
-      "pos": [
-        2.0,
-        3.0,
-        -93.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube",
-      "shadow": false
-    },
-    {
-      "pos": [
-        2.0,
-        3.0,
-        -100.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube"
-    },
-    {
-      "pos": [
-        2.0,
-        3.0,
-        -107.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube",
-      "shadow": false
-    },
-    {
-      "pos": [
-        2.0,
-        3.0,
-        -114.5
-      ],
-      "color": [
-        0.78,
-        0.9,
-        1.0
-      ],
-      "power": 2.4,
-      "mood": "steady",
-      "fixture": "tube"
-    },
-    {
-      "pos": [
-        0.0,
+        1.55,
         2.4,
-        -59.1
+        -87.3
       ],
       "color": [
         0.78,
@@ -1785,14 +2242,15 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dead",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        -1.55,
         2.4,
-        -66.1
+        -78.3
       ],
       "color": [
         0.78,
@@ -1800,12 +2258,589 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dying",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        -1.55,
+        2.4,
+        -81.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.55,
+        2.4,
+        -84.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.55,
+        2.4,
+        -87.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.55,
+        2.4,
+        -72.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.55,
+        2.4,
+        -75.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.55,
+        2.4,
+        -78.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.55,
+        2.4,
+        -81.3
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -91.556
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -94.667
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -94.667
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -97.778
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -100.889
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -104.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -107.111
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -110.222
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -113.333
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -116.444
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -97.778
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -100.889
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -104.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -107.111
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -110.222
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -113.333
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -116.444
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -91.556
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -57.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -59.8
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -62.6
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -65.4
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.45,
+        2.4,
+        -68.2
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -57.0
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -59.8
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -62.6
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -65.4
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.45,
+        2.4,
+        -68.2
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.25,
+        2.2,
+        -120.867
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -1.25,
         2.2,
         -124.2
       ],
@@ -1815,12 +2850,93 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dying",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     },
     {
       "pos": [
-        0.0,
+        -1.25,
+        2.2,
+        -127.533
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.25,
+        2.2,
+        -120.867
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.25,
+        2.2,
+        -124.2
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        1.25,
+        2.2,
+        -127.533
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -132.067
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
         3.0,
         -135.4
       ],
@@ -1830,8 +2946,73 @@
         1.0
       ],
       "power": 2.4,
-      "mood": "dying",
-      "fixture": "tube"
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        -3.55,
+        3.0,
+        -138.733
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -132.067
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -135.4
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
+    },
+    {
+      "pos": [
+        3.55,
+        3.0,
+        -138.733
+      ],
+      "color": [
+        0.78,
+        0.9,
+        1.0
+      ],
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube",
+      "shadow": false
     }
   ],
   "spawns": [
@@ -2076,6 +3257,16 @@
       "yaw": -3.1416
     },
     {
+      "id": "van-cage",
+      "kind": "zombie",
+      "pos": [
+        0.2,
+        0.0,
+        -9.8
+      ],
+      "yaw": -3.1416
+    },
+    {
       "id": "van-coffin-e",
       "kind": "zombie",
       "pos": [
@@ -2102,16 +3293,6 @@
         0.6,
         0.0,
         -13.8
-      ],
-      "yaw": -3.1416
-    },
-    {
-      "id": "van-trunk",
-      "kind": "zombie",
-      "pos": [
-        1.05,
-        0.0,
-        -4.45
       ],
       "yaw": -3.1416
     },
@@ -2216,6 +3397,24 @@
         -1.4,
         0.3,
         -13.3
+      ]
+    },
+    {
+      "id": "blue-key",
+      "item": "key-blue",
+      "pos": [
+        0.4,
+        0.3,
+        -79.1
+      ]
+    },
+    {
+      "id": "red-key",
+      "item": "key-red",
+      "pos": [
+        0.0,
+        0.9,
+        -53.9
       ]
     },
     {

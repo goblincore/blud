@@ -60,6 +60,7 @@ Top level. Every key listed; keys marked *opt* may be omitted.
 | `ammo` | `"finite"` \| `"infinite"` *opt* | Default `"finite"` |
 | `loadout` | string[] *opt* | Weapons held at the start, e.g. `["melee"]` |
 | `completeOn` | string *opt* | Event that completes the level; default `"pickup.cd"` |
+| `lighting` | `"dark"` \| `"lit"` *opt* | Ambient rig. Default `"dark"` (the dungeon rig); `"lit"` is lights on: a bright floor, long fog, no storm darkening or grade, no window shadow maps (added 2026-10-22) |
 | `palette` | object *opt* | `wall`, `floor`, `ceil`, `tunnel`, `solid`: RGB 0–1 |
 | `states` | string[] *opt* | Named variants of the level (§7). Default `["default"]` |
 | `skyline` | skyline preset name *opt* | Backdrop beyond open-sky rooms (Outdoor v1) |
@@ -69,6 +70,7 @@ Top level. Every key listed; keys marked *opt* may be omitted.
 | `furniture` | Box[] *opt* | Floor-standing boxes (cover) |
 | `solids` | Box[] *opt* | Any other solid box |
 | `gates` | Gate[] *opt* | Solid until an event opens them |
+| `doors` | Door[] *opt* | `{ id, key?, min, max }`: the closed slab of a sliding door. Opens for the player (holding `key`: `red`, `blue` or `yellow`), never for enemies; shuts once its doorway is empty. A `key-<colour>` pickup holds the key. Fires `door.unlock.<id>` and `door.open.<id>` (added 2026-10-22) |
 | `triggers` | Trigger[] *opt* | Fire an event when the player enters |
 | `windows` | Window[] *opt* | Wall planes that show a view |
 | `lights` | Light[] *opt* | Point lights; become room accents |

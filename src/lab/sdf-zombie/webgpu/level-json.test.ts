@@ -242,3 +242,35 @@ describe('parseLevelJson: none fixture (a light whose lamp the level art draws)'
     expect(() => parseLevelJson(g)).toThrow('lights[0].shadow: only a tube fixture takes it');
   });
 });
+
+describe('parseLevelJson: lighting, doors and keys (Night Train lights on, 2026-10-22)', () => {
+  it('defaults to the dark rig and no doors', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.lighting).toBe('dark');
+    expect(L.doors).toEqual([]);
+  });
+
+  it('reads lit, a door with and without a key, and a key pickup', () => {
+    const f = fixture('two-rooms');
+    f.lighting = 'lit';
+    f.doors = [{ id: 'd1', key: 'red', min: [8.5, 0, 3.2], max: [8.6, 2.1, 4.8] }, { id: 'd2', min: [1, 0, 6], max: [2, 2, 6.1] }];
+    f.pickups.push({ id: 'k', item: 'key-red', pos: [2, 0.3, 2] });
+    const L = parseLevelJson(f);
+    expect(L.lighting).toBe('lit');
+    expect(L.doors).toEqual([
+      { id: 'd1', key: 'red', box: { min: [8.5, 0, 3.2], max: [8.6, 2.1, 4.8] } },
+      { id: 'd2', key: null, box: { min: [1, 0, 6], max: [2, 2, 6.1] } },
+    ]);
+    expect(L.pickups.find(p => p.id === 'k')?.item).toBe('key-red');
+  });
+
+  it.each([
+    ['an unknown lighting', (f: any) => { f.lighting = 'bright'; }, 'lighting'],
+    ['an unknown key colour', (f: any) => { f.doors = [{ id: 'd', key: 'green', min: [1, 0, 6], max: [2, 2, 6.1] }]; }, 'door d.key'],
+    ['an unknown door key', (f: any) => { f.doors = [{ id: 'd', colour: 'red', min: [1, 0, 6], max: [2, 2, 6.1] }]; }, 'unknown key colour'],
+  ])('rejects %s', (_label, mutate, needle) => {
+    const f = fixture('two-rooms');
+    mutate(f);
+    expect(() => parseLevelJson(f)).toThrow(needle);
+  });
+});

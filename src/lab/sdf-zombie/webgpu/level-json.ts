@@ -11,7 +11,7 @@ import {
   DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
-  type WallSide, type WindowDef, type CueDef,
+  type WallSide, type WindowDef, type CueDef, type LevelLighting, type DoorDef, type KeyColor, KEY_COLORS,
 } from './level-def';
 import { LAMP_MOODS, type LampMood } from './lamp-moods';
 import { BEACON } from './beacon';
@@ -27,8 +27,8 @@ const MAX_STAIR_RISE = 3;
 
 /** Allowed keys per element (spec §4). `states` is allowed on every element. */
 const KEYS: Record<string, readonly string[]> = {
-  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
-    'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
+  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'lighting', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
+    'stairs', 'furniture', 'solids', 'gates', 'doors', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
     'pickups', 'bells', 'portals', 'art', 'cues'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
   room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'shell', 'states'],
@@ -38,6 +38,7 @@ const KEYS: Record<string, readonly string[]> = {
   stair: ['id', 'up', 'min', 'max', 'states'],
   box: ['min', 'max', 'states'],
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
+  door: ['id', 'key', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
   light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'shadow', 'gain', 'tint', 'states'],
@@ -100,6 +101,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (j.ammo !== undefined && j.ammo !== 'infinite' && j.ammo !== 'finite') errors.push('ammo: finite or infinite');
   const loadout = j.loadout === undefined ? [] : (Array.isArray(j.loadout) ? j.loadout : []).map((w, i) => str(w, `loadout[${i}]`));
   const completeOn = typeof j.completeOn === 'string' && j.completeOn ? j.completeOn : 'pickup.cd';
+  const lighting: LevelLighting = j.lighting === 'lit' ? 'lit' : 'dark';
+  if (j.lighting !== undefined && j.lighting !== 'lit' && j.lighting !== 'dark') errors.push('lighting: dark or lit');
 
   const oneOf = <T extends string>(v: string, known: readonly T[], what: string, where: string): v is T => {
     if ((known as readonly string[]).includes(v)) return true;
@@ -290,6 +293,20 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const g = { id: gid, opensOn: str(o.opensOn, `gate ${gid}.opensOn`), box: aabb(o, `gate ${gid}`) };
     if (keep) gates.push(g);
   });
+  const doors: DoorDef[] = [];
+  list(j.doors, 'doors').forEach((o, i) => {
+    const did = str(o.id, `doors[${i}].id`, `door${i}`);
+    keys(o, 'door', `door ${did}`);
+    const keep = present(o, `door ${did}`);
+    claim(did);
+    let key: KeyColor | null = null;
+    if (o.key !== undefined) {
+      const k = KEY_COLORS.find(c => c === o.key);
+      if (k) key = k;
+      else errors.push(`door ${did}.key: must be one of ${KEY_COLORS.join(', ')}`);
+    }
+    if (keep) doors.push({ id: did, key, box: aabb(o, `door ${did}`) });
+  });
   const triggers: TriggerDef[] = [];
   list(j.triggers, 'triggers').forEach((o, i) => {
     const tid = str(o.id, `triggers[${i}].id`, `trigger${i}`);
@@ -477,7 +494,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
 
   return {
     id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
-    rooms, tunnels, stairs, furniture, solids, gates, triggers, cues, windows,
-    playerStart, spawns, graves, pickups, bells, portals, art,
+    rooms, tunnels, stairs, furniture, solids, gates, doors, triggers, cues, windows,
+    playerStart, spawns, graves, pickups, bells, portals, art, lighting,
   };
 }

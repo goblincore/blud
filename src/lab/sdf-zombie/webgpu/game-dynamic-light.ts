@@ -108,6 +108,8 @@ export interface DynamicLightRuntime {
     ambientBase: number;
     /** The screen grade's afterglow: the bolt's envelope with a slow release. */
     grade: number;
+    /** A lit level (`lighting: "lit"`): no ambient cut, no grade, no window shadows. */
+    lit: boolean;
     /** This step's window light, for the SDF bodies' key (applyWindowKey). */
     dir: [number, number, number];
     color: [number, number, number];
@@ -168,13 +170,15 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   }
 
   const train = ctx.world.train;
+  const lit = def?.lighting === 'lit';
   if (train?.storm) {
     const seed = 1;
-    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0, grade: 0,
+    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0, grade: 0, lit,
       dir: [...STORM.boltDir], color: [...STORM.boltColor] };
     const amb = ctx.boot.handle.scene.children.find(o => o instanceof THREE.AmbientLight) as THREE.AmbientLight | undefined;
     // Doom 3 dark (owner, 2026-09-26): on a storm level the ambient floor is a third of the rig's.
-    if (amb) { rt.storm.ambient = amb; rt.storm.ambientBase = amb.intensity * STORM_AMBIENT; }
+    // A lit level (`lighting: "lit"`, owner 2026-10-22) keeps its floor: the storm only adds.
+    if (amb) { rt.storm.ambient = amb; rt.storm.ambientBase = amb.intensity * (lit ? 1 : STORM_AMBIENT); }
     const group = new THREE.Group();
     group.name = 'train.window-lights';
     const rooms = new Set<number>();
@@ -184,7 +188,8 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
       if (!room) continue;
       const l = new THREE.DirectionalLight(0xffffff, 0);
       l.name = `train.window-light:${id}`;
-      l.castShadow = true;
+      // Lit: no window shadow maps (the bolts still flash the room; a lit carriage doesn't need the shadows).
+      l.castShadow = !lit;
       l.shadow.mapSize.set(WINDOW_SHADOW_SIZE, WINDOW_SHADOW_SIZE);
       l.shadow.bias = -0.0005;
       l.shadow.autoUpdate = false;
@@ -206,6 +211,9 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
 const TUBE = {
   /** Half-angle (rad): ~3.3 m across at the floor under a 2.4 m drop, a pool per tube. */
   angle: 0.6, penumbra: 0.25, decay: 1.2,
+  /** A lit level's tubes hang in rows along the sides of the ceiling (2026-10-23): a wide, soft cone so
+   *  each one reaches the middle of the carriage (the Boiler Room's rows are 3.55 m off its centre line). */
+  litAngle: 1.0, litPenumbra: 0.6,
   /** Spot intensity per unit of the lamp's power; the omni's share of it as spill. */
   spotGain: TUBE_SPOT_GAIN, spill: 0.2,
   /** Swing: the train's lamp swing, amplified for a tube on chains. */
@@ -228,7 +236,9 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   const pos = light.position.clone();
   const roomDef = ctx.world.level.rooms.find(r => r.id === room);
   const drop = Math.max(1.5, (roomDef ? roomDef.height : 2.8) - 0.4 + 0.2);
-  const spot = new THREE.SpotLight(light.color.clone(), 0, drop * 2.2, TUBE.angle, TUBE.penumbra, TUBE.decay);
+  const wide = ctx.world.level.def?.lighting === 'lit';
+  const spot = new THREE.SpotLight(light.color.clone(), 0, drop * 2.2, wide ? TUBE.litAngle : TUBE.angle,
+    wide ? TUBE.litPenumbra : TUBE.penumbra, TUBE.decay);
   spot.name = `train.tube-spot:${room}`;
   spot.position.set(pos.x, pos.y - 0.06, pos.z);
   spot.target.position.set(pos.x, pos.y - 3, pos.z);
@@ -254,6 +264,8 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   beam.position.copy(pos);
   beam.frustumCulled = true;   // its bounds cover the small swing; off-screen carriages skip it
   beam.userData.skipLevelLights = true;
+  // A lit level (`lighting: "lit"`) draws no dust cones: plain lit tubes, and a raymarched cone per tube is the cost.
+  beam.visible = !wide;
   ctx.boot.handle.scene.add(beam);                // moved to the late-effects scene by adoptLightFx
   return { spot, mesh, beam, beamLit: lit as unknown as { value: THREE.Vector4 }, pos, drop };
 }
@@ -530,7 +542,8 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
     storm.flash = w.flash;
     storm.grade = Math.max(w.flash, storm.grade * Math.exp(-dt / STORM.grade.releaseS));
     if (storm.grade < 1e-3) storm.grade = 0;
-    ctx.render.postAa?.setFlashGrade(w.flash, storm.grade, STORM.grade.punch, STORM.grade.crush);
+    // A lit level skips the whole-screen grade (its crushed blacks are the dark look).
+    if (!storm.lit) ctx.render.postAa?.setFlashGrade(w.flash, storm.grade, STORM.grade.punch, STORM.grade.crush);
     storm.bolt = w.bolt;
     storm.intensity = w.intensity;
     storm.dir = [...w.dir];
@@ -606,7 +619,8 @@ function presentingLamp(ctx: GameContext, at: readonly [number, number, number])
       // only ~1 m across, so a body walking through the visible pool was mostly "outside" it.
       const fy = at[1] + 0.2 - p.y, fd = Math.hypot(dx, fy, dz) || 1;
       const cosA = -fy / fd;   // the cone points straight down
-      const inner = Math.cos(TUBE.angle * (1 - TUBE.penumbra)), outer = Math.cos(TUBE.angle * PRESENT.edge);
+      const { angle, penumbra } = l.tube.spot;
+      const inner = Math.cos(angle * (1 - penumbra)), outer = Math.cos(angle * PRESENT.edge);
       const t = Math.min(1, Math.max(0, (cosA - outer) / Math.max(1e-4, inner - outer)));
       cover = t * t * (3 - 2 * t);
     }

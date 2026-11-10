@@ -21,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, lamps, placed  # noqa: E402
+from night_train_layout import AMMO, BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, LIGHTING, VESTIBULE, lamps, placed, vestibule_door  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -47,10 +47,11 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 SC = bpy.context.scene
 SC["level_id"] = "night-train"
 SC["level_name"] = "Night Train"
-SC["ammo"] = "finite"
+SC["ammo"] = AMMO
 SC["loadout"] = "melee"
 SC["cues"] = json.dumps(CUES)
 SC["complete_on"] = COMPLETE_ON
+SC["lighting"] = LIGHTING
 
 COLLS = {}
 
@@ -293,6 +294,8 @@ def carriage(c, zs):
         t["once"] = True
     for gid, event, x0, x1, u0, u1 in c["gates"]:
         gbox("gates", f"gate:{event}:{gid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)))
+    for did, key, x0, x1, u0, u1, dh in c.get("doors", []):
+        gbox("doors", f"door:{key or 'none'}:{did}", (x0, 0, g(u1)), (x1, dh, g(u0)))
 
 
 prev = None
@@ -301,6 +304,8 @@ for c, zs in placed():
         # The vestibule between the previous carriage and this one: a 1.4 m tunnel.
         put("vestibule", 0, 0, zs + VESTIBULE)
         gbox("tunnels", f"tunnel:{prev}:{c['rid']}", (-0.7, 0, zs), (0.7, 2.1, zs + VESTIBULE), wire=True)
+        did, key, dmin, dmax = vestibule_door(c, zs)
+        gbox("doors", f"door:{key or 'none'}:{did}", dmin, dmax)
     carriage(c, zs)
     prev = c["rid"]
 

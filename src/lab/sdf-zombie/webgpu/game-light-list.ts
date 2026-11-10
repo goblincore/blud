@@ -149,6 +149,11 @@ const _b = new THREE.Vector3();
 const v3 = (v: THREE.Vector3, out: Vec3): Vec3 => { out[0] = v.x; out[1] = v.y; out[2] = v.z; return out; };
 const c3 = (c: THREE.Color, out: Vec3): Vec3 => { out[0] = c.r; out[1] = c.g; out[2] = c.b; return out; };
 
+/** A lit level's tubes on the BODIES only (owner, 2026-10-23: "the enemies are a bit too blown / washed out").
+ *  Its tubes hang in two side rows with wide cones, so a body sums about four of them where it used to stand
+ *  under one; the trim raises each tube's reference (bodyNorm), leaving the walls' light as it is. */
+export const LIT_TUBE_BODY_TRIM = 0.35;
+
 /** Reused across frames (the reader rewrites these records in place). */
 function makeInput(): SourceInput { return { lamps: [], window: null, flashlight: null, flashes: [] }; }
 const scratchWindow: WindowInput = { dir: [0, 1, 0], color: [1, 1, 1], intensity: 0, rooms: [] };
@@ -160,6 +165,7 @@ export function readSourceInput(
 ): SourceInput {
   const rt = ctx.world.light;
   const lamps = rt?.lamps ?? [];
+  const tubeBodyTrim = ctx.world.level.def?.lighting === 'lit' ? LIT_TUBE_BODY_TRIM : 1;
   into.lamps.length = lamps.length;
   for (let i = 0; i < lamps.length; i++) {
     const l = lamps[i]!;
@@ -168,7 +174,7 @@ export function readSourceInput(
     rec.gain = l.gain; rec.tint = l.tint;
     rec.levelCheap = l.levelCheap;
     // Fire-mood lamps carry no reference (bodyNorm 1): see collectLightSources.
-    rec.ref = l.mood === 'fire' ? undefined : l.base * (l.beacon ? BEACON.spotGain : l.tube?.spot ? TUBE_SPOT_GAIN : 1);
+    rec.ref = l.mood === 'fire' ? undefined : l.base * (l.beacon ? BEACON.spotGain : l.tube?.spot ? TUBE_SPOT_GAIN / tubeBodyTrim : 1);
     rec.beacon = !!l.beacon;
     // A beacon's light is its swept spot (its omni stays at 0), read like a tube's.
     const spot = l.beacon?.spot ?? l.tube?.spot;

@@ -63,6 +63,8 @@ export interface WorldState {
   openGates: Set<string>;
   /** Gate meshes by gate id, hidden when the gate opens. */
   gateMeshes: Map<string, THREE.Object3D>;
+  /** Each enemy's live furniture list: its room's furniture plus every closed door (refreshGateColliders). */
+  actorBlockers: { base: readonly Aabb[]; live: Aabb[] }[];
   /** Mesh key: what the level's art file placed, or null (no art / `?art=0`). */
   art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[]; sourceMeshes?: number } | null;
   /** Mesh key: the level's art scene, loaded at boot and placed with the level
@@ -138,6 +140,7 @@ export function makeWorldState(): WorldState {
     level: unbuilt<ActiveLevel>(),
     openGates: new Set<string>(),
     gateMeshes: new Map<string, THREE.Object3D>(),
+    actorBlockers: [],
     art: null,
     artScene: null,
     train: null,
@@ -178,6 +181,7 @@ export const WORLD_BINDINGS = {
   level: 'world.level',
   openGates: 'world.openGates',
   gateMeshes: 'world.gateMeshes',
+  actorBlockers: 'world.actorBlockers',
   art: 'world.art',
   artScene: 'world.artScene',
   train: 'world.train',

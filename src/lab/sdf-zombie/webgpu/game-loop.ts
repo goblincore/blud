@@ -10,7 +10,9 @@
 
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
-import { openGate } from './game-level-rooms';
+import { openGate, refreshGateColliders } from './game-level-rooms';
+import { doorSlab, makeDoorStates, stepDoors, type DoorState } from './doors';
+import type { DoorDef, KeyColor } from './level-def';
 import { PLAYER } from './game-player';
 import { MAGAZINE_CAPACITY } from './game-viewmodel';
 import { requestSlot, type WeaponSlot } from './game-weapon-slots';
@@ -34,7 +36,12 @@ export interface LoopRuntime {
   /** Actors that fight with a weapon (the bride's sword) and so never bite. */
   biteExempt: Set<number>;
   meshes: Map<string, THREE.Mesh>;
-  el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
+  /** One per level door (doors.ts), and its slab mesh. */
+  doors: DoorState[];
+  doorMeshes: THREE.Mesh[];
+  /** Seconds the "locked" notice has left. */
+  noticeAge: number;
+  el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement; notice: HTMLDivElement };
 }
 
 function overlay(title: string, hint: string): HTMLDivElement {
@@ -56,7 +63,18 @@ const LOOK: Record<string, { geo: () => THREE.BufferGeometry; color: number }> =
   melee: { geo: () => new THREE.BoxGeometry(0.08, 0.8, 0.08), color: 0x6b5a45 },
   dynamite: { geo: () => new THREE.CylinderGeometry(0.03, 0.03, 0.22, 10), color: 0xb0302a },
   flashlight: { geo: () => new THREE.CylinderGeometry(0.035, 0.05, 0.24, 12), color: 0xd8d0b0 },
+  'key-red': { geo: keyGeo, color: 0xe0281e },
+  'key-blue': { geo: keyGeo, color: 0x2a62ff },
+  'key-yellow': { geo: keyGeo, color: 0xf0c020 },
 };
+/** Placeholder coloured keys (owner, 2026-09-25: red / blue / yellow, re-skinnable later): a ring and a bit. */
+function keyGeo(): THREE.BufferGeometry {
+  return new THREE.TorusGeometry(0.07, 0.022, 8, 16);
+}
+/** HUD and door colours per key. */
+export const KEY_HEX: Record<KeyColor, number> = { red: 0xe0281e, blue: 0x2a62ff, yellow: 0xf0c020 };
+/** An unlocked door's slab. */
+const DOOR_HEX = 0x5a5c60;
 /** Pickups that hang still (the flashlight on its hook) instead of spinning. */
 const STILL = new Set(['flashlight']);
 
@@ -74,6 +92,10 @@ export function createLoop(ctx: GameContext): LoopRuntime {
   hurt.setAttribute('style', 'position:fixed; inset:0; z-index:34; pointer-events:none; opacity:0;'
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
   document.body.appendChild(hurt);
+  const notice = document.createElement('div');
+  notice.setAttribute('style', 'position:fixed; left:0; right:0; top:58%; z-index:33; pointer-events:none; text-align:center; opacity:0;'
+    + ' font:700 20px/1.2 ui-monospace,Menlo,monospace; color:#f2e6d0; text-shadow:0 2px 0 #000; letter-spacing:.08em;');
+  document.body.appendChild(notice);
   const rt: LoopRuntime = {
     god: godMode(authored, q.get('god')),
     authored,
@@ -86,7 +108,10 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     done: false,
     biteExempt: new Set(),
     meshes: new Map(),
-    el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
+    doors: authored ? makeDoorStates(def.doors) : [],
+    doorMeshes: [],
+    noticeAge: 0,
+    el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again'), notice },
   };
   if (authored) {
     for (const p of def.pickups) {
@@ -102,10 +127,28 @@ export function createLoop(ctx: GameContext): LoopRuntime {
       ctx.boot.handle.scene.add(mesh);
       rt.meshes.set(p.id, mesh);
     }
+    // Doors: plain slabs until the kit has door art; a locked one wears its key's colour.
+    def.doors.forEach((d, i) => {
+      const b = d.box;
+      const hex = d.key ? KEY_HEX[d.key] : DOOR_HEX;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).multiplyScalar(d.key ? 0.55 : 1), emissive: d.key ? hex : 0x000000,
+          emissiveIntensity: 0.12, metalness: 0.4, roughness: 0.55 }));
+      mesh.name = `door:${d.id}`;
+      ctx.boot.handle.scene.add(mesh);
+      rt.doorMeshes.push(mesh);
+      placeDoor(rt, def.doors, i);
+    });
   }
   ctx.world.loop = rt;
+  refreshGateColliders(ctx);
   updateStatus(ctx);
   return rt;
+}
+
+function placeDoor(rt: LoopRuntime, doors: readonly DoorDef[], i: number): void {
+  const b = doorSlab(doors[i]!, rt.doors[i]!);
+  rt.doorMeshes[i]?.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
 }
 
 export function updateStatus(ctx: GameContext): void {
@@ -114,7 +157,9 @@ export function updateStatus(ctx: GameContext): void {
   const low = rt.vitals.health <= 25 ? ' style="color:#ff5a3c"' : '';
   const ammo = rt.finite && rt.inventory.weapons.includes('shotgun')
     ? `&nbsp;&nbsp; SHELLS ${ctx.weapon.shells} | ${rt.inventory.shellsReserve}` : '';
-  rt.el.status.innerHTML = `<span${low}>HEALTH ${rt.vitals.health}</span>${ammo}${rt.god ? '&nbsp;&nbsp; GOD' : ''}`;
+  const keys = rt.inventory.keys.length === 0 ? ''
+    : `&nbsp;&nbsp; KEYS ${rt.inventory.keys.map(k => `<span style="color:#${KEY_HEX[k].toString(16).padStart(6, '0')}">&#9632;</span>`).join(' ')}`;
+  rt.el.status.innerHTML = `<span${low}>HEALTH ${rt.vitals.health}</span>${ammo}${keys}${rt.god ? '&nbsp;&nbsp; GOD' : ''}`;
 }
 
 export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind): void {
@@ -222,6 +267,24 @@ export function stepLoop(ctx: GameContext, dt: number): void {
     }
     updateStatus(ctx);
   }
+  if (def.doors.length > 0) {
+    const occupants = ctx.world.actors.map(a => a.pose().pos);
+    const d = stepDoors(def.doors, rt.doors, feet, rt.inventory.keys, occupants, dt);
+    rt.doors = d.states;
+    for (const ev of d.events) emitLevelEvent(ctx, ev);
+    if (d.moved) {
+      for (let i = 0; i < def.doors.length; i++) placeDoor(rt, def.doors, i);
+      refreshGateColliders(ctx);
+    }
+    const locked = d.locked[0];
+    if (locked !== undefined) {
+      const key = def.doors.find(x => x.id === locked)?.key;
+      if (key) rt.el.notice.innerHTML = `LOCKED &mdash; NEEDS THE <span style="color:#${KEY_HEX[key].toString(16).padStart(6, '0')}">${key.toUpperCase()} KEY</span>`;
+      rt.noticeAge = 1.5;
+    }
+  }
+  rt.noticeAge = Math.max(0, rt.noticeAge - dt);
+  rt.el.notice.style.opacity = String(Math.min(1, rt.noticeAge * 2));
   const t = stepTriggers(def.triggers, rt.triggers, feet);
   rt.triggers = t.state;
   for (const ev of t.events) emitLevelEvent(ctx, ev);
@@ -246,7 +309,7 @@ export function applyDeathCamera(ctx: GameContext, camera: THREE.Camera): void {
 }
 
 /** Seams: `__sdfGame.vitals()`, `damagePlayer(n, kind)`, `inventory()`, `pickupsLeft()`,
- *  `emitLevelEvent(e)`, `levelComplete()`. */
+ *  `emitLevelEvent(e)`, `levelComplete()`, `doors()`. */
 export function createLoopSeams(ctx: GameContext) {
   return {
     vitals: () => (ctx.world.loop ? { ...ctx.world.loop.vitals } : null),
@@ -256,7 +319,7 @@ export function createLoopSeams(ctx: GameContext) {
     },
     inventory: () => {
       const inv = ctx.world.loop?.inventory;
-      return inv ? { ...inv, weapons: [...inv.weapons], cds: [...inv.cds], shells: ctx.weapon.shells } : null;
+      return inv ? { ...inv, weapons: [...inv.weapons], cds: [...inv.cds], keys: [...inv.keys], shells: ctx.weapon.shells } : null;
     },
     pickupsLeft: () => {
       const rt = ctx.world.loop, def = ctx.world.level.def;
@@ -264,5 +327,10 @@ export function createLoopSeams(ctx: GameContext) {
     },
     emitLevelEvent: (event: string) => { emitLevelEvent(ctx, event); },
     levelComplete: () => !!ctx.world.loop?.done,
+    /** Each door's id, open fraction and lock. */
+    doors: () => {
+      const rt = ctx.world.loop, def = ctx.world.level.def;
+      return rt && def ? def.doors.map((d, i) => ({ id: d.id, key: d.key, open: rt.doors[i]!.open, unlocked: rt.doors[i]!.unlocked })) : [];
+    },
   };
 }

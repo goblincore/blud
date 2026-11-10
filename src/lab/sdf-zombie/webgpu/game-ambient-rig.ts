@@ -9,10 +9,16 @@
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
-import { DUNGEON_RIG, type AmbientRig } from './dungeon-lighting';
+import { DUNGEON_RIG, GALLERY_RIG, LIT_RIG, type AmbientRig } from './dungeon-lighting';
 import { restampLevelProbes } from './game-bone-cull';
 import { applyHemi } from './game-level-lights';
 
+
+/** The rig in force: the gallery A/B (`setDungeon(false)`), else the level's own (`lighting`). */
+export function activeRig(ctx: GameContext): AmbientRig {
+  if (!ctx.lighting.dungeonOn) return GALLERY_RIG;
+  return ctx.world.level.def?.lighting === 'lit' ? LIT_RIG : DUNGEON_RIG;
+}
 
 export function applyRig(ctx: GameContext, rig: AmbientRig) {
   ctx.lighting.hemiBase = rig.hemiIntensity;
@@ -34,6 +40,6 @@ export function applyRig(ctx: GameContext, rig: AmbientRig) {
     fog.far = rig.fogFar;
   }
   ctx.boot.handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
-  ctx.lighting.flashlight.spot.visible = rig === DUNGEON_RIG;
-  ctx.lighting.flashlight.levelShadow.visible = rig === DUNGEON_RIG;
+  ctx.lighting.flashlight.spot.visible = rig !== GALLERY_RIG;
+  ctx.lighting.flashlight.levelShadow.visible = rig !== GALLERY_RIG;
 }

@@ -20,7 +20,7 @@ function twoRooms(): LevelDef {
   });
   return {
     id: 'two', name: 'Two rooms', ammo: 'infinite', palette: P, loadout: [], completeOn: 'pickup.cd',
-    state: 'default', states: ['default'], requires: [], skyline: null,
+    state: 'default', states: ['default'], requires: [], skyline: null, lighting: 'dark', doors: [],
     rooms: [room(1, 'west', 0, 8), room(2, 'east', 9.6, 17.6)],
     tunnels: [{ name: 'tunnel-1-2', a: 1, b: 2, minX: 8, maxX: 9.6, minZ: 3.2, maxZ: 4.8,
       height: 2.2, color: P.tunnel, axis: 'x', floor: 0 }],

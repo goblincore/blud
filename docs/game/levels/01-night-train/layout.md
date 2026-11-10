@@ -1,5 +1,21 @@
 # Night Train: layout
 
+## Lights on, keys and doors (2026-10-22, owner)
+
+After playing: the train was "too dark and a bit too realistic", and the first zombies were in your face.
+- **Lights on.** `lighting: "lit"` (the level's own rig, `LIT_RIG`: bright ambient, fog at 10–55 m, the storm still
+  flashes in the windows but no longer darkens the room or grades the screen). Every tube is steady; the drama is the
+  scripted moments only: the coat check dies when the torch is taken, the sleeper blacks out, the Boiler Room strobes.
+  No tube or window shadow maps (performance). **2026-10-23:** the tubes hang in two rows along the sides of the
+  ceiling, one every 3 m (86 in all, was 20 down the centre), and a lit level draws no dust cones under them; their cones are wide and soft (1.0 rad, penumbra 0.6) so the centre of each carriage is as lit as its sides. Bodies take a lit level's tubes at 0.35 (`LIT_TUBE_BODY_TRIM`, game-light-list.ts): each sums about four tubes now, and at full strength the zombies washed out.
+- **A safe start.** The baggage hold is empty (the trunk zombie moved into the mail cage) and a shut door separates it
+  from the cage. Enemies never open doors and can't see through a shut one.
+- **Keys and doors.** A sliding door in every vestibule. Two are locked: the coat check (**red key**, at the north end of
+  the dining galley) and the Boiler Room (**blue key**, in sleeper C3). Placeholder slabs in the key's colour until the
+  kit has door art.
+- **Ammo doubled:** a shell box is 16, the sawn-off comes with 8 spare, the reserve holds 80 (to tweak).
+- **Infinite ammo (2026-10-23):** `ammo: "infinite"`: the two-shell magazine still reloads, the reserve never runs dry (no SHELLS counter).
+
 ## Draft 3 (2026-09-28): the Boiler Room at 8 × 28 m (built)
 
 ![Plan, draft 3](layout-draft3.png)

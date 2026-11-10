@@ -47,6 +47,7 @@ import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
+import { closedDoors } from './game-level-rooms';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
 // game-march-accept.ts beside the accept law, so a lab page can run the game's march without importing the game; re-exported here.
@@ -84,6 +85,9 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   const roomFurniture = ctx.world.level.furniture
     .filter(f => f.room === room.id)
     .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
+  // Live: refreshGateColliders adds the closed doors as they open and shut.
+  const blockers = { base: roomFurniture, live: [...roomFurniture, ...closedDoors(ctx)] };
+  ctx.world.actorBlockers.push(blockers);
   // THE SHARED PATH (character-view.ts). Compile, bone-ratio override,
   // build, stance check, translate and the GPU view were all inline here and
   // all duplicated in lab-main; they are one module now, and this call is
@@ -420,7 +424,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     profile: characterEntry(name).profile,
     seed: 1337 + ctx.boot.nextId * 101,
     bounds: wanderBounds(room),
-    furniture: roomFurniture,
+    furniture: blockers.live,
     navigation: ctx.world.encounterNav,
     onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
     // A melee hit on the player. There is no player health, so a hit is

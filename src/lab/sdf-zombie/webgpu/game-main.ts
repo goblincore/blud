@@ -40,7 +40,7 @@ import {
 } from '../adaptive-scale';
 import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, REFINE_LAYER, PRECOMPILE_COLD_PASS_TIMEOUT_MS } from './sdf-layer';
-import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { createFlashlight, DUNGEON_RIG } from './dungeon-lighting';
 import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatchedGain } from './probe-lighting-node';
 import { isLevelCheap } from './level-tier';
 import { LevelListLightingNode } from './level-list-node';
@@ -390,7 +390,7 @@ import { acquireVolumeAtlas, bindSkeletonVolume, buildSkeletonSources, releaseSk
 import { GAME_HULL_EXIT_BOUND, GAME_LAST_STEP, GAME_LEVEL_SHADOW, GAME_OMEGA, GAME_RELAX, GAME_WOUND_EARLY_OUT, GAME_WOUND_STEP, SMG_TARGET_CHEST_Y, rebuildCast, spawnAll, spawnEnemy } from './game-spawn';
 import { applyWoundTuning } from './game-wound-tuning';
 import { DemoReplayOpts, applyDemoQuery, demoSynthesize, runDemoReplay } from './game-demo-replay';
-import { applyRig } from './game-ambient-rig';
+import { activeRig, applyRig } from './game-ambient-rig';
 import { boneExposedActors, nearestCrowdBody } from './game-crowd-queries';
 import { ENGAGED_RADIUS, FORE_HAND_REST, GRIP_HAND_REST, GUN_REST, SPRITE_TRAIL_ID_BASE, Y_UP, _tmpV, tick } from './game-tick';
 
@@ -965,7 +965,7 @@ async function main() {
     // Level art may opt out of casting (mesh key §4: `shadow = false`).
     if (o instanceof THREE.Mesh) { o.castShadow = o.userData.shadow !== false; o.receiveShadow = true; }
   });
-  applyRig(ctx, DUNGEON_RIG);
+  applyRig(ctx, activeRig(ctx));
   // Dynamic light (lamp moods and scripts, the flashlight's switch, the train's storm window
   // lights): after the accents and the flashlight exist, before the per-room light lists.
   createDynamicLight(ctx);
@@ -978,7 +978,7 @@ async function main() {
   createEmergence(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
-    setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(ctx, on ? DUNGEON_RIG : GALLERY_RIG); },
+    setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(ctx, activeRig(ctx)); },
     get on() { return ctx.lighting.dungeonOn; },
     /** The weapon light itself, for runtime A/Bs (shadow.intensity 0/1 is the
      *  shadow kill switch — do NOT toggle spot.castShadow live, three r185/r186
@@ -1337,7 +1337,7 @@ async function main() {
         });
         return candidates;
       },
-      environment: () => deferredEnvironmentFromRig(ctx.lighting.dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
+      environment: () => deferredEnvironmentFromRig(activeRig(ctx)),
       // M2 task 5: the flashlight slot's march-key response for deferred
       // flesh, read LIVE from beamTuning — the same gain/shoulder the legacy
       // march replays per frame, so setBeamTuning moves BOTH paths together
