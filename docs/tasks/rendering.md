@@ -15,11 +15,27 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   −29 % over three runs); with the call chosen per pixel inside the loop, −16 to −22 %.
 - [x] Rays that walk and miss: 15 % of the walked pixels, 60 % of the steps, 48 % of the folds (24 steps a ray).
 - [x] The per-pixel setup without the temporal start's probe is 0.2 ms.
-- [ ] **Next: the clean-body fast path in the real shader** (`mapLean` beside `mapBody`, chosen per pixel when every
-  slot in the tile is clean; the clean `march-hash` pins should not move). Then per sample for wounded bodies
-  (outside the wound bound a sample is `mapLean`'s exactly). Owner's go-ahead pending.
-- [ ] Not measured: a wounded frame, a crowd frame, other bodies, the live game, the cold compile of the extra call
-  sites, and why untaken code costs.
+- [x] **The clean-body fast path, built behind `?leanwalk`, default off**
+  ([notes](../dev-notes/2026-11-09-march-lean-walk/NOTES.md),
+  [spec](../superpowers/specs/2026-11-09-march-lean-walk-design.md)). `mapLean` beside `mapBody`, chosen once per
+  pixel when every body in the pixel's tile is clean; the walk and the temporal start's probe call it.
+  `__sdfGame.setLeanWalk(on)` is the runtime A/B, debug mode 23 the census.
+  - Same picture to the bit: `march-hash` in its three modes, clean and wounded, flag off and on; a 12-body frame
+    with one wounded body (62 % of its pixels on the fast path), hull exit bound off and on.
+  - The `sdf:march` pass at the shipped settings (exit bound on), paired differences over 6 repeats: clean close-up
+    16.2 ms, −2.50 ms (−15.5 %); 12-zombie crowd 15.3 ms, −2.32 ms (−15.2 %); wounded close-up 20.6 ms, +0.33 ms
+    (+1.6 %). With the exit bound off the close-up reads −19 % (the ladder's frame; it shipped captures with the
+    bound off).
+  - Cold compile of the program the loader waits for: 42.0 s → 46.8 to 48.0 s. `?leanwalk=walk` (the probe left on
+    `mapBody`): 44.9 s, the same gain on the crowd and −14.0 % on the close-up.
+- [ ] **Owner's call: turn it on, and which form.** Nothing to look at (the picture does not change); the trade is
+  −15 % of the march on clean frames against +2 % on wounded close-ups and 3 to 5 s of cold compile.
+- [ ] **`march-hash` pins are stale** (Chrome 154 → 157; base `3f0c65eb` gives `07f628a3…` / `e0a128e7…` /
+  `565aaad4…`). Not re-pinned, not bisected. `MARCH_HASH_NOPIN=1` reports and carries on.
+- [ ] **Next: per sample on wounded bodies** (outside a body's wound bound a sample is `mapLean`'s exactly). It is
+  what would turn the wounded frames' +2 % into a gain, and the heavy scenes are wounded.
+- [ ] Not measured: the live game's frame, other bodies (cloth, kits, the bare-bones bypass), the capture gates with
+  the flag on, why the flag-on program costs 2 % on the `mapBody` path, and why untaken code costs.
 
 ## three r187 — 2026-10-30
 

@@ -22,6 +22,11 @@ Behind a compile-time flag, `?leanwalk`, default off (shader text byte-identical
 5. **A census**, debug mode 23 (compiled only with the flag): per pixel `leanOk`, the slot count,
    the walk's steps.
 
+`?leanwalk=walk` (added after the cold compile was measured) is item 3 for the walk only: the
+temporal start's probe stays on `mapBody`, which is one inlined copy of the fold fewer in every
+march program. The identity argument does not change: a probe through `mapBody` leaves the state
+`mapLean` would.
+
 The claim is bit identity: with the flag on, every march target is the one the flag-off program
 draws.
 
