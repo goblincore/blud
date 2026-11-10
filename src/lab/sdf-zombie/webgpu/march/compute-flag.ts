@@ -2,21 +2,24 @@
 //
 // COMPILE-TIME switch for the COMPUTE MARCH (2026-11-10; docs/dev-notes/2026-11-10-compute-march-spike/NOTES.md).
 //
-// With `?marchcompute` a quad-dispatch crowd type marches its bodies in a compute pass, 8 x 8 invocations a
+// ON BY DEFAULT since 2026-11-10 (owner's call, after a playtest on doom-map28: a close mob at about 70 ms a frame
+// read 50 to 60). `?marchcompute=0` is off: the fragment march, its shader text byte for byte. Any other value, or
+// no parameter, is on.
+//
+// On, a quad-dispatch crowd type marches its bodies in a compute pass, 8 x 8 invocations a
 // workgroup, into a storage texture, and its quad then only copies that texture into the march target (colour, and
 // the hit depth through the depth test). The field code is the fragment march's own text: the one difference is
 // that a `discard` becomes a flag the kernel reads. Replayed captures measured the pass 24 to 55 % faster this way
 // (the note above); nothing was measured in the game before this flag existed.
 //
-// Off (the default), no node of the compute path is created: every wgslFn consumes a global three node id, and
+// Off, no node of the compute path is created: every wgslFn consumes a global three node id, and
 // those ids name the buffers of every program built later, so the shipped shader text stays byte-identical.
 export const MARCH_COMPUTE: boolean = (() => {
   try {
     const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
-    const v = new URLSearchParams(search).get('marchcompute');
-    return v !== null && v !== '0';
+    return new URLSearchParams(search).get('marchcompute') !== '0';
   } catch {
-    return false;
+    return true;
   }
 })();
 

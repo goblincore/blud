@@ -73,6 +73,9 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
     runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
     compile moved into the background warm-up, a look in motion, the paths it does not cover.
+  - **On by default, 2026-11-10** (owner's call after the MAP28 playtest; `?marchcompute=0` is off). The default
+    page on the clean 22-body mob, headless, whole frames: 37.5 ms off, 29.5 ms on (−21 %). The replay harness's
+    captures turn it off themselves. Owed: the compile in the background warm-up, the uncovered paths.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
