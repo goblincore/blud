@@ -1,0 +1,471 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/def-closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 57,
+     "bytes": [
+      372650,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/def-closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 57,
+     "bytes": [
+      372650,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup default page on xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/def-closeup-xb1-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "held",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup default page held xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "probe",
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/def-closeup-xb1-probe-on",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-probe-on]",
+   "manifest": "manifest.probe.json",
+   "swapped": [
+    {
+     "lines": 2,
+     "bytes": [
+      372650,
+      372730
+     ]
+    }
+   ]
+  }
+ ],
+ "baseMedianMs": 16.869999998807906,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "medianMs": 16.869999998807906,
+   "lo": 16.829999995231628,
+   "hi": 16.930000007152557
+  },
+  {
+   "leg": "off2",
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "medianMs": 16.890000003576276,
+   "lo": 16.85,
+   "hi": 16.920000004768372,
+   "diffMedianMs": 0.010000008344650979,
+   "diffMinMs": -0.030000007152558794,
+   "diffMaxMs": 0.0800000071525595,
+   "diffMedianPct": 0.05927687223092837,
+   "diffMinPct": -0.17783051069756195,
+   "diffMaxPct": 0.47421462453000945
+  },
+  {
+   "leg": "on",
+   "label": "closeup default page on xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "medianMs": 14.415000003576278,
+   "lo": 14.32000000476837,
+   "hi": 14.530000007152557,
+   "diffMedianMs": -2.4449999928474417,
+   "diffMinMs": -2.5399999976158156,
+   "diffMaxMs": -2.3099999904632558,
+   "diffMedianPct": -14.493183124008382,
+   "diffMinPct": -15.05631296855543,
+   "diffMaxPct": -13.692946002528089
+  },
+  {
+   "leg": "held",
+   "label": "closeup default page held xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/def-closeup-xb1-held",
+   "medianMs": 17.279999995231627,
+   "lo": 17.210000002384184,
+   "hi": 17.389999997615813,
+   "diffMedianMs": 0.3900000035762794,
+   "diffMinMs": 0.33999998569488454,
+   "diffMaxMs": 0.5500000000000007,
+   "diffMedianPct": 2.3117961090921053,
+   "diffMinPct": 2.015411889264435,
+   "diffMaxPct": 3.26022525215688
+  },
+  {
+   "leg": "probe",
+   "label": "closeup default page on xb1 [frame of .scratch/lean/def-closeup-xb1-on, program of .scratch/lean/def-closeup-xb1-probe-on]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "medianMs": 14.154999995231629,
+   "lo": 14.1,
+   "hi": 14.190000009536742,
+   "diffMedianMs": -2.7150000035762787,
+   "diffMinMs": -2.780000007152557,
+   "diffMaxMs": -2.6599999904632554,
+   "diffMedianPct": -16.093657402300714,
+   "diffMinPct": -16.47895677148193,
+   "diffMaxPct": -15.767634799355191
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "probe"
+   ],
+   "ms": {
+    "off": 16.889999997615813,
+    "off2": 16.869999992847443,
+    "on": 14.430000007152557,
+    "held": 17.289999997615816,
+    "probe": 14.190000009536742
+   },
+   "minMs": {
+    "off": 16.539999997615816,
+    "off2": 16.47999999523163,
+    "on": 14.369999992847443,
+    "held": 17.029999995231627,
+    "probe": 13.979999995231628
+   },
+   "diff": {
+    "off2": -0.02000000476837016,
+    "on": -2.459999990463256,
+    "held": 0.40000000000000213,
+    "probe": -2.699999988079071
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "probe",
+    "off"
+   ],
+   "ms": {
+    "off2": 16.920000004768372,
+    "on": 14.530000007152557,
+    "held": 17.389999997615813,
+    "probe": 14.180000007152557,
+    "off": 16.839999997615813
+   },
+   "minMs": {
+    "off2": 16.680000007152557,
+    "on": 14.330000007152558,
+    "held": 17.159999990463255,
+    "probe": 14.039999997615814,
+    "off": 16.639999997615813
+   },
+   "diff": {
+    "off2": 0.0800000071525595,
+    "on": -2.3099999904632558,
+    "held": 0.5500000000000007,
+    "probe": -2.6599999904632554
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "probe",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 14.390000009536744,
+    "held": 17.269999992847442,
+    "probe": 14.15,
+    "off": 16.930000007152557,
+    "off2": 16.9
+   },
+   "minMs": {
+    "on": 14.3,
+    "held": 17.07000000476837,
+    "probe": 14.05,
+    "off": 16.589999997615813,
+    "off2": 16.689999997615814
+   },
+   "diff": {
+    "off2": -0.030000007152558794,
+    "on": -2.539999997615814,
+    "held": 0.33999998569488454,
+    "probe": -2.780000007152557
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "probe",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 17.329999995231628,
+    "probe": 14.159999990463257,
+    "off": 16.860000002384187,
+    "off2": 16.910000002384187,
+    "on": 14.32000000476837
+   },
+   "minMs": {
+    "held": 17.160000002384187,
+    "probe": 13.969999992847443,
+    "off": 16.62000000476837,
+    "off2": 16.6,
+    "on": 14.219999992847443
+   },
+   "diff": {
+    "off2": 0.05000000000000071,
+    "on": -2.5399999976158156,
+    "held": 0.4699999928474412,
+    "probe": -2.7000000119209293
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "probe",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "probe": 14.1,
+    "off": 16.829999995231628,
+    "off2": 16.85,
+    "on": 14.4,
+    "held": 17.210000002384184
+   },
+   "minMs": {
+    "probe": 13.940000009536742,
+    "off": 16.660000002384187,
+    "off2": 16.689999997615814,
+    "on": 14.25,
+    "held": 17.139999997615813
+   },
+   "diff": {
+    "off2": 0.020000004768373714,
+    "on": -2.4299999952316274,
+    "held": 0.38000000715255666,
+    "probe": -2.729999995231628
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "probe"
+   ],
+   "ms": {
+    "off": 16.87999999523163,
+    "off2": 16.880000007152557,
+    "on": 14.520000004768372,
+    "held": 17.260000002384185,
+    "probe": 14.15
+   },
+   "minMs": {
+    "off": 16.680000007152557,
+    "off2": 16.619999992847443,
+    "on": 14.220000004768371,
+    "held": 17.039999997615816,
+    "probe": 14.039999997615814
+   },
+   "diff": {
+    "off2": 1.192092824453539e-8,
+    "on": -2.3599999904632565,
+    "held": 0.38000000715255666,
+    "probe": -2.729999995231628
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "warmS": 0.5,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.2044894695281982,
+       "g": 2.1118922233581543
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "warmS": 0.453,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.2044894695281982,
+       "g": 2.1118922233581543
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "warmS": 0.444,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.2044894695281982,
+       "g": 2.1118922233581543
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/def-closeup-xb1-held",
+   "warmS": 0.453,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.203218102455139,
+       "g": 2.11111581325531
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "probe": {
+   "dir": ".scratch/lean/def-closeup-xb1-on",
+   "warmS": 0.517,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.2044894695281982,
+       "g": 2.1118922233581543
+      }
+     }
+    }
+   ],
+   "errors": []
+  }
+ }
+}

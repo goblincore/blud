@@ -36,7 +36,8 @@ describe('the hit keeps its own copy of the winning piece', () => {
   it('the walk copies gHitPiece / gHitSplitF at every sample, next to hitRefold, before anything can call mapBody again', () => {
     expect(MARCH_TRACE_LOOP).toContain('var hitPiece = 0;');
     expect(MARCH_TRACE_LOOP).toContain('var hitSplitF = 0.0;');
-    const call = MARCH_TRACE_LOOP.indexOf('let dres = mapBody(');
+    const call = MARCH_TRACE_LOOP.indexOf('dres = mapBody(camPos + rd * t, ');
+    expect(call).toBeGreaterThan(-1);
     const refold = MARCH_TRACE_LOOP.indexOf('hitRefold = gRefoldWin;');
     const piece = MARCH_TRACE_LOOP.indexOf('hitPiece = gHitPiece;');
     const f = MARCH_TRACE_LOOP.indexOf('hitSplitF = gHitSplitF;');

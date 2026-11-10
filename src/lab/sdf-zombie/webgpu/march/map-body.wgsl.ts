@@ -5,12 +5,16 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { SHADE_BOUND as SHADE } from './shade-bound-flag';
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
+import { LEAN_WALK as LEAN } from './lean-walk-flag';
+import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 import { REGION_MARGIN } from '../../head-split';
 import { SPLIT_ABL, ablWgsl } from '../split-ablate';
 import { CUT_NEAR } from '../../cut-wound';
 
+// The tail also carries mapLean (lean-walk.wgsl.ts), the walk's clean-body fast path, the way FOLD_GROUP's tail
+// carries limbLoad under `?limbs`. `?leanwalk=0` (lean-walk-flag.ts) leaves it out.
 export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
   gWalkGapNew = 1e9;
@@ -513,7 +517,7 @@ var<private> gLastFoldPiece: i32 = 0;${SHADE ? `
 var<private> gShadeFold: f32 = 1e9;
 var<private> gShadeAt: vec3<f32> = vec3<f32>(0.0);
 var<private> gShadeSlot: i32 = -1;
-var<private> gShadePiece: i32 = 0;` : ''}`;
+var<private> gShadePiece: i32 = 0;` : ''}${LEAN ? `\n${MAP_LEAN}` : ''}`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the

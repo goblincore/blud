@@ -18,7 +18,8 @@ describe('ported features reach the entry point', () => {
     // field relaxed until |d| enters the shell, then the silhouette fbm
     // displaces the stepped distance itself. Same 3.0 scale as mapBody's
     // noise term, so calcNormal's warped normals match the displaced skin.
-    expect(MARCH_BODY).toContain('let dres = mapBody(');
+    // (`dres = mapBody(`, not `let dres`: the walk chooses mapLean or mapBody per pixel, lean-walk-flag.ts.)
+    expect(MARCH_BODY).toContain('dres = mapBody(camPos + rd * t, ');
     expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
     // Restored to the shellAmp-only form in the 2026-09-04 merge: the melt

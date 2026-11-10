@@ -1,0 +1,438 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "shaderFrom": ".scratch/lean/closeup-xb0-off",
+   "note": "",
+   "hullExitBound": false,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": ""
+   },
+   "label": "closeup ?leanwalk on xb0 [frame of .scratch/lean/closeup-xb0-on, program of .scratch/lean/closeup-xb0-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "shaderFrom": ".scratch/lean/closeup-xb0-off",
+   "note": "",
+   "hullExitBound": false,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": ""
+   },
+   "label": "closeup ?leanwalk on xb0 [frame of .scratch/lean/closeup-xb0-on, program of .scratch/lean/closeup-xb0-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": false,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": ""
+   },
+   "label": "closeup ?leanwalk on xb0",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/closeup-xb0-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": false,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "held",
+    "prelude": ""
+   },
+   "label": "closeup ?leanwalk held xb0",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "offboot",
+   "dir": ".scratch/lean/closeup-xb0-off",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": false,
+   "scene": {
+    "scene": "closeup",
+    "query": "",
+    "variant": "",
+    "prelude": ""
+   },
+   "label": "closeup no flag xb0",
+   "manifest": "manifest.json"
+  }
+ ],
+ "baseMedianMs": 21.774999994039533,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup ?leanwalk on xb0 [frame of .scratch/lean/closeup-xb0-on, program of .scratch/lean/closeup-xb0-off]",
+   "hullExitBound": false,
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "medianMs": 21.774999994039533,
+   "lo": 21.389999997615813,
+   "hi": 22.42999999523163
+  },
+  {
+   "leg": "off2",
+   "label": "closeup ?leanwalk on xb0 [frame of .scratch/lean/closeup-xb0-on, program of .scratch/lean/closeup-xb0-off]",
+   "hullExitBound": false,
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "medianMs": 21.81999999880791,
+   "lo": 21.360000002384187,
+   "hi": 23.319999992847443,
+   "diffMedianMs": 0.1750000000000007,
+   "diffMinMs": -0.16000000238418366,
+   "diffMaxMs": 1.3200000047683709,
+   "diffMedianPct": 0.803673938222289,
+   "diffMinPct": -0.7347876116095542,
+   "diffMaxPct": 6.061997727346473
+  },
+  {
+   "leg": "on",
+   "label": "closeup ?leanwalk on xb0",
+   "hullExitBound": false,
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "medianMs": 17.549999994039535,
+   "lo": 17.139999997615813,
+   "hi": 18.6,
+   "diffMedianMs": -4.125,
+   "diffMinMs": -4.910000002384187,
+   "diffMaxMs": -3.2399999976158114,
+   "diffMedianPct": -18.943742829525306,
+   "diffMinPct": -22.548794506214467,
+   "diffMaxPct": -14.879448902423404
+  },
+  {
+   "leg": "held",
+   "label": "closeup ?leanwalk held xb0",
+   "hullExitBound": false,
+   "dir": ".scratch/lean/closeup-xb0-held",
+   "medianMs": 21.579999995231628,
+   "lo": 21.12999999523163,
+   "hi": 23.930000007152557,
+   "diffMedianMs": -0.16499999165534973,
+   "diffMinMs": -0.7100000023841844,
+   "diffMaxMs": 1.5000000119209282,
+   "diffMedianPct": -0.7577496748588526,
+   "diffMinPct": -3.2606199888795984,
+   "diffMaxPct": 6.888633810936961
+  },
+  {
+   "leg": "offboot",
+   "label": "closeup no flag xb0",
+   "hullExitBound": false,
+   "dir": ".scratch/lean/closeup-xb0-off",
+   "medianMs": 20.35999999642372,
+   "lo": 19.96999999284744,
+   "hi": 21.159999990463255,
+   "diffMedianMs": -1.3600000023841865,
+   "diffMinMs": -2.220000004768373,
+   "diffMaxMs": -0.23000000715255808,
+   "diffMedianPct": -6.245694616562383,
+   "diffMinPct": -10.195177981061095,
+   "diffMaxPct": -1.0562572087968585
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 22.42999999523163,
+    "off2": 23.319999992847443,
+    "on": 17.519999992847442,
+    "held": 23.930000007152557,
+    "offboot": 20.209999990463256
+   },
+   "minMs": {
+    "off": 20.62999999523163,
+    "off2": 20.910000002384187,
+    "on": 15.740000009536743,
+    "held": 21.160000002384187,
+    "offboot": 19.32000000476837
+   },
+   "diff": {
+    "off2": 0.8899999976158135,
+    "on": -4.910000002384187,
+    "held": 1.5000000119209282,
+    "offboot": -2.220000004768373
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "offboot",
+    "off"
+   ],
+   "ms": {
+    "off2": 21.939999997615814,
+    "on": 18.15,
+    "held": 21.690000009536742,
+    "offboot": 20.839999997615813,
+    "off": 21.9
+   },
+   "minMs": {
+    "off2": 20.96999999284744,
+    "on": 16.920000004768372,
+    "held": 21.419999992847444,
+    "offboot": 19.420000004768372,
+    "off": 20.810000002384186
+   },
+   "diff": {
+    "off2": 0.03999999761581563,
+    "on": -3.75,
+    "held": -0.20999999046325613,
+    "offboot": -1.0600000023841858
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "offboot",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 17.579999995231628,
+    "held": 21.5,
+    "offboot": 20.510000002384185,
+    "off": 21.709999990463256,
+    "off2": 23.029999995231627
+   },
+   "minMs": {
+    "on": 17.110000002384187,
+    "held": 21.119999992847443,
+    "offboot": 19.510000002384185,
+    "off": 21.039999997615816,
+    "off2": 21.7
+   },
+   "diff": {
+    "off2": 1.3200000047683709,
+    "on": -4.129999995231628,
+    "held": -0.20999999046325613,
+    "offboot": -1.199999988079071
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "offboot",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 21.27000000476837,
+    "offboot": 21.159999990463255,
+    "off": 21.389999997615813,
+    "off2": 21.7,
+    "on": 17.139999997615813
+   },
+   "minMs": {
+    "held": 20.55,
+    "offboot": 19.1,
+    "off": 21,
+    "off2": 20.889999997615813,
+    "on": 16.710000002384184
+   },
+   "diff": {
+    "off2": 0.3100000023841858,
+    "on": -4.25,
+    "held": -0.11999999284744334,
+    "offboot": -0.23000000715255808
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "offboot",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "offboot": 19.96999999284744,
+    "off": 21.490000009536743,
+    "off2": 21.360000002384187,
+    "on": 17.37000000476837,
+    "held": 21.659999990463255
+   },
+   "minMs": {
+    "offboot": 19.45,
+    "off": 20.720000004768373,
+    "off2": 20.939999997615814,
+    "on": 16.67999999523163,
+    "held": 21.12999999523163
+   },
+   "diff": {
+    "off2": -0.13000000715255666,
+    "on": -4.120000004768372,
+    "held": 0.16999998092651225,
+    "offboot": -1.520000016689302
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "offboot"
+   ],
+   "ms": {
+    "off": 21.839999997615813,
+    "off2": 21.67999999523163,
+    "on": 18.6,
+    "held": 21.12999999523163,
+    "offboot": 20.1
+   },
+   "minMs": {
+    "off": 20.660000002384187,
+    "off2": 20.220000004768373,
+    "on": 16.53000000715256,
+    "held": 20.4,
+    "offboot": 19.190000009536742
+   },
+   "diff": {
+    "off2": -0.16000000238418366,
+    "on": -3.2399999976158114,
+    "held": -0.7100000023841844,
+    "offboot": -1.7399999976158114
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "warmS": 0.564,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "warmS": 0.47,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/closeup-xb0-on",
+   "warmS": 0.448,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/closeup-xb0-held",
+   "warmS": 0.488,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "offboot": {
+   "dir": ".scratch/lean/closeup-xb0-off",
+   "warmS": 0.474,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.0629475116729736,
+       "g": 2.0287811756134033
+      }
+     }
+    }
+   ],
+   "errors": []
+  }
+ }
+}

@@ -1,0 +1,471 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "shaderFrom": ".scratch/lean/wounded-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2); (() => { __sdfGame.setWoundTuning({ spillChance: 0 }); const m = __sdfGameDebug.normalCaptureState().camera; const r3 = (v) => Math.round(v * 1000) / 1000; const eye = [r3(m[12]), r3(m[13]), r3(m[14])]; let n = 0; for (const [a, b, kind] of [[0, 0, \"slug\"], [0.15, 0.1, \"pellet\"], [-0.12, -0.12, \"pellet\"]]) { let d = [0, 1, 2].map((i) => -m[8 + i] + a * m[i] + b * m[4 + i]); const L = Math.hypot(d[0], d[1], d[2]); d = d.map((v) => r3(v / L)); if (__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], kind, 1)) n++; } __sdfGame.step(5); if (!n) throw new Error(\"no wound stamped on body 1\"); return n; })()"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "shaderFrom": ".scratch/lean/wounded-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2); (() => { __sdfGame.setWoundTuning({ spillChance: 0 }); const m = __sdfGameDebug.normalCaptureState().camera; const r3 = (v) => Math.round(v * 1000) / 1000; const eye = [r3(m[12]), r3(m[13]), r3(m[14])]; let n = 0; for (const [a, b, kind] of [[0, 0, \"slug\"], [0.15, 0.1, \"pellet\"], [-0.12, -0.12, \"pellet\"]]) { let d = [0, 1, 2].map((i) => -m[8 + i] + a * m[i] + b * m[4 + i]); const L = Math.hypot(d[0], d[1], d[2]); d = d.map((v) => r3(v / L)); if (__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], kind, 1)) n++; } __sdfGame.step(5); if (!n) throw new Error(\"no wound stamped on body 1\"); return n; })()"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2); (() => { __sdfGame.setWoundTuning({ spillChance: 0 }); const m = __sdfGameDebug.normalCaptureState().camera; const r3 = (v) => Math.round(v * 1000) / 1000; const eye = [r3(m[12]), r3(m[13]), r3(m[14])]; let n = 0; for (const [a, b, kind] of [[0, 0, \"slug\"], [0.15, 0.1, \"pellet\"], [-0.12, -0.12, \"pellet\"]]) { let d = [0, 1, 2].map((i) => -m[8 + i] + a * m[i] + b * m[4 + i]); const L = Math.hypot(d[0], d[1], d[2]); d = d.map((v) => r3(v / L)); if (__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], kind, 1)) n++; } __sdfGame.step(5); if (!n) throw new Error(\"no wound stamped on body 1\"); return n; })()"
+   },
+   "label": "closeup ?leanwalk on xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/wounded-xb1-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "held",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2); (() => { __sdfGame.setWoundTuning({ spillChance: 0 }); const m = __sdfGameDebug.normalCaptureState().camera; const r3 = (v) => Math.round(v * 1000) / 1000; const eye = [r3(m[12]), r3(m[13]), r3(m[14])]; let n = 0; for (const [a, b, kind] of [[0, 0, \"slug\"], [0.15, 0.1, \"pellet\"], [-0.12, -0.12, \"pellet\"]]) { let d = [0, 1, 2].map((i) => -m[8 + i] + a * m[i] + b * m[4 + i]); const L = Math.hypot(d[0], d[1], d[2]); d = d.map((v) => r3(v / L)); if (__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], kind, 1)) n++; } __sdfGame.step(5); if (!n) throw new Error(\"no wound stamped on body 1\"); return n; })()"
+   },
+   "label": "closeup ?leanwalk held xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "walk",
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "shaderFrom": ".scratch/lean/wounded-xb1-walk-on",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2); (() => { __sdfGame.setWoundTuning({ spillChance: 0 }); const m = __sdfGameDebug.normalCaptureState().camera; const r3 = (v) => Math.round(v * 1000) / 1000; const eye = [r3(m[12]), r3(m[13]), r3(m[14])]; let n = 0; for (const [a, b, kind] of [[0, 0, \"slug\"], [0.15, 0.1, \"pellet\"], [-0.12, -0.12, \"pellet\"]]) { let d = [0, 1, 2].map((i) => -m[8 + i] + a * m[i] + b * m[4 + i]); const L = Math.hypot(d[0], d[1], d[2]); d = d.map((v) => r3(v / L)); if (__sdfGame.stampWoundAt(eye[0], eye[1], eye[2], d[0], d[1], d[2], kind, 1)) n++; } __sdfGame.step(5); if (!n) throw new Error(\"no wound stamped on body 1\"); return n; })()"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-walk-on]",
+   "manifest": "manifest.walk.json",
+   "swapped": [
+    {
+     "lines": 2,
+     "bytes": [
+      372757,
+      372677
+     ]
+    }
+   ]
+  }
+ ],
+ "baseMedianMs": 20.585000002384184,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "medianMs": 20.585000002384184,
+   "lo": 20.5,
+   "hi": 20.680000007152557
+  },
+  {
+   "leg": "off2",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "medianMs": 20.630000001192094,
+   "lo": 20.489999997615815,
+   "hi": 20.75,
+   "diffMedianMs": 0.049999999999998934,
+   "diffMinMs": -0.1600000023841872,
+   "diffMaxMs": 0.1399999976158135,
+   "diffMedianPct": 0.24289531209233842,
+   "diffMinPct": -0.7772650102776574,
+   "diffMaxPct": 0.6801068622764076
+  },
+  {
+   "leg": "on",
+   "label": "closeup ?leanwalk on xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "medianMs": 20.960000002384184,
+   "lo": 20.739999997615815,
+   "hi": 21.019999992847442,
+   "diffMedianMs": 0.3300000011920936,
+   "diffMinMs": 0.23999999761581492,
+   "diffMaxMs": 0.5,
+   "diffMedianPct": 1.6031090656005467,
+   "diffMinPct": 1.1658974864611016,
+   "diffMaxPct": 2.428953120923436
+  },
+  {
+   "leg": "held",
+   "label": "closeup ?leanwalk held xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/wounded-xb1-held",
+   "medianMs": 20.94499999880791,
+   "lo": 20.82000000476837,
+   "hi": 21.029999995231627,
+   "diffMedianMs": 0.40000000596046625,
+   "diffMinMs": 0.1399999976158135,
+   "diffMaxMs": 0.4199999928474405,
+   "diffMedianPct": 1.943162525694135,
+   "diffMinPct": 0.6801068622764076,
+   "diffMaxPct": 2.040320586829223
+  },
+  {
+   "leg": "walk",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/wounded-xb1-on, program of .scratch/lean/wounded-xb1-walk-on]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "medianMs": 21.014999997615813,
+   "lo": 20.939999997615814,
+   "hi": 21.02000000476837,
+   "diffMedianMs": 0.3949999928474419,
+   "diffMinMs": 0.33999998569488454,
+   "diffMaxMs": 0.5100000023841851,
+   "diffMedianPct": 1.9188729307830579,
+   "diffMinPct": 1.6516880527350268,
+   "diffMaxPct": 2.477532194924052
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "walk"
+   ],
+   "ms": {
+    "off": 20.5,
+    "off2": 20.489999997615815,
+    "on": 20.739999997615815,
+    "held": 20.910000002384187,
+    "walk": 21.010000002384185
+   },
+   "minMs": {
+    "off": 20.25,
+    "off2": 20.169999992847444,
+    "on": 20.580000007152556,
+    "held": 20.619999992847443,
+    "walk": 20.72999999523163
+   },
+   "diff": {
+    "off2": -0.01000000238418508,
+    "on": 0.23999999761581492,
+    "held": 0.4100000023841872,
+    "walk": 0.5100000023841851
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "walk",
+    "off"
+   ],
+   "ms": {
+    "off2": 20.75,
+    "on": 20.939999997615814,
+    "held": 21.029999995231627,
+    "walk": 20.960000002384184,
+    "off": 20.610000002384187
+   },
+   "minMs": {
+    "off2": 20.42999999523163,
+    "on": 20.82000000476837,
+    "held": 20.539999997615816,
+    "walk": 20.659999990463255,
+    "off": 20.279999995231627
+   },
+   "diff": {
+    "off2": 0.1399999976158135,
+    "on": 0.3299999952316277,
+    "held": 0.4199999928474405,
+    "walk": 0.34999999999999787
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "walk",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 21.019999992847442,
+    "held": 20.92999999523163,
+    "walk": 21.02000000476837,
+    "off": 20.519999992847442,
+    "off2": 20.639999997615813
+   },
+   "minMs": {
+    "on": 20.65,
+    "held": 20.639999997615813,
+    "walk": 20.65,
+    "off": 20.37000000476837,
+    "off2": 20.389999997615813
+   },
+   "diff": {
+    "off2": 0.12000000476837158,
+    "on": 0.5,
+    "held": 0.4100000023841872,
+    "walk": 0.5000000119209282
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "walk",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 20.970000004768373,
+    "walk": 20.939999997615814,
+    "off": 20.579999995231628,
+    "off2": 20.65,
+    "on": 20.910000002384187
+   },
+   "minMs": {
+    "held": 20.62999999523163,
+    "walk": 20.67999999523163,
+    "off": 20.37000000476837,
+    "off2": 20.27000000476837,
+    "on": 20.55
+   },
+   "diff": {
+    "off2": 0.07000000476837087,
+    "on": 0.3300000071525595,
+    "held": 0.3900000095367453,
+    "walk": 0.3600000023841865
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "walk",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "walk": 21.019999992847442,
+    "off": 20.680000007152557,
+    "off2": 20.52000000476837,
+    "on": 20.980000007152558,
+    "held": 20.82000000476837
+   },
+   "minMs": {
+    "walk": 20.839999997615813,
+    "off": 20.189999997615814,
+    "off2": 20.369999992847443,
+    "on": 20.789999997615816,
+    "held": 20.480000007152558
+   },
+   "diff": {
+    "off2": -0.1600000023841872,
+    "on": 0.3000000000000007,
+    "held": 0.1399999976158135,
+    "walk": 0.33999998569488454
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "walk"
+   ],
+   "ms": {
+    "off": 20.590000009536745,
+    "off2": 20.62000000476837,
+    "on": 21,
+    "held": 20.960000002384184,
+    "walk": 21.019999992847442
+   },
+   "minMs": {
+    "off": 20.239999997615815,
+    "off2": 20.32000000476837,
+    "on": 20.839999997615813,
+    "held": 20.62999999523163,
+    "walk": 20.71999999284744
+   },
+   "diff": {
+    "off2": 0.029999995231626997,
+    "on": 0.4099999904632554,
+    "held": 0.3699999928474398,
+    "walk": 0.42999998331069733
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "warmS": 0.554,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.069591760635376,
+       "g": 2.0277669429779053
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "warmS": 0.517,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.069591760635376,
+       "g": 2.0277669429779053
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "warmS": 0.548,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.069591760635376,
+       "g": 2.0277669429779053
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/wounded-xb1-held",
+   "warmS": 0.628,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 5,
+       "r": 5.407379984855652,
+       "g": 5.15845000743866
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "walk": {
+   "dir": ".scratch/lean/wounded-xb1-on",
+   "warmS": 0.622,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 2,
+       "r": 2.069591760635376,
+       "g": 2.0277669429779053
+      }
+     }
+    }
+   ],
+   "errors": []
+  }
+ }
+}

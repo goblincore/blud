@@ -71,6 +71,7 @@ const REACH_CM: Partial<Record<string, { cm: number; what: string }>> = {
   ogre: { cm: 21, what: 'the hide kilt hangs from the belt over the thighs, and stays on the belt' },
   gamer: { cm: 51, what: 'the gaming chair he is fused to: its base and armrests stay with the chair' },
   chair: { cm: 21, what: 'the chair he is: its seat frame runs under the thighs and beside the arms' },
+  cerebrax: { cm: 13.5, what: 'the harness ring\'s leg sockets, where each leg hangs off the frame (13.1 cm, 2026-11-09)' },
   gibbet: { cm: 16, what: 'the yoke bar across the chest the arms are chained to' },
   flayer: { cm: 9.6, what: 'the hip sockets on the pelvis; the spine-to-shoulder coupling (7.3 cm) is a follow-up' },
   butcher: { cm: 9, what: 'the hip sockets on the pelvis' },
