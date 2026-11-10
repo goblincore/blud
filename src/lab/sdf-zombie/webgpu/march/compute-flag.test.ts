@@ -6,8 +6,8 @@ import { MARCH_COMPUTE, MARCH_COMPUTE_BLOCK, MARCH_DISCARD_READ, marchBodyForCom
 const code = (s: string) => s.replace(/\/\/[^\n]*/g, '');
 
 describe('the compute march flag', () => {
-  it('is off without ?marchcompute', () => {
-    expect(MARCH_COMPUTE).toBe(false);
+  it('is on unless the page says ?marchcompute=0', () => {
+    expect(MARCH_COMPUTE).toBe(true);
   });
 
   it('is a block the measurement supports: a multiple of 8 invocations a side', () => {
