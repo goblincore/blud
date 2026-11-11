@@ -7,6 +7,7 @@ import { SHADE_BOUND as SHADE } from './shade-bound-flag';
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { LEAN_WALK as LEAN } from './lean-walk-flag';
 import { TILE_REF as TR } from './tile-ref-flag';
+import { WOUND_FOLD } from './wound-fold-flag';
 import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
@@ -315,7 +316,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // Never on an open split slot: the gap was measured on the pieces the LAST sample evaluated, and the early skip
   // may have left this one out.
   let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0 && !splitOpen;
-  if (!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if (${WOUND_FOLD ? '' : 'false && '}!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }

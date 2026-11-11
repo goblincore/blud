@@ -33,6 +33,15 @@ without any volume. The re-fold is what stops a crater on one limb from eating a
 
 This stage is small and is worth having whatever happens to the volume.
 
+**Built 2026-11-11** (`march/wound-fold-flag.ts`; one `false &&` on the re-fold's condition in `mapBody`, the
+owner bookkeeping left in because the inside-flesh fold's gate reads it). The wounded mob's `sdf:march` pass,
+captured from the game with the flag on and off and replayed by alternation, 5 repeats: **59.3 ms on, 48.6 ms
+off, -10.8 ms (-11.2 to -10.1)**; on against on, -0.1 (-1.7 to +1.7). The game's `?woundfold=0` text is the on
+text with that one edit (a generated buffer name aside). Sheet:
+[`mobw-woundfold-off.png`](../../dev-notes/2026-11-10-silhouette-spike/look/wound-volume/mobw-woundfold-off.png)
+(on | off | difference x 8). Not measured: live frame time, the compute march, motion. Waiting on the owner's
+playtest.
+
 ## Stage 2: the volume, in game (`?woundvol`)
 
 ### Where a wound lives

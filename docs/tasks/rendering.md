@@ -107,6 +107,7 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
   - **The in-game design, 2026-11-11** ([spec](../superpowers/specs/2026-11-11-baked-wound-volume-design.md)): not built.
     Stage 1 is the re-fold off behind `?woundfold=0`; stage 2 is a per-body rest-pose volume behind `?woundvol`.
     Each ends at an owner playtest.
+    Stage 1 is built: `?woundfold=0` takes 10.8 ms off the wounded mob's 59.3 ms march pass (replayed capture). Owner playtest pending.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
