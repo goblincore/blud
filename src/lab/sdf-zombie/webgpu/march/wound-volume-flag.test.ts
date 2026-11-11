@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { woundVolumeVoxel } from './wound-volume-flag';
+import { woundListKeep, woundVolumeVoxel } from './wound-volume-flag';
 
 describe('?woundvol', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
@@ -16,6 +16,16 @@ describe('?woundvol', () => {
     expect(woundVolumeVoxel('?skeleton=volume')).toBe(0);
     expect(woundVolumeVoxel('?skeleton=volume&woundvol=1')).toBe(0);
     expect(woundVolumeVoxel('?skeleton=mesh')).toBe(0.02);
+  });
+
+  it('?woundlist keeps the whole list unless a smaller count is asked for', () => {
+    expect(woundListKeep('')).toBe(32);
+    expect(woundListKeep('?woundlist')).toBe(32);
+    expect(woundListKeep('?woundlist=8')).toBe(8);
+    expect(woundListKeep('?woundlist=0')).toBe(0);
+    expect(woundListKeep('?woundlist=99')).toBe(32);
+    expect(woundListKeep('?woundlist=-3')).toBe(0);
+    expect(woundListKeep('?woundlist=abc')).toBe(32);
   });
 
   it('leaves the ?woundvol=0 text without a trace of the volume', async () => {
