@@ -218,8 +218,8 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
       const geo = new THREE.BufferGeometry();
       const pos = new THREE.BufferAttribute(new Float32Array(ribMax * 3), 3);
       const col = new THREE.BufferAttribute(new Float32Array(ribMax * 3), 3);
-      pos.setUsage(THREE.DynamicDrawUsage);
-      col.setUsage(THREE.DynamicDrawUsage);
+      // Not DynamicDrawUsage: three r186's WebGPU renderer writes a dynamic attribute whole on every render call that
+      // draws it. Static, these are written when sync() marks them, and only the range in use.
       geo.setAttribute('position', pos);
       geo.setAttribute('color', col);
       const idx = new Uint32Array(600 * (TRAIL_HIST - 1) * 6);
@@ -376,9 +376,13 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
         }
       }
       ribbons.geo.setDrawRange(0, ii);
-      ribbons.pos.needsUpdate = true;
-      ribbons.col.needsUpdate = true;
-      ribbons.geo.index!.needsUpdate = true;
+      // Only the strips in use go to the GPU (the buffers are sized for 600 droplets: 374 KB a frame otherwise,
+      // with no blood in the air). The draw range ends where they do.
+      for (const [attr, used] of [[ribbons.pos, v * 3], [ribbons.col, v * 3], [ribbons.geo.index!, ii]] as const) {
+        attr.clearUpdateRanges();
+        attr.addUpdateRange(0, Math.max(used, 3));
+        attr.needsUpdate = true;
+      }
     }
 
     for (let i = 0; i < MAX_SPLATS; i++) {

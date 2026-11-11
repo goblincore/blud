@@ -48,7 +48,7 @@ import { DEFAULT_PUSH_BAKE, pushBakeGains } from './emit-push';
 import { FLUORO_RGB, SIGN_RGB } from '../../../game/level/emitter-layout';
 import { EM_HASH, EM_RAND, EMITTER_FN, type EmitterKind } from './emitter-glow.wgsl';
 import type { GameContext } from './game-context';
-import { createSectorFx, CEIL_WHISPER, EMIT_PUSH, type SectorFxRuntime } from './game-sector-light';
+import { createSectorFx, CEIL_WHISPER, EMIT_PUSH, type SectorFxRuntime, sectorTintsNode } from './game-sector-light';
 import { gainParam } from './sector-light';
 import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
@@ -277,7 +277,7 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
   // +0.5 before the cast: the interpolated index may arrive as 2.9999998, which truncates to 2.
   const lvl = fx.levels.element(attribute('sectorIndex', 'float').add(0.5).toInt());
   // The room's mood (sector tint): only levels with moods carry the array.
-  const ambient = fx.tints ? vec3(lvl).mul(fx.tints.element(attribute('sectorIndex', 'float').add(0.5).toInt())) : vec3(lvl);
+  const ambient = fx.tints ? vec3(lvl).mul(fx.tints.element(attribute('sectorIndex', 'float').add(0.5).toInt()).xyz) : vec3(lvl);
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   // The pools' baked bounce (sector-bounce.ts), scaled with the pools' own brightness (glowGain).
   const bounce = attribute('glowBounce', 'vec3').mul(fx.bounceGain.mul(fx.glowGain));
@@ -363,7 +363,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const search = new URLSearchParams(location.search);
   const fx = createSectorFx(map.sectors.length, search, reducedFlashes(search));
   ctx.world.sectorFx = fx;
-  if (map.sectors.some(s => s.tint)) fx.tints = uniformArray(map.sectors.map(s => new THREE.Vector3(...(s.tint ?? [1, 1, 1]))), 'vec3');
+  if (map.sectors.some(s => s.tint)) fx.tints = sectorTintsNode(map.sectors.map(s => s.tint ?? [1, 1, 1]));
   const hellOn = hellMatOn(search), breathing = breatheOn(search);
   // The bounce rays test the real lines; the mesh uses the refined copy (same sectors, more vertices).
   const sources = glowSources(map);

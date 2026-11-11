@@ -6,7 +6,8 @@
 // __sdfGame.sectorLight seam tunes (also the emitter gains: screenGain, fluoroGain, signGain, and the
 // emitters' baked bounce: emitBounceGain). The decisions are sector-light.ts's; this only binds them.
 
-import { uniform, uniformArray } from 'three/tsl';
+import * as THREE from 'three/webgpu';
+import { storage, uniform } from 'three/tsl';
 import type { GameContext } from './game-context';
 import { DEFAULT_EMITTER_GAINS, type EmitterGainKey } from './sector-materials';
 import { DEFAULT_SECTOR_LIGHT, gainParam, writeSectorLevels, type SectorLightConfig } from './sector-light';
@@ -29,13 +30,29 @@ export const DEFAULT_BOUNCE_GAIN = 36;
  *  B1 tuning sheet (docs/dev-notes/2026-10-24-sector-levels-handoff.md item 2g). */
 export const DEFAULT_EMIT_BOUNCE_GAIN = 30;
 
+/** A per-sector array every sector mesh reads by its `sectorIndex`: ONE read-only storage buffer. As a uniform array
+ *  each material's pipeline had its own copy, re-packed and written on every draw (MAP28, 2026-11-10: about 150
+ *  writes of 1.9 KB a frame for the levels and the tints). */
+const sectorLevelsNode = (attr: THREE.StorageBufferAttribute) => storage(attr, 'float', attr.count).toReadOnly();
+const sectorVec4Node = (attr: THREE.StorageBufferAttribute) => storage(attr, 'vec4', attr.count).toReadOnly();
+export type SectorLevelsNode = ReturnType<typeof sectorLevelsNode>;
+export type SectorTintsNode = ReturnType<typeof sectorVec4Node>;
+/** The sectors' tints, one read-only storage buffer (vec4: a vec3 storage element is padded). Never rewritten. */
+export function sectorTintsNode(tints: readonly (readonly [number, number, number])[]): SectorTintsNode {
+  const a = new Float32Array(Math.max(1, tints.length) * 4);
+  tints.forEach((t, i) => a.set([t[0], t[1], t[2], 1], i * 4));
+  return sectorVec4Node(new THREE.StorageBufferAttribute(a, 4));
+}
+
 const floatUniform = (v: number) => uniform(v);
 type FloatUniform = ReturnType<typeof floatUniform>;
 
 export interface SectorFxRuntime {
   /** One float per sector, read by every sector mesh through its `sectorIndex` attribute. */
-  levels: ReturnType<typeof uniformArray<'float'>>;
-  /** The current levels (sector-light.ts writes here; copied into `levels.array` each tick). */
+  levels: SectorLevelsNode;
+  /** The storage attribute behind `levels`: one GPU buffer for every sector mesh, written once a tick. */
+  levelsAttr: THREE.StorageBufferAttribute;
+  /** The current levels (sector-light.ts writes here; copied into `levelsAttr` each tick). */
   values: Float32Array;
   cfg: SectorLightConfig;
   /** The ceilings' fixed self-light: CEIL_WHISPER with sector light off, 0 with it on. */
@@ -45,7 +62,7 @@ export interface SectorFxRuntime {
   /** Multiplies the glow floors' colour (DEFAULT_GLOW_GAIN unless ?glowgain or the seam set it). */
   glowGain: FloatUniform;
   /** Per sector, the room's mood (sector tint); null on a level without moods (game-sector-mesh.ts sets it). */
-  tints: ReturnType<typeof uniformArray<'vec3'>> | null;
+  tints: SectorTintsNode | null;
   /** Multiplies the baked glow bounce (DEFAULT_BOUNCE_GAIN unless ?bouncegain or the seam set it). */
   bounceGain: FloatUniform;
   /** Multiplies the emitters' baked bounce (DEFAULT_EMIT_BOUNCE_GAIN unless ?emitbounce or the seam set it). */
@@ -63,8 +80,10 @@ export function createSectorFx(sectorCount: number, search: URLSearchParams, red
   const cfg: SectorLightConfig = { ...DEFAULT_SECTOR_LIGHT, on: search.get('doomlight') !== '0' };
   // A uniform array needs at least one element to declare.
   const n = Math.max(1, sectorCount);
+  const levelsAttr = new THREE.StorageBufferAttribute(new Float32Array(n), 1);
   return {
-    levels: uniformArray(new Array<number>(n).fill(0), 'float'),
+    levels: sectorLevelsNode(levelsAttr),
+    levelsAttr,
     values: new Float32Array(sectorCount),
     cfg,
     ceilWhisper: floatUniform(cfg.on ? 0 : CEIL_WHISPER),
@@ -87,9 +106,8 @@ export function stepSectorLight(ctx: GameContext): void {
   if (!fx || !map) return;
   const t = simTimeMs() / 1000;
   writeSectorLevels(map.sectors, t, fx.cfg, fx.reducedFlashes, fx.values);
-  // UniformArrayNode re-packs `.array` into its padded buffer on every render (updateType RENDER).
-  const arr = fx.levels.array as number[];
-  for (let i = 0; i < fx.values.length; i++) arr[i] = fx.values[i]!;
+  (fx.levelsAttr.array as Float32Array).set(fx.values);
+  fx.levelsAttr.needsUpdate = true;
   // Wrapped (emitter-layout.ts GLOW_PERIOD_S): an f32 clock that never loses its slots' precision.
   fx.glowTime.value = wrapGlowTime(t);
   fx.ceilWhisper.value = fx.cfg.on ? 0 : CEIL_WHISPER;
