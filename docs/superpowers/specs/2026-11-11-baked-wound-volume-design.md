@@ -343,3 +343,30 @@ switch byte for byte (the golden holds it) and the merge on overflow.
   `applyWounds(...)` call text and needs `woundvol=0` captures.
 - Pages with their own renderer (not `lab-renderer.ts`) never call `bindRenderer`, so a stamp there re-uploads the
   whole 19 MB atlas; the game does not.
+
+## A baked wound is still a hole, 2026-11-11 (later)
+
+Two things read only the exact list, so a wound stopped counting the moment it was baked:
+
+- **The sever rules and the wounded limbs** (`game-actor.ts`: `cutLimbs`, `cutChains`, `woundedLimbs`) and **the
+  skeleton's and organs' exposure** (`cut-wound.ts boneExposureOf`: an organ mesh is drawn only where one of its
+  owner's wounds reaches it). The ring now keeps a record of what it baked (`WoundRing.baked`, up to 256, a dead
+  primitive's dropped) and these read the list and the record.
+- **The lean walk.** A body with boxes and an EMPTY list was marched as unwounded: the craters' colour, none of
+  their shape. Its record's wound count is now 0.75 (`recordWoundCount`): the list's loops still run zero times and
+  the lean test fails. On `main` this case could not arise (boxes only exist past a full list).
+
+### `?woundlist=<n>`: keep only the newest n bakeable wounds exact (a try; default 32 = no change)
+
+Same heavy mob, compute march on, whole frames, three rounds, a loaded machine (read the sizes loosely):
+
+| Kept exact | Against 32 | Control (32 against 32) |
+| --- | --- | --- |
+| 0 | −14.4 ms (−21.8 to −12.0), 56 to 42 ms | +13.4 (−0.1 to +48.4) |
+| 8 | −12.2 ms (−21.1 to +3.5) | −3.5 (−15.1 to +1.1) |
+
+- An earlier keep-0 run read −37 %: it was the lean walk drawing uncarved bodies, not a result.
+- Look: fully baked bodies read as wounded, blockier, with less of the white rib detail
+  (`docs/dev-notes/2026-11-11-wound-volume/woundlist-{32,8-fixed,0-fixed}.png`, local only). Owner to judge.
+- Not tested: an actual sever driven by baked wounds in play; soldiers; a fresh burn baked at once (it bakes at
+  the depth it has that instant).

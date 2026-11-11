@@ -359,6 +359,11 @@ export type WoundPointTransform = (v: Vec3, primIdx: number, dir: boolean) => Ve
 export interface WoundRing {
   /** The live ring, oldest evicted at MAX_WOUNDS. */
   all(): readonly Wound[];
+  /** The wounds that left the ring into the baked wound volume (wound-volume-store.ts), oldest first; empty without
+   *  the volume. They are still holes in the body: what asks "where is this body wounded" (the sever rules, the
+   *  wounded limbs, the skeleton's and organs' exposure) reads these beside all(). Capped at MAX_BAKED_RECORD
+   *  (the oldest forgotten); a wound whose primitive has died is dropped. */
+  baked(): readonly Wound[];
   /**
    * Push a freshly stamped wound and record where it was placed.
    * `posed` and `bodyYaw` are the pose it was stamped against — the caller
@@ -409,6 +414,9 @@ export interface WoundRing {
   dispose(): void;
 }
 
+/** Baked wounds a ring remembers for the rules that read wounds (WoundRing.baked). */
+export const MAX_BAKED_RECORD = 256;
+
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
   let nextEventId = 1;
@@ -418,6 +426,7 @@ export function createWoundRing(): WoundRing {
   // overflows it waits here for the next refresh (which has the pose) and is stamped into its primitive's box.
   const volumes = WOUND_VOL ? createBodyWoundVolumes() : null;
   let overflow: Wound[] = [];
+  let bakedRecord: Wound[] = [];
   let tableUp = false;
   const table = volumes ? new Float32Array(WV_MAX_ENTRIES * 16) : null;
   const push = (w: Wound) => {
@@ -449,6 +458,7 @@ export function createWoundRing(): WoundRing {
   };
   return {
     all: () => wounds,
+    baked: () => bakedRecord,
     stamp(wound, posed, bodyYaw) {
       identify(wound); push(wound);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
@@ -460,12 +470,14 @@ export function createWoundRing(): WoundRing {
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
     setMergeMaxRadius(r) { mergeMax = Number.isFinite(r) && r > 0 ? r : MERGE.maxRadius; },
-    dispose() { volumes?.dispose(); overflow = []; },
+    dispose() { volumes?.dispose(); overflow = []; bakedRecord = []; },
     refresh(gpu, posed, bodyYaw, visual, xf) {
       if (volumes && table && typeof gpu.setWoundVolumes === 'function') {
         if (overflow.length) {
           const cfg = volumeCfg(gpu);
-          for (const o of overflow) volumes.stamp(o, posed.prims, bodyYaw, cfg);
+          const next = bakedRecord.filter(w => !posed.prims[w.primIdx]?.dead);
+          for (const o of overflow) if (volumes.stamp(o, posed.prims, bodyYaw, cfg)) next.push(o);
+          bakedRecord = next.length > MAX_BAKED_RECORD ? next.slice(next.length - MAX_BAKED_RECORD) : next;
           overflow = [];
         }
         if (volumes.size || tableUp) {

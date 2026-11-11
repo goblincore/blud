@@ -526,9 +526,13 @@ export function boneExposureOf(a: {
   posed(): { prims: Primitive[] };
   pose(): { yaw: number };
   visualWounds(): readonly Wound[];
+  /** The wounds baked into the wound volume (WoundRing.baked): still holes, so they expose bone and organs too.
+   *  After the list's, so a consumer that keeps only the first N keeps the list's as before. */
+  bakedWounds?(): readonly Wound[];
 }): { pos: Vec3; radius: number }[] {
   const prims = a.posed().prims, yaw = a.pose().yaw;
   const out: { pos: Vec3; radius: number }[] = [];
   for (const w of a.visualWounds()) if (!w.decal) out.push(...cutExposureSpheres(prims, w, yaw));
+  for (const w of a.bakedWounds?.() ?? []) if (prims[w.primIdx] && !prims[w.primIdx]!.dead) out.push(...cutExposureSpheres(prims, w, yaw));
   return out;
 }
