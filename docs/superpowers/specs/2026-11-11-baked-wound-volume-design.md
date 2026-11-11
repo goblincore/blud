@@ -39,8 +39,9 @@ captured from the game with the flag on and off and replayed by alternation, 5 r
 off, -10.8 ms (-11.2 to -10.1)**; on against on, -0.1 (-1.7 to +1.7). The game's `?woundfold=0` text is the on
 text with that one edit (a generated buffer name aside). Sheet:
 [`mobw-woundfold-off.png`](../../dev-notes/2026-11-10-silhouette-spike/look/wound-volume/mobw-woundfold-off.png)
-(on | off | difference x 8). Not measured: live frame time, the compute march, motion. Waiting on the owner's
-playtest.
+(on | off | difference x 8). Not measured: live frame time, the compute march, motion. **Off by default since
+2026-11-11** (owner's call after playing it: "looks fine, make it default"; `?woundfold=1` brings the re-fold
+back, byte for byte). So stage 2 starts from a march without the re-fold, and its volume need not replace it.
 
 ## Stage 2: the volume, in game (`?woundvol`)
 

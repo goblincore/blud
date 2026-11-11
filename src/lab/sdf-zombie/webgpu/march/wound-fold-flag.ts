@@ -11,16 +11,18 @@
 // flesh it reaches. LOOSE, not exact (the owner's rule, 2026-11-10: a speed-up that loosens the look is fine where
 // it is not noticed). The owner bookkeeping in applyWounds stays: the inside-flesh fold's gate reads it.
 //
-//   (no parameter), ?woundfold, ?woundfold=1   on: today's shader text, byte for byte
-//   ?woundfold=0                               off
+// OFF BY DEFAULT since 2026-11-11 (owner's call, after playing it: "looks fine, make it default").
+//   (no parameter), ?woundfold=0   off: no re-fold
+//   ?woundfold, ?woundfold=1       on: the shader text of before the switch, byte for byte
 export function woundFoldOn(search: string): boolean {
-  return new URLSearchParams(search).get('woundfold') !== '0';
+  const v = new URLSearchParams(search).get('woundfold');
+  return v !== null && v !== '0';
 }
 
 export const WOUND_FOLD: boolean = (() => {
   try {
     return woundFoldOn((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return true;
+    return false;
   }
 })();
