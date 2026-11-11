@@ -73,7 +73,7 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
     runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
     compile moved into the background warm-up, a look in motion, the paths it does not cover.
-  - **On by default, 2026-11-10** (owner's call after the MAP28 playtest; `?marchcompute=0` is off). The PR for it (116) was merged into a stacked branch and never reached `main`; landed on `main` 2026-11-11. The default
+  - **On by default, 2026-11-10** (owner's call after the MAP28 playtest; `?marchcompute=0` is off). The PR for it (116) was merged into a stacked branch and never reached `main`; landed on `main` 2026-11-11. With the baked wound volume on (the heavily shot mob of `prelude-mob-heavy.js`, whole frames, a noisy machine): fragment 83 ms, compute 56 ms, −30 ms (−11 to −33; the control ranged −21 to +11), and the same picture, baked craters included. The default
     page on the clean 22-body mob, headless, whole frames: 37.5 ms off, 29.5 ms on (−21 %). The replay harness's
     captures turn it off themselves. Owed: the compile in the background warm-up, the uncovered paths.
 - [x] **Silhouettes from the field (research note §3 B), spiked 2026-11-10: no, as a speed lever**

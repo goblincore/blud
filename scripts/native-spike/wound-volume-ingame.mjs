@@ -9,7 +9,8 @@
 //
 //   node scripts/native-spike/wound-volume-ingame.mjs <vite-port> <cdp-port> <prelude.js> [out.json]
 //   WV_FRAMES (default 30), WV_SAMPLES (default 3, the median is the leg's time), WV_ROUNDS (default 4),
-//   WV_ON (default empty: extra query for the on leg, e.g. woundvol=1.5), WV_SHOT (a path prefix for stills)
+//   WV_ON (default empty: extra query for the on leg, e.g. woundvol=1.5), WV_OFF (default woundvol=0: the off leg's
+//   query; marchcompute=0 times the compute march against the fragment march on the same wounds), WV_SHOT (a path prefix for stills)
 //
 // Run through servers.sh, under the GPU lock.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,13 +25,14 @@ const FRAMES = Number(process.env.WV_FRAMES ?? 30);
 const SAMPLES = Number(process.env.WV_SAMPLES ?? 3);
 const ROUNDS = Number(process.env.WV_ROUNDS ?? 4);
 const ON = process.env.WV_ON ?? '';
+const OFF = process.env.WV_OFF ?? 'woundvol=0';
 
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800 });
 
 const shot = {};
 async function leg(on) {
-  await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1${on ? (ON ? '&' + ON : '') : '&woundvol=0'}` });
+  await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1${on ? (ON ? '&' + ON : '') : '&' + OFF}` });
   await waitForLoader(evaluate, { fail: failHard });
   let crowd = 'pending';
   for (let i = 0; i < 1200 && crowd !== 'ready' && crowd !== 'failed'; i++) {
@@ -63,7 +65,7 @@ async function leg(on) {
   const census = await evaluate(`(async () => {
     // A fresh load serves the module at its plain path, so this import is the page's own instance.
     let atlas = null;
-    if (${on}) { const m = await import('/src/lab/sdf-zombie/webgpu/wound-volume-store.ts'); atlas = m.woundVolumeAtlas().stats(); }
+    if (${on} || ${JSON.stringify(OFF)}.indexOf('woundvol=0') < 0) { const m = await import('/src/lab/sdf-zombie/webgpu/wound-volume-store.ts'); atlas = m.woundVolumeAtlas().stats(); }
     return JSON.stringify({ wounds: window.__mobWounds ?? null, atlas });
   })()`).catch((e) => String(e));
   return { ms: med(samples), samples, census };
