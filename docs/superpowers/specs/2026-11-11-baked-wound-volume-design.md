@@ -170,12 +170,21 @@ This stage answers what only play can:
 
 - seams and swimming craters at joints;
 - softer crater edges at 2 cm;
-- **what a crater older than the ring looks like.** Its shape is in the volume; its wound colouring is gone
-  with its row. If that reads wrong, a fifth value (a wound mask, and the wound's type) goes in a second
-  texture, and the shading reads it where no row claims the hit.
+- whether a crater older than the ring still reads as a wound (the colour volume below).
+
+**The colour is stamped too** (owner, 2026-11-11: a crater that keeps its shape and loses its colouring is an
+issue, so this is in 2a and not a later fix). The hit's shading takes four things from the rows: the one wound
+mask (`woundMask`: 0 at healthy skin, 1 deep inside, the 1.6-radius footprint), its cavity share, the char mask
+of burns (`charMask`), and the wet-lip and cloth-hole marks. A second 8-bit texture beside the shape holds those
+four, each stamped as the larger of old and new. At the hit the shading takes the larger of what the rows give
+and what the volume gives, so a wound still in the ring looks as it does today and one that has left it keeps a
+voxel-soft copy of its colouring. That doubles the memory: about 1.2 MB a humanoid at 8 bits.
+
+What the copy loses, to be judged in play: the ragged and torn edges' fine detail (2 cm voxels), the soak's
+frayed edge, and anything that ages (a row's age is gone with the row; the stamp holds the look at stamp time).
 
 **Owner playtest**, on a soldier and a chaingunner shot well past 32 pellets. Dropped if the joints or the old
-craters read wrong and the fifth value does not fix it, or if the wounded mob's march is slower than today's.
+craters read wrong, or if the wounded mob's march is slower than today's.
 
 ### Stage 2b: bounded memory, and the big bodies
 
