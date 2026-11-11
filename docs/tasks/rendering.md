@@ -96,6 +96,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     **The cheaper fallback normal is ON BY DEFAULT** (owner, 2026-11-10, after playing its second form:
     "looks right now"). `?ngloose=0` is the old text. About 5 to 7 ms off a clean 22-body mob's march, nothing
     on a wounded one. Not checked: an open head split with it, live frame time.
+  - **What wounds cost on the mob, 2026-11-11** ([`WOUNDS-WALK.md`](../dev-notes/2026-11-10-silhouette-spike/WOUNDS-WALK.md)):
+    about 26 ms of a 65 ms pass, spread (walk 15, shading 12, near flag 7, re-fold 5; they overlap). A lean field
+    with wounds would save 4 to 7 ms at most: not the next build. The crater maths is not the cost (cut by 59 %,
+    nothing saved); 34 wound rows are read a step. Lead: bake a body's wounds into a volume. Noisy machine.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
