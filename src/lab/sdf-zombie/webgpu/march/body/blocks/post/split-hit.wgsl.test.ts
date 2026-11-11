@@ -149,7 +149,9 @@ describe('finite-difference normals inside an open region', () => {
     // ngValid stays false, so the one calcNormal call below it runs (it differentiates mapBody, the split field).
     const gate = SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && !splitIn) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }')).toBeLessThan(gate);
-    expect(SHADING_NORMAL_BLOCK.indexOf('if (!ngValid || debugNormal12) {')).toBeGreaterThan(gate);
+    // (The cheaper fallback, normal-loose-flag.ts, never stands in here: it needs ngBody to have run.)
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound) {');
+    expect(SHADING_NORMAL_BLOCK.indexOf('if ((!ngValid && !ngLoose) || debugNormal12) {')).toBeGreaterThan(gate);
     expect(noComments(SHADING_NORMAL_BLOCK).match(/ngBody\(/g)).toHaveLength(1);
     expect(SHADING_NORMAL_BLOCK.indexOf('ngBody(')).toBeGreaterThan(gate);
   });

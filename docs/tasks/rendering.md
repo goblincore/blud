@@ -73,6 +73,29 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
     runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
     compile moved into the background warm-up, a look in motion, the paths it does not cover.
+- [x] **Silhouettes from the field (research note §3 B), spiked 2026-11-10: no, as a speed lever**
+  ([`NOTES.md`](../dev-notes/2026-11-10-silhouette-spike/NOTES.md)). Edge rays at output resolution fix the
+  edges (band error 0.40 to 0.06 on a close-up from 400 × 300, 300 × 225 and 200 × 150 alike; 0.24 to 0.11 on a
+  22-body mob at 400 × 300, worse below), but as masked fragment rays at the production walk's cost they are dearer
+  than the lower resolution saves: every combination is slower than the shipped pass (close-up +21 to +54 %, mob +84
+  to +121 %). The edge texels are 7 to 24 % of the frame and hold the costly rays; the inside of surfaces gets 30 to
+  50 % worse at 300 × 225 whatever the edges do. Not tried: the edge rays as a compute pass over a packed list, or a
+  lean kernel. Driver: `scripts/native-spike/silhouette.mjs`.
+  - **Census by pixel, 2026-11-10** ([`CENSUS.md`](../dev-notes/2026-11-10-silhouette-spike/CENSUS.md)): on the
+    22-body mob the hit pixels alone cost the whole pass (34.3 of 34.9 ms); the misses beside the silhouettes are
+    5.5 ms alone but about 0.6 ms in the pass. Of a hit pixel's 421 ns, the walk is 225 and the shading after the hit
+    the rest (15 ms of 35). Wounded: 1,009 ns a hit pixel. Next: take the post-hit chain apart on the mob.
+  - **Shading after the hit, 2026-11-10** ([`SHADING.md`](../dev-notes/2026-11-10-silhouette-spike/SHADING.md)): 19 of the
+    clean mob's 32 ms. The AO and scatter probes 5.6 ms, the finite-difference normal 5.0 (on a clean mob), the
+    analytic normal's stage 4.5; materials, lights and ambient about 1 ms together. Wounding the mob adds 15.5 ms
+    to the WALK: a wounded slot in a pixel's table takes the pixel off the lean walk. Leads are in the note.
+  - **Fast walk for wounded bodies, and looser shading, 2026-11-10** ([`LOOSEN.md`](../dev-notes/2026-11-10-silhouette-spike/LOOSEN.md)):
+    the lean walk per sample does not pay (wounds are 10 cm wide, 8 to a body; no sample near one is outside them).
+    Dropping the finite-difference normal is −6 ms (−17 %) on the clean mob, edges only; with the probes on `mapLean`
+    −9 ms (−25 %), a visible change. Replay only; pictures in the note for the owner to judge.
+    **The cheaper fallback normal is ON BY DEFAULT** (owner, 2026-11-10, after playing its second form:
+    "looks right now"). `?ngloose=0` is the old text. About 5 to 7 ms off a clean 22-body mob's march, nothing
+    on a wounded one. Not checked: an open head split with it, live frame time.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).

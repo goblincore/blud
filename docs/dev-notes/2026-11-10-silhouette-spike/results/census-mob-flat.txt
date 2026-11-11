@@ -1,0 +1,23 @@
+17:03  up 12 days,  1:25, 2 users, load averages: 5.41 3.85 4.65
+.scratch/compute/mob-flat: 400 x 300, 3 draw(s); hit 81277 px (67.7 %), near miss (within 8 px) 4148, far miss 34575
+warm all      1 s  errors 0
+warm all2     1 s  errors 0
+warm hit      1 s  errors 0
+warm near     1 s  errors 0
+warm far      1 s  errors 0
+warm none     0 s  errors 0
+  rep  1  all 21.61  all2 22.18  hit 18.96  near 5.71  far 1.21  none 0.15
+  rep  2  all 20.98  all2 19.89  hit 20.81  near 5.72  far 1.21  none 0.15
+  rep  3  all 19.63  all2 18.29  hit 17.91  near 5.47  far 1.23  none 0.14
+  rep  4  all 19.09  all2 18.34  hit 18.38  near 5.44  far 1.21  none 0.13
+  rep  5  all 19.91  all2 17.73  hit 17.49  near 5.78  far 1.18  none 0.15
+
+the whole pass 19.91 ms; again 18.34; with no pixel running 0.15
+class    pixels   leg ms   own ms             range  of the pass  ns a pixel
+hit       81277    18.38    18.25      17.34..20.66         92 %         225
+near       4148     5.71     5.56        5.31..5.63         28 %        1340
+far       34575     1.21     1.06        1.03..1.09          5 %          31
+the three legs put together (hit + near + far - 2 x none): 24.77 ms against the whole pass's 19.91
+wrote .scratch/compute/mob-flat-census.json
+exit 0
+17:04  up 12 days,  1:27, 2 users, load averages: 4.18 3.80 4.56

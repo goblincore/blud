@@ -12,6 +12,7 @@ export const CLOTH_FOLDS = 9;
 export const CLOTH_FOLD_TILT = 0.5;
 import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
+import { NORMAL_LOOSE } from '../../../normal-loose-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
 const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
@@ -46,7 +47,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
   var ngReason = 7;
-  var ngScalar = 0.0;
+  var ngScalar = 0.0;${NORMAL_LOOSE ? '\n  var ngRan = false;\n  var ngLooseG = vec3<f32>(0.0);\n  var ngLoose = false;' : ''}
   // CROWD (2026-09-14): the analytic gradient runs for single- AND multi-slot
   // draws. ngBody no longer reloads a hard-coded slot 0 — that clobbered the
   // hit slot POST pins just above and returned slot 0's field for every other
@@ -67,7 +68,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
     let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
-    ngScalar = ng.x;
+    ngScalar = ng.x;${NORMAL_LOOSE ? '\n    ngRan = true;\n    ngLooseG = ng.yzw;\n    if ((gNgDebugMask & 8u) == 0u) { ngLooseG = ngLooseG + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }' : ''}
     if (ngReason == 0) {
       var candidate = ng.yzw;
       ng0 = ng.yzw;
@@ -81,8 +82,16 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // ONE calcNormal call site for the fallback and the debug-12 compare
   // (cold-compile 2026-09-21): each call site inlines four more field taps.
   let debugNormal12 = debugCfg.x > 11.5 && debugCfg.x < 12.5;
-  var nFD = n;
-  if (!ngValid || debugNormal12) {
+  var nFD = n;${NORMAL_LOOSE ? `
+  // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
+  // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
+  // crater's shape, which ngBody's gradient does not.
+  if (!ngValid && ngRan && !hitNearWound) {
+    let ngLoose2 = dot(ngLooseG, ngLooseG);
+    if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
+  }
+  if ((!ngValid && !ngLoose) || debugNormal12) {` : `
+  if (!ngValid || debugNormal12) {`}
     // NORMAL HINT (counts2.z + 32): the four taps re-fold only the limb that won
     // at the hit (or none). They sit within a hair of the hit, so the decision
     // only differs where a tap straddles a limb's exit from a foreign crater.

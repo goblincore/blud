@@ -31,14 +31,25 @@ describe('march.wgsl split golden', () => {
   // Re-recorded again 2026-11-10 on the owner's call: the tile reference list (tile-ref-flag.ts) is on by default, so
   // the fold's tail, MAP_BODY, MAP_LEAN, the tile preload, the analytic normal's tile walk and what is built from
   // them moved (the next test holds the text without it to the snapshot this one had before).
+  // Re-recorded again 2026-11-10 on the owner's call: the cheaper fallback normal (normal-loose-flag.ts) is on by
+  // default, so the shading normal block and the bodies built from it moved (the next test holds the text without
+  // it to the snapshot this one had before).
   it('keeps every string export byte-identical', () => {
     expect(digest(M)).toMatchSnapshot();
   });
-  // THE MARCH WITHOUT THE TILE REFERENCE LIST (`?tileref=0`): the snapshot the test above held until 2026-11-10,
+  // THE MARCH WITHOUT THE CHEAPER FALLBACK NORMAL (`?ngloose=0`): the snapshot the test above held until the flag
+  // went on by default, value for value.
+  it('keeps the ?ngloose=0 text byte-identical', async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?ngloose=0' });
+    expect((await import('./normal-loose-flag')).NORMAL_LOOSE).toBe(false);
+    expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
+  });
+  // THE MARCH WITHOUT THE TILE REFERENCE LIST (`?tileref=0`, and `?ngloose=0` since that went on by default): the snapshot the test above held until 2026-11-10,
   // value for value. The flag's off side must stay the old text to the byte.
   it('keeps the ?tileref=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?tileref=0' });
+    vi.stubGlobal('location', { search: '?tileref=0&ngloose=0' });
     const flag = await import('./tile-ref-flag');
     expect(flag.TILE_REF).toBe(false);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
@@ -47,7 +58,7 @@ describe('march.wgsl split golden', () => {
   // held until 2026-11-09, value for value. With both flags off the text must stay the old text to the byte.
   it('keeps the ?leanwalk=0&tileref=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?leanwalk=0&tileref=0' });
+    vi.stubGlobal('location', { search: '?leanwalk=0&tileref=0&ngloose=0' });
     const flag = await import('./lean-walk-flag');
     expect(flag.LEAN_WALK).toBe(false);
     expect((await import('./tile-ref-flag')).TILE_REF).toBe(false);
