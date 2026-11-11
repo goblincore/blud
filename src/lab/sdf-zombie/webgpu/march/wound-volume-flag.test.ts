@@ -4,18 +4,23 @@ import { woundVolumeVoxel } from './wound-volume-flag';
 describe('?woundvol', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
-  it('is off unless the page turns it on, and takes a voxel size in centimetres', () => {
-    expect(woundVolumeVoxel('')).toBe(0);
+  it('is on unless the page turns it off, and takes a voxel size in centimetres', () => {
+    expect(woundVolumeVoxel('')).toBe(0.02);
     expect(woundVolumeVoxel('?level=arena&woundvol=0')).toBe(0);
     expect(woundVolumeVoxel('?woundvol')).toBe(0.02);
     expect(woundVolumeVoxel('?woundvol=1')).toBe(0.02);
     expect(woundVolumeVoxel('?woundvol=1.5')).toBeCloseTo(0.015, 9);
     expect(woundVolumeVoxel('?woundvol=9')).toBe(0.04);
     expect(woundVolumeVoxel('?woundvol=abc')).toBe(0.02);
+    // The skeleton's volume mode owns the 3D texture.
+    expect(woundVolumeVoxel('?skeleton=volume')).toBe(0);
+    expect(woundVolumeVoxel('?skeleton=volume&woundvol=1')).toBe(0);
+    expect(woundVolumeVoxel('?skeleton=mesh')).toBe(0.02);
   });
 
-  it('leaves the default text without a trace of the volume', async () => {
+  it('leaves the ?woundvol=0 text without a trace of the volume', async () => {
     vi.resetModules();
+    vi.stubGlobal('location', { search: '?woundvol=0' });
     const M = await import('../march.wgsl');
     const all = [...Object.values(M).filter((v): v is string => typeof v === 'string'), ...(M.HELPERS as string[])].join('\n');
     expect(all).not.toContain('wvRead');

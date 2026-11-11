@@ -150,7 +150,8 @@ describe('finite-difference normals inside an open region', () => {
     const gate = SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && !splitIn) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }')).toBeLessThan(gate);
     // (The cheaper fallback, normal-loose-flag.ts, never stands in here: it needs ngBody to have run.)
-    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound) {');
+    // `&& !wvHit`: a baked crater's pixels keep the full normal too (wound-volume-flag.ts, on by default).
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound && !wvHit) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if ((!ngValid && !ngLoose) || debugNormal12) {')).toBeGreaterThan(gate);
     expect(noComments(SHADING_NORMAL_BLOCK).match(/ngBody\(/g)).toHaveLength(1);
     expect(SHADING_NORMAL_BLOCK.indexOf('ngBody(')).toBeGreaterThan(gate);

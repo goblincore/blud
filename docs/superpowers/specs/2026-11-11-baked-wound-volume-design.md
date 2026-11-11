@@ -329,3 +329,17 @@ Same scene and script; each row is `?woundvol` against off, three or four rounds
 - The sub-box and the four-texel read made no difference the run can resolve (noise is about 1 ms). They stay:
   fewer loads, and the still holds (`mob-heavy-on.png`, `mob-heavy-off.png` beside the prelude).
 - The variants were temporary `?wvdbg` bits, removed.
+
+## On by default, 2026-11-11
+
+The owner played it on E1M1 and MAP28 and made it the default. `?woundvol=0` restores the shader text of before the
+switch byte for byte (the golden holds it) and the merge on overflow.
+
+- `?skeleton=volume` turns it off: that mode needs the 3D texture for its own volumes.
+- The normal-gradient probe compiles the list-only `applyWounds` (`probeApplyWounds`), so the page builds again.
+- What the default now changes in play: a body past 32 wounds keeps separate craters where it used to grow a few
+  merged ones (up to 16 cm). Whether any sever rule read the merged size is not checked.
+- Not re-taken: the march-hash pins and the other GPU gates. `scripts/native-spike/ladder.mjs` edits the old
+  `applyWounds(...)` call text and needs `woundvol=0` captures.
+- Pages with their own renderer (not `lab-renderer.ts`) never call `bindRenderer`, so a stamp there re-uploads the
+  whole 19 MB atlas; the game does not.

@@ -10,19 +10,23 @@
 // the count of craters a body shows is not capped. A stamped crater is rounder and coarser than a listed one.
 //
 // The boxes live in the 3D texture the shader already takes for the skeleton's segment volumes (`segVolumeAtlas`,
-// unused unless `?skeleton=volume`), so the switch adds no binding. The two do not combine.
+// unused unless `?skeleton=volume`), so the switch adds no binding. The two do not combine: that mode turns this off.
 //
 // Under the switch the list no longer merges at its cap, which changes what the wound-driven rules see (a merged
 // crater grows and can sever; a stamped one has left the list).
 //
-//   (no parameter), ?woundvol=0   off: the shader text of before the switch, byte for byte
-//   ?woundvol, ?woundvol=1        on, 2 cm voxels
-//   ?woundvol=<cm>                on, voxels of that many centimetres (1 to 4)
+// ON BY DEFAULT since 2026-11-11 (owner's call, after playing it on E1M1 and MAP28: "you can make it default").
+//   (no parameter), ?woundvol, ?woundvol=1   on, 2 cm voxels
+//   ?woundvol=<cm>                           on, voxels of that many centimetres (1 to 4; 1.5 for finer than 2 cm)
+//   ?woundvol=0                              off: the shader text of before the switch, byte for byte
+//   ?skeleton=volume                         off too: that mode needs the 3D texture for its own volumes
 export function woundVolumeVoxel(search: string): number {
-  const v = new URLSearchParams(search).get('woundvol');
-  if (v === null || v === '0') return 0;
+  const q = new URLSearchParams(search);
+  if (q.get('skeleton') === 'volume') return 0;
+  const v = q.get('woundvol');
+  if (v === '0') return 0;
   const cm = Number(v);
-  return v === '' || v === '1' || !Number.isFinite(cm) ? 0.02 : Math.min(4, Math.max(1, cm)) / 100;
+  return v === null || v === '' || v === '1' || !Number.isFinite(cm) ? 0.02 : Math.min(4, Math.max(1, cm)) / 100;
 }
 
 /** The voxel's edge in metres; 0 = the switch is off. */
@@ -30,7 +34,7 @@ export const WOUND_VOL_VOXEL: number = (() => {
   try {
     return woundVolumeVoxel((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return 0;
+    return 0.02;
   }
 })();
 export const WOUND_VOL: boolean = WOUND_VOL_VOXEL > 0;

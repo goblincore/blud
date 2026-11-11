@@ -1,14 +1,15 @@
 // scripts/native-spike/wound-volume-ingame.mjs
 //
-// THE BAKED WOUND VOLUME IN THE GAME, TIMED (?woundvol; src/lab/sdf-zombie/webgpu/wound-volume-store.ts). The flag
-// is compiled in, so there is no runtime switch: each leg is a FRESH PAGE (sdf-game.html with or without the flag),
+// THE BAKED WOUND VOLUME IN THE GAME, TIMED (wound-volume-flag.ts; src/lab/sdf-zombie/webgpu/wound-volume-store.ts).
+// The flag is compiled in, so there is no runtime switch: each leg is a FRESH PAGE (sdf-game.html as shipped, the
+// volume on, or with ?woundvol=0),
 // staged by the prelude, then timed as WHOLE FRAMES (wall-clock from the first hand-stepped frame to the GPU fence
 // after the last, as compute-ingame.mjs). A round loads off, on and off again (`off2`: the A/A control, a second
 // load of the same page); the order flips each round.
 //
 //   node scripts/native-spike/wound-volume-ingame.mjs <vite-port> <cdp-port> <prelude.js> [out.json]
 //   WV_FRAMES (default 30), WV_SAMPLES (default 3, the median is the leg's time), WV_ROUNDS (default 4),
-//   WV_ON (default woundvol: the query that turns it on, e.g. woundvol=1.5), WV_SHOT (a path prefix for stills)
+//   WV_ON (default empty: extra query for the on leg, e.g. woundvol=1.5), WV_SHOT (a path prefix for stills)
 //
 // Run through servers.sh, under the GPU lock.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,14 +23,14 @@ const OUT = process.argv[5] ?? '';
 const FRAMES = Number(process.env.WV_FRAMES ?? 30);
 const SAMPLES = Number(process.env.WV_SAMPLES ?? 3);
 const ROUNDS = Number(process.env.WV_ROUNDS ?? 4);
-const ON = process.env.WV_ON ?? 'woundvol';
+const ON = process.env.WV_ON ?? '';
 
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800 });
 
 const shot = {};
 async function leg(on) {
-  await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1${on ? '&' + ON : ''}` });
+  await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1${on ? (ON ? '&' + ON : '') : '&woundvol=0'}` });
   await waitForLoader(evaluate, { fail: failHard });
   let crowd = 'pending';
   for (let i = 0; i < 1200 && crowd !== 'ready' && crowd !== 'failed'; i++) {
