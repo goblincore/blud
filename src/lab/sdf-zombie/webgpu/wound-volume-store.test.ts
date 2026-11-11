@@ -49,13 +49,15 @@ describe('the baked wound volume store', () => {
     expect(Math.hypot(world[0] - table[0]!, world[1] - table[1]!, world[2] - table[2]!)).toBeLessThan(table[3]!);
     expect(Math.hypot(world[0] - t.bound[0], world[1] - t.bound[1], world[2] - t.bound[2])).toBeLessThan(t.bound[3]);
     // The shader's transform lands the centre on the voxels the stamp filled: the colour mask is full there.
-    const voxel = table[11]!, local = boxLocal(table, 0, world);
+    // The table holds the touched part of the box only; table[11] is the shape-to-colour offset (the whole box's depth).
+    const voxel = 0.02, colourZ = table[11]!, local = boxLocal(table, 0, world);
     const dims = [table[15]! % 256, Math.floor(table[15]! / 256) % 256, Math.floor(table[15]! / 65536)];
     const g = local.map(v => Math.floor(v / voxel));
     for (let k = 0; k < 3; k++) { expect(g[k]).toBeGreaterThan(0); expect(g[k]).toBeLessThan(dims[k]! - 1); }
     const AW = 96, AH = 96;
     const tex = (x: number, y: number, z: number) => atlas.data[(((table[14]! + z) * AH + table[13]! + y) * AW + table[12]! + x) * 4]!;
-    expect(tex(g[0]!, g[1]!, g[2]! + dims[2]!)).toBeGreaterThan(200); // colour box: stacked after the shape box
+    expect(colourZ).toBeGreaterThanOrEqual(dims[2]!);
+    expect(tex(g[0]!, g[1]!, g[2]! + colourZ)).toBeGreaterThan(200); // colour box: stacked after the shape box
     expect(tex(g[0]!, g[1]!, g[2]!)).toBeGreaterThan(120);             // shape box: the chain is well above the floor
   });
 

@@ -122,8 +122,9 @@ export function stampCrater(v: PrimVolume, c: StampCrater): { lo: [number, numbe
   return { lo, hi };
 }
 
-/** CPU twin of the shader's read (wvSample in march/fields/wound-volume.wgsl.ts): trilinear over the eight texels
- *  round `local`, decoded. Null outside the box. */
+/** CPU twin of the shader's read (wvRead in march/fields/wound-volume.wgsl.ts): tetrahedral over four of the eight
+ *  texels round `local` (the corners walked along t's largest, middle and smallest axes), decoded. Null outside the
+ *  box. */
 export function sampleVolume(v: PrimVolume, local: Vec3, which: 'shape' | 'colour' = 'shape'): [number, number, number, number] | null {
   const g: number[] = [0, 0, 0], i0: number[] = [0, 0, 0], f: number[] = [0, 0, 0];
   for (let k = 0; k < 3; k++) {
@@ -134,10 +135,14 @@ export function sampleVolume(v: PrimVolume, local: Vec3, which: 'shape' | 'colou
   }
   const src = which === 'shape' ? v.shape : v.colour;
   const out: [number, number, number, number] = [0, 0, 0, 0];
-  for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-    const w = (dx ? f[0]! : 1 - f[0]!) * (dy ? f[1]! : 1 - f[1]!) * (dz ? f[2]! : 1 - f[2]!);
-    const o = (((i0[2]! + dz) * v.dims[1] + i0[1]! + dy) * v.dims[0] + i0[0]! + dx) * 4;
-    for (let c = 0; c < 4; c++) out[c] = out[c]! + w * src[o + c]!;
+  // Axes by falling t (ties as the shader breaks them: x before y before z).
+  const order = [0, 1, 2].sort((p, q) => f[q]! - f[p]! || p - q);
+  const at = [0, 0, 0];
+  const weights = [1 - f[order[0]!]!, f[order[0]!]! - f[order[1]!]!, f[order[1]!]! - f[order[2]!]!, f[order[2]!]!];
+  for (let n = 0; n < 4; n++) {
+    if (n > 0) at[order[n - 1]!] = 1;
+    const o = (((i0[2]! + at[2]!) * v.dims[1] + i0[1]! + at[1]!) * v.dims[0] + i0[0]! + at[0]!) * 4;
+    for (let c = 0; c < 4; c++) out[c] = out[c]! + weights[n]! * src[o + c]!;
   }
   if (which === 'colour') return [out[0] / 255, out[1] / 255, out[2] / 255, out[3] / 255];
   return [chainOf(out[0]), bumpOf(out[1]), bumpOf(out[2]), chainOf(out[3])];

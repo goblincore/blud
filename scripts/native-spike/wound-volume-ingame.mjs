@@ -8,7 +8,7 @@
 //
 //   node scripts/native-spike/wound-volume-ingame.mjs <vite-port> <cdp-port> <prelude.js> [out.json]
 //   WV_FRAMES (default 30), WV_SAMPLES (default 3, the median is the leg's time), WV_ROUNDS (default 4),
-//   WV_ON (default woundvol: the query that turns it on, e.g. woundvol=1.5)
+//   WV_ON (default woundvol: the query that turns it on, e.g. woundvol=1.5), WV_SHOT (a path prefix for stills)
 //
 // Run through servers.sh, under the GPU lock.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -27,6 +27,7 @@ const ON = process.env.WV_ON ?? 'woundvol';
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800 });
 
+const shot = {};
 async function leg(on) {
   await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1${on ? '&' + ON : ''}` });
   await waitForLoader(evaluate, { fail: failHard });
@@ -40,6 +41,12 @@ async function leg(on) {
   await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
   await evaluate(PRELUDE);
   await evaluate('(async () => { __sdfGame.step(12); await __sdfGame.resolveGpu(); return 1; })()', 600_000);
+  // WV_SHOT=<path prefix>: one still of each page as staged (<prefix>-on.png, <prefix>-off.png).
+  if (process.env.WV_SHOT && !shot[on]) {
+    shot[on] = true;
+    const { data } = (await send('Page.captureScreenshot', { format: 'png' })).result;
+    writeFileSync(`${process.env.WV_SHOT}-${on ? 'on' : 'off'}.png`, Buffer.from(data, 'base64'));
+  }
   const samples = [];
   for (let s = 0; s < SAMPLES; s++) {
     samples.push(await evaluate(`(async () => {

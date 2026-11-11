@@ -152,13 +152,17 @@ interface Entry {
   /** What the stamps have touched, in the box's frame (metres): the entry's bound. */
   lo: [number, number, number];
   hi: [number, number, number];
+  /** The same in voxels (inclusive): the table hands the shader this sub-box only, so a sample over the untouched
+   *  part of the primitive's box reads nothing. */
+  vlo: [number, number, number];
+  vhi: [number, number, number];
 }
 
 export interface BodyWoundVolumes {
   /** Bake a wound that left the list. False when it is not a crater the volume takes, its primitive is gone, or
    *  there is no room. */
   stamp(w: Wound, prims: readonly Primitive[], bodyYaw: number, cfg?: WoundVolumeCfg): boolean;
-  /** Write the table (WV_MAX_ENTRIES x 4 texels: bound, world-to-box quaternion, box corner + voxel, atlas box) and
+  /** Write the table (WV_MAX_ENTRIES x 4 texels: bound, world-to-box quaternion, the touched sub-box's corner + the colour offset, its atlas origin + dims) and
    *  return how many entries it holds and their union bound (world centre, radius), or null when there are none. */
   table(
     out: Float32Array, prims: readonly Primitive[], bodyYaw: number,
@@ -186,7 +190,7 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
     const vol = createPrimVolume(lo, hi, voxel);
     const origin = atlas.alloc([vol.dims[0], vol.dims[1], vol.dims[2] * 2]);
     if (!origin) return null;
-    return { primIdx: w.primIdx, vol, origin, axis0: w.axis0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9] };
+    return { primIdx: w.primIdx, vol, origin, axis0: w.axis0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9], vlo: [1e9, 1e9, 1e9], vhi: [-1, -1, -1] };
   };
   return {
     get size() { return entries.size; },
@@ -220,7 +224,11 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
       const hit = stampCrater(e.vol, crater);
       if (!hit) return false;
       const reach = stampReach(crater);
-      for (let k = 0; k < 3; k++) { e.lo[k] = Math.min(e.lo[k]!, crater.centre[k]! - reach); e.hi[k] = Math.max(e.hi[k]!, crater.centre[k]! + reach); }
+      for (let k = 0; k < 3; k++) {
+        e.lo[k] = Math.min(e.lo[k]!, crater.centre[k]! - reach); e.hi[k] = Math.max(e.hi[k]!, crater.centre[k]! + reach);
+        // One voxel of empty border round what was written, as the whole box has.
+        e.vlo[k] = Math.min(e.vlo[k]!, hit.lo[k]! - 1); e.vhi[k] = Math.max(e.vhi[k]!, hit.hi[k]! + 1);
+      }
       // The touched voxels into the atlas (shape, then colour stacked after it along z) and on to the GPU.
       const [nx, ny, nz] = e.vol.dims;
       for (const [src, zOff] of [[e.vol.shape, 0], [e.vol.colour, nz]] as const) {
@@ -248,13 +256,15 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
         const basis: Basis = xf ? { u: xf(f.u, e.primIdx, true), v: xf(f.v, e.primIdx, true), w: xf(f.w, e.primIdx, true) } : f;
         const c = at([(e.lo[0] + e.hi[0]) / 2, (e.lo[1] + e.hi[1]) / 2, (e.lo[2] + e.hi[2]) / 2]);
         const r = Math.hypot(e.hi[0] - e.lo[0], e.hi[1] - e.lo[1], e.hi[2] - e.lo[2]) / 2;
-        const corner = at(e.vol.min);
+        const corner = at([e.vol.min[0] + e.vlo[0] * e.vol.voxel, e.vol.min[1] + e.vlo[1] * e.vol.voxel, e.vol.min[2] + e.vlo[2] * e.vol.voxel]);
+        const sub = [e.vhi[0] - e.vlo[0] + 1, e.vhi[1] - e.vlo[1] + 1, e.vhi[2] - e.vlo[2] + 1];
         const q = worldToFrameQuat(basis);
         const o = n * 16;
         out.set([c[0], c[1], c[2], r], o);
         out.set(q, o + 4);
-        out.set([corner[0], corner[1], corner[2], e.vol.voxel], o + 8);
-        out.set([e.origin[0], e.origin[1], e.origin[2], e.vol.dims[0] + e.vol.dims[1] * 256 + e.vol.dims[2] * 65536], o + 12);
+        // .w: how far along z the colour voxels sit after the shape's (the WHOLE box's depth).
+        out.set([corner[0], corner[1], corner[2], e.vol.dims[2]], o + 8);
+        out.set([e.origin[0] + e.vlo[0], e.origin[1] + e.vlo[1], e.origin[2] + e.vlo[2], sub[0]! + sub[1]! * 256 + sub[2]! * 65536], o + 12);
         centres.push(c[0], c[1], c[2], r);
         n++;
       }
