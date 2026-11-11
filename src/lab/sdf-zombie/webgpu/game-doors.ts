@@ -25,6 +25,10 @@
 // plus two baked weights (lamp, spill) and the door's status colour uniform: no light, no extra pass, pre-warmed with
 // the level like the leaves.
 //
+// LOCKS (2026-11-01; sector-doors.ts): keys and gun switches. `?locks=0` starts every door unlocked (the old behaviour,
+// for A/B; no switches either, game-switches.ts). A locked door's lamp wears its key's colour, violet when only a switch
+// opens it, and a keyed door's leaves are tinted that colour for good, so a red door still reads as one once it is open.
+//
 // SOUND: the game loads no audio. `onPhase` is the hook: it is called with each phase change (opening,
 // open, closing, closed) and the door's centre, for a door sound to plug into later.
 
@@ -36,12 +40,12 @@ import type { GameContext } from './game-context';
 import { PLAYER } from './game-player';
 import { panelSurfaceMaterial } from './game-sector-mesh';
 import { doorFaceSigns, doorLeafMesh, LEAF_INSET_M } from './door-leaf-geometry';
-import { doorCues, doorFrameMesh, LAMP_RGB, leafInset, type DoorCues } from './door-frame-geometry';
+import { doorCues, doorFrameMesh, LAMP_RGB, leafInset, lockRgb, type DoorCues } from './door-frame-geometry';
 import { SECTOR_BODY_RADIUS_M, type SectorDoorDef } from './sector-def';
-import { closedDoor, stepDoors, type DoorBody, type DoorEvent, type DoorField, type DoorPhase, type DoorState } from './sector-doors';
+import { closedDoor, createDoorLocks, fireDoorEvent, stepDoors, type DoorBody, type DoorEvent, type DoorField, type DoorLocks, type DoorPhase, type DoorState } from './sector-doors';
 import type { SectorGround } from './sector-ground';
 
-export interface DoorSnapshot { id: string; sector: number; phase: DoorPhase; open: number; hold: number; centre: [number, number]; zones: readonly [number, number] }
+export interface DoorSnapshot { id: string; sector: number; phase: DoorPhase; open: number; hold: number; centre: [number, number]; zones: readonly [number, number]; locked: boolean; key: string | null }
 
 export interface GameDoors {
   readonly field: DoorField;
@@ -52,6 +56,12 @@ export interface GameDoors {
   snapshot(): DoorSnapshot[];
   /** Seam: force door `id` to an open fraction and phase ('open' holds `wait` again). */
   force(id: string, open: number, phase?: DoorPhase): boolean;
+  /** A level event: the doors that open on it unlock and stay open. */
+  levelEvent(event: string): void;
+  /** The locks (`on` false under `?locks=0`). */
+  readonly locks: DoorLocks;
+  /** The doors the player walked at that stayed shut since the last call. */
+  takeRefused(): readonly SectorDoorDef[];
   /** The phase changes so far (a sound hook's log; capped). */
   readonly events: (DoorEvent & { t: number })[];
   /** The sound hook: every phase change, with the door's centre. */
@@ -71,14 +81,21 @@ export const doorSpillGain = uniform(0.35);
 const TONE_LEAF_RGB: readonly [number, number, number] = [0.4, 0.46, 0.56];
 const TONE_LEAF_GRIME = 0.35;
 /** The frame's colour: darker, heavier metal than the walls. */
-const FRAME_RGB: readonly [number, number, number] = [0.075, 0.072, 0.07];
+export const FRAME_RGB: readonly [number, number, number] = [0.075, 0.072, 0.07];
+
+/** A keyed door's leaves: the tone steel washed with its key's colour. */
+const KEY_LEAF_TINT = 0.8;
+function keyLeafRgb(key: string): [number, number, number] {
+  const c = lockRgb({ key });
+  return [0, 1, 2].map(i => TONE_LEAF_RGB[i]! * (1 - KEY_LEAF_TINT) + c[i]! * 0.6 * KEY_LEAF_TINT) as [number, number, number];
+}
 
 const EMPTY_BAKE = 0;
-const makeStatus = () => uniform(new THREE.Vector3(...LAMP_RGB.closed));
-type UniformColor = ReturnType<typeof makeStatus>;
+export const makeStatus = () => uniform(new THREE.Vector3(...LAMP_RGB.closed));
+export type UniformColor = ReturnType<typeof makeStatus>;
 /** The bake attributes every sector-material mesh carries, plus the frame's two weights, in ONE interleaved buffer
  *  (WebGPU allows 8 vertex buffers): sectorIndex, glowBounce(3), emitScreen(3), emitFS(2)[, lamp, spill]. */
-function bakeAttributes(geo: THREE.BufferGeometry, count: number, sector: number, extra?: { lamp: number[]; spill: number[] }): void {
+export function bakeAttributes(geo: THREE.BufferGeometry, count: number, sector: number, extra?: { lamp: number[]; spill: number[] }): void {
   const stride = extra ? 11 : 9;
   const bake = new Float32Array(count * stride).fill(EMPTY_BAKE);
   for (let i = 0; i < count; i++) {
@@ -98,7 +115,7 @@ function bakeAttributes(geo: THREE.BufferGeometry, count: number, sector: number
 
 /** The frame's material: the walls' metal-plate recipe, the lamp faces dark glass lit by the door's status colour,
  *  and the status spill on the header round it. */
-function frameMaterial(color: readonly [number, number, number], fx: NonNullable<GameContext['world']['sectorFx']>,
+export function frameMaterial(color: readonly [number, number, number], fx: NonNullable<GameContext['world']['sectorFx']>,
   status: UniformColor): MeshStandardNodeMaterial {
   const mat = panelSurfaceMaterial('metalPlate', color, fx, { metalness: 0.55 });
   const lamp = attribute('doorLamp', 'float'), spill = attribute('doorSpill', 'float');
@@ -126,6 +143,8 @@ export function createGameDoors(ctx: GameContext): GameDoors | null {
   const defs = field.defs;
   const states: DoorState[] = defs.map(() => closedDoor());
   const requests = new Uint8Array(defs.length);
+  const locks = createDoorLocks(defs, key => !!ctx.world.loop?.inventory.keys.includes(key), new URLSearchParams(location.search).get('locks') !== '0');
+  const refused: number[] = [];
   const opens = defs.map(() => uniform(0));
   const statuses = defs.map(makeStatus);
   const P = ctx.world.level.def!.palette;
@@ -160,8 +179,8 @@ export function createGameDoors(ctx: GameContext): GameDoors | null {
       bakeAttributes(geo, g.count, def.sector);
       geo.computeBoundingSphere();
       geo.boundingSphere!.radius += def.width / 2;           // the leaves' whole travel
-      const mat = cues.tone
-        ? panelSurfaceMaterial('slideDoor', TONE_LEAF_RGB, fx, { grime: TONE_LEAF_GRIME, metalness: 0.4 })
+      const mat = cues.tone || def.key
+        ? panelSurfaceMaterial('slideDoor', def.key ? keyLeafRgb(def.key) : TONE_LEAF_RGB, fx, { grime: TONE_LEAF_GRIME, metalness: 0.4 })
         : panelSurfaceMaterial('slideDoor', P.wall, fx);
       mat.positionNode = positionLocal.add(attribute('leafSlide', 'vec3').mul(opens[d]!));
       const mesh = new THREE.Mesh(geo, mat);
@@ -191,21 +210,32 @@ export function createGameDoors(ctx: GameContext): GameDoors | null {
       meshes.push(frame);
     }
   });
-  const setStatus = (d: number) => { const c = LAMP_RGB[states[d]!.phase]; statuses[d]!.value.set(c[0], c[1], c[2]); };
+  const setStatus = (d: number) => {
+    const c = locks.locked[d] ? lockRgb(defs[d]!) : LAMP_RGB[states[d]!.phase];
+    statuses[d]!.value.set(c[0], c[1], c[2]);
+  };
+  defs.forEach((_, d) => setStatus(d));
 
   const bodies: DoorBody[] = [];
   const lastPos = new Map<number, [number, number]>();
   const events: (DoorEvent & { t: number })[] = [];
   let clock = 0;
   const api: GameDoors = {
-    field, meshes, events, onPhase: null, cues,
+    field, meshes, events, onPhase: null, cues, locks,
+    levelEvent(event) { for (const d of fireDoorEvent(defs, locks, event)) setStatus(d); },
+    takeRefused() {
+      if (refused.length === 0) return [];
+      const out = refused.map(d => defs[d]!);
+      refused.length = 0;
+      return out;
+    },
     lampColours: () => statuses.map(u => [+u.value.x.toFixed(3), +u.value.y.toFixed(3), +u.value.z.toFixed(3)] as [number, number, number]),
     step(dt) {
       if (!(dt > 0)) return;
       clock += dt;
       bodies.length = 0;
       const pl = ctx.player.player;
-      bodies.push({ x: pl.pos[0], z: pl.pos[2], vx: pl.vel[0], vz: pl.vel[2], r: PLAYER.radius });
+      bodies.push({ x: pl.pos[0], z: pl.pos[2], vx: pl.vel[0], vz: pl.vel[2], r: PLAYER.radius, player: true });
       for (const a of ctx.world.actors) {
         const p = a.pose().pos, prev = lastPos.get(a.id);
         lastPos.set(a.id, [p[0], p[2]]);
@@ -213,7 +243,7 @@ export function createGameDoors(ctx: GameContext): GameDoors | null {
         const vx = prev ? (p[0] - prev[0]) / dt : 0, vz = prev ? (p[2] - prev[1]) / dt : 0;
         bodies.push({ x: p[0], z: p[2], vx, vz, r: SECTOR_BODY_RADIUS_M });
       }
-      const changed = stepDoors(field, states, dt, bodies, requests);
+      const changed = stepDoors(field, states, dt, bodies, requests, locks, refused);
       for (let d = 0; d < defs.length; d++) opens[d]!.value = states[d]!.open;
       for (const e of changed) setStatus(e.door);
       for (const e of changed) {
@@ -225,13 +255,14 @@ export function createGameDoors(ctx: GameContext): GameDoors | null {
     request(d) { if (d >= 0 && d < requests.length) requests[d] = 1; },
     snapshot: () => defs.map((def, d) => ({
       id: def.id, sector: def.sector, phase: states[d]!.phase, open: +states[d]!.open.toFixed(4), hold: +states[d]!.hold.toFixed(3),
-      centre: [(def.a[0] + def.b[0]) / 2, (def.a[1] + def.b[1]) / 2], zones: def.zones,
+      centre: [(def.a[0] + def.b[0]) / 2, (def.a[1] + def.b[1]) / 2], zones: def.zones, locked: locks.locked[d] === 1, key: def.key,
     })),
     force(id, open, phase) {
       const d = defs.findIndex(def => def.id === id);
       if (d < 0) return false;
       const st = states[d]!;
       st.open = Math.min(1, Math.max(0, open));
+      if (st.open > 0) locks.locked[d] = 0;                  // a door forced open is no longer locked
       st.phase = phase ?? (st.open >= 1 ? 'open' : st.open <= 0 ? 'closed' : 'opening');
       if (st.phase === 'open') st.hold = defs[d]!.wait;
       field.open[d] = st.open;

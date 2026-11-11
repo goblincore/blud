@@ -17,7 +17,8 @@ not move an edit off its spot. Other values (light, hurtPerSec, yaw) are not len
       ],
       "spawns": [
         {"id": "o-teratoma-1", "kind": "teratoma", "at": [38, -10], "face": [24, -10.5], "sector": 1}
-      ]
+      ],
+      "recast": {"s166": "imp", "s168": null}
     }
 
 Sector patches pick their sector by `sector` (an index) or `at` (a point that exactly one sector
@@ -26,6 +27,10 @@ fails loudly if the WAD or the converter changes under it. `set` writes floor / 
 special / hurtPerSec / glow / materials (merged per key); `glow` also sets materials.floor to the
 glow material, as the converter does. Patches run BEFORE lights and things are placed, so a new glow
 sector gets a pool light, and things standing on a moved floor follow it.
+
+`recast` retypes the WAD's own monsters by spawn id (`s<thing index>`, as the level JSON and `--svg` plan name them):
+a kind replaces the converter's choice, null removes that spawn. An id the converted map does not have (wrong skill,
+or the WAD changed) is an error, so thinning a room fails loudly rather than silently doing nothing.
 
 Spawns stand at `at` on the floor of the sector under it (`sector`, optional, asserts which), facing
 `yaw` (radians, 0 = -z, the start rule) or `face` (a point to look at). A spawn must be in a sector
@@ -41,14 +46,14 @@ from pathlib import Path
 # Mirrors of src/lab/sdf-zombie/webgpu/level-def.ts SPAWN_KINDS and sector-def.ts SECTOR_SPECIALS /
 # GLOW_KINDS / SECTOR_BODY_RADIUS_M / SECTOR_STEP_M / SECTOR_HEADROOM_M (test_doom_overrides.py
 # checks the TypeScript still says the same).
-SPAWN_KINDS = ("zombie", "soldier", "cultist", "juggernaut", "warbull", "deadeye", "butcher", "flayer", "teratoma", "imp")
+SPAWN_KINDS = ("zombie", "soldier", "cultist", "juggernaut", "warbull", "deadeye", "butcher", "flayer", "teratoma", "imp", "cerebrax")
 SECTOR_SPECIALS = ("none", "hurt", "flicker", "pulse", "strobe")
 GLOW_KINDS = ("nukage", "lava", "acid")
 BODY_RADIUS_M = 0.34
 STEP_M = 0.75
 HEADROOM_M = 1.9
 
-TOP_KEYS = {"map", "unitsPerM", "note", "sectors", "spawns"}
+TOP_KEYS = {"map", "unitsPerM", "note", "sectors", "spawns", "recast"}
 DEFAULT_UNITS_PER_M = 32.0
 LENGTH_KEYS = ("floor", "ceil")
 SECTOR_KEYS = {"sector", "at", "expect", "set", "note"}
@@ -225,6 +230,27 @@ def _seg_dist(px: float, pz: float, a, b) -> float:
     dx, dz = b[0] - a[0], b[1] - a[1]
     t = 0.0 if dx == dz == 0 else max(0.0, min(1.0, ((px - a[0]) * dx + (pz - a[1]) * dz) / (dx * dx + dz * dz)))
     return math.hypot(px - a[0] - t * dx, pz - a[1] - t * dz)
+
+
+def apply_recast(ov: dict, spawns: list[dict]) -> list[dict]:
+    """Retype or remove the converted spawns `ov["recast"]` names, in place. Returns one {id, from, to} per entry (to None: removed)."""
+    recast = ov.get("recast", {})
+    if not isinstance(recast, dict):
+        raise OverrideError("overrides.recast: must be an object of spawn id -> kind (or null to remove)")
+    by_id = {s["id"]: s for s in spawns}
+    changes = []
+    for sid, kind in recast.items():
+        where = f"overrides.recast.{sid}"
+        if sid not in by_id:
+            raise OverrideError(f"{where}: the converted map has no spawn {sid!r} (wrong skill, or the WAD changed)")
+        if kind is not None and kind not in SPAWN_KINDS:
+            raise OverrideError(f"{where}: kind {kind!r} is not one of {SPAWN_KINDS} (or null to remove)")
+        changes.append({"id": sid, "from": by_id[sid]["kind"], "to": kind})
+        if kind is None:
+            spawns.remove(by_id[sid])
+        else:
+            by_id[sid]["kind"] = kind
+    return changes
 
 
 def apply_spawns(ov: dict, spawns: list[dict], used_ids: set[str], vertices, lines, out_sectors, sector_segs) -> list[dict]:

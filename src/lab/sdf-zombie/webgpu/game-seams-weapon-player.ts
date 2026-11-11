@@ -63,6 +63,11 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
     walkTo: (x: number, z: number) => { ctx.player.autopilot = { x, z }; },
     walkCancel: () => { ctx.player.autopilot = null; },
+    /** The enemies' navigation route from the player to (x, z): [[x, y, z], ...], [] when there is no way. */
+    navRoute: (x: number, z: number) => {
+      const y = ctx.world.encounterNav.floorAt([x, 0, z]);
+      return ctx.world.encounterNav.route([...ctx.player.player.pos] as Vec3, [x, Number.isFinite(y) ? y : 0, z]);
+    },
     get walking() { return ctx.player.autopilot !== null; },
     get flashVisible() { return ctx.weapon.flashGroup?.visible ?? false; },
     /** Free-aim seam, for the gate and for A/B by hand. */

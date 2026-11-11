@@ -12,9 +12,11 @@ import { buildSectorGround } from './sector-ground';
 import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
 import {
   DOOR_STYLES, GLOW_KINDS, SECTOR_SPECIALS, zoneName,
-  type DoorStyle, type GlowKind, type SectorDef, type SectorDoorDef, type SectorLine, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
+  type DoorStyle, type GlowKind, type SectorDef, type SectorDoorDef, type SectorLiftDef, type SectorClosetDef, type SectorLine, type SectorSwitchDef, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
 } from './sector-def';
 import { DOOR_SPEED_M_S, DOOR_WAIT_S } from './sector-doors';
+import { LIFT_SPEED_M_S, LIFT_WAIT_S } from './sector-lifts';
+import { CLOSET_SPEED_M_S } from './sector-closets';
 
 type Json = Record<string, unknown>;
 
@@ -22,16 +24,19 @@ type Json = Record<string, unknown>;
  *  metre, scripts/levels/doom_map.py). The game does not read it; tools that place things by Doom
  *  position (the doom gate's route) do. */
 const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry', 'unitsPerM',
-  'vertices', 'sectors', 'lines', 'doors', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
+  'vertices', 'sectors', 'lines', 'doors', 'switches', 'lifts', 'closets', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
-const SECTOR_KEYS = ['floor', 'ceil', 'light', 'special', 'hurtPerSec', 'glow', 'materials', 'zone'];
+const SECTOR_KEYS = ['floor', 'ceil', 'tint', 'light', 'special', 'hurtPerSec', 'glow', 'materials', 'zone'];
 const LINE_KEYS = ['v', 'front', 'back', 'door', 'exit', 'walls'];
 const WALL_SIDES = ['front', 'back'];
 const WALL_PARTS = ['upper', 'mid', 'lower'];
 const DOOR_KEYS = ['sector', 'speed', 'wait'];
-const DOOR_ENTITY_KEYS = ['id', 'sector', 'faces', 'a', 'b', 'width', 'depth', 'height', 'zones', 'style', 'speed', 'wait', 'key'];
+const DOOR_ENTITY_KEYS = ['id', 'sector', 'faces', 'a', 'b', 'width', 'depth', 'height', 'zones', 'style', 'speed', 'wait', 'key', 'opensOn', 'sealed'];
+const SWITCH_KEYS = ['id', 'line', 'event'];
+const LIFT_KEYS = ['id', 'sector', 'top', 'speed', 'wait'];
+const CLOSET_KEYS = ['id', 'sector', 'opensOn', 'moves', 'shut', 'speed'];
 /** How far a door's stated width may differ from |b - a|, and its faces from parallel to a -> b (metres). */
 const DOOR_TOLERANCE_M = 0.01;
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
@@ -123,7 +128,9 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       return 'default';
     };
     const zone = isInt(o.zone) && o.zone >= 0 ? o.zone : (errors.push(`${where}.zone: an integer >= 0`), 0);
-    return { floor, ceil, light, special, hurtPerSec, glow,
+    const okTint = Array.isArray(o.tint) && o.tint.length === 3 && o.tint.every(v => isNum(v) && v >= 0);
+    if (o.tint !== undefined && !okTint) errors.push(`${where}.tint: three numbers >= 0`);
+    return { floor, ceil, ...(okTint ? { tint: o.tint as [number, number, number] } : {}), light, special, hurtPerSec, glow,
       materials: { floor: mat('floor'), ceil: mat('ceil'), wall: mat('wall') }, zone };
   });
   if (sectors.length === 0) errors.push('sectors: a sector level needs at least one sector');
@@ -232,6 +239,11 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       const wait = o.wait === undefined ? DOOR_WAIT_S : isNum(o.wait) && o.wait >= 0 ? o.wait : (errors.push(`${where}.wait: >= 0`), DOOR_WAIT_S);
       const key = o.key === undefined || o.key === null ? null
         : typeof o.key === 'string' && o.key !== '' ? o.key : (errors.push(`${where}.key: a name or null`), null);
+      const opensOn = o.opensOn === undefined || o.opensOn === null ? null
+        : typeof o.opensOn === 'string' && o.opensOn !== '' ? o.opensOn : (errors.push(`${where}.opensOn: an event name or null`), null);
+      if (o.sealed !== undefined && typeof o.sealed !== 'boolean') errors.push(`${where}.sealed: true or false`);
+      const sealed = o.sealed === true;
+      if (sealed && !opensOn) errors.push(`door ${id}: sealed needs opensOn`);
       if (errors.length > before || !faces || !a || !b) return;
       // The geometry must agree with itself and with the lines it names.
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -250,12 +262,77 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
           if (Math.abs(off - depth / 2) > DOOR_TOLERANCE_M) errors.push(`door ${id}: faces[${k}] (line ${f}) is not depth / 2 from a -> b`);
         }
       });
-      doors.push({ id, sector, faces, a, b, width, depth, height, zones, style, speed, wait, key });
+      doors.push({ id, sector, faces, a, b, width, depth, height, zones, style, speed, wait, key, ...(opensOn ? { opensOn } : {}), ...(sealed ? { sealed } : {}) });
+    });
+  }
+
+  // --- gun switches (sector-def.ts SectorSwitchDef; sector-switches.ts runs them) ---------
+  const switches: SectorSwitchDef[] = [];
+  if (j.switches !== undefined) {
+    const seen = new Set<string>();
+    objects(j.switches, 'switches').forEach((o, i) => {
+      const where = `switches[${i}]`;
+      unknownKeys(o, SWITCH_KEYS, where);
+      const id = typeof o.id === 'string' && o.id !== '' ? o.id : (errors.push(`${where}.id: expected a name`), '');
+      if (id && seen.has(id)) errors.push(`switch ${id}: duplicate id`);
+      seen.add(id);
+      const okLine = isInt(o.line) && o.line >= 0 && o.line < lines.length;
+      if (!okLine) errors.push(`${where}.line: a line index`);
+      const okEvent = typeof o.event === 'string' && o.event !== '';
+      if (!okEvent) errors.push(`${where}.event: an event name`);
+      if (id && okLine && okEvent) switches.push({ id, line: o.line as number, event: o.event as string });
+    });
+  }
+
+  // --- lifts (sector-def.ts SectorLiftDef; sector-lifts.ts runs them; the sector's floor is the low position) ---
+  const lifts: SectorLiftDef[] = [];
+  if (j.lifts !== undefined) {
+    const seen = new Set<string>();
+    objects(j.lifts, 'lifts').forEach((o, i) => {
+      const where = `lifts[${i}]`;
+      const before = errors.length;
+      unknownKeys(o, LIFT_KEYS, where);
+      const id = typeof o.id === 'string' && o.id !== '' ? o.id : (errors.push(`${where}.id: expected a name`), '');
+      if (id && seen.has(id)) errors.push(`lift ${id}: duplicate id`);
+      seen.add(id);
+      if (!sectorIndex(o.sector)) { errors.push(`${where}.sector: a sector index`); return; }
+      const sec = sectors[o.sector as number]!;
+      if (!isNum(o.top) || (o.top as number) <= sec.floor) errors.push(`${where}.top: a height above the sector's floor (its low position)`);
+      else if ((o.top as number) >= sec.ceil) errors.push(`${where}.top: must be under the sector's ceiling`);
+      const speed = o.speed === undefined ? LIFT_SPEED_M_S : isNum(o.speed) && o.speed > 0 ? o.speed : (errors.push(`${where}.speed: > 0`), 1);
+      const wait = o.wait === undefined ? LIFT_WAIT_S : isNum(o.wait) && o.wait >= 0 ? o.wait : (errors.push(`${where}.wait: >= 0`), 0);
+      if (errors.length === before) lifts.push({ id, sector: o.sector as number, low: sec.floor, top: o.top as number, speed, wait });
+    });
+  }
+
+  // --- closets (sector-def.ts SectorClosetDef; sector-closets.ts runs them; the sector's heights are the open position) ---
+  const closets: SectorClosetDef[] = [];
+  if (j.closets !== undefined) {
+    const seen = new Set<string>();
+    const taken = new Set<number>([...lifts.map(l => l.sector), ...doors.map(d => d.sector)]);
+    objects(j.closets, 'closets').forEach((o, i) => {
+      const where = `closets[${i}]`;
+      const before = errors.length;
+      unknownKeys(o, CLOSET_KEYS, where);
+      const id = typeof o.id === 'string' && o.id !== '' ? o.id : (errors.push(`${where}.id: expected a name`), '');
+      if (id && seen.has(id)) errors.push(`closet ${id}: duplicate id`);
+      seen.add(id);
+      if (!sectorIndex(o.sector)) { errors.push(`${where}.sector: a sector index`); return; }
+      if (taken.has(o.sector as number)) errors.push(`${where}.sector: already a door, lift or closet`);
+      taken.add(o.sector as number);
+      const sec = sectors[o.sector as number]!;
+      const opensOn = typeof o.opensOn === 'string' && o.opensOn !== '' ? o.opensOn : (errors.push(`${where}.opensOn: an event name`), '');
+      const moves = o.moves === 'ceil' || o.moves === 'floor' ? o.moves : (errors.push(`${where}.moves: 'ceil' or 'floor'`), 'ceil');
+      if (!isNum(o.shut)) errors.push(`${where}.shut: a height`);
+      else if (moves === 'ceil' && ((o.shut as number) < sec.floor - 1e-6 || (o.shut as number) >= sec.ceil)) errors.push(`${where}.shut: from the sector's floor to under its ceiling`);
+      else if (moves === 'floor' && ((o.shut as number) <= sec.floor || (o.shut as number) > sec.ceil + 1e-6)) errors.push(`${where}.shut: over the sector's floor, up to its ceiling`);
+      const speed = o.speed === undefined ? CLOSET_SPEED_M_S : isNum(o.speed) && o.speed > 0 ? o.speed : (errors.push(`${where}.speed: > 0`), 1);
+      if (errors.length === before) closets.push({ id, sector: o.sector as number, opensOn, moves, shut: o.shut as number, speed });
     });
   }
 
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
-  const map: SectorMap = { vertices, sectors, lines, ...(doors.length ? { doors } : {}) };
+  const map: SectorMap = { vertices, sectors, lines, ...(doors.length ? { doors } : {}), ...(switches.length ? { switches } : {}), ...(lifts.length ? { lifts } : {}), ...(closets.length ? { closets } : {}) };
   if (errors.length === 0) sectors.forEach((_, s) => {
     const idx = sectorEdgeIndices(map, s);
     const bal = new Map<number, number>();
@@ -333,5 +410,7 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
   if (errors.length > 0 || !base) throw new Error(`level ${id}: ${errors.join('; ')}`);
   rehomeAccents(base, map);
   const requires: Capability[] = [...base.requires.filter(c => c !== 'multi-floor'), 'sectors'];
+  // A lift rests at its top: the live floor from here on (navigation, built before the meshes, reads it).
+  for (const l of lifts) sectors[l.sector]!.floor = l.top;
   return { ...base, requires, sectors: map, ...(barrels.length ? { barrels } : {}) };
 }

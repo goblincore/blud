@@ -236,6 +236,45 @@ export function createBootSeams(ctx: GameContext) {
       const targets = detail ? Object.fromEntries(Object.entries(det).map(([k, v]) => [k, { objects: v.size, draws: +(detN[k]! / n).toFixed(1) }])) : undefined;
       return { objects: seen.size, draws: out, targets };
     },
+    /** UPLOADS BY OBJECT (CPU draw pass, 2026-11-10): every GPU buffer write over `n` hand-stepped frames, per frame,
+     *  keyed by the object three was drawing when it happened (as drawsByObject names it) or `(outside a draw)`, with
+     *  the buffer's size. Borrows the render-object function and the queue's writeBuffer for its duration. */
+    uploadsByObject: async (n = 6) => {
+      const r = ctx.boot.handle.renderer;
+      type Write = (buffer: { size: number }, offset: number, data: ArrayBufferView | ArrayBuffer, dataOffset?: number, size?: number) => void;
+      const queue = (r.backend as unknown as { device: { queue: { writeBuffer: Write } } }).device.queue;
+      const prev = r.getRenderObjectFunction();
+      const orig = queue.writeBuffer;
+      const by: Record<string, { calls: number; bytes: number }> = {};
+      let current = '(outside a draw)';
+      const keyOf = (o: THREE.Object3D) => {
+        let q: THREE.Object3D | null = o, k = '';
+        while (q && !k) { k = q.name; q = q.parent; }
+        return (k || `(${o.type})`).replace(/[:#].*$/, '').replace(/-?\d+/g, '#');
+      };
+      queue.writeBuffer = function (this: unknown, buffer, offset, data, dataOffset, size) {
+        const el = (data as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1;
+        const bytes = size !== undefined ? size * el : data.byteLength - (dataOffset ?? 0) * el;
+        const e = (by[`${current} | ${buffer.size} B`] ??= { calls: 0, bytes: 0 });
+        e.calls++; e.bytes += bytes;
+        return orig.call(this, buffer, offset, data, dataOffset, size);
+      } as Write;
+      r.setRenderObjectFunction((object, scene, camera, geometry, material, group, lightsNode, clip, passId) => {
+        current = keyOf(object);
+        // An unnamed mesh is told apart by what it is made of: material, vertex layout, vertex count.
+        if (current.startsWith('(')) current = `${current} ${material.name || material.type} [${Object.keys(geometry.attributes).join(',')}] ${geometry.getAttribute('position')?.count ?? 0}v`;
+        try { r.renderObject(object, scene, camera, geometry, material, group, lightsNode, clip, passId); } finally { current = '(outside a draw)'; }
+      });
+      ctx.boot.handle.setLoopRunning(false);
+      try {
+        for (let i = 0; i < n; i++) { ctx.boot.handle.step(1 / 30); await ctx.boot.handle.resolveGpu(); }
+      } finally {
+        r.setRenderObjectFunction(prev);
+        queue.writeBuffer = orig;
+        ctx.boot.handle.setLoopRunning(true);
+      }
+      return Object.entries(by).map(([k, v]) => ({ key: k, calls: +(v.calls / n).toFixed(1), bytes: Math.round(v.bytes / n) })).sort((x, y) => y.bytes - x.bytes);
+    },
     /** LEVEL BATCHING (level-batch.ts, 2026-10-28): whether it is on (`?batch=0` off), the pickup batches (members,
      *  instances drawn this frame) and the casing pools (all, and those in the render). Pair with drawsByObject. */
     levelBatch: () => {

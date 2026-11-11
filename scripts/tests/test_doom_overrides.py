@@ -192,3 +192,26 @@ def test_the_committed_e1m1_overrides_are_well_formed():
         assert set(entry) <= doom_overrides.SPAWN_KEYS and entry["kind"] in doom_overrides.SPAWN_KINDS
     assert len({s["id"] for s in ov["spawns"]}) == len(ov["spawns"])
     assert ov["unitsPerM"] == 32                     # its metres are at 32: the converter rescales them
+
+
+def test_recast_retypes_and_removes_the_wads_own_spawns(tmp_path):
+    out, stats = run(tmp_path, {"recast": {"s1": "imp", "s2": None}})
+    assert [(s["id"], s["kind"]) for s in out["spawns"]] == [("s1", "imp")]
+    assert stats["recast"] == [{"id": "s1", "from": "deadeye", "to": "imp"}, {"id": "s2", "from": "soldier", "to": None}]
+
+
+@pytest.mark.parametrize("recast, message", [
+    ({"s9": "imp"}, "no spawn 's9'"),
+    ({"s1": "cacodemon"}, "kind 'cacodemon'"),
+    (["s1"], "must be an object"),
+])
+def test_bad_recasts_are_named(tmp_path, recast, message):
+    with pytest.raises(OverrideError, match=re.escape(message)):
+        run(tmp_path, {"recast": recast})
+
+
+def test_the_committed_map28_overrides_are_well_formed():
+    ov = doom_overrides.load(doom_overrides.default_path("MAP28"))
+    doom_overrides.check_top(ov, "MAP28")
+    assert all(re.fullmatch(r"s\d+", sid) for sid in ov["recast"])
+    assert all(k is None or k in doom_overrides.SPAWN_KINDS for k in ov["recast"].values())

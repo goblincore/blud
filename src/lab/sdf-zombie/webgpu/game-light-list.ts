@@ -270,7 +270,8 @@ export function createLightListGpu(): LightListGpu {
   const floats = new Float32Array(LIST_VEC4S * 4);
   packLightList([], floats);   // the profile table is valid from the first frame
   const attr = new THREE.StorageBufferAttribute(floats, 4);
-  attr.setUsage(THREE.DynamicDrawUsage);
+  // Not DynamicDrawUsage: three r186 writes a dynamic attribute whole each time a draw that binds it is updated,
+  // changed or not (74 writes a frame on MAP28, 2026-11-10). Static, it is written when writeLightList marks it.
   const node = makeListNode(attr);
   return { floats, attr, node, list: [], input: makeInput(), rel: { pos: [0, 0, 0], nearMask: 0 } };
 }

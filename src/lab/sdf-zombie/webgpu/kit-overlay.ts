@@ -42,6 +42,7 @@
 // mesh; moving the object is the correct and only way to move it.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { cloneKitScene, isSharedKitGeometry, kitShareOn, kitTemplate, kitTemplateKey } from './kit-template';
 import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
@@ -50,7 +51,8 @@ import { createKitDamage, piecesOf, type KitArmorInput, type KitDamageEvent } fr
 import { KIT_BURST } from '../kit-burst';
 import { PLANE_GROUND, type DebrisGround, type DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
-import { addKitOccluders } from './kit-occluder';
+import { addKitOccluders, KIT_OCCLUDER_MATERIALS } from './kit-occluder';
+import { KIT_MERGED_NAME, kitMergeOn, mergeKitMeshes } from './kit-merge';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -299,6 +301,8 @@ export interface KitWreck {
 }
 
 export interface KitOverlay {
+  /** False until the first pose: the kit stands in its bind pose at the world origin until then, and is not drawn. */
+  readonly posed: boolean;
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
   object: THREE.Object3D;
   /** Detached pieces remain in world space when the attached kit is hidden. */
@@ -476,8 +480,28 @@ export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
   breakable: false | 'sheds' | 'armour' = false, opts: KitLoadOpts = {},
 ): Promise<KitOverlay> {
-  const gltf = await new GLTFLoader().loadAsync(url);
-  if (opts.only) keepKitMaterials(gltf.scene, opts.only);
+  // One parse per kit, one clone per body (kit-template.ts).
+  const parse = async () => {
+    const parsed = (await new GLTFLoader().loadAsync(url)).scene;
+    if (opts.only) keepKitMaterials(parsed, opts.only);
+    // `?kitmerge` (kit-merge.ts): the kit's plain materials become one draw. Not the ones that glow, pulse or
+    // stand in the occluder pass by name, and not a breakable armour kit's plate (its look is the loader's override).
+    if (kitMergeOn(typeof location === 'undefined' ? '' : location.search)) {
+      mergeKitMeshes(parsed, {
+        environment: kitEnvironment(renderer),
+        look: (name) => {
+          if (GLOW_FROM_ATTRIBUTE[name] || (PULSED as readonly string[]).includes(name) || KIT_OCCLUDER_MATERIALS.has(name)) return null;
+          if (breakable === 'armour') return null;
+          const look = LOOK[name] ?? LOOK_DEFAULT;
+          return (look as { emissive?: unknown }).emissive ? null : look;
+        },
+      });
+    }
+    return parsed;
+  };
+  const kitScene = kitShareOn(typeof location === 'undefined' ? '' : location.search)
+    ? cloneKitScene(await kitTemplate(kitTemplateKey(url, opts.only), parse))
+    : await parse();
   const kitScale = opts.scale ?? 1;
 
   // A specular-only environment for the KIT ALONE, not `scene.environment`.
@@ -494,14 +518,17 @@ export async function loadKit(
   // (A kit loaded with `only` has already lost its other meshes here: keepKitMaterials above.)
   const env = kitEnvironment(renderer);
   const object = new THREE.Group();
-  object.add(gltf.scene);
+  object.add(kitScene);
   object.position.set(root[0], root[1], root[2]);
+  // Not drawn until the first pose: the bones are posed in world space, so until then the kit is a bind pose at the
+  // world origin, which is where a Doom level starts the player. On the inner node: `object.visible` is the sight cull's.
+  kitScene.visible = false;
 
   const bones = new Map<string, THREE.Bone>();
   const skinned: THREE.SkinnedMesh[] = [];
   /** PULSED materials and their authored emissive intensity, for glow(). */
   const pulsed: { name: string; mat: THREE.MeshStandardMaterial; base: number }[] = [];
-  gltf.scene.traverse(o => {
+  kitScene.traverse(o => {
     if ((o as THREE.Bone).isBone) bones.set(o.name, o as THREE.Bone);
     if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned.push(o as THREE.SkinnedMesh);
     // Both sides matter: a pauldron is a shell seen from outside AND from
@@ -524,6 +551,7 @@ export async function loadKit(
     const m = (o as THREE.Mesh).material;
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
+      if (mat.name === KIT_MERGED_NAME) continue; // its numbers and its environment are in its nodes (kit-merge.ts)
       const std = mat as THREE.MeshStandardMaterial;
       const look = breakable === 'armour' && mat.name === 'plate'
         ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
@@ -545,7 +573,7 @@ export async function loadKit(
     }
   });
 
-  const kitBones = bindKitBones(gltf.scene);
+  const kitBones = bindKitBones(kitScene);
   object.updateMatrixWorld(true);
   // Bind-pose pad per skinned mesh, then an initial sphere so three never
   // finds boundingSphere null and falls back to its per-vertex skinning.
@@ -567,6 +595,7 @@ export async function loadKit(
   let posed = false;
   const pose: KitOverlay['pose'] = (frames, damage) => {
     posed = true;
+    kitScene.visible = true;
     poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
@@ -584,6 +613,7 @@ export async function loadKit(
     object,
     debris,
     bones,
+    get posed() { return posed; },
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
     dropped: () => damageView?.dropped() ?? [],
@@ -597,6 +627,9 @@ export async function loadKit(
       // By bone, the shed pieces stay gone: the split draws (and tears) only the index the damage view left.
       const islands = byBone ? null : damageView?.livePieces()
         ?? (indexCount <= KIT_BURST.islandIndexLimit ? drawn.flatMap(piecesOf) : null);
+      // A burst that re-weights vertices or tears triangles writes to the geometry, which other bodies may be wearing.
+      // A sculpted kit split by bone writes nothing and keeps sharing.
+      if (islands || byBone?.tears.length) for (const m of skinned) if (isSharedKitGeometry(m.geometry)) m.geometry = m.geometry.clone();
       const pieces = createKitBurst({ meshes: skinned, islands, byBone, launch, rolls, seat });
       return {
         step(dt, ground) {
@@ -620,7 +653,7 @@ export async function loadKit(
       // NOT the environment: it is the renderer's one kit environment (kitEnvironment), shared by every kit.
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
-        mesh.geometry?.dispose();
+        if (mesh.geometry && !isSharedKitGeometry(mesh.geometry)) mesh.geometry.dispose();
         const m = mesh.material;
         for (const mat of Array.isArray(m) ? m : m ? [m] : []) mat.dispose();
       });

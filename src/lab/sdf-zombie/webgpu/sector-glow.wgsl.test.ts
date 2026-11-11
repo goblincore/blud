@@ -1,10 +1,10 @@
 // src/lab/sdf-zombie/webgpu/sector-glow.wgsl.test.ts
 
 import { describe, expect, it } from 'vitest';
-import { GLOW_BASE_RGB, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
+import { GLOW_BASE_RGB, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_LAVA, SECTOR_LAVA_CELLS } from './sector-glow.wgsl';
 
 describe('sector-glow.wgsl', () => {
-  const all = [SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_GLOW];
+  const all = [SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_GLOW, SECTOR_LAVA_CELLS, SECTOR_LAVA];
   it('each string is exactly one fn with a return type', () => {
     for (const s of all) {
       expect(s.trim().startsWith('fn ')).toBe(true);
