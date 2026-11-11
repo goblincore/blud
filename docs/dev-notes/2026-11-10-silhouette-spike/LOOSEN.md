@@ -56,6 +56,20 @@ all of them (up to 8 spheres; more, and the pixel stays on `mapBody`).
 - All three: [clean](look/loosen/mob-loose.png), [wounded](look/loosen/mobw-loose.png). Each sheet is the game's
   frame, the edited one, and the difference times 8.
 
+## In the game: `?ngloose` (2026-11-10)
+
+The cheaper fallback normal is in the march behind `?ngloose` (`march/normal-loose-flag.ts`), off by default, the
+shipped text unchanged when off. It keeps `calcNormal` where `ngBody` did not run at all (an open head split), which
+the replay edit above did not. The game's own pass, captured with the flag and replayed against the shipped
+captures of the same frozen scenes (two boots; 5 repeats):
+
+| | Shipped | With `?ngloose` | Control |
+| --- | --- | --- | --- |
+| Clean mob | 35.8 ms | 30.7, −5.1 (−5.9 to −3.5), −14 % | +0.5 (−0.2 to +2.7) |
+| Wounded mob | 62.0 ms | 54.9, −6.7 (−8.5 to −5.7), −11 % | −1.9 (−2.5 to +0.4) |
+
+Not checked: the look in motion, the compute march with the flag (it shares the text), an open head split.
+
 ## Not shown
 
 Motion (a normal that changes source at an edge can shimmer), the upscaler on top, MAP28's butchers and flayers, the
