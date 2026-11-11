@@ -100,6 +100,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     about 26 ms of a 65 ms pass, spread (walk 15, shading 12, near flag 7, re-fold 5; they overlap). A lean field
     with wounds would save 4 to 7 ms at most: not the next build. The crater maths is not the cost (cut by 59 %,
     nothing saved); 34 wound rows are read a step. Lead: bake a body's wounds into a volume. Noisy machine.
+  - **A baked wound volume, replay spike, 2026-11-11** ([`WOUND-VOLUME.md`](../dev-notes/2026-11-10-silhouette-spike/WOUND-VOLUME.md)):
+    wounds read from a 3D texture: −16 ms (−27 %) on the wounded mob, 57.9 to 42.4, of a −23 ms ceiling; 1 cm and
+    2 cm cost the same. 10 of the 16 is the re-fold going away. A voxel needs four values (the bump refills the
+    carve). Not shown: per-limb rest-frame volumes, the stamp on a hit, memory. Next: a design for the game.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).

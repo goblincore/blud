@@ -341,6 +341,34 @@ window.replay = async ({ dir, manifest = 'manifest.json', repeat = 20, rounds = 
   for (let i = 0; i < rounds; i++) ms.push(await round());
   return { repeat, rounds, medianMs: median(ms), minMs: Math.min(...ms), maxMs: Math.max(...ms), ms, parity: check, errors };
 };
+// A SWEEP (wound-volume.mjs): the pass is run once per value of a 1 x 1 r32float texture the manifest names
+// (manifest.sweepTex), and colour attachment 0 of each run is POSTed, tightly packed, to post/<index>.
+window.sweep = async ({ dir, manifest = 'manifest.json', values, post }) => {
+  const state = await load(dir, manifest);
+  const { device, passes, errors } = state;
+  const p = passes[0];
+  const param = await p.get({ $ref: state.manifest.sweepTex });
+  const viewNode = state.manifest.objects[p.output.ref.$ref];
+  const texId = viewNode.texture.$ref;
+  const ref = p.output.post[texId].mips[0];
+  const color = await p.get(viewNode.texture);
+  const bytesPerRow = Math.ceil((ref.width * 16) / 256) * 256;
+  const staging = device.createBuffer({ size: bytesPerRow * ref.height, usage: BU.MAP_READ | BU.COPY_DST });
+  const tight = new Float32Array(ref.width * ref.height * 4);
+  for (const [i, v] of values.entries()) {
+    device.queue.writeTexture({ texture: param }, new Float32Array([v]), {}, [1, 1]);
+    const enc = device.createCommandEncoder();
+    encodePasses(enc, passes);
+    enc.copyTextureToBuffer({ texture: color }, { buffer: staging, bytesPerRow }, [ref.width, ref.height]);
+    device.queue.submit([enc.finish()]);
+    await staging.mapAsync(GPUMapMode.READ);
+    const got = new Float32Array(staging.getMappedRange());
+    for (let y = 0; y < ref.height; y++) tight.set(got.subarray(y * (bytesPerRow / 4), y * (bytesPerRow / 4) + ref.width * 4), y * ref.width * 4);
+    staging.unmap();
+    await fetch(`${post}/${i}`, { method: 'POST', body: tight });
+  }
+  return { n: values.length, width: ref.width, height: ref.height, errors };
+};
 window.replayReady = true;
 
 // A LOOK BY EYE (compute-view.mjs): ?dir=/cap/<frame>&manifest=<name> replays that leg once and shows the sheet
