@@ -292,3 +292,20 @@ Not done, not measured:
 
 A stamp per hit on the GPU (the stamp is on the CPU first), per-limb-cluster volumes, cut wounds and the head split in the volume, a
 smaller texel format, volumes for corpses beyond the pool. Each waits on stage 2's playtest.
+
+## Timed, 2026-11-11
+
+`scripts/native-spike/wound-volume-ingame.mjs` with `docs/dev-notes/2026-11-11-wound-volume/prelude-mob-heavy.js`:
+the 22-zombie mob, the six nearest bodies shot about 70 times each (every one overflows the list). Whole frames,
+fresh page a leg, four rounds, headless Chrome on the M3 (`ingame-mob-heavy.json` beside the prelude).
+
+| Leg | Frame | Against off |
+| --- | --- | --- |
+| off | 62.30 ms | |
+| off again (control) | 62.33 ms | −0.19 ms (−1.09 to +0.54) |
+| `?woundvol` (2 cm) | 68.29 ms | +5.49 ms (+4.71 to +6.48), +8.8 % |
+
+- With the flag on the six bodies hold 34 boxes, 6.3 MB of the 19 MB atlas.
+- The two legs do not draw the same wounds: off merges the overflow into larger craters, on keeps them apart.
+- Baking is not a spike: `stampCrater` 0.25 ms a crater at 2 cm (1.8 ms at 1 cm), an atlas upload 0.07 to 0.2 ms.
+- Not timed: 1 cm voxels, a body with boxes but a short list, MAP28.
