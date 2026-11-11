@@ -309,3 +309,23 @@ fresh page a leg, four rounds, headless Chrome on the M3 (`ingame-mob-heavy.json
 - The two legs do not draw the same wounds: off merges the overflow into larger craters, on keeps them apart.
 - Baking is not a spike: `stampCrater` 0.25 ms a crater at 2 cm (1.8 ms at 1 cm), an atlas upload 0.07 to 0.2 ms.
 - Not timed: 1 cm voxels, a body with boxes but a short list, MAP28.
+
+### Where the 5.5 ms goes (same day)
+
+Same scene and script; each row is `?woundvol` against off, three or four rounds.
+
+| Build | Against off |
+| --- | --- |
+| As first built (whole box, eight texels a read) | +5.49 ms (+4.71 to +6.48) |
+| Touched sub-box only, four texels a read (tetrahedral); kept | +5.41 ms (+1.44 to +7.93) |
+| ... without the near flag from baked craters | +4.89 ms (−0.71 to +5.35) |
+| ... without the shading normal's fallback on baked pixels | +4.91 ms (+4.75 to +6.11) |
+| ... without the carve in `applyWounds` | +0.26 ms (−1.30 to +0.77) |
+| ... every read done, the shape left unchanged (carve scaled by 1e-4) | +2.28 ms (+1.77 to +5.62) |
+
+- The cost is the carve in the march. The near flag and the normal's fallback are not it.
+- About 2 ms of it is the lookups. The rest is marching a body that shows some forty more craters than the merged
+  one does, and comes with showing them.
+- The sub-box and the four-texel read made no difference the run can resolve (noise is about 1 ms). They stay:
+  fewer loads, and the still holds (`mob-heavy-on.png`, `mob-heavy-off.png` beside the prelude).
+- The variants were temporary `?wvdbg` bits, removed.
