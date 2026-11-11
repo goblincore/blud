@@ -200,6 +200,48 @@ voxels no wound touches.
 Stage 2b is measured as stage 2 was, plus the budget under a long fight: how many bodies hold bricks, and
 whether a body falling back to the list is seen.
 
+## Revision 2, 2026-11-11: the rest-pose volume tears; nothing of stage 2a is built
+
+Before building 2a its first risk was measured on the CPU, and it fails. `restPoint` maps a point through its
+DOMINANT primitive, by a shortest-arc swing of that primitive's own axis. Two primitives of one rigid limb
+therefore map the same motion differently, and a zombie's torso is six primitives, an arm four. A cluster of the
+zombie was turned rigidly and the mapping compared with the true one
+([`wound-seam.scratch.test.ts.txt`](../../dev-notes/2026-11-11-wound-volume/wound-seam.scratch.test.ts.txt);
+move it into `src/lab/sdf-zombie/` as a `.test.ts` to run it):
+
+| Motion of the limb | Step in the mapping across a primitive boundary, points under 3 cm apart (median / 90th centile) |
+| --- | --- |
+| 8 degrees of twist, 10 of bend | torso 1.6 / 2.4 cm, arm 0.9 / 2.5 cm, leg 0.4 / 1.6 cm |
+| 20 and 30 | torso 1.5 / 6.5 cm, arm 3.2 / 8.1 cm, leg 1.4 / 3.5 cm |
+| 45 and 70 | torso 3.1 / 13.4 cm, arm 5.3 / 15.1 cm, leg 2.9 / 8.0 cm |
+
+A pellet crater is 5.5 cm in radius. A crater read from one rest-pose volume would crack along every primitive
+boundary it crosses, by centimetres, in an ordinary walk; not only at joints. The skin noise lives with the same
+seams because it is small and statistical. A crater cannot. (The test turns a cluster rigidly and sets no orient
+quaternion, as `rest-space.test.ts` does; a rig that stamps an exact quaternion on every primitive would not
+have the seam, and today only point spheres and skull primitives carry one.)
+
+**What the cap does today, found on the way:** at 32 the ring does not drop the oldest wound, it MERGES it into
+its nearest crater on the same primitive when one is in reach (`pushWound`, `mergeVictim`), and evicts it only
+when none is. So "too few wounds" shows as craters fusing into fewer, larger ones.
+
+### The layout that does not tear (proposed, not approved)
+
+- **A volume a wounded primitive, in that primitive's own frame**, the frame its wounds already ride in. Every
+  crater moves rigidly with its primitive, as craters do today. Memory is sparse by construction (a forearm's box
+  is about 90 KB at 2 cm and 8 bits, a torso primitive's about 200 KB; nothing for an unwounded primitive), so
+  the bricks of stage 2b are not needed for humanoids.
+- **Stamped when a wound leaves the ring**, in place of the merge. The newest 32 wounds stay on the list and look
+  exactly as today: ragged and torn edges, ageing, the exact colour. Only what would have been merged away goes
+  into the volume, as a round, voxel-soft crater with its colour. The order comes out right for free: the volume
+  holds the oldest wounds and is applied first, the list after it.
+- **The read**: a body carries a short table of its wounded primitives (world bound, the world-to-volume
+  transform the CPU already knows, the box in the atlas). A field call tests each bound and reads the volumes it
+  is inside, before the wound loop. A body under 32 wounds has no table and pays nothing.
+- **What it gives up against the first design:** no speed-up. The list is walked as today, and a body past 32
+  wounds pays the volume reads on top. The ring's size becomes the knob: a smaller ring moves wounds into the
+  volume sooner, which is cheaper and softer.
+
 ## Risks
 
 1. **Joints.** `restPoint` follows the dominant primitive, and the dominant primitive flips at a joint. A
