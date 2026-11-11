@@ -56,7 +56,7 @@ import { levelBatchOn } from './level-batch';
 const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.search);
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
-import { WOUND_VOL, WV_MAX_ENTRIES } from './march/wound-volume-flag';
+import { WOUND_VOL, WV_LIST_KEEP, WV_MAX_ENTRIES } from './march/wound-volume-flag';
 import { createBodyWoundVolumes, stampable, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
 import {
   MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
@@ -425,6 +425,18 @@ export function createWoundRing(): WoundRing {
     const before = wounds;
     wounds = pushWound(wounds, w, MAX_WOUNDS, 0);
     for (const o of before) if (!wounds.includes(o) && stampable(o)) overflow.push(o);
+    // `?woundlist=<n>` (wound-volume-flag.ts): only the newest n bakeable wounds stay exact; the oldest past that
+    // is baked now. The list is oldest first.
+    if (WV_LIST_KEEP < MAX_WOUNDS) {
+      let n = 0;
+      for (const o of wounds) if (stampable(o)) n++;
+      for (let i = 0; i < wounds.length && n > WV_LIST_KEEP; i++) {
+        if (!stampable(wounds[i]!)) continue;
+        overflow.push(wounds[i]!);
+        wounds = wounds.filter((_, j) => j !== i);
+        i--; n--;
+      }
+    }
   };
   const volumeCfg = (gpu: ZombieGpuView): WoundVolumeCfg => {
     const c = gpu.uniforms?.woundCfg?.value, c2 = gpu.uniforms?.woundCfg2?.value;

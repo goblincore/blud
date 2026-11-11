@@ -43,3 +43,20 @@ export const WOUND_VOL: boolean = WOUND_VOL_VOXEL > 0;
  *  (ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS) are used up to column MAX_WOUNDS only. */
 export const WV_MAX_ENTRIES = 24;
 export const WV_TABLE_COL = 32;
+
+/** A TRY (2026-11-11): how many of a body's newest BAKEABLE wounds stay on the exact list (`?woundlist=<n>`, 0 to
+ *  32; default 32, the list's own cap, which changes nothing). Past it the oldest bakeable wound is baked into the
+ *  volume at once, so the march walks a shorter list. Wounds the volume does not take (cuts, decals, cloth holes,
+ *  the melee head craters) are not counted and stay on the list as before. Off with the volume. */
+export function woundListKeep(search: string): number {
+  const v = new URLSearchParams(search).get('woundlist');
+  const n = v === null || v === '' ? NaN : Number(v);
+  return Number.isFinite(n) ? Math.min(32, Math.max(0, Math.floor(n))) : 32;
+}
+export const WV_LIST_KEEP: number = (() => {
+  try {
+    return woundListKeep((globalThis as { location?: { search?: string } }).location?.search ?? '');
+  } catch {
+    return 32;
+  }
+})();
