@@ -242,6 +242,40 @@ when none is. So "too few wounds" shows as craters fusing into fewer, larger one
   wounds pays the volume reads on top. The ring's size becomes the knob: a smaller ring moves wounds into the
   volume sooner, which is cheaper and softer.
 
+### Built, 2026-11-11 (`?woundvol`, default off)
+
+The layout above, after the owner saw a close-up of baked craters (exact | 2 cm | 1 cm, 8 bits) and passed the
+look. What is in the tree:
+
+- `wound-volume-stamp.ts` (pure): the voxel box, the stamp of one round crater (shape and colour), and the CPU
+  twins of the shader's read. Tested against the list's crater steps.
+- `webgpu/wound-volume-store.ts`: one RGBA8 3D atlas (192 x 192 x 128, 19 MB), a box a wounded primitive with its
+  colour voxels stacked after its shape voxels, and a body's table of boxes. A stamp sends only the voxels it
+  touched to the GPU.
+- `webgpu/character-view.ts`: under the flag the wound ring never merges at its cap; the crater that overflows
+  is stamped at the next refresh.
+- `march/fields/wound-volume.wgsl.ts`: `applyWounds` reads the boxes before its list; the wound masks take the
+  stamped colour; inside a stamped crater's footprint the shading normal comes from the finite-difference taps.
+- **No new binding.** The atlas is bound where the shader takes `segVolumeAtlas` (used only by
+  `?skeleton=volume`; the two do not combine), and the table rides the wound rows' free columns (32 and up).
+- `?woundvol=<cm>` sets the voxel (1 to 4 cm; `?woundvol` is 2 cm). Up to 24 boxes a body.
+
+Seen in the game (arena, one zombie, 100 pellets fired from the eye, 86 to 89 landing): the list holds 32, 13
+boxes hold the rest in 2.0 MB, no GPU errors.
+[`arena-100-pellets-off-on.png`](../../dev-notes/2026-11-11-wound-volume/arena-100-pellets-off-on.png): left,
+the switch off (the overflow merged: the torso opens into a few large cavities); right, on.
+
+Not done, not measured:
+
+- **Frame time.** Nothing was timed. A body past 32 wounds pays the box reads on top of the list.
+- **Gameplay.** With the switch on the ring no longer merges, so a crater that would have grown (and could sever)
+  leaves the list instead. Not played.
+- Motion, the mob, soldiers and the chaingunner (their visual wound lists), the spider brain, an open head split,
+  gib chunks (a severed part does not take its boxes with it), the compute march, the hull pass.
+- The ragged and torn edges of a stamped crater; cuts, decals, cloth holes and head craters are never stamped.
+- The normal-gradient probe page does not compile with the switch on (its `applyWounds` call has no atlas).
+- A full atlas drops the wound, as an evicted wound always was dropped; nothing is evicted to make room.
+
 ## Risks
 
 1. **Joints.** `restPoint` follows the dominant primitive, and the dominant primitive flips at a joint. A

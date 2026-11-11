@@ -37,5 +37,5 @@ export const WOUND_VOL: boolean = WOUND_VOL_VOXEL > 0;
 
 /** Wounded primitives a body can carry a box for, and the data-texture column their table starts at: the wound rows
  *  (ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS) are used up to column MAX_WOUNDS only. */
-export const WV_MAX_ENTRIES = 12;
+export const WV_MAX_ENTRIES = 24;
 export const WV_TABLE_COL = 32;
