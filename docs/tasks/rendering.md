@@ -89,6 +89,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     clean mob's 32 ms. The AO and scatter probes 5.6 ms, the finite-difference normal 5.0 (on a clean mob), the
     analytic normal's stage 4.5; materials, lights and ambient about 1 ms together. Wounding the mob adds 15.5 ms
     to the WALK: a wounded slot in a pixel's table takes the pixel off the lean walk. Leads are in the note.
+  - **Fast walk for wounded bodies, and looser shading, 2026-11-10** ([`LOOSEN.md`](../dev-notes/2026-11-10-silhouette-spike/LOOSEN.md)):
+    the lean walk per sample does not pay (wounds are 10 cm wide, 8 to a body; no sample near one is outside them).
+    Dropping the finite-difference normal is −6 ms (−17 %) on the clean mob, edges only; with the probes on `mapLean`
+    −9 ms (−25 %), a visible change. Replay only; pictures in the note for the owner to judge.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
