@@ -85,6 +85,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     22-body mob the hit pixels alone cost the whole pass (34.3 of 34.9 ms); the misses beside the silhouettes are
     5.5 ms alone but about 0.6 ms in the pass. Of a hit pixel's 421 ns, the walk is 225 and the shading after the hit
     the rest (15 ms of 35). Wounded: 1,009 ns a hit pixel. Next: take the post-hit chain apart on the mob.
+  - **Shading after the hit, 2026-11-10** ([`SHADING.md`](../dev-notes/2026-11-10-silhouette-spike/SHADING.md)): 19 of the
+    clean mob's 32 ms. The AO and scatter probes 5.6 ms, the finite-difference normal 5.0 (on a clean mob), the
+    analytic normal's stage 4.5; materials, lights and ambient about 1 ms together. Wounding the mob adds 15.5 ms
+    to the WALK: a wounded slot in a pixel's table takes the pixel off the lean walk. Leads are in the note.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
