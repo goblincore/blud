@@ -58,7 +58,8 @@ all of them (up to 8 spheres; more, and the pixel stays on `mapBody`).
 
 ## In the game: `?ngloose` (2026-11-10)
 
-The cheaper fallback normal is in the march behind `?ngloose` (`march/normal-loose-flag.ts`), off by default, the
+The cheaper fallback normal is in the march behind `?ngloose` (`march/normal-loose-flag.ts`), off by default when
+this section's numbers were taken (on by default since the owner's second playtest, below), the
 shipped text unchanged when off. It keeps `calcNormal` where `ngBody` did not run at all (an open head split), which
 the replay edit above did not. The game's own pass, captured with the flag and replayed against the shipped
 captures of the same frozen scenes (two boots; 5 repeats):
@@ -82,7 +83,8 @@ and keeps `calcNormal` where the hit is near a wound. Re-captured and re-timed t
 
 So the saving is kept on clean bodies and is gone on wounded ones: on the wounded mob nearly every pixel that takes
 the taps is near a wound. **Owner's playtest of the second form (2026-11-10): looks right.** Clean zombies and the teratoma
-read as they do without the flag. The flag is still off by default; whether it becomes the default is the owner's call.
+read as they do without the flag. **On by default since 2026-11-10 (owner's call).** `?ngloose=0` is the old text to the byte (the march golden
+holds it). Not re-timed after the flip: the default text is the text `?ngloose` gave.
 
 ## Not shown
 

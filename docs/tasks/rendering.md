@@ -93,6 +93,9 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     the lean walk per sample does not pay (wounds are 10 cm wide, 8 to a body; no sample near one is outside them).
     Dropping the finite-difference normal is −6 ms (−17 %) on the clean mob, edges only; with the probes on `mapLean`
     −9 ms (−25 %), a visible change. Replay only; pictures in the note for the owner to judge.
+    **The cheaper fallback normal is ON BY DEFAULT** (owner, 2026-11-10, after playing its second form:
+    "looks right now"). `?ngloose=0` is the old text. About 5 to 7 ms off a clean 22-body mob's march, nothing
+    on a wounded one. Not checked: an open head split with it, live frame time.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).

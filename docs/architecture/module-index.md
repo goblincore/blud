@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 60 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 62 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 60 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 61 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -111,6 +111,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/body/params.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): marchBody parameter list.
 - `webgpu/march/body/surface.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): surface prep and output readers.
 - `webgpu/march/body/trace.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): march trace setup/loop/post and assembled trace.
+- `webgpu/march/compute-flag.ts` — COMPILE-TIME switch for the COMPUTE MARCH (2026-11-10; docs/dev-notes/2026-11-10-compute-march-spike/NOTES.md).
 - `webgpu/march/cone-march.wgsl.ts` — WGSL for the cone march, the depth prepass and the quad empty-tile gate.
 - `webgpu/march/fields/bones.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): bone fold and bone application.
 - `webgpu/march/fields/carves.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): carve/noise anchor helpers.
@@ -126,6 +127,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/map-body.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): the signed-distance body field and its normal.
 - `webgpu/march/math.wgsl.ts` — Hash, value noise, fbm and the quaternion helpers — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/melt.ts` — Face-melt and melt-skin tuning constants — split out of march.wgsl.ts (phase 1, move-only).
+- `webgpu/march/normal-loose-flag.ts` — COMPILE-TIME switch for the CHEAPER FALLBACK NORMAL (2026-11-10; docs/dev-notes/2026-11-10-silhouette-spike/LOOSEN.md).
 - `webgpu/march/primitives.wgsl.ts` — SDF primitives, fold operators and the detail field — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/raymask-flag.ts` — COMPILE-TIME switch for the per-ray primitive mask PROBE (2026-10-08).
 - `webgpu/march/shade-bound-flag.ts` — COMPILE-TIME switch for the POST-HIT UPPER-BOUND CULL (SDF-cloth cost spike, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
@@ -676,6 +678,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/goblin-puppet.ts` — THE GOBLIN PUPPET (emergence in the Flat, plan Task 4; spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): the SDF goblin of the…
 - `webgpu/hazard-floor.ts` — HURT FLOORS (spec 2026-10-24 §8): standing on a hurt sector deals whole points of damage once a second, the first after half a second (Doom hits…
 - `webgpu/hull-refine-view.ts` — Wraps a shipped body/chunk view so it can be drawn EITHER through its own proxy-box march (unchanged) OR through a per-frame surface-nets hull whose…
+- `webgpu/march-compute.ts` — THE COMPUTE MARCH (?marchcompute; march/compute-flag.ts; docs/dev-notes/2026-11-10-compute-march-spike/NOTES.md).
 - `webgpu/march-private-reads.ts` — The ONE wgslFn node that carries MARCH_NORMAL_OUT — and with it the march body's module-scope privates `gMarchNormal` and `gMarchAnchor` — plus the…
 - `webgpu/march-test-support.ts` — Shared fixtures for the march shader-text tests (split out of march.wgsl.test.ts by march split task 3, 2026-09-19).
 - `webgpu/march.wgsl.ts` — The WGSL raymarch shader barrel: re-exports the layout, field, body and helper pieces under march/ that make up the SDF march.
