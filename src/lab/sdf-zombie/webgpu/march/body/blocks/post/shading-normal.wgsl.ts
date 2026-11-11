@@ -68,7 +68,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
     let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
-    ngScalar = ng.x;${NORMAL_LOOSE ? '\n    ngRan = true;\n    ngLooseG = ng.yzw;' : ''}
+    ngScalar = ng.x;${NORMAL_LOOSE ? '\n    ngRan = true;\n    ngLooseG = ng.yzw;\n    if ((gNgDebugMask & 8u) == 0u) { ngLooseG = ngLooseG + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }' : ''}
     if (ngReason == 0) {
       var candidate = ng.yzw;
       ng0 = ng.yzw;
@@ -83,8 +83,10 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // (cold-compile 2026-09-21): each call site inlines four more field taps.
   let debugNormal12 = debugCfg.x > 11.5 && debugCfg.x < 12.5;
   var nFD = n;${NORMAL_LOOSE ? `
-  // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient stands in for the taps.
-  if (!ngValid && ngRan) {
+  // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
+  // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
+  // crater's shape, which ngBody's gradient does not.
+  if (!ngValid && ngRan && !hitNearWound) {
     let ngLoose2 = dot(ngLooseG, ngLooseG);
     if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
   }

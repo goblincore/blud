@@ -70,6 +70,19 @@ captures of the same frozen scenes (two boots; 5 repeats):
 
 Not checked: the look in motion, the compute march with the flag (it shares the text), an open head split.
 
+**Owner's playtest of that first form: a visible loss.** Zombies and the teratoma looked smooth, and wounds simpler.
+Two causes: the stand-in gradient had no skin detail term (`ngDetail`, which the analytic path adds), and near a
+wound the taps carry the crater's shape, which `ngBody`'s gradient does not. The second form adds the detail term
+and keeps `calcNormal` where the hit is near a wound. Re-captured and re-timed the same way:
+
+| | Shipped | With `?ngloose`, second form | Control |
+| --- | --- | --- | --- |
+| Clean mob | 42.8 ms (a busier run) | 37.0, −6.9 (−15.0 to −5.0) | +0.5 (−2.8 to +8.5) |
+| Wounded mob | 61.0 ms | 60.6, −0.6 (−1.3 to +0.3) | −0.2 (−0.7 to +1.0) |
+
+So the saving is kept on clean bodies and is gone on wounded ones: on the wounded mob nearly every pixel that takes
+the taps is near a wound. The owner has not yet looked at the second form.
+
 ## Not shown
 
 Motion (a normal that changes source at an edge can shimmer), the upscaler on top, MAP28's butchers and flayers, the
