@@ -11,7 +11,8 @@ describe('?ngloose', () => {
     expect(normalLooseOn('?level=doom-map28&ngloose=1')).toBe(true);
   });
   it('puts the cheaper fallback in the default text, and keeps the full normal near wounds', () => {
-    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound) {');
+    // `&& !wvHit`: a baked crater's pixels keep the full normal too (wound-volume-flag.ts, on by default).
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound && !wvHit) {');
     expect(SHADING_NORMAL_BLOCK).toContain('  if ((!ngValid && !ngLoose) || debugNormal12) {');
   });
 });

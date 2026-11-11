@@ -7,6 +7,8 @@ import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_CUT, ROW_WOUND_FLAGS, ROW_WOUND_MET
 import { TORN } from '../../../torn-lips';
 import { CUT_JAG_SLACK, CUT_NEAR, CUT_SHADE } from '../../../cut-wound';
 import { MAX_WOUNDS } from '../../../damage';
+import { WOUND_VOL } from '../wound-volume-flag';
+import { WV_APPLY, WV_FUNCTIONS } from './wound-volume.wgsl';
 import { SPLIT_ABL, ablWgsl } from '../../split-ablate';
 
 // TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
@@ -66,7 +68,7 @@ const TORN_LOBE = (n: string) => `mix(${n}, noise3(q * ${f(TORN_OCTAVE_FREQ)} + 
 // NOTE (cut wounds): ROW_WOUND_META.w is the crater rim offset scale below, but for bit-32 (cut) wounds it holds the cut's sag.
 // The cut branch (flag 32, right after the cap load) reads it as the sag and always `continue`s, so a cut never reaches the
 // crater rim code; ROW_WOUND_CUT is read only inside that branch (rows of non-cut slots may be stale).
-export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>, band: i32) -> vec2<f32> {
+export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>, band: i32${WOUND_VOL ? ', wvAtlas: texture_3d<f32>' : ''}) -> vec2<f32> {
   var d = dIn;
   var near = 0.0;
   // One sphere test before the loop replaces up to ${MAX_WOUNDS} wound-row loads plus a
@@ -74,7 +76,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // a crater. Tested BEFORE the loop (pinned by test): the whole point is
   // that a far sample pays nothing per-wound.
   if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }
-  let n = ${ablWgsl(`select(i32(gInstWoundCount), 0, (i32(gInstSplitR.y) & ${SPLIT_ABL.noFieldWounds}) != 0)`) || 'i32(gInstWoundCount)'};
+${WOUND_VOL ? WV_APPLY : ''}  let n = ${ablWgsl(`select(i32(gInstWoundCount), 0, (i32(gInstSplitR.y) & ${SPLIT_ABL.noFieldWounds}) != 0)`) || 'i32(gInstWoundCount)'};
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07): with the gate ON the
   // loop iterates only the preloaded reachable set; with it OFF this is the
   // same iteration sequence as before (k == i, same break on n), so OFF is
@@ -296,7 +298,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return vec2<f32>(d, near);
-}
+}${WOUND_VOL ? `\n${WV_FUNCTIONS}` : ''}
 // Per-map ownership selection. 0 keeps the original whole-body carve;
 // a positive cluster id restricts the independent limb field below.
 var<private> gWoundCluster: f32 = 0.0;

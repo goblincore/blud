@@ -21,6 +21,8 @@
 // does not recognise lights constructed by the other copy:
 //   LightsNode.setupNodeLights: Light node not found for DirectionalLight
 // which renders every standard material black. Do not split these imports.
+import { WOUND_VOL } from './march/wound-volume-flag';
+import { woundVolumeAtlas } from './wound-volume-store';
 import * as THREE from 'three/webgpu';
 import { WebGPURenderer } from 'three/webgpu';
 import type { FrameTiming } from './game-telemetry';
@@ -298,6 +300,8 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // adapter and device. Skipping this is the classic first WebGPU bug: the
   // first frame silently does nothing.
   await renderer.init();
+  // THE BAKED WOUND VOLUME (march/wound-volume-flag.ts): its stamps go straight to the backend's texture.
+  if (WOUND_VOL) woundVolumeAtlas().bindRenderer(renderer);
 
   // PIPELINE-CREATION LOG (pipeline-log.ts, startup-hitch attribution). Must
   // wrap before ANY pipeline exists — the first frame and the boot warm-up
