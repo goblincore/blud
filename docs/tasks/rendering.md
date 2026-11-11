@@ -104,6 +104,9 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     wounds read from a 3D texture: −16 ms (−27 %) on the wounded mob, 57.9 to 42.4, of a −23 ms ceiling; 1 cm and
     2 cm cost the same. 10 of the 16 is the re-fold going away. A voxel needs four values (the bump refills the
     carve). Not shown: per-limb rest-frame volumes, the stamp on a hit, memory. Next: a design for the game.
+  - **The in-game design, 2026-11-11** ([spec](../superpowers/specs/2026-11-11-baked-wound-volume-design.md)): not built.
+    Stage 1 is the re-fold off behind `?woundfold=0`; stage 2 is a per-body rest-pose volume behind `?woundvol`.
+    Each ends at an owner playtest.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
