@@ -81,7 +81,8 @@ and keeps `calcNormal` where the hit is near a wound. Re-captured and re-timed t
 | Wounded mob | 61.0 ms | 60.6, −0.6 (−1.3 to +0.3) | −0.2 (−0.7 to +1.0) |
 
 So the saving is kept on clean bodies and is gone on wounded ones: on the wounded mob nearly every pixel that takes
-the taps is near a wound. The owner has not yet looked at the second form.
+the taps is near a wound. **Owner's playtest of the second form (2026-11-10): looks right.** Clean zombies and the teratoma
+read as they do without the flag. The flag is still off by default; whether it becomes the default is the owner's call.
 
 ## Not shown
 
