@@ -56,6 +56,8 @@ import { levelBatchOn } from './level-batch';
 const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.search);
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
+import { WOUND_VOL, WV_MAX_ENTRIES } from './march/wound-volume-flag';
+import { createBodyWoundVolumes, stampable, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
 import {
   MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
   type Wound, type WoundType,
@@ -403,6 +405,8 @@ export interface WoundRing {
    *  whose gun craters are scaled up (MotionProfile.gore.craterScale, the teratoma) sets it scaled the same, or its
    *  ring fills after two volleys and every further crater evicts an old one instead of deepening the damage. */
   setMergeMaxRadius(r: number): void;
+  /** Free what the ring holds off the heap (the baked wound volume's boxes, `?woundvol`). */
+  dispose(): void;
 }
 
 export function createWoundRing(): WoundRing {
@@ -410,6 +414,22 @@ export function createWoundRing(): WoundRing {
   let nextEventId = 1;
   let mergeMax: number = MERGE.maxRadius;
   const stampWorld = new WeakMap<Wound, Vec3>();
+  // THE BAKED WOUND VOLUME (`?woundvol`, wound-volume-store.ts): the ring never merges at its cap; the crater that
+  // overflows it waits here for the next refresh (which has the pose) and is stamped into its primitive's box.
+  const volumes = WOUND_VOL ? createBodyWoundVolumes() : null;
+  let overflow: Wound[] = [];
+  let tableUp = false;
+  const table = volumes ? new Float32Array(WV_MAX_ENTRIES * 16) : null;
+  const push = (w: Wound) => {
+    if (!volumes) { wounds = pushWound(wounds, w, MAX_WOUNDS, mergeMax); return; }
+    const before = wounds;
+    wounds = pushWound(wounds, w, MAX_WOUNDS, 0);
+    for (const o of before) if (!wounds.includes(o) && stampable(o)) overflow.push(o);
+  };
+  const volumeCfg = (gpu: ZombieGpuView): WoundVolumeCfg => {
+    const c = gpu.uniforms?.woundCfg?.value, c2 = gpu.uniforms?.woundCfg2?.value;
+    return c && c2 ? { blendK: c.y, rimSplay: c.z, rimOffset: c.w, rimWidth: c2.x } : WV_DEFAULT_CFG;
+  };
   const identify = (w: Wound) => {
     if (w.eventId === undefined) w.eventId = nextEventId++;
     else nextEventId = Math.max(nextEventId, w.eventId + 1);
@@ -418,17 +438,30 @@ export function createWoundRing(): WoundRing {
   return {
     all: () => wounds,
     stamp(wound, posed, bodyYaw) {
-      identify(wound); wounds = pushWound(wounds, wound, MAX_WOUNDS, mergeMax);
+      identify(wound); push(wound);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
       return wound;
     },
     stampBundle(ws) {
-      for (const w of ws) wounds = pushWound(wounds, identify(w), MAX_WOUNDS, mergeMax);
+      for (const w of ws) push(identify(w));
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
     setMergeMaxRadius(r) { mergeMax = Number.isFinite(r) && r > 0 ? r : MERGE.maxRadius; },
+    dispose() { volumes?.dispose(); overflow = []; },
     refresh(gpu, posed, bodyYaw, visual, xf) {
+      if (volumes && table && typeof gpu.setWoundVolumes === 'function') {
+        if (overflow.length) {
+          const cfg = volumeCfg(gpu);
+          for (const o of overflow) volumes.stamp(o, posed.prims, bodyYaw, cfg);
+          overflow = [];
+        }
+        if (volumes.size || tableUp) {
+          const t = volumes.table(table, posed.prims, bodyYaw, xf);
+          gpu.setWoundVolumes(t ? table : null, t ? t.bound : null);
+          tableUp = !!t;
+        }
+      }
       const rows = visual ?? wounds;
       if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;
       // The wound position is computed from the CLEAN prims (its stored offset
@@ -794,6 +827,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       if (disposed) return;
       disposed = true;
       retireEquipment();
+      wounds.dispose();
       gpu.dispose();
     },
   };

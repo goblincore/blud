@@ -12,6 +12,7 @@ export const CLOTH_FOLDS = 9;
 export const CLOTH_FOLD_TILT = 0.5;
 import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
+import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
@@ -79,14 +80,18 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
       if (ngValid) { n = normalize(candidate); } else { ngReason = 2; }
     }
   }
-  // ONE calcNormal call site for the fallback and the debug-12 compare
+${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differentiates the list's wounds and knows nothing of a
+  // stamped crater. Inside one's footprint the taps below (which read the volume through mapBody) give the normal.
+  let wvHit = wvColour(p, data, gBand, segVolumeAtlas).x > 0.0;
+  if (wvHit) { ngValid = false; }
+` : ''}  // ONE calcNormal call site for the fallback and the debug-12 compare
   // (cold-compile 2026-09-21): each call site inlines four more field taps.
   let debugNormal12 = debugCfg.x > 11.5 && debugCfg.x < 12.5;
   var nFD = n;${NORMAL_LOOSE ? `
   // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
   // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
   // crater's shape, which ngBody's gradient does not.
-  if (!ngValid && ngRan && !hitNearWound) {
+  if (!ngValid && ngRan && !hitNearWound${WOUND_VOL ? ' && !wvHit' : ''}) {
     let ngLoose2 = dot(ngLooseG, ngLooseG);
     if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
   }

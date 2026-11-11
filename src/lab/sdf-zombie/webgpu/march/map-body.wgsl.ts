@@ -8,6 +8,7 @@ import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { LEAN_WALK as LEAN } from './lean-walk-flag';
 import { TILE_REF as TR } from './tile-ref-flag';
 import { WOUND_FOLD } from './wound-fold-flag';
+import { WOUND_VOL } from './wound-volume-flag';
 import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
@@ -278,7 +279,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
 ` : ''}  gCullRef = 1e9;
   let foldSlot = d;
   let carved = applyCarves(d, p, data, counts, band);
-  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
+  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band${WOUND_VOL ? ', segVolumeAtlas' : ''});
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
   // Preserve independently moving limbs under somebody else's wound.
@@ -412,7 +413,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
 `}      gWoundCluster = f32(c + 1);
       if (gDebugMode > 0.5) { gDebugRefolds = gDebugRefolds + 1.0; }
       let limbCarved = applyCarves(limb, p, data, counts, band);
-      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
+      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band${WOUND_VOL ? ', segVolumeAtlas' : ''}).x;
       gWalkAttempted = 1.0;
       gWalkGapNew = min(gWalkGapNew, max(limbDamage - dmg, 0.0));
       if (limbDamage < dmg) {

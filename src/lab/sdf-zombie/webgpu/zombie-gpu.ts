@@ -26,6 +26,8 @@ import { SPLIT_BOUND, boundsSplit, splitAblate } from './split-ablate';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
+import { WOUND_VOL, WV_MAX_ENTRIES, WV_TABLE_COL } from './march/wound-volume-flag';
+import { woundVolumeAtlas } from './wound-volume-store';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
@@ -143,6 +145,10 @@ export interface ZombieGpuView {
    *  no-cull identity) for the bench A/B; the computed radius is kept, so
    *  true restores it without a re-upload. */
   setWoundCull(on: boolean): void;
+  /** THE BAKED WOUND VOLUME (`?woundvol`, wound-volume-store.ts): this body's table of wounded primitives
+   *  (WV_MAX_ENTRIES x 4 texels, written into the wound rows' free columns) and their union bound, or null to
+   *  clear it. The wound bound the shader culls by becomes the union of the list's and this. */
+  setWoundVolumes?(table: Float32Array | null, bound: readonly [number, number, number, number] | null): void;
   /** Diagnostic: the per-wound threat masks last written (wound-threat.ts). */
   woundThreats(): number[];
   readonly woundThreatMargin: number;
@@ -927,11 +933,15 @@ function fallbackCrowdVolumeTexture() { return (fallbackCrowdVolume ??= createFa
 let fallbackSegmentVolume: { atlas: THREE.Data3DTexture; meta: THREE.DataTexture } | null = null;
 function fallbackSegmentVolumeTextures() {
   if (!fallbackSegmentVolume) {
-    const atlas = new THREE.Data3DTexture(new Float32Array(8), 2, 2, 2);
-    atlas.format = THREE.RedFormat;
-    atlas.type = THREE.FloatType;
-    atlas.minFilter = atlas.magFilter = THREE.NearestFilter;
-    atlas.needsUpdate = true;
+    // THE BAKED WOUND VOLUME (march/wound-volume-flag.ts) takes this binding: with the switch on the "fallback" is
+    // the wound atlas, and the zero meta below keeps the segment-volume reader off it.
+    const atlas = WOUND_VOL ? woundVolumeAtlas().texture : new THREE.Data3DTexture(new Float32Array(8), 2, 2, 2);
+    if (!WOUND_VOL) {
+      atlas.format = THREE.RedFormat;
+      atlas.type = THREE.FloatType;
+      atlas.minFilter = atlas.magFilter = THREE.NearestFilter;
+      atlas.needsUpdate = true;
+    }
     const meta = new THREE.DataTexture(new Float32Array(BONE_SEG_MAX * 4 * 4), BONE_SEG_MAX, 4);
     meta.format = THREE.RGBAFormat;
     meta.type = THREE.FloatType;
@@ -2656,6 +2666,23 @@ export function createZombieGpuView(
   // cull anyway (woundCfg.x = 0).
   let woundCullOn = true;
   let woundBoundR = 1e9;
+  // The list's own reach bound and the baked volume's (setWoundVolumes): the uniform carries their union.
+  let listBound: [number, number, number, number] | null = null;
+  let volBound: readonly [number, number, number, number] | null = null;
+  const applyWoundBound = () => {
+    if (!listBound) return; // before the first setWounds the uniform is the no-cull identity, a superset
+    let b: readonly number[] = listBound;
+    if (volBound) {
+      const dx = volBound[0] - b[0]!, dy = volBound[1] - b[1]!, dz = volBound[2] - b[2]!, dist = Math.hypot(dx, dy, dz);
+      if (dist + b[3]! <= volBound[3]) b = volBound;
+      else if (dist + volBound[3] > b[3]!) {
+        const R = (dist + b[3]! + volBound[3]) / 2, t = (R - b[3]!) / dist;
+        b = [b[0]! + dx * t, b[1]! + dy * t, b[2]! + dz * t, R];
+      }
+    }
+    woundBoundR = b[3]!;
+    u.woundBound.value.set(b[0]!, b[1]!, b[2]!, woundCullOn ? b[3]! : 1e9);
+  };
 
   // THREAT MASKS (wound-threat.ts): which clusters each wound's carve bowl can reach,
   // from the group spheres of the LAST upload and the wounds of the LAST setWounds.
@@ -3213,8 +3240,21 @@ export function createZombieGpuView(
       // re-upload; the game's values are boot constants.
       const b = woundReachBound(worldPositions, radii, worldPositions.length,
         u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
-      woundBoundR = b[3];
-      u.woundBound.value.set(b[0], b[1], b[2], woundCullOn ? b[3] : 1e9);
+      listBound = [b[0], b[1], b[2], b[3]];
+      applyWoundBound();
+      sink.markDirty();
+      syncRecord();
+    },
+    setWoundVolumes(table, bound) {
+      const L = sink.woundLayout;
+      const rows = [L.woundRow, L.metaRow, L.capRow, L.flagsRow];
+      for (let e = 0; e < WV_MAX_ENTRIES; e++) for (let r = 0; r < 4; r++) {
+        const o = (rows[r]! * L.stride + WV_TABLE_COL + e) * 4;
+        if (table) texels.set(table.subarray(e * 16 + r * 4, e * 16 + r * 4 + 4), o);
+        else texels.fill(0, o, o + 4);
+      }
+      volBound = table ? bound : null;
+      applyWoundBound();
       sink.markDirty();
       syncRecord();
     },

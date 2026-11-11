@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 63 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 65 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -53,7 +53,7 @@ Each line is the first sentence of the module's header comment.
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 52 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
-| [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
+| [Actors and crowd (render)](#actors-and-crowd-render) | 20 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 30 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 31 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -118,6 +118,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/fields/groups.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 - `webgpu/march/fields/tissue.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): tissue ramp and char/fire ramp.
 - `webgpu/march/fields/volume.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): baked hand-volume sample.
+- `webgpu/march/fields/wound-volume.wgsl.ts` — THE BAKED WOUND VOLUME, shader half (`?woundvol`, ../wound-volume-flag.ts; the stamp is ../../../wound-volume-stamp.ts and the boxes…
 - `webgpu/march/fields/wounds.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): wound field, mask and shadow.
 - `webgpu/march/helpers.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): the HELPERS include list.
 - `webgpu/march/layout.ts` — Data-texture row layout, group capacity, culling slack and the CPU face damage mirror — split out of march.wgsl.ts (phase 1, move-only).
@@ -134,6 +135,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/shade-helpers.wgsl.ts` — Small shading helpers — texel fetch, soft shoulder, flicker and the level-only shadow lookup — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/tile-ref-flag.ts` — COMPILE-TIME switch for the TILE REFERENCE LIST (2026-11-09; docs/dev-notes/2026-11-09-sdf-perf-research/ONE-CALL.md).
 - `webgpu/march/wound-fold-flag.ts` — COMPILE-TIME switch for the OWNER RE-FOLD (2026-11-11; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, stage 1; measured in…
+- `webgpu/march/wound-volume-flag.ts` — COMPILE-TIME switch for THE BAKED WOUND VOLUME (2026-11-11; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").
 
 ## webgpu/earlyz/
 
@@ -608,6 +610,7 @@ Per-actor GPU records, crowd atlas, character views, wounds on screen.
 - `webgpu/player-vitals.ts` — PLAYER HEALTH. Pure numbers so the rules are testable without a renderer. Two damage kinds, because they arrive differently: a zombie swing reports…
 - `webgpu/visual-actor-set.ts` — Pure selector for which actors need per-actor visual upkeep this tick, using a view-cone and distance test biased toward keeping bodies.
 - `webgpu/wound-threat.ts` — CPU THREAT MASKS for the owner re-fold (2026-09-21, wound-cost investigation; docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md).
+- `webgpu/wound-volume-store.ts` — THE BAKED WOUND VOLUME, host half (`?woundvol`, march/wound-volume-flag.ts): the one 3D texture every wounded primitive's box lives in, the boxes a…
 - `webgpu/zombie-gpu.ts` — The WebGPU view of the body: packs primitives into a float data texture and drives the WGSL march.
 
 ## Deferred renderer (paused)
@@ -924,3 +927,4 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
 - `slump-death.ts` — THE FORWARD SLUMP (owner playtest 2026-11-03: "it's not possible for the zombie to die like his knees bend and he falls over, back bent, rear in the…
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…
+- `wound-volume-stamp.ts` — THE BAKED WOUND VOLUME, pure half (`?woundvol`; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").
