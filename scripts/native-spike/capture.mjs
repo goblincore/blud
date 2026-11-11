@@ -32,7 +32,9 @@ const CDP = Number(process.argv[3] ?? 9291);
 const OUT = process.argv[4] ?? '.scratch/native-spike/capture';
 const SCENE = process.env.SPIKE_SCENE ?? 'closeup';
 const PASSES = process.env.SPIKE_PASSES ?? '^sdf:march$';
-const QUERY = process.env.SPIKE_QUERY ?? '';
+// The replayers replay the FRAGMENT march. With the compute march on (the default) the `sdf:march` pass is a copy of
+// a texture a compute pass filled, which is not what any of them measures: off, unless the query names it.
+const QUERY = ((q) => (/(^|&)marchcompute(=|&|$)/.test(q) ? q : [q, 'marchcompute=0'].filter(Boolean).join('&')))(process.env.SPIKE_QUERY ?? '');
 const PRELUDE = process.env.SPIKE_PRELUDE ?? '';
 const CROWD = Number(process.env.SPIKE_CROWD ?? 12);
 const W = Number(process.env.GAME_W ?? 1280);

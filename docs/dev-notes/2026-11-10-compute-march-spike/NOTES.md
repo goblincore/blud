@@ -286,3 +286,23 @@ them locally and are not committed (`*.log` is ignored):
 | `sweep-small-workgroups-mob-ship.txt` | The one repeat that holds 2 × 2 and 1 × 1, stopped by hand |
 
 `prelude-closeup.js` and `prelude-mob.js` beside this note stage the close-up and the mob.
+
+## On by default (2026-11-10)
+
+The owner's call after a playtest on `doom-map28`: a close mob that read about 70 ms a frame read 50 to 60 with
+`&marchcompute`, and "in general things feel a lot smoother". `MARCH_COMPUTE` is now true unless the page has
+`?marchcompute=0` (`march/compute-flag.ts`); off is the fragment march and its shader text, byte for byte.
+
+Checked on the default page (no parameter), headless, the clean 22-body mob, whole frames, a quieter machine
+(`results/ingame-default-on-mob.json`, 4 rounds of 30 frames): the compute march dispatches, and the frame is
+37.5 ms with it switched off at run time against 29.5 ms on, −7.8 ms (−12.5 to −7.5), −21 %. The off-against-off
+control read +1.5 ms (−4.7 to +3.9).
+
+What changes for other tools: the replay harness measures the FRAGMENT march, so `native-spike/capture.mjs` adds
+`marchcompute=0` to its page unless the query names the flag. Anything else that reads the `sdf:march` pass or
+hashes the march target (`march-hash.mjs`, `lean-walk-parity.mjs`) now sees the compute march's picture, which
+differs from the fragment one by float order (145 texels of 120,000 over 1e-4 on a pinned mob, no hit or miss change).
+
+Still owed: the compute program compiles on the first frame that draws bodies, on the main thread, not in the
+background warm-up (how long that is on a cold cache was not measured); a look in motion under a gate; the paths
+it does not cover (per-body views, chunks, first-person hands, box dispatch, the per-body gate, `graphics=high`).
