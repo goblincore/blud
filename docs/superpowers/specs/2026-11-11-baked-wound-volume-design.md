@@ -127,6 +127,70 @@ The compute march takes the same helper text; it is checked in the same playtest
 - **Owner playtest.** The stage is dropped if the gain in game is under about 8 ms on that mob, or if the
   owner sees seams or swimming craters at joints.
 
+## Revision, 2026-11-11: the goal is more wounds
+
+Stage 1 shipped and left the volume about 4 ms to win, so the owner stopped. The owner then gave a different
+reason to build it: the ring of 32 wounds a body (`MAX_WOUNDS`) is too few. It shows on the spider brain (a big
+fleshy mass), on soldiers and the chaingunner, and with the shotgun, where every pellet is a wound; a blast
+stamps 16 (`BLAST_WOUNDS_PER_BODY`), so two blasts fill the ring. A volume has no count. This section replaces
+what it contradicts above.
+
+**The goal now:** a body's wound shape is not capped. Frame time must not be worse than today's on the wounded
+mob; a gain is welcome and not required.
+
+### A hit is stamped, not rebaked
+
+Wounds are only ever appended, and appending wound `k` to a voxel is an update from its old values:
+
+| Channel | Update |
+| --- | --- |
+| r (chain with bumps) | `smax(r, carve_k) - bump_k` |
+| a (chain without bumps) | `smax(a, carve_k)` |
+| g (sum of bumps) | `g + bump_k` |
+| b (largest amplitude) | `max(b, amp_k)` |
+
+So the stamp touches the voxels in the new wound's box only and needs nothing of the body's history. The
+order-dependence found in the spike matters only for removing or reordering a wound, which the volume never
+does: a wound evicted from the ring stays in the volume. The one in-place replacement today is a head region's
+crater; the head stays on the list (below). A burn's first second is the other exception: its depth grows, and
+a carve only deepens, so it is re-stamped each frame for that second with `smax`, its bump added once at the end.
+
+### Stage 2a: the look (`?woundvol`), humanoids only
+
+A plain box a body (the layout of "Memory" above, pool of 24, 8 bits a value), stamping on hit, the read in
+`applyWounds`. The ring stays at 32 and keeps feeding the hit's shading (normal, masks, colour, holes, decals),
+the head, cuts, and bodies with no slot. Bodies with a slot stop walking the list for shape.
+
+**8 bits a value from the start** (owner's call, 2026-11-11: "8 bit should be acceptable"). The values span
+about 12 cm either way, so a step is about 1 mm and a humanoid's box is about 0.6 MB. Two things to watch, since
+the spike was 16-bit: a stamp reads rounded values and writes rounded values, so many overlapping stamps can
+drift by a step each; and the bump sum is clamped to the range.
+
+This stage answers what only play can:
+
+- seams and swimming craters at joints;
+- softer crater edges at 2 cm;
+- **what a crater older than the ring looks like.** Its shape is in the volume; its wound colouring is gone
+  with its row. If that reads wrong, a fifth value (a wound mask, and the wound's type) goes in a second
+  texture, and the shading reads it where no row claims the hit.
+
+**Owner playtest**, on a soldier and a chaingunner shot well past 32 pellets. Dropped if the joints or the old
+craters read wrong and the fifth value does not fix it, or if the wounded mob's march is slower than today's.
+
+### Stage 2b: bounded memory, and the big bodies
+
+Only if 2a passes. A dense box is about 1.2 MB for a humanoid and about 20 MB for a 3 m body, nearly all of it
+voxels no wound touches.
+
+- **Bricks.** A body has a coarse pointer grid over its rest-pose box; bricks of 16 x 16 x 16 voxels (32 cm at
+  2 cm) come from one shared 3D texture when a stamp first touches them. One more texture read a field call.
+- **A fixed budget.** The shared texture does not grow (about 32 MB to start). When it is full the bricks of the
+  farthest wounded body are reused and that body goes back to the ring's list.
+- **Voxel size by body.** 3 to 4 cm on the spider brain, whose craters are larger.
+
+Stage 2b is measured as stage 2 was, plus the budget under a long fight: how many bodies hold bricks, and
+whether a body falling back to the list is seen.
+
 ## Risks
 
 1. **Joints.** `restPoint` follows the dominant primitive, and the dominant primitive flips at a joint. A
@@ -141,5 +205,5 @@ The compute march takes the same helper text; it is checked in the same playtest
 
 ## Not in this design
 
-A stamp per hit on the GPU, per-limb-cluster volumes, cut wounds and the head split in the volume, a
+A stamp per hit on the GPU (the stamp is on the CPU first), per-limb-cluster volumes, cut wounds and the head split in the volume, a
 smaller texel format, volumes for corpses beyond the pool. Each waits on stage 2's playtest.
