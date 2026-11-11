@@ -515,6 +515,13 @@ export function worldHitToWound(
  * pipeline rotated the rest pose by this frame — so the wound's stored
  * offset rotates out of the stamp frame and into the live one.
  */
+/** The orthonormal frame a wound's `local` is expressed in, in world space: `local` = (u, v, w) offsets from
+ *  `prim.a`. `axis0` is the wound's stamp-time axis (Wound.axis0); the baked wound volume gives its own
+ *  (webgpu/wound-volume-store.ts), so every crater in one box rides one frame. */
+export function woundFrame(prim: Primitive, bodyYaw = 0, axis0?: Vec3): { u: Vec3; v: Vec3; w: Vec3 } {
+  return frame(prim, bodyYaw, axis0);
+}
+
 export function woundWorldPos(prims: Primitive[], wound: Wound, bodyYaw = 0): Vec3 {
   const prim = prims[wound.primIdx]!;
   const { u, v, w } = frame(prim, bodyYaw, wound.axis0);

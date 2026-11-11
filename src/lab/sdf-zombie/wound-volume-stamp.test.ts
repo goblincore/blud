@@ -41,7 +41,7 @@ describe('the baked wound volume (pure)', () => {
     const [nx, ny, nz] = v.dims;
     for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (const x of [0, nx - 1]) {
       const o = ((z * ny + y) * nx + x) * 4;
-      expect(v.shape[o] | v.shape[o + 1] | v.shape[o + 2] | v.shape[o + 3] | v.colour[o]).toBe(0);
+      expect(v.shape[o]! | v.shape[o + 1]! | v.shape[o + 2]! | v.shape[o + 3]! | v.colour[o]!).toBe(0);
     }
     expect(sampleVolume(v, [1, 0, 0])).toBeNull();
   });

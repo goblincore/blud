@@ -137,7 +137,7 @@ export function sampleVolume(v: PrimVolume, local: Vec3, which: 'shape' | 'colou
   for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
     const w = (dx ? f[0]! : 1 - f[0]!) * (dy ? f[1]! : 1 - f[1]!) * (dz ? f[2]! : 1 - f[2]!);
     const o = (((i0[2]! + dz) * v.dims[1] + i0[1]! + dy) * v.dims[0] + i0[0]! + dx) * 4;
-    for (let c = 0; c < 4; c++) out[c] += w * src[o + c]!;
+    for (let c = 0; c < 4; c++) out[c] = out[c]! + w * src[o + c]!;
   }
   if (which === 'colour') return [out[0] / 255, out[1] / 255, out[2] / 255, out[3] / 255];
   return [chainOf(out[0]), bumpOf(out[1]), bumpOf(out[2]), chainOf(out[3])];
