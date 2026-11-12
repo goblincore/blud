@@ -54,7 +54,9 @@ describe('bounded torso game preview', () => {
   it('keeps gameplay history while uploading only two cutters after saturation', () => {
     const { actor, wound, upload } = fixture(true);
     actor.stampBlast(Array.from({ length: MAX_WOUNDS + 4 }, () => ({ ...wound })));
-    expect(actor.wounds()).toHaveLength(MAX_WOUNDS);
+    // The crater grid (wound-grid-flag.ts, on by default since 2026-11-12) keeps every wound on the list, up to
+    // WG_MAX_WOUNDS: nothing merges at MAX_WOUNDS.
+    expect(actor.wounds()).toHaveLength(MAX_WOUNDS + 4);
     actor.advanceWoundPreview(.4);
     expect(upload().types).toEqual([-1, -1]);
     expect(upload().radii).toEqual([.12, .07]);

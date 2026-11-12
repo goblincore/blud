@@ -125,7 +125,7 @@ describe('who reads the body where', () => {
     expect(MARCH_BODY_LIGHT).toContain('(prev.xyz - pS) * 40.0');
   });
   it('the lighting, the normal\'s taps and the probes stay at the world point', () => {
-    for (const world of ['calcNormal(p,', 'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,', 'mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)',
+    for (const world of ['calcNormal(p,', 'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,', 'let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);',
       'let toLamp = spotPos - p;', 'bodyLights(p, n, -rd,'])
       expect(MARCH_BODY, world).toContain(world);
     // pS is read by what is anchored to the body only: the two motion readers, and the wet film's head-side gate
@@ -150,8 +150,10 @@ describe('finite-difference normals inside an open region', () => {
     const gate = SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && !splitIn) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }')).toBeLessThan(gate);
     // (The cheaper fallback, normal-loose-flag.ts, never stands in here: it needs ngBody to have run.)
-    // `&& !wvHit`: a baked crater's pixels keep the full normal too (wound-volume-flag.ts, on by default).
-    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound && !wvHit) {');
+    // Near a wound the taps are kept only for a shape the analytic normal does not support (reason 1: a cut, a torn
+    // wound): `?ngwound=8` is the default (normal-wound-flag.ts). No `&& !wvHit`: the baked volume is off under the
+    // crater grid.
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && (!hitNearWound || ngReason != 1)) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if ((!ngValid && !ngLoose) || debugNormal12) {')).toBeGreaterThan(gate);
     expect(noComments(SHADING_NORMAL_BLOCK).match(/ngBody\(/g)).toHaveLength(1);
     expect(SHADING_NORMAL_BLOCK.indexOf('ngBody(')).toBeGreaterThan(gate);

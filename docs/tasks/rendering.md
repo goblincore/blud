@@ -112,7 +112,7 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     Each ends at an owner playtest.
     Stage 1 shipped: the owner re-fold is off by default since 2026-11-11 (owner played it; `?woundfold=1` restores it), 10.8 ms off the wounded mob's 59.3 ms march pass (replayed capture).
     Stage 2 is back on for a different reason (owner, 2026-11-11): 32 wounds a body is too few. The rest-pose layout tears at primitive boundaries (measured), so it is built per wounded primitive: the baked wound volume (**on by default since 2026-11-11, owner's call after playing E1M1 and MAP28**; `?woundvol=0` restores the old text and the merge; it costs about 5.5 ms a frame on a mob with six overflowing bodies) stamps the crater that overflows the list into a box on its primitive. Runs in the arena; not timed, not played.
-  - **The crater grid and two after-hit shortcuts, 2026-11-11/12, behind flags; owner played them on MAP28's closet mob
+  - **The crater grid and two after-hit shortcuts, 2026-11-11/12, the default since 2026-11-12; owner played them on MAP28's closet mob
     2026-11-12: "significant improvement ... not a steady 30 but much smoother overall, worth the changes".**
     ([spec](../superpowers/specs/2026-11-11-wound-crater-grid-design.md),
     [notes](../dev-notes/2026-11-11-frame-breakdown/NOTES.md); PR 122 draft, stacked on 121.)
@@ -124,7 +124,10 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     fine, from stills).
     `?afterhit`: nine stops for timing the shading after the hit by stage (heavy mob: walk 19 ms, analytic normal 4,
     four taps 9, probes 7, all else under 2).
-    None is a default yet. Open: the owner saw wounds vanish once on a soldier under `?woundgrid` (not reproduced); a
+    **All three are the default since 2026-11-12 (owner's call), with `?ngwound=8`** (as `=2`, and the analytic
+    normal follows a soldier's ragged craters). `?woundgrid=0&ngwound=0&probelean=0` is the old text to the byte;
+    the baked volume runs only with `?woundgrid=0`. Whole frame on the heavy mob: 61 to 78 ms before, 49 to 53 after
+    (one noisy run). Open: the owner saw wounds vanish once on a soldier under `?woundgrid` (not reproduced); a
     faint body-part outline inside list wounds that baked wounds lack (not investigated); the twinhead's authored
     scars read as red marks (owner: ignore for now); the analytic normal itself (4 to 6 ms) not looked into; no GPU
     gate re-taken.

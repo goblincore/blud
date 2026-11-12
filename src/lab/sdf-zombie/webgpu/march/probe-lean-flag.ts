@@ -12,19 +12,20 @@
 //
 // Only where the pixel is on the tile path (mapLean walks the tile's list); elsewhere the probes are mapBody's.
 //
-//   (no parameter), ?probelean=0   off: the shader text of before the switch, byte for byte
-//   ?probelean, ?probelean=1       on
+// ON BY DEFAULT since 2026-11-12 (owner's call, with the crater grid and ?ngwound=8, after MAP28's closet mob).
+//   (no parameter), ?probelean, ?probelean=1   on
+//   ?probelean=0                               off: the shader text of before the switch, byte for byte
 import { LEAN_WALK } from './lean-walk-flag';
 
 export function probeLeanOn(search: string): boolean {
   const v = new URLSearchParams(search).get('probelean');
-  return v !== null && v !== '0';
+  return v !== '0';
 }
 
 export const PROBE_LEAN: boolean = LEAN_WALK && (() => {
   try {
     return probeLeanOn((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return false;
+    return true;
   }
 })();

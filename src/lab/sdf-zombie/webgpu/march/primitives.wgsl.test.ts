@@ -5,6 +5,7 @@
 // what CAN be checked from text. See march/helpers.test.ts for the parse
 // contract and docs/dev-notes/2026-09-18-march-split/ for the split.
 
+import { WG_ROWS } from '../../wound-grid';
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS,
@@ -410,7 +411,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // added ROW_WOUND_FLAGS (2026-09-02). The shell cloth spike added
     // ROW_PRIM_WARP and hairlock ROW_PRIM_STRAND (both 2026-09-05 — they
     // collided on index 20 across two branches; see ROW_PRIM_STRAND's doc).
-    expect(DATA_ROWS).toBe(26); // 22 -> 25: ROW_PREV_A/B/QUAT (motion vectors, 2026-09-22); 25 -> 26: ROW_WOUND_CUT (cut wounds, 2026-10-03)
+    expect(DATA_ROWS).toBe(26 + WG_ROWS); // + the crater grid's rows (wound-grid-flag.ts, on by default). 22 -> 25: ROW_PREV_A/B/QUAT (motion vectors, 2026-09-22); 25 -> 26: ROW_WOUND_CUT (cut wounds, 2026-10-03)
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

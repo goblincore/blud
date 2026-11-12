@@ -40,14 +40,30 @@ describe('march.wgsl split golden', () => {
   // Re-recorded again 2026-11-11 on the owner's call: the baked wound volume (wound-volume-flag.ts) is on by default,
   // so applyWounds, MAP_BODY, the wound masks, the shading normal and what is built from them moved (the next test
   // holds the text without it to the snapshot this one had before). The older flags' tests below take `woundvol=0`.
+  // Re-recorded again 2026-11-12 on the owner's call, after MAP28's closet mob: the crater grid (wound-grid-flag.ts),
+  // the analytic normal on wounded pixels at `=8` (normal-wound-flag.ts) and the probes on the lean field
+  // (probe-lean-flag.ts) are on by default. The grid adds rows to a body's band (DATA_ROWS) and turns the baked
+  // wound volume off, so nearly every block that reads a wound moved (the next test holds the text without the
+  // three to the snapshot this one had before). The older flags' tests below take `woundgrid=0&ngwound=0&probelean=0`.
   it('keeps every string export byte-identical', () => {
     expect(digest(M)).toMatchSnapshot();
+  });
+  // THE MARCH WITHOUT THE CRATER GRID, THE ANALYTIC WOUND NORMAL OR THE LEAN PROBES (`?woundgrid=0&ngwound=0&probelean=0`):
+  // the snapshot the test above held until the three went on by default, value for value.
+  it('keeps the ?woundgrid=0&ngwound=0&probelean=0 text byte-identical', async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?woundgrid=0&ngwound=0&probelean=0' });
+    expect((await import('./wound-grid-flag')).WOUND_GRID).toBe(false);
+    expect((await import('./wound-volume-flag')).WOUND_VOL).toBe(true);
+    expect((await import('./normal-wound-flag')).NG_WOUND_ANALYTIC).toBe(false);
+    expect((await import('./probe-lean-flag')).PROBE_LEAN).toBe(false);
+    expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
   });
   // THE MARCH WITHOUT THE BAKED WOUND VOLUME (`?woundvol=0`): the snapshot the test above held until the volume went
   // on by default, value for value.
   it('keeps the ?woundvol=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?woundvol=0' });
+    vi.stubGlobal('location', { search: '?woundvol=0&woundgrid=0&ngwound=0&probelean=0' });
     expect((await import('./wound-volume-flag')).WOUND_VOL).toBe(false);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
   });
@@ -55,7 +71,7 @@ describe('march.wgsl split golden', () => {
   // by default, value for value.
   it('keeps the ?woundfold=1 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?woundfold=1&woundvol=0' });
+    vi.stubGlobal('location', { search: '?woundfold=1&woundvol=0&woundgrid=0&ngwound=0&probelean=0' });
     expect((await import('./wound-fold-flag')).WOUND_FOLD).toBe(true);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
   });
@@ -63,7 +79,7 @@ describe('march.wgsl split golden', () => {
   // went on by default, value for value.
   it('keeps the ?ngloose=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?ngloose=0&woundfold=1&woundvol=0' });
+    vi.stubGlobal('location', { search: '?ngloose=0&woundfold=1&woundvol=0&woundgrid=0&ngwound=0&probelean=0' });
     expect((await import('./normal-loose-flag')).NORMAL_LOOSE).toBe(false);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
   });
@@ -71,7 +87,7 @@ describe('march.wgsl split golden', () => {
   // value for value. The flag's off side must stay the old text to the byte.
   it('keeps the ?tileref=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?tileref=0&ngloose=0&woundfold=1&woundvol=0' });
+    vi.stubGlobal('location', { search: '?tileref=0&ngloose=0&woundfold=1&woundvol=0&woundgrid=0&ngwound=0&probelean=0' });
     const flag = await import('./tile-ref-flag');
     expect(flag.TILE_REF).toBe(false);
     expect(digest(await import('../march.wgsl'))).toMatchSnapshot();
@@ -80,7 +96,7 @@ describe('march.wgsl split golden', () => {
   // held until 2026-11-09, value for value. With both flags off the text must stay the old text to the byte.
   it('keeps the ?leanwalk=0&tileref=0 text byte-identical', async () => {
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?leanwalk=0&tileref=0&ngloose=0&woundfold=1&woundvol=0' });
+    vi.stubGlobal('location', { search: '?leanwalk=0&tileref=0&ngloose=0&woundfold=1&woundvol=0&woundgrid=0&ngwound=0&probelean=0' });
     const flag = await import('./lean-walk-flag');
     expect(flag.LEAN_WALK).toBe(false);
     expect((await import('./tile-ref-flag')).TILE_REF).toBe(false);

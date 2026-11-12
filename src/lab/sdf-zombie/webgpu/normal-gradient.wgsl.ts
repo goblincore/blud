@@ -701,13 +701,13 @@ fn ngWoundRagged(dIn: vec4<f32>, base: vec4<f32>, v: vec3<f32>, depth: f32, cap:
   let h = 0.05;
   let gq = vec3<f32>(noise3(q + vec3<f32>(h, 0.0, 0.0)) - n0, noise3(q + vec3<f32>(0.0, h, 0.0)) - n0, noise3(q + vec3<f32>(0.0, 0.0, h)) - n0) / h;
   let gv = vec3<f32>(cy * gq.x + sy * gq.z, gq.y, cy * gq.z - sy * gq.x);
-  let gLobe = (gv - radial * dot(gv, radial)) * (0.9 / r);
+  let lobeGrad = (gv - radial * dot(gv, radial)) * (0.9 / r);
   let s = 1.0 + ragged * (n0 * 0.5 + 0.5);
   let rN = r / s;
-  let gRN = radial / s - gLobe * (r * ragged / (s * s));
+  let rnGrad = radial / s - lobeGrad * (r * ragged / (s * s));
   let sphere = (depth - rN) * 0.75;
   let slab = cap.w - dot(v, cap.xyz);
-  let cutter = vec4<f32>(min(sphere, slab), select(-cap.xyz, -0.75 * gRN, sphere < slab));
+  let cutter = vec4<f32>(min(sphere, slab), select(-cap.xyz, -0.75 * rnGrad, sphere < slab));
   var d = ngSmax(dIn, cutter, blend);
   let amp = rim.z;
   if (amp <= 0.0) { return d; }
@@ -715,7 +715,7 @@ fn ngWoundRagged(dIn: vec4<f32>, base: vec4<f32>, v: vec3<f32>, depth: f32, cap:
   let bump = exp(-x * x) * amp;
   let m = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, base.x);
   let u = clamp((base.x + 0.3 * amp) / amp, 0.0, 1.0);
-  let gradBump = bump * (-2.0 * x / rim.y) * gRN;
+  let gradBump = bump * (-2.0 * x / rim.y) * rnGrad;
   let gradGate = -(6.0 * u * (1.0 - u) / amp) * base.yzw;
   return vec4<f32>(d.x - bump * m, d.yzw - m * gradBump - bump * gradGate);
 }
