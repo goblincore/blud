@@ -48,6 +48,8 @@ await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLight
 await evaluate(PRELUDE);
 await evaluate('(async () => { __sdfGame.step(12); await __sdfGame.resolveGpu(); await __sdfGame.passTimings(); return 1; })()', 600_000);
 
+// What the march is drawing into: the upscaler's state and the canvas, so two legs can be told apart by size.
+console.log('state', await evaluate('JSON.stringify({ upscale: __sdfGame.upscaleInfo(), canvas: [document.querySelector("canvas").width, document.querySelector("canvas").height], dpr: devicePixelRatio })').catch((e) => String(e)));
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : 0; };
 const family = (l) => l.startsWith('sdf:upscale') ? 'sdf:upscale (all)' : l;
 const report = [];

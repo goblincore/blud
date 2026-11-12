@@ -61,3 +61,25 @@ two rounds, the ship pin skipped on both (`WV_NO_SHIP=1`: the pin refuses a boot
 - **The look, frozen (its best case):** softer, with stair-stepped edges and a bright fringe on silhouettes
   (`checker-quarter-res.png` against `shipped-half-res.png`, local only).
 - As it stands it is not a lever. A fair test would need it on the compute march.
+
+## The march at 0.375 of the canvas, plainly enlarged (owner's question, same day)
+
+`prelude-mob-heavy-tryscale.js` (`?tryscale=<s>`). Any scale but 0.5 switches the neural upscaler off (it is built
+for exactly 2x), and with it off the page falls back to its interlaced FIELD style, which marches half the rows a
+frame: a first run read 46 to 16 ms and was measuring that. The prelude now forces fields off.
+
+| Leg | Frame | Against shipped |
+| --- | --- | --- |
+| shipped (0.5, upscaler) | 90.64 ms | |
+| shipped again (control) | 102.80 ms | +12.16 (−1.10 to +25.42) |
+| 0.375, fields off, plain enlargement | 60.54 ms | −30.10 (−36.01 to −24.19), −33 % |
+
+- **The machine was loaded** (shipped reads 46 ms when it is quiet): take the ratio, about a third of the frame,
+  not the milliseconds. By pixel count the march would lose 44 %.
+- **The look** (`scale-0.375-plain.png`, local only): blocky, with a bright fringe on silhouettes. This is the
+  floor: any upscaler would start from here.
+- Fields on at 0.5 with the upscaler off: about 60 % off the frame (same loaded run). Owner, 2026-11-11: fields at
+  the march's resolution are too distracting; interlacing only looks fine at the output's line spacing, where it
+  saves nothing. Not a lever.
+- Not built: an upscaler for any ratio (the fitted-filter or FSR-style kind, guided by the march's depth and
+  normals), or a temporal one (the previous-pose rows exist; it would smear on gore).
