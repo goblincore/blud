@@ -52,3 +52,14 @@ __sdfGame.step(4);
   __sdfGame.step(6);
   console.log('tryscale', s, JSON.stringify(__sdfGame.upscaleInfo()));
 })();
+// ?tryao=0 and ?tryscatter=0: the AO probe (lodCfg.x) and the scatter probe (surfCfg.w) off on every body, to size
+// them. Each is one whole field call a hit pixel.
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('tryao') === '0') __sdfGame.setUniformAll('lodCfg', 0, 0);
+  if (q.get('tryscatter') === '0') __sdfGame.setUniformAll('surfCfg', 3, 0);
+  // ?tryng=0: the analytic normal off on every body (every hit pixel takes the four taps).
+  if (q.get('tryng') === '0') __sdfGame.setUniformAll('normalGradientCfg', 0, 0);
+  __sdfGame.step(4);
+})();
+

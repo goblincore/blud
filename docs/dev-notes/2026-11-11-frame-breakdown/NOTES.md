@@ -83,3 +83,29 @@ frame: a first run read 46 to 16 ms and was measuring that. The prelude now forc
   saves nothing. Not a lever.
 - Not built: an upscaler for any ratio (the fitted-filter or FSR-style kind, guided by the march's depth and
   normals), or a temporal one (the previous-pose rows exist; it would smear on gore).
+
+## The shading after the hit, taken apart (2026-11-12)
+
+The march pass alone (`compute:sdf-march` from `frame-breakdown.mjs`), heavy mob, `?woundgrid` on every leg, a fresh
+page a leg, a baseline between legs because the machine drifts (the wall-clock comparisons of the same variants
+ran on a loaded machine and are not usable).
+
+| Variant | March | Baselines either side |
+| --- | --- | --- |
+| `?ngwound`: the analytic normal near owned wounds, on the exact reach | 38.4 ms | 38.1, 38.4 |
+| `?ngwound=2`: no four-tap normal near wounds at all (sizing) | 41.3 | 38.4, 41.9 |
+| the analytic normal off everywhere (`normalGradientCfg.x = 0`) | 41.1 | 41.9, 42.0 |
+| AO and scatter probes both off (`lodCfg.x`, `surfCfg.w` = 0) | 34.8 | 42.0, 42.0 |
+| `?probelean`: both probes on `mapLean` | 34.7, 34.6 | 39.7, 37.6, 37.4 |
+
+- **The normal is not a lever.** `?ngwound` saves nothing; neither does taking the taps away near wounds, nor
+  switching the analytic normal off. Whether the analytic path still gives up on most wounded pixels was not
+  counted. `?ngwound` stays as an off-by-default switch; not pursued.
+- **The two probes are about 7 ms** of the heavy mob's march: each is one whole field call a hit pixel.
+- **`?probelean` takes about 3 ms off** (34.6 against 37.4 to 37.6; 47 against 50 ms on the wall). The probes read
+  the bodies without their wounds, so inside a crater they see the flesh that was there: the floor reads fully
+  occluded. Close up the cavity is darker and deeper red, the organs less glossy-bright
+  (`probelean-close-{off,on}.png`); on the mob the difference is slight (`probelean-mob-{off,on}.png`). Local only.
+  Owner to judge.
+- **Not found:** the shading after the hit is about 21 ms and the probes are 7 of it. The rest is not the normal.
+  What is left: `ngBody` itself, the wound colour and tissue loops, the light list, the materials. Not split.

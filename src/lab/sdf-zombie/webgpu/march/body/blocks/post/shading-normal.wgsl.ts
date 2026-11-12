@@ -14,6 +14,7 @@ import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
+import { NG_WOUND_ANALYTIC, NG_WOUND_NO_TAPS } from '../../../normal-wound-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
 const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
@@ -65,7 +66,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   if (normalGradientCfg.x > 0.5 && ${SPLIT_IN}) { ngReason = ${NG_REASON_SPLIT}; }
   if (normalGradientCfg.x > 0.5 && !${SPLIT_IN}) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
-    gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);
+    gNgOwnedOk = select(0.0, 1.0, ${NG_WOUND_ANALYTIC ? '' : 'gInstCounts2.z % 128.0 > 63.5 && '}hitRefold == 0.0);
     let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
@@ -91,7 +92,7 @@ ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differ
   // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
   // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
   // crater's shape, which ngBody's gradient does not.
-  if (!ngValid && ngRan && !hitNearWound${WOUND_VOL ? ' && !wvHit' : ''}) {
+  if (!ngValid && ngRan${NG_WOUND_NO_TAPS ? '' : ' && !hitNearWound'}${WOUND_VOL ? ' && !wvHit' : ''}) {
     let ngLoose2 = dot(ngLooseG, ngLooseG);
     if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
   }
