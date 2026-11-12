@@ -14,7 +14,7 @@ import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
-import { NG_WOUND_ANALYTIC, NG_WOUND_TAP_RULE } from '../../../normal-wound-flag';
+import { NG_WOUND_ANALYTIC, NG_WOUND_DIFF, NG_WOUND_RIM, NG_WOUND_TAP_RULE } from '../../../normal-wound-flag';
 import { afterHitStop } from '../../../after-hit-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
@@ -68,7 +68,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   if (normalGradientCfg.x > 0.5 && !${SPLIT_IN}) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
     gNgOwnedOk = select(0.0, 1.0, ${NG_WOUND_ANALYTIC ? '' : 'gInstCounts2.z % 128.0 > 63.5 && '}hitRefold == 0.0);
-    let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));
+    let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));${NG_WOUND_RIM ? '\n    gNgRim = 0.0;' : ''}
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
     ngScalar = ng.x;${NORMAL_LOOSE ? '\n    ngRan = true;\n    ngLooseG = ng.yzw;\n    if ((gNgDebugMask & 8u) == 0u) { ngLooseG = ngLooseG + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }' : ''}
@@ -108,7 +108,13 @@ ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differ
   }
   if (!ngValid) {
     n = nFD;
-  }${SKIN_NORMAL}
+  }${NG_WOUND_DIFF ? `
+  // THE ERROR PICTURE (normal-wound-flag.ts, ?ngwound=7).
+  if (ngLoose || ngValid) {
+    let tapN = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(max(gloss, metal), cloth)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    return vec4<f32>(clamp((1.0 - dot(n, tapN)) * 8.0, 0.0, 1.0), select(0.0, 0.35, hitNearWound), 0.0, t);
+  }
+  if (t > -1e30) { return vec4<f32>(0.0, 0.0, 0.25, t); }` : ''}${SKIN_NORMAL}
   // CLOTH FOLDS (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): hanging pleats in the SHADING only, so the
   // march pays nothing — the field's own warp= folds are a centimetre and vanish at game range. Nine folds round the
   // hit shell's own axis, deepening toward its open end (s 0 at a, 1 at b), wandering a little, with a wave that runs

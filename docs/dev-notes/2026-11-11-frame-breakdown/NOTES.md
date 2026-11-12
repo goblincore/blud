@@ -184,3 +184,32 @@ kink), not from the taps. Not tried.
 - **How to time a part of the shader** (what this pass got wrong first): stops inside the shader switched by debug
   mode on one page, several rounds (`?afterhit`, `FB_MODES`), not one fresh page a variant. One leg a variant on a
   drifting machine read the taps as free when they are 9 ms.
+
+## A sharper `?ngwound=2`: where the softness was (2026-11-12, later)
+
+Owner: `?ngwound=2` is fine but a little soft. The plan was a sharper analytic normal at crater edges. That was the
+wrong place to look. What the stills say, taken with the VHS pass off (`?novhs=1` in the two close preludes: with it
+on, two stills of the SAME build differ by 3.8 grey levels a pixel on average, more than any variant differs from the
+default; with it off, by 0.005):
+
+| Close-up, mean difference from the default | zombie, 70 pellets | soldier, 24 pellets |
+| --- | --- | --- |
+| `?ngwound=2` | 0.91 | 2.10 |
+| `?ngwound=5` (ngBody goes on through wounds and bones after a numerical give-up) | 0.91, the same picture | as `=2` |
+| `?ngwound=8` (`=5`, and ngWounds differentiates a ragged crater) | 0.91 | 0.46 |
+
+- **The softness is the soldier's.** A soldier's craters have a noise-ragged outline (applyWounds' `rN`), which
+  `ngWounds` never differentiated. By default that did not matter: its wounds are owned, so every pixel near one took
+  the taps. With `?ngwound` an owned wound is analytic, so the soldier's wounds shaded as smooth round bowls: flat red
+  rings on bright skin (`ngwound-soldier-default-2-8-error.png`: default, `=2`, `=8`, the error picture).
+- **`?ngwound=8` gives the relief back**: `ngWoundRagged` is `ngWound` on `rN = r / (1 + A * lobe)` with the 0.75
+  carve scale; the lobe noise's slope is three more noise reads a ragged wound in reach.
+- **On the zombie nothing was wrong with the kept gradient.** The error picture (`?ngwound=7` / `=9`: red = how far
+  the kept analytic normal is from the taps') shows faint lines along crater ridges and nothing else
+  (`ngwound-zombie-default-2-8-error.png`). The 0.91 that remains is those ridges and a few highlights.
+- **Tried and dropped:** `=5` alone (no change in either picture); `=6`, the taps on a crater's raised rim only (the
+  rims of 70 wounds are most of the torso: the taps cost what they cost by default, 8 to 10 ms).
+- **Cost** (heavy zombie mob, alternated, a noisy machine): `=8` reads as `=2` (march 40 to 43 ms against the
+  default's 47 to 55 in the same run; the taps about 0 in both). The ragged path's own cost is NOT measured: that
+  mob has no ragged wounds. A mob of wounded soldiers would show it.
+- Not seen in motion. Not looked at: cloth holes (ragged too), cuts and torn wounds (they still take the taps).
