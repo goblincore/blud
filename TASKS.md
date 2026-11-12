@@ -76,6 +76,8 @@
   same picture to the bit; the march pass −15 % on a clean close-up and a 12-zombie crowd, +1.9 % on a wounded
   close-up, 3 s more cold compile. `?leanwalk=0` turns it off. The march golden snapshot was re-recorded; the
   `march-hash` pins are stale on Chrome 157 (not re-pinned). Next: the same choice per sample on wounded bodies.
+- [~] **Wounded mobs: the crater grid and two shading shortcuts, behind flags (2026-11-12; PR 122 draft on 121).** `?woundgrid` (128 exact wounds a body), `?ngwound=2` (no four-tap normal near wounds), `?probelean` (cheaper AO and scatter probes): the heavy mob's march about 38 to 30 ms with the first two. Owner played MAP28's closet mob with all three: much smoother, not a steady 30, worth the changes. Not defaults yet; open items in [rendering](docs/tasks/rendering.md).
+
 - [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
   frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
   `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's

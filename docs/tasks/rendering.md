@@ -112,6 +112,22 @@ Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed 
     Each ends at an owner playtest.
     Stage 1 shipped: the owner re-fold is off by default since 2026-11-11 (owner played it; `?woundfold=1` restores it), 10.8 ms off the wounded mob's 59.3 ms march pass (replayed capture).
     Stage 2 is back on for a different reason (owner, 2026-11-11): 32 wounds a body is too few. The rest-pose layout tears at primitive boundaries (measured), so it is built per wounded primitive: the baked wound volume (**on by default since 2026-11-11, owner's call after playing E1M1 and MAP28**; `?woundvol=0` restores the old text and the merge; it costs about 5.5 ms a frame on a mob with six overflowing bodies) stamps the crater that overflows the list into a box on its primitive. Runs in the arena; not timed, not played.
+  - **The crater grid and two after-hit shortcuts, 2026-11-11/12, behind flags; owner played them on MAP28's closet mob
+    2026-11-12: "significant improvement ... not a steady 30 but much smoother overall, worth the changes".**
+    ([spec](../superpowers/specs/2026-11-11-wound-crater-grid-design.md),
+    [notes](../dev-notes/2026-11-11-frame-breakdown/NOTES.md); PR 122 draft, stacked on 121.)
+    `?woundgrid`: 128 exact wounds a body, each sample reads only its cell's wounds; 52.6 to 45.7 ms on the heavy mob
+    (22 bodies, six shot 70 times). Replaces the baked volume while on.
+    `?ngwound=2`: no four-tap normal near wounds; march 38 to 30.5 ms on that mob. Crater lips a little softer (owner:
+    noticeable, acceptable for the trade, keep the switch). `=1` saves nothing; `=3`/`=4` are sizing rules.
+    `?probelean`: the AO and scatter probes read the bodies without their wounds; about 3 ms; craters darker (owner:
+    fine, from stills).
+    `?afterhit`: nine stops for timing the shading after the hit by stage (heavy mob: walk 19 ms, analytic normal 4,
+    four taps 9, probes 7, all else under 2).
+    None is a default yet. Open: the owner saw wounds vanish once on a soldier under `?woundgrid` (not reproduced); a
+    faint body-part outline inside list wounds that baked wounds lack (not investigated); the twinhead's authored
+    scars read as red marks (owner: ignore for now); the analytic normal itself (4 to 6 ms) not looked into; no GPU
+    gate re-taken.
 - [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
   two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
   of a difference, and could not prove identity).
