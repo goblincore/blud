@@ -32,6 +32,7 @@ import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
 import { BURN_BLOCK } from './blocks/post/burn.wgsl';
 import { MELT_BLOCK } from './blocks/post/melt.wgsl';
+import { afterHitStop } from '../after-hit-flag';
 
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
@@ -401,15 +402,15 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
   let debugSteps = gDebugSteps;
   let debugPrims = gDebugPrims;
 
-  let p = camPos + rd * t;
+  let p = camPos + rd * t;${afterHitStop(30, 'baseColor + p * 0.0')}
 ${SPLIT_HIT_BLOCK}
 ${PRIM_MATERIAL_BLOCK}
-${SHADING_NORMAL_BLOCK}
-${WOUND_MASKS_BLOCK}
+${SHADING_NORMAL_BLOCK}${afterHitStop(31, 'n')}
+${WOUND_MASKS_BLOCK}${afterHitStop(32, 'n + vec3<f32>(wm, wmRim + wmCav, cm)')}
 ${TISSUE_BLOCK}
 ${CUT_FACE_BLOCK}
 
-${ORGAN_BLOCK}
+${ORGAN_BLOCK}${afterHitStop(33, 'albedo + n * (wmRim + cm + hitMat)')}
 
 ${MOTTLE_BLOCK}
 
@@ -427,7 +428,7 @@ ${PAINT_CHAR_BLOCK}
 
 ${BURN_BLOCK}
 
-${MELT_BLOCK}
+${MELT_BLOCK}${afterHitStop(34, 'albedo + n * (wmRim + cm + gore)')}
 `;
 
 export const MARCH_BODY_TRACE = /* wgsl */ `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;

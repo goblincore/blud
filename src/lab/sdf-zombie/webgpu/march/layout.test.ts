@@ -38,6 +38,7 @@ import {
   ROW_WOUND_CUT,
 } from '../march.wgsl';
 import { MAX_WOUNDS } from '../../damage';
+import { WG_CELL_MAX, WG_ROWS } from '../../wound-grid';
 import { MAX_PRIMS } from '../../validate';
 import { declaredName } from '../march-test-support';
 import { NG_WOUNDS } from '../normal-gradient.wgsl';
@@ -53,7 +54,8 @@ describe('data texture layout', () => {
       ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_WOUND_CUT,
     ];
     expect(new Set(rows).size).toBe(rows.length);
-    expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
+    // The crater grid's rows (wound-grid-flag.ts, on by default) follow the band of before.
+    expect(Math.max(...rows)).toBe(DATA_ROWS - WG_ROWS - 1);
   });
 
   it('is wide enough for the wound ring, which shares the primitive rows', () => {
@@ -75,7 +77,9 @@ describe('data texture layout', () => {
       // The loop variable name can change (the per-ray wound list folds by k);
       // pin only the BOUND, which is the MAX_WOUNDS literal that can drift
       // from damage.ts. Match `var x = 0; x < MAX_WOUNDS` for any identifier x.
-      expect(src, declaredName(src) ?? 'MARCH_BODY').toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
+      // Under the crater grid (wound-grid-flag.ts, on by default) a loop over the wounds walks the sample's CELL
+      // instead (at most WG_CELL_MAX entries, or the cell's count wgS.z): those bounds are the grid's own.
+      expect(src, declaredName(src) ?? 'MARCH_BODY').toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*(${MAX_WOUNDS}|${WG_CELL_MAX}|wgS\\.z)(?![\\w.])`));
       checked++;
     }
     // applyWounds, the charMask chunk, woundMask, MARCH_BODY, ngWounds.

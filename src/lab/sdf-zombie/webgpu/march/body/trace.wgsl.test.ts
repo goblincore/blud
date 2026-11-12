@@ -173,7 +173,10 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
     expect(rest).toContain('ambientAt(p, n,');
     expect(rest).toContain('calcNormal(p,');
     // Scatter + AO probes share one call site since 2026-09-21 (cold compile).
-    expect(rest).toContain('mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)');
+    // On the lean field where the pixel is on the tile path (probe-lean-flag.ts, on by default), else mapBody.
+    expect(rest).toContain('let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);');
+    expect(rest).toContain('probeD = mapLean(probeP, data, inst, instCfg).x;');
+    expect(rest).toContain('probeD = mapBody(probeP,');
   });
 });
 

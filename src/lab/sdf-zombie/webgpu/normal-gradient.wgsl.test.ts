@@ -78,7 +78,9 @@ describe('final-hit helper isolation', () => {
     expect(NG_WOUNDS).toContain('if (owner > 0.0 && gNgOwnedOk < 0.5) { gNgReason = 1; return d; }');
     expect(NG_WOUNDS.indexOf(load)).toBeGreaterThan(NG_WOUNDS.indexOf('if (r > reach) { continue; }'));
     expect(NG_WOUNDS.indexOf(load)).toBeLessThan(NG_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
-    expect(NG_BODY).toMatch(/d = ngWounds\([^;]+;\s*if \(gNgReason != 0\) \{ return d; \}/);
+    // Only the unsupported shape (reason 1) stops ngBody there: `?ngwound=8`, the default, carries on past a
+    // numerical give-up (normal-wound-flag.ts NG_WOUND_COMPLETE).
+    expect(NG_BODY).toMatch(/d = ngWounds\([^;]+;\s*if \(gNgReason == 1\) \{ return d; \}/);
   });
 
   it('ngWounds falls back to calcNormal taps for a cut (flag 32)', () => {

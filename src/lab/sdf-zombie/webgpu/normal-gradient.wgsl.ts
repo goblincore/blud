@@ -13,6 +13,7 @@ import { ROW_PRIM_CLIP, ROW_PRIM_SHELL, ROW_PRIM_WARP } from './march/layout';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { WOUND_GRID } from './march/wound-grid-flag';
+import { NG_WOUND_ANALYTIC, NG_WOUND_COMPLETE, NG_WOUND_RAGGED, NG_WOUND_RIM } from './march/normal-wound-flag';
 import { wgLoopHead } from './march/fields/wound-grid.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { TILE_REF as TR } from './march/tile-ref-flag';
@@ -626,7 +627,7 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     let v = p - w.xyz;
     let r = length(v);
-    let reach = w.w * max(2.0, 2.0 * cfg.w + 3.0 * cfg2.x) + 4.0 * cfg.y + 0.25;
+    let reach = w.w * max(2.0, 2.0 * cfg.w + 3.0 * cfg2.x) + 4.0 * cfg.y + ${NG_WOUND_ANALYTIC ? 'max(0.0, -d.x)' : '0.25'};
     if (perf.y > 0.5) {
       if (abs(r - reach) <= R) { gNgReason = 3; }
       if (r > reach) { continue; }
@@ -671,12 +672,16 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), burn);
     let rim = vec3<f32>(depth * cfg.w * wMeta.w, max(depth * cfg2.x, 1e-4), depth * cfg.z * wMeta.z * select(1.0, 0.25, burn));
     if (r <= R) { gNgReason = 2; }
-    if (abs(r - 2.0 * depth) <= R) { gNgReason = 3; }
+    if (abs(r - 2.0 * depth) <= R) { gNgReason = 3; }${NG_WOUND_RIM ? `
+    let rimX = (r - rim.x) / rim.y;
+    if (rim.z > 0.0 && exp(-rimX * rimX) * (1.0 - smoothstep(-0.3 * rim.z, 0.7 * rim.z, base.x)) > 0.15) { gNgRim = 1.0; }` : ''}
     let cutter = min(depth - r, cap.w - dot(v, cap.xyz));
     if (abs((depth - r) - (cap.w - dot(v, cap.xyz))) <= (1.0 + length(cap.xyz)) * R && cutter + (1.0 + gNgLip) * R >= d.x - 4.0 * cfg.y) { gNgReason = 3; }
     if (cfg.y <= 0.0 && abs(d.x - cutter) <= (gNgLip + max(1.0, length(cap.xyz))) * R) { gNgReason = 3; }
     // Size-scaled fillet — MUST match APPLY_WOUNDS (march/fields/wounds.wgsl.ts).
-    d = ngWound(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim);
+    ${NG_WOUND_RAGGED ? `let raggedA = select(0.0, fract(wMeta.x), !burn);
+    if (raggedA > 0.0) { d = ngWoundRagged(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim, raggedA, w.w); }
+    else { d = ngWound(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim); }` : 'd = ngWound(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim);'}
     gNgLip = max(gNgLip, max(1.0, length(cap.xyz))) + ngWoundLip(base.x, r, rim);
     if (r < 2.0 * depth) { gNgNear = 1.0; }
   }
@@ -684,7 +689,37 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
 }
 var<private> gNgLip: f32;
 var<private> gNgNear: f32;
-`;
+${NG_WOUND_RAGGED ? `// THE RAGGED CRATER (normal-wound-flag.ts, ?ngwound=8): ngWound with applyWounds' rN = r / (1 + A * lobe(direction)) and
+// its 0.75 carve scale. The lobe noise's slope is three forward differences in its own (body-yaw) frame.
+fn ngWoundRagged(dIn: vec4<f32>, base: vec4<f32>, v: vec3<f32>, depth: f32, cap: vec4<f32>, blend: f32, rim: vec3<f32>, ragged: f32, seed: f32) -> vec4<f32> {
+  let r = max(length(v), 1e-6);
+  let radial = v / r;
+  let cy = cos(gInstYaw);
+  let sy = sin(gInstYaw);
+  let q = vec3<f32>(cy * radial.x - sy * radial.z, radial.y, sy * radial.x + cy * radial.z) * 1.8 + vec3<f32>(seed * 917.0, seed * 413.0, seed * 211.0);
+  let n0 = noise3(q);
+  let h = 0.05;
+  let gq = vec3<f32>(noise3(q + vec3<f32>(h, 0.0, 0.0)) - n0, noise3(q + vec3<f32>(0.0, h, 0.0)) - n0, noise3(q + vec3<f32>(0.0, 0.0, h)) - n0) / h;
+  let gv = vec3<f32>(cy * gq.x + sy * gq.z, gq.y, cy * gq.z - sy * gq.x);
+  let lobeGrad = (gv - radial * dot(gv, radial)) * (0.9 / r);
+  let s = 1.0 + ragged * (n0 * 0.5 + 0.5);
+  let rN = r / s;
+  let rnGrad = radial / s - lobeGrad * (r * ragged / (s * s));
+  let sphere = (depth - rN) * 0.75;
+  let slab = cap.w - dot(v, cap.xyz);
+  let cutter = vec4<f32>(min(sphere, slab), select(-cap.xyz, -0.75 * rnGrad, sphere < slab));
+  var d = ngSmax(dIn, cutter, blend);
+  let amp = rim.z;
+  if (amp <= 0.0) { return d; }
+  let x = (rN - rim.x) / rim.y;
+  let bump = exp(-x * x) * amp;
+  let m = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, base.x);
+  let u = clamp((base.x + 0.3 * amp) / amp, 0.0, 1.0);
+  let gradBump = bump * (-2.0 * x / rim.y) * rnGrad;
+  let gradGate = -(6.0 * u * (1.0 - u) / amp) * base.yzw;
+  return vec4<f32>(d.x - bump * m, d.yzw - m * gradBump - bump * gradGate);
+}
+` : ''}${NG_WOUND_RIM ? 'var<private> gNgRim: f32;\n' : ''}`;
 
 // Lower bound for the ACTUAL coneBend/coneCap field: every radius sample
 // subtracts <= maxRadius from a point on the scaled control hull. Distance
@@ -811,7 +846,7 @@ ${TR ? `          if ((gTileRef[e] & 255u) == u32(g) && f32(gTileRef[e] >> 8u) *
       if (gNgReason == 1) { return d; }
     }
   }
-  if (gNgReason != 0) { return d; }
+  if (gNgReason ${NG_WOUND_COMPLETE ? '== 1' : '!= 0'}) { return d; }
   if (gNgOwner < 0) { gNgReason = 7; return d; }
   // Preserve the production cluster/primitive carve order. Smooth max of
   // 1-Lipschitz capsule fields remains 1-Lipschitz.
@@ -835,14 +870,14 @@ ${TR ? `          if ((gTileRef[e] & 255u) == u32(g) && f32(gTileRef[e] >> 8u) *
         let O = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_QUAT} + gBand), 0);
         var cutter = ngCapsule(p, A.xyz, B.xyz, A.w, S.xyz);
         if ((i32(crange.w + 0.5) & 1) != 0 && abs(1.0 - O.w) > 1e-6) { cutter = ngCapsuleOriented(p, A.xyz, B.xyz, A.w, S.xyz, O); }
-        if (B.w <= 0.0 && abs(d.x + cutter.x) <= 2.0 * R) { gNgReason = 3; return d; }
+        if (B.w <= 0.0 && abs(d.x + cutter.x) <= 2.0 * R) { gNgReason = 3; ${NG_WOUND_COMPLETE ? '' : 'return d; '}}
         d = ngSmax(d, -cutter, B.w);
       }
     }
   }
   if ((gNgDebugMask & 1u) == 0u) {
     d = ngWounds(d, p, data, woundCfg, woundCfg2, perfCfg, gInstWoundBound);
-    if (gNgReason != 0) { return d; }
+    if (gNgReason ${NG_WOUND_COMPLETE ? '== 1' : '!= 0'}) { return d; }
   }
   if ((gNgDebugMask & 2u) == 0u && gNgNear > 0.5 && gInstCounts2.x > 0.0) { d = ngBones(d, p, data, gInstCounts, gInstCounts2.x); }
   if (gNgReason != 0) { return d; }

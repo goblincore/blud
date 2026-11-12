@@ -40,7 +40,9 @@ async function leg(on) {
     if (crowd !== 'ready') await sleep(1000);
   }
   if (crowd !== 'ready') failHard(`the crowd program is ${crowd}`);
-  await applyShipDefaults(evaluate);
+  // WV_NO_SHIP=1 leaves the page's boot state alone (a boot that sets its own march scale, such as ?accum=1, is
+  // refused by the pin).
+  if (process.env.WV_NO_SHIP !== '1') await applyShipDefaults(evaluate);
   await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
   await evaluate(PRELUDE);
   await evaluate('(async () => { __sdfGame.step(12); await __sdfGame.resolveGpu(); return 1; })()', 600_000);

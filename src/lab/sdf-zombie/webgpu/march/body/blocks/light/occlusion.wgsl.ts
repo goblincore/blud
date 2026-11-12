@@ -4,6 +4,8 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { PROBE_LEAN } from '../../../probe-lean-flag';
+
 export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the field a little way toward the light.
   // A whole extra mapBody, so it is skipped outright at zero translucency
   // rather than multiplied away afterwards.
@@ -19,9 +21,18 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // field in the Metal compile. Same probe points, same gates, same math.
   for (var k = 0; k < 2; k = k + 1) {
     if (select(lodCfg.x > 0.5, surfCfg.w > 0.0, k == 0)) {
-      gProbePass = 1.0;
+${PROBE_LEAN ? `      // THE LEAN PROBE (probe-lean-flag.ts): on the tile path the probe reads the bodies without their wounds.
+      let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);
+      var probeD = 0.0;
+      if (gTileActive > 0.5) {
+        probeD = mapLean(probeP, data, inst, instCfg).x;
+      } else {
+        gProbePass = 1.0;
+        probeD = mapBody(probeP, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
+        gProbePass = 0.0;
+      }` : `      gProbePass = 1.0;
       let probeD = mapBody(select(p + n * 0.06, p + L * 0.06, k == 0), data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
-      gProbePass = 0.0;
+      gProbePass = 0.0;`}
       if (k == 0) {
         let thin = clamp(probeD * -8.0, 0.0, 1.0);
         scatter = deepColor * thin * surfCfg.w * (1.0 - cm) * (1.0 - cloth);

@@ -26,7 +26,15 @@ describe('march chains are seeded with the shared private-declaring node', () =>
   });
 
   it('the forward chain seeds with marchNormalRead', () => {
-    expect(read('zombie-gpu.ts')).toMatch(/wgslFn\(src, acc\.slice\(-1\)\)\],\s*\[marchNormalRead\]/);
+    // buildEntryFn takes its seed as a parameter since the compute march (2026-11-10): the default is
+    // marchNormalRead, and the one caller that passes its own seed (the compute entry's discard read)
+    // builds that seed ON marchNormalRead, so the declaring node still heads every chain.
+    const src = read('zombie-gpu.ts');
+    expect(src).toMatch(/function buildEntryFn\(entry: string, seed: ReturnType<typeof wgslFn> = marchNormalRead\)/);
+    expect(src).toMatch(/wgslFn\(src, acc\.slice\(-1\)\)\],\s*\[seed\]/);
+    const seeded = [...src.matchAll(/buildEntryFn\([^;]*?,\s*(\w+)\)/g)].map((m) => m[1]);
+    expect(seeded).toEqual(['discardRead']);
+    expect(src).toMatch(/const discardRead = wgslFn\(MARCH_DISCARD_READ, \[marchNormalRead\]/);
   });
 
   it('the DEFERRED surface chain seeds with the same node, not []', () => {

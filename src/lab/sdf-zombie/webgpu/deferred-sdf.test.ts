@@ -269,8 +269,9 @@ describe('legacy expansion preserved', () => {
 
   it('keeps the lighting tail’s field probes and display conversion exactly where they were', () => {
     for (const marker of [
-      // scatter and AO share one mapBody site (cold-compile 2026-09-21)
-      'mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)',
+      // scatter and AO share one probe site (cold-compile 2026-09-21); it reads the lean field on the tile path
+      // (probe-lean-flag.ts, on by default since 2026-11-12), else mapBody
+      'let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);', 'probeD = mapBody(probeP,',
       'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,',
       'c <= vec3<f32>(0.04045)', // legacy display compensation
     ]) {
