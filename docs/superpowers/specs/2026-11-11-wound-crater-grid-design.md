@@ -140,3 +140,40 @@ whole frames, four rounds, a quiet machine:
   results, local only) show the same picture: open cavities, ribs.
 - Not measured: how many bodies kept a live grid, the grid's CPU cost, a slack of 0, an exact reach, motion,
   an open head split, soldiers. Not looked at up close.
+
+## Stage 2, built and timed 2026-11-11 (still `?woundgrid`, default off)
+
+Under the switch a body carries 128 wounds, all on the list and all exact. Nothing merges, nothing is baked (the
+switch turns the baked wound volume off), and the sever rules read the list as they always did.
+
+- **The grid has its own rows:** six after the band's 26 (`DATA_ROWS` is 32 under the switch), 768 texels: the
+  header, 216 cells, 6,600 indices at twelve a texel (7 bits each). The spike's free columns are the wound rows'
+  own now.
+- **Every loop over a body's wounds takes the cell's list:** `applyWounds`, `woundMask`, `charMask`, `ngWounds`.
+  The per-ray wound list is still built and is not read.
+- **A cell lists 64 wounds at most**, the loops' bound under the switch. Past that it keeps its newest; when the
+  runs would overflow the index rows, every cell's limit drops alike (never under 30). An old crater can then end
+  at a cell's wall, in a spot hit more than 64 times.
+- **An open head split uses the grid** (the spike left it on the list). Not looked at.
+
+Heavy mob (six bodies shot about 70 times), compute march on, whole frames, three rounds, a quiet machine. The off
+leg is `main`'s default: 32 exact wounds and 44 baked boxes. The on leg has every wound exact (70, 70, 68, 70, 70,
+69 listed):
+
+| Leg | Frame | Against off |
+| --- | --- | --- |
+| off | 52.61 ms | |
+| off again (control) | 52.20 ms | −0.41 ms (−0.55 to +0.37) |
+| `?woundgrid` | 45.73 ms | −6.87 ms (−7.61 to −5.73), −13.1 % |
+
+- More than twice the exact wounds, and faster than the default.
+- The look: `woundgrid-128-mob.png`, and one zombie at 1 m with 70 pellets in the chest
+  (`woundgrid-128-close.png`): the deep cavity, the ribs and the organs, no voxels. Local only.
+- **The CPU build** (`writeWoundGrid`, node, an M3): 24 µs at 8 wounds, 52 at 32, 108 at 70, 186 at 128, each
+  time a body's wounds are uploaded. Twenty heavily wounded bodies rebuilt every frame would be about 2 ms. Not
+  reduced yet: rebuild only when the wounds or the pose moved, and only for bodies in view; or bin on the GPU
+  (owner's question, 2026-11-11: a compute pass with a fixed number of slots a cell needs no prefix sum, and the
+  instance buffer is already a storage buffer the march reads).
+- Not tested: play (motion, severing with 100 wounds, soldiers, the spider brain), a body with 128 wounds on one
+  spot (a step there walks 30 to 48 wounds, more than today's 32), an open head split, gib chunks, the lab pages,
+  the 23 % taller data texture's cost on an unwounded mob, any GPU gate.

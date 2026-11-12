@@ -5,6 +5,8 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { ROW_WOUND, ROW_WOUND_FLAGS, ROW_WOUND_META } from '../layout';
 import { MAX_WOUNDS } from '../../../damage';
+import { WOUND_GRID } from '../wound-grid-flag';
+import { wgLoopHead } from './wound-grid.wgsl';
 
 // Tissue colour by depth beneath the ORIGINAL skin — the signal `carved`
 // carries in mapBody's .w.
@@ -49,8 +51,8 @@ export const CHAR_MASK = /* wgsl */ `fn fireRamp(t: f32) -> vec3<f32> {
 fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
   var m = 0.0;
   let n = i32(gInstWoundCount);
-  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
-    if (i >= n) { break; }
+  ${WOUND_GRID ? wgLoopHead('p', 'n') : `for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
+    if (i >= n) { break; }`}
     let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }

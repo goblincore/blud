@@ -1,54 +1,52 @@
 // src/lab/sdf-zombie/wound-grid.ts
 //
-// THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stage 1:
-// a spike over the list's own wounds). applyWounds reads every wound row of a body at every march step to find the
-// one or two the sample is near. This is an index over them: a box round the body's wounds cut into
-// WG_N x WG_N x WG_N cells, each holding the indices of the wounds whose reach touches it, so a step loads its cell
-// and walks those (march/fields/wound-grid.wgsl.ts). The wounds and their formula are untouched.
+// THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stages
+// 1 and 2). applyWounds reads every wound row of a body at every march step to find the few the sample is near.
+// This is an index over them: a box round the body's wounds cut into near-cubic cells, each holding the indices of
+// the wounds whose reach touches it, so a step loads its cell and walks those (march/fields/wound-grid.wgsl.ts).
+// The wounds and their formula are untouched. With the index a body carries WG_MAX_WOUNDS wounds, not 32: a cell
+// lists at most WG_CELL_MAX of them (the loops' bound), the body as many as its rows hold.
 //
 // In WORLD space, rebuilt whenever the wounds are uploaded (their posed positions are computed for that anyway). No
 // renderer imports: positions in, texels out.
 //
-// WHERE IT LIVES: the free columns of the body's own wound rows (the rows hold MAX_WOUNDS wounds in columns 0..31
-// and the baked wound volume's table in 32..55 of four of them; the stride is at least 128). WG_TEXELS texels,
-// numbered t = 0..:
-//   t < 288   the wound, meta, cap and flags rows, columns 56..127 (72 a row, in that row order)
-//   t >= 288  the cut row, columns 32..127
-//   t = 0     header: the box's minimum corner (world), w = nx + 16 ny + 256 nz (cells along each axis: the box is
-//             cut so the cells come out near cubes, WG_CELLS of them at most)
-//   t = 1     header: cells a metre along x, y, z; w = 1 when the grid is live (0: walk the whole list)
+// WHERE IT LIVES: WG_ROWS rows added to the body's band under the switch (march/layout.ts DATA_ROWS), the first
+// at band row WG_ROW0, 128 texels a row whatever the stride. Texels t = 0..:
+//   t = 0     header: the box's minimum corner (world), w = nx + 16 ny + 256 nz (cells along each axis)
+//   t = 1     header: cells a metre along x, y, z; w = 1 when the grid is live (0: walk the list's first rows)
 //   t = 2..   the cells, x fastest: (offset into the index run, count)
-//   then      the indices, WG_PER_TEXEL a texel (four 5-bit indices a channel: a float holds 24 bits exactly), each
-//             cell's run in rising wound order (the carve chain is ordered)
+//   then      the indices, WG_PER_TEXEL a texel (three 7-bit indices a channel: a float holds 24 bits exactly),
+//             each cell's run in rising wound order (the carve chain is ordered)
 import type { Vec3 } from './types';
 
+/** Wounds a body carries under the switch (the wound rows' columns 0..127: every stride is at least 128). */
+export const WG_MAX_WOUNDS = 128;
+/** Wounds a cell lists: the shader loops' bound under the switch. Past it a cell keeps its NEWEST (a crater can
+ *  then end at a cell's wall; it takes more than 64 wounds within reach of one 10 cm cell). */
+export const WG_CELL_MAX = 64;
+/** The band row the grid starts at (the band's row count without the switch) and the rows it takes. */
+export const WG_ROW0 = 26;
+export const WG_ROWS = 6;
+export const WG_COLS = 128;
+export const WG_TEXELS = WG_ROWS * WG_COLS;
 /** Cells the table holds, and the most along one axis (4 bits in the header). */
 export const WG_CELLS = 216;
 export const WG_MAX_AXIS = 15;
-/** Bits an index takes (MAX_WOUNDS is 32), and indices a texel. */
-export const WG_INDEX_BITS = 5;
-export const WG_PER_TEXEL = 16;
-export const WG_A_COL = 56;
-export const WG_A_COLS = 72;
-export const WG_A_TEXELS = 4 * WG_A_COLS;
-export const WG_B_COL = 32;
-export const WG_B_COLS = 96;
-export const WG_TEXELS = WG_A_TEXELS + WG_B_COLS;
+/** Bits an index takes, indices a channel and a texel. */
+export const WG_INDEX_BITS = 7;
+export const WG_PER_CHANNEL = 3;
+export const WG_PER_TEXEL = 12;
 export const WG_CELL0 = 2;
 export const WG_INDEX0 = WG_CELL0 + WG_CELLS;
-/** Indices the grid can hold; a body whose cells need more keeps no grid that frame (the whole list is walked). */
+/** Indices the grid can hold; when the cells need more, every cell's limit drops until they fit. */
 export const WG_MAX_INDICES = (WG_TEXELS - WG_INDEX0) * WG_PER_TEXEL;
 
-/** The rows the grid's texels sit in (absolute rows of the texture) and the texture's stride. */
-export interface WoundGridLayout { woundRow: number; metaRow: number; capRow: number; flagsRow: number; cutRow: number; stride: number }
+/** The texture row the grid starts at (absolute) and the texture's stride. */
+export interface WoundGridLayout { gridRow: number; stride: number }
 
 /** Float offset of grid texel `t` in the texel array. */
 export function woundGridTexel(L: WoundGridLayout, t: number): number {
-  if (t < WG_A_TEXELS) {
-    const row = [L.woundRow, L.metaRow, L.capRow, L.flagsRow][Math.floor(t / WG_A_COLS)]!;
-    return (row * L.stride + WG_A_COL + (t % WG_A_COLS)) * 4;
-  }
-  return (L.cutRow * L.stride + WG_B_COL + (t - WG_A_TEXELS)) * 4;
+  return ((L.gridRow + Math.floor(t / WG_COLS)) * L.stride + (t % WG_COLS)) * 4;
 }
 
 /** How far from its centre a wound is listed, as a sample at or above the surface needs it, plus `slack`:
@@ -61,10 +59,10 @@ export function woundGridReach(radius: number, blendK: number, rimOffset: number
   return Math.max(2 * radius, radius * (rimOffset * offsetScale + 2 * rimWidth), radius + 4 * blendK) + slack;
 }
 
-export interface WoundGridStats { live: boolean; indices: number; maxCell: number; meanCell: number }
+export interface WoundGridStats { live: boolean; indices: number; maxCell: number; meanCell: number; clipped: number }
 
-/** Build the grid for `count` wounds into `texels`. Returns what it wrote (live false: too many indices, or no
- *  room in the texture, and the header says so). */
+/** Build the grid for `count` wounds into `texels`. Returns what it wrote (live false: no wounds, no room in the
+ *  texture; the header says so). `clipped` counts the entries cells past their limit lost. */
 export function writeWoundGrid(
   texels: Float32Array, L: WoundGridLayout,
   positions: readonly Vec3[], radii: readonly number[], count: number,
@@ -72,9 +70,9 @@ export function writeWoundGrid(
   offsetScales?: readonly number[],
 ): WoundGridStats {
   const off = (t: number) => woundGridTexel(L, t);
-  const dead = (): WoundGridStats => { texels.fill(0, off(1), off(1) + 4); return { live: false, indices: 0, maxCell: 0, meanCell: 0 }; };
-  const n = Math.min(count, positions.length, radii.length);
-  if (n <= 0 || L.stride < WG_A_COL + WG_A_COLS) return dead();
+  const dead = (): WoundGridStats => { texels.fill(0, off(1), off(1) + 4); return { live: false, indices: 0, maxCell: 0, meanCell: 0, clipped: 0 }; };
+  const n = Math.min(count, positions.length, radii.length, WG_MAX_WOUNDS);
+  if (n <= 0 || L.stride < WG_COLS) return dead();
   const reach = new Float64Array(n);
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < n; i++) {
@@ -90,7 +88,6 @@ export function writeWoundGrid(
   // Each cell's wounds, in rising wound order. A wound is listed in every cell its reach SPHERE touches.
   const nCells = dims[0]! * dims[1]! * dims[2]!;
   const cells: number[][] = Array.from({ length: nCells }, () => []);
-  let total = 0;
   for (let i = 0; i < n; i++) {
     const p = positions[i]!, r = reach[i]!;
     const a = [0, 0, 0], b = [0, 0, 0];
@@ -109,26 +106,38 @@ export function writeWoundGrid(
       }
       if (d2 > r * r) continue;
       cells[x + dims[0]! * (y + dims[1]! * z)]!.push(i);
-      total++;
     }
   }
-  if (total > WG_MAX_INDICES) return dead();
+  // A cell lists WG_CELL_MAX at most: its newest (the highest indices; the ring is oldest first). When the runs
+  // would not fit the index rows, the limit drops to what fits for every cell alike (never below 30: the rows
+  // hold that for a full table).
+  let total = 0, clipped = 0;
+  const clip = (limit: number) => {
+    total = 0;
+    for (let ci = 0; ci < nCells; ci++) {
+      const list = cells[ci]!;
+      if (list.length > limit) { clipped += list.length - limit; cells[ci] = list.slice(list.length - limit); }
+      total += cells[ci]!.length;
+    }
+  };
+  clip(WG_CELL_MAX);
+  if (total > WG_MAX_INDICES) clip(Math.floor(WG_MAX_INDICES / nCells));
   texels.set([lo[0]!, lo[1]!, lo[2]!, dims[0]! + 16 * dims[1]! + 256 * dims[2]!], off(0));
-  // The index texels this build uses start clean (a channel is built up by adding).
-  for (let t = 0; t <= (total >> 4); t++) if (WG_INDEX0 + t < WG_TEXELS) texels.fill(0, off(WG_INDEX0 + t), off(WG_INDEX0 + t) + 4);
   texels.set([inv[0]!, inv[1]!, inv[2]!, 1], off(1));
+  // The index texels this build uses start clean (a channel is built up by adding).
+  for (let t = 0; t <= Math.floor(total / WG_PER_TEXEL); t++) if (WG_INDEX0 + t < WG_TEXELS) texels.fill(0, off(WG_INDEX0 + t), off(WG_INDEX0 + t) + 4);
   let at = 0, maxCell = 0;
   for (let ci = 0; ci < nCells; ci++) {
     const list = cells[ci]!;
     texels.set([at, list.length, 0, 0], off(WG_CELL0 + ci));
     for (let k = 0; k < list.length; k++) {
-      const q = at + k;
-      texels[off(WG_INDEX0 + (q >> 4)) + ((q >> 2) & 3)]! += list[k]! * 2 ** (WG_INDEX_BITS * (q & 3));
+      const q = at + k, inTexel = q % WG_PER_TEXEL;
+      texels[off(WG_INDEX0 + Math.floor(q / WG_PER_TEXEL)) + Math.floor(inTexel / WG_PER_CHANNEL)]! += list[k]! * 2 ** (WG_INDEX_BITS * (inTexel % WG_PER_CHANNEL));
     }
     at += list.length;
     if (list.length > maxCell) maxCell = list.length;
   }
-  return { live: true, indices: total, maxCell, meanCell: total / nCells };
+  return { live: true, indices: total, maxCell, meanCell: total / nCells, clipped };
 }
 
 /** CPU twin of the shader's lookup: the wound indices a sample at `p` walks, or null when the grid is not live
@@ -147,8 +156,9 @@ export function woundGridLookup(texels: Float32Array, L: WoundGridLayout, p: Vec
   const at = Math.round(texels[e]!), cnt = Math.round(texels[e + 1]!);
   const out: number[] = [];
   for (let k = 0; k < cnt; k++) {
-    const q = at + k;
-    out.push((Math.round(texels[off(WG_INDEX0 + (q >> 4)) + ((q >> 2) & 3)]!) >> (WG_INDEX_BITS * (q & 3))) & 31);
+    const q = at + k, inTexel = q % WG_PER_TEXEL;
+    const v = Math.round(texels[off(WG_INDEX0 + Math.floor(q / WG_PER_TEXEL)) + Math.floor(inTexel / WG_PER_CHANNEL)]!);
+    out.push((v >> (WG_INDEX_BITS * (inTexel % WG_PER_CHANNEL))) & 127);
   }
   return out;
 }

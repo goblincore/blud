@@ -929,5 +929,5 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
 - `slump-death.ts` — THE FORWARD SLUMP (owner playtest 2026-11-03: "it's not possible for the zombie to die like his knees bend and he falls over, back bent, rear in the…
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…
-- `wound-grid.ts` — THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stage 1: a spike over the list's own wounds).
+- `wound-grid.ts` — THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stages 1 and 2).
 - `wound-volume-stamp.ts` — THE BAKED WOUND VOLUME, pure half (`?woundvol`; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").

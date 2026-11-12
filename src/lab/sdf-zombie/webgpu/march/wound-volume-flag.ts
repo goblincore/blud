@@ -20,9 +20,12 @@
 //   ?woundvol=<cm>                           on, voxels of that many centimetres (1 to 4; 1.5 for finer than 2 cm)
 //   ?woundvol=0                              off: the shader text of before the switch, byte for byte
 //   ?skeleton=volume                         off too: that mode needs the 3D texture for its own volumes
+//   ?woundgrid                               off too: the crater grid carries every wound on the list
 export function woundVolumeVoxel(search: string): number {
   const q = new URLSearchParams(search);
   if (q.get('skeleton') === 'volume') return 0;
+  // The crater grid (wound-grid-flag.ts) keeps every wound on the list: nothing overflows into the volume.
+  if (q.get('woundgrid') !== null && q.get('woundgrid') !== '0') return 0;
   const v = q.get('woundvol');
   if (v === '0') return 0;
   const cm = Number(v);

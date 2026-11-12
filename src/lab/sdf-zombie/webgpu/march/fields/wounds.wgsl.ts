@@ -10,7 +10,8 @@ import { MAX_WOUNDS } from '../../../damage';
 import { WOUND_VOL } from '../wound-volume-flag';
 import { WV_APPLY, WV_FUNCTIONS } from './wound-volume.wgsl';
 import { WOUND_GRID } from '../wound-grid-flag';
-import { WG_LOOKUP, WG_TEXEL, wgNext } from './wound-grid.wgsl';
+import { WG_CELL_MAX } from '../../../wound-grid';
+import { WG_FUNCTIONS, WG_LOOKUP, wgLoopHead, wgNext } from './wound-grid.wgsl';
 import { SPLIT_ABL, ablWgsl } from '../../split-ablate';
 
 // TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
@@ -72,7 +73,7 @@ const TORN_LOBE = (n: string) => `mix(${n}, noise3(q * ${f(TORN_OCTAVE_FREQ)} + 
 // crater rim code; ROW_WOUND_CUT is read only inside that branch (rows of non-cut slots may be stale).
 /** The loop's index source without the crater grid: the per-ray list, or every wound in order. */
 const LIST_NEXT = `if (listOn) {
-      if (k >= gWoundN) { break; }
+      if (k >= gWoundN${WOUND_GRID ? ` || k >= ${MAX_WOUNDS}` : ''}) { break; }
       i = gWoundList[k];
     } else {
       if (k >= n) { break; }
@@ -94,7 +95,7 @@ ${WOUND_VOL ? WV_APPLY : ''}  let n = ${ablWgsl(`select(i32(gInstWoundCount), 0,
   // reach the WORLD ray enters, and a split slot's piece reads its wounds at its un-warped point, off that ray. Such
   // a slot folds every wound.
   let listOn = gWoundListOn > 0.5 && !gInstSplitOpen;
-${WOUND_GRID ? WG_LOOKUP : ''}  for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1) {
+${WOUND_GRID ? WG_LOOKUP : ''}  for (var k = 0; k < ${WOUND_GRID ? WG_CELL_MAX : MAX_WOUNDS}; k = k + 1) {
     var i = k;
 ${WOUND_GRID ? wgNext(LIST_NEXT) : `    ${LIST_NEXT}`}
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + band), 0);
@@ -302,7 +303,7 @@ ${WOUND_GRID ? wgNext(LIST_NEXT) : `    ${LIST_NEXT}`}
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return vec2<f32>(d, near);
-}${WOUND_VOL ? `\n${WV_FUNCTIONS}` : ''}${WOUND_GRID ? `\n${WG_TEXEL}` : ''}
+}${WOUND_VOL ? `\n${WV_FUNCTIONS}` : ''}${WOUND_GRID ? `\n${WG_FUNCTIONS}` : ''}
 // Per-map ownership selection. 0 keeps the original whole-body carve;
 // a positive cluster id restricts the independent limb field below.
 var<private> gWoundCluster: f32 = 0.0;
@@ -370,8 +371,8 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   // Per-instance wound count: the slot loop's loadInstance set this before
   // the post-hit readback (POST reloads gHitSlot).
   let n = i32(gInstWoundCount);
-  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
-    if (i >= n) { break; }
+  ${WOUND_GRID ? wgLoopHead('p', 'n') : `for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
+    if (i >= n) { break; }`}
     let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
