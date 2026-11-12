@@ -148,5 +148,21 @@ overlapping craters are a little softer, the cavity and the organs read the same
 sizing switch because the analytic gradient does not carry a crater's exact shape; in the stills that is hard to
 see. Not seen in motion. Local only.
 
+**Owner on `?ngwound=2` in play (2026-11-12): looks fine, would like it a little less soft; not a deal breaker.**
+Two in-between rules (`normalWoundTapRule`), second half of an alternated run (the first half ran while the owner
+was playing):
+
+| | March pass | The taps |
+| --- | --- | --- |
+| baseline | 38.0 ms | 8.7 |
+| `?ngwound=3`: taps only where the analytic path gave up at a kink (a lip, a ridge between craters) | 38.0 | 7.6 |
+| `?ngwound=4`: taps near a wound except at kinks | 32.7 | 2.4 |
+| `?ngwound=2` | 30.3 | 0.2 |
+
+Nearly every give-up on a wounded pixel is a kink, so "taps at the edges only" is the baseline over again. `=4`
+keeps the taps for the other give-ups at 2.4 ms; in the close-up still (`ngwound4-close-on.png`) it is hard to tell
+from `=2`. A sharper edge at `=2`'s cost would have to come from the analytic side (a one-sided gradient at the
+kink), not from the taps. Not tried.
+
 - **Open:** `ngBody` is 4 to 6 ms on every mob and has not been looked into. The taps left with `?ngwound=2`
   (2 ms) are the pixels where `ngBody` did not run or gave no usable gradient.

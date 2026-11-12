@@ -14,7 +14,7 @@ import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
-import { NG_WOUND_ANALYTIC, NG_WOUND_NO_TAPS } from '../../../normal-wound-flag';
+import { NG_WOUND_ANALYTIC, NG_WOUND_TAP_RULE } from '../../../normal-wound-flag';
 import { afterHitStop } from '../../../after-hit-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
@@ -93,7 +93,7 @@ ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differ
   // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
   // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
   // crater's shape, which ngBody's gradient does not.
-  if (!ngValid && ngRan${NG_WOUND_NO_TAPS ? '' : ' && !hitNearWound'}${WOUND_VOL ? ' && !wvHit' : ''}) {
+  if (!ngValid && ngRan${NG_WOUND_TAP_RULE}${WOUND_VOL ? ' && !wvHit' : ''}) {
     let ngLoose2 = dot(ngLooseG, ngLooseG);
     if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
   }

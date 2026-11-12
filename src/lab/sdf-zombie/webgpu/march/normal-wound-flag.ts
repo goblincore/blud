@@ -20,6 +20,7 @@
 //                                gradient (the cheaper fallback, normal-loose-flag.ts) and not the four taps. That
 //                                gradient does not carry a crater's shape: a SIZING switch (what the taps cost on
 //                                wounded pixels), not a look to ship.
+//   ?ngwound=3, ?ngwound=4       in between: see normalWoundTapRule below.
 export function normalWoundOn(search: string): boolean {
   const v = new URLSearchParams(search).get('ngwound');
   return v !== null && v !== '0';
@@ -33,11 +34,22 @@ export const NG_WOUND_ANALYTIC: boolean = (() => {
   }
 })();
 
-/** `?ngwound=2`: no four-tap normal near wounds at all (see the header: for sizing). */
-export const NG_WOUND_NO_TAPS: boolean = (() => {
+/** The WGSL condition (led by ` && `) under which a pixel the analytic path gave up keeps ngBody's own gradient
+ *  and skips the four taps. Off and `?ngwound=1`: never near a wound. `=2`: always. `=3`: near a wound unless the
+ *  give-up was a KINK (reason 3: a crater lip, the ridge between two craters), so the taps still draw the edges.
+ *  `=4`: the reverse of 3 (taps everywhere near a wound but at kinks), to size the two halves. */
+export function normalWoundTapRule(search: string): string {
+  const v = new URLSearchParams(search).get('ngwound');
+  if (v === '2') return '';
+  if (v === '3') return ' && (!hitNearWound || ngReason != 3)';
+  if (v === '4') return ' && (!hitNearWound || ngReason == 3)';
+  return ' && !hitNearWound';
+}
+
+export const NG_WOUND_TAP_RULE: string = (() => {
   try {
-    return new URLSearchParams((globalThis as { location?: { search?: string } }).location?.search ?? '').get('ngwound') === '2';
+    return normalWoundTapRule((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return false;
+    return ' && !hitNearWound';
   }
 })();
