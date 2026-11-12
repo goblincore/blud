@@ -106,6 +106,7 @@ ran on a loaded machine and are not usable).
   the bodies without their wounds, so inside a crater they see the flesh that was there: the floor reads fully
   occluded. Close up the cavity is darker and deeper red, the organs less glossy-bright
   (`probelean-close-{off,on}.png`); on the mob the difference is slight (`probelean-mob-{off,on}.png`). Local only.
-  Owner to judge.
+  Owner's verdict on the two close-up stills (2026-11-12): "Looks fine". Not yet seen by the owner in play; still
+  off by default.
 - **Not found:** the shading after the hit is about 21 ms and the probes are 7 of it. The rest is not the normal.
   What is left: `ngBody` itself, the wound colour and tissue loops, the light list, the materials. Not split.
