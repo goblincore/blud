@@ -1,0 +1,297 @@
+{
+ "query": "",
+ "prelude": "docs/dev-notes/2026-11-11-wound-volume/prelude-mob-heavy.js",
+ "modes": [
+  {
+   "mode": 0,
+   "frames": 40,
+   "wallMs": 62.25,
+   "cpuMs": 8.5,
+   "gpuMs": 59.1565770000002,
+   "rows": [
+    {
+     "label": "compute:sdf-march",
+     "ms": 47.986538499999824
+    },
+    {
+     "label": "sdf:shell-hull",
+     "ms": 5.603123499999583
+    },
+    {
+     "label": "sdf:polys",
+     "ms": 2.003178000000389
+    },
+    {
+     "label": "compute:tile-bin",
+     "ms": 0.9894020000006094
+    },
+    {
+     "label": "sdf:upscale:L3a",
+     "ms": 0.29937049999944065
+    },
+    {
+     "label": "sdf:upscale:L4a",
+     "ms": 0.29620399999976144
+    },
+    {
+     "label": "sdf:upscale:L2a",
+     "ms": 0.28470400000014706
+    },
+    {
+     "label": "goo:surface",
+     "ms": 0.2642869999999675
+    },
+    {
+     "label": "post:fxaa",
+     "ms": 0.23164150000002337
+    },
+    {
+     "label": "post:blit",
+     "ms": 0.23135050000018964
+    },
+    {
+     "label": "sdf:composite",
+     "ms": 0.15897700000004988
+    },
+    {
+     "label": "sdf:upscale:sharpen",
+     "ms": 0.14051849999987098
+    },
+    {
+     "label": "sdf:upscale:shuffle",
+     "ms": 0.13739350000014383
+    },
+    {
+     "label": "sdf:march",
+     "ms": 0.12887300000011237
+    },
+    {
+     "label": "post:vhs",
+     "ms": 0.09556150000025809
+    },
+    {
+     "label": "sdf:upscale:L1a",
+     "ms": 0.08349850000013248
+    },
+    {
+     "label": "post:vhs-input",
+     "ms": 0.08251900000004753
+    },
+    {
+     "label": "effects",
+     "ms": 0.05622849999963364
+    },
+    {
+     "label": "sdf:upscale:occupiedTiles",
+     "ms": 0.05595750000020416
+    },
+    {
+     "label": "sdf:last-blit",
+     "ms": 0.04943700000012541
+    },
+    {
+     "label": "compute:probe-gather",
+     "ms": 0.034791499999755615
+    },
+    {
+     "label": "sdf:upscale:activeTiles",
+     "ms": 0.024832999999489402
+    }
+   ]
+  },
+  {
+   "mode": 13,
+   "frames": 40,
+   "wallMs": 38.10000002384186,
+   "cpuMs": 8.899999976158142,
+   "gpuMs": 34.44830749999983,
+   "rows": [
+    {
+     "label": "compute:sdf-march",
+     "ms": 23.657743499999924
+    },
+    {
+     "label": "sdf:shell-hull",
+     "ms": 6.015657999999348
+    },
+    {
+     "label": "sdf:polys",
+     "ms": 1.0411709999998493
+    },
+    {
+     "label": "compute:tile-bin",
+     "ms": 0.8914644999995289
+    },
+    {
+     "label": "sdf:upscale:L3a",
+     "ms": 0.3009124999998676
+    },
+    {
+     "label": "sdf:upscale:L4a",
+     "ms": 0.2997450000002573
+    },
+    {
+     "label": "sdf:upscale:L2a",
+     "ms": 0.2964329999995243
+    },
+    {
+     "label": "goo:surface",
+     "ms": 0.2506419999999707
+    },
+    {
+     "label": "post:blit",
+     "ms": 0.23147599999992963
+    },
+    {
+     "label": "post:fxaa",
+     "ms": 0.23020399999950314
+    },
+    {
+     "label": "compute:probe-gather",
+     "ms": 0.18899700000019948
+    },
+    {
+     "label": "sdf:march",
+     "ms": 0.12462249999953201
+    },
+    {
+     "label": "post:vhs",
+     "ms": 0.09587349999947037
+    },
+    {
+     "label": "sdf:composite",
+     "ms": 0.08891500000027008
+    },
+    {
+     "label": "sdf:upscale:shuffle",
+     "ms": 0.08472850000089238
+    },
+    {
+     "label": "sdf:upscale:L1a",
+     "ms": 0.0840200000002369
+    },
+    {
+     "label": "post:vhs-input",
+     "ms": 0.08326949999991484
+    },
+    {
+     "label": "effects",
+     "ms": 0.054208500000640925
+    },
+    {
+     "label": "sdf:upscale:occupiedTiles",
+     "ms": 0.05183249999936379
+    },
+    {
+     "label": "sdf:upscale:sharpen",
+     "ms": 0.04697849999956816
+    },
+    {
+     "label": "sdf:last-blit",
+     "ms": 0.043894499999623804
+    },
+    {
+     "label": "sdf:upscale:activeTiles",
+     "ms": 0.024228999999650114
+    }
+   ]
+  },
+  {
+   "mode": 0,
+   "frames": 40,
+   "wallMs": 62.499999940395355,
+   "cpuMs": 9.199999988079071,
+   "gpuMs": 58.83822699999928,
+   "rows": [
+    {
+     "label": "compute:sdf-march",
+     "ms": 47.37448499999937
+    },
+    {
+     "label": "sdf:shell-hull",
+     "ms": 5.710787999999411
+    },
+    {
+     "label": "sdf:polys",
+     "ms": 1.3493744999996125
+    },
+    {
+     "label": "compute:tile-bin",
+     "ms": 0.6064280000000508
+    },
+    {
+     "label": "sdf:upscale:L3a",
+     "ms": 0.2970580000001064
+    },
+    {
+     "label": "sdf:upscale:L4a",
+     "ms": 0.29241300000012416
+    },
+    {
+     "label": "sdf:upscale:L2a",
+     "ms": 0.28845449999971606
+    },
+    {
+     "label": "goo:surface",
+     "ms": 0.25982899999962683
+    },
+    {
+     "label": "post:blit",
+     "ms": 0.23035100000015518
+    },
+    {
+     "label": "post:fxaa",
+     "ms": 0.22993400000086694
+    },
+    {
+     "label": "compute:probe-gather",
+     "ms": 0.19041350000043167
+    },
+    {
+     "label": "sdf:composite",
+     "ms": 0.1535185000002457
+    },
+    {
+     "label": "sdf:upscale:sharpen",
+     "ms": 0.13866450000023178
+    },
+    {
+     "label": "sdf:upscale:shuffle",
+     "ms": 0.13183099999969272
+    },
+    {
+     "label": "sdf:march",
+     "ms": 0.12872750000042288
+    },
+    {
+     "label": "post:vhs",
+     "ms": 0.09399849999954313
+    },
+    {
+     "label": "sdf:upscale:L1a",
+     "ms": 0.08306150000043999
+    },
+    {
+     "label": "post:vhs-input",
+     "ms": 0.0793325000004188
+    },
+    {
+     "label": "sdf:upscale:occupiedTiles",
+     "ms": 0.05597849999958271
+    },
+    {
+     "label": "effects",
+     "ms": 0.05374950000077661
+    },
+    {
+     "label": "sdf:last-blit",
+     "ms": 0.04797850000068138
+    },
+    {
+     "label": "sdf:upscale:activeTiles",
+     "ms": 0.024415500000031898
+    }
+   ]
+  }
+ ]
+}
