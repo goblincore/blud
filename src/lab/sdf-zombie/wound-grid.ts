@@ -162,3 +162,33 @@ export function woundGridLookup(texels: Float32Array, L: WoundGridLayout, p: Vec
   }
   return out;
 }
+
+/** What a grid was built from: `count`, then (x, y, z, radius) a wound. */
+export type WoundGridKey = Float64Array;
+
+/** The grid built from `key` still serves these wounds: the same count and radii, and no wound further than `tol`
+ *  from where it was. The listed reach carries a slack, so a grid built for wounds that have since moved less than
+ *  the slack still lists every wound a sample can feel; the caller passes a fraction of the slack (a third: the
+ *  rest stays as slack). A body that stands, or lies dead, then keeps its grid for many frames. */
+export function woundGridFresh(key: WoundGridKey | null, positions: readonly Vec3[], radii: readonly number[], count: number, tol: number): boolean {
+  const n = Math.min(count, positions.length, radii.length, WG_MAX_WOUNDS);
+  if (!key || key[0] !== n) return false;
+  const t2 = tol * tol;
+  for (let i = 0; i < n; i++) {
+    const o = 1 + i * 4, p = positions[i]!;
+    if (key[o + 3] !== radii[i]) return false;
+    const dx = p[0] - key[o]!, dy = p[1] - key[o + 1]!, dz = p[2] - key[o + 2]!;
+    if (dx * dx + dy * dy + dz * dz > t2) return false;
+  }
+  return true;
+}
+
+/** The key of a build from these wounds (into `into` when it is given: no allocation a frame). */
+export function woundGridKey(positions: readonly Vec3[], radii: readonly number[], count: number, into?: WoundGridKey | null): WoundGridKey {
+  const n = Math.min(count, positions.length, radii.length, WG_MAX_WOUNDS);
+  const key = into ?? new Float64Array(1 + WG_MAX_WOUNDS * 4);
+  key[0] = n;
+  for (let i = 0; i < n; i++) key.set([positions[i]![0], positions[i]![1], positions[i]![2], radii[i]!], 1 + i * 4);
+  return key;
+}
+

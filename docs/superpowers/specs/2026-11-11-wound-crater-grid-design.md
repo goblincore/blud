@@ -177,3 +177,16 @@ leg is `main`'s default: 32 exact wounds and 44 baked boxes. The on leg has ever
 - Not tested: play (motion, severing with 100 wounds, soldiers, the spider brain), a body with 128 wounds on one
   spot (a step there walks 30 to 48 wounds, more than today's 32), an open head split, gib chunks, the lab pages,
   the 23 % taller data texture's cost on an unwounded mob, any GPU gate.
+
+### The build is skipped for a body that has not moved (same day)
+
+`woundGridFresh`: the grid is rebuilt only when a wound came or went, or one moved more than a third of the slack
+(1 cm) since the last build; the kept grid still lists every wound a sample can feel, with two thirds of the slack
+left (unit test). A standing body and a corpse keep their grid; a walking body (over 1 cm a frame) still rebuilds.
+A view moved to another band rebuilds.
+
+Heavy mob, frozen, three rounds: off 49.47 ms, control +0.08 (+0.06 to +0.25), `?woundgrid` 43.55 ms, −5.93
+(−6.05 to −5.85). Against the run before the skip (−6.87, −7.61 to −5.73, on a 52.6 ms base) this run cannot show
+the saving: six wounded bodies are about 0.6 ms of builds, and the base moved 3 ms between the runs. What the skip
+saves is the build cost measured above, a body a frame. Not done: skipping bodies out of view (the wound upload
+does not know), and binning on the GPU.

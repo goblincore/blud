@@ -3,7 +3,7 @@ import type { Vec3 } from './types';
 import { MAX_WOUNDS } from './damage';
 import {
   WG_CELL_MAX, WG_COLS, WG_MAX_INDICES, WG_MAX_WOUNDS, WG_ROW0, WG_ROWS, WG_TEXELS,
-  woundGridLookup, woundGridReach, woundGridTexel, writeWoundGrid, type WoundGridLayout,
+  woundGridFresh, woundGridKey, woundGridLookup, woundGridReach, woundGridTexel, writeWoundGrid, type WoundGridLayout,
 } from './wound-grid';
 
 // A body's band under the switch: the 26 rows and the grid's, 128 texels wide.
@@ -102,6 +102,39 @@ describe('the crater grid', () => {
     expect(wide.indices).toBeLessThanOrEqual(WG_MAX_INDICES);
     expect(writeWoundGrid(b, L, pos, rad, 0, K, OFF, WIDTH, SLACK).live).toBe(false);
     expect(woundGridLookup(b, L, [3, 1, -2])).toBeNull();   // the header was cleared: the list is walked again
+  });
+
+  it('a grid is kept while its wounds stay within a third of the slack of where it was built', () => {
+    const { pos, rad } = wounds(40), tol = SLACK / 3;
+    expect(woundGridFresh(null, pos, rad, 40, tol)).toBe(false);
+    const key = woundGridKey(pos, rad, 40);
+    expect(woundGridFresh(key, pos, rad, 40, tol)).toBe(true);
+    // A sway of 5 mm: kept. A step of 2 cm: rebuilt.
+    expect(woundGridFresh(key, pos.map(p => [p[0] + 0.005, p[1], p[2]] as Vec3), rad, 40, tol)).toBe(true);
+    expect(woundGridFresh(key, pos.map(p => [p[0] + 0.02, p[1], p[2]] as Vec3), rad, 40, tol)).toBe(false);
+    // One wound more, one fewer, or one that grew: rebuilt.
+    expect(woundGridFresh(key, pos, rad, 39, tol)).toBe(false);
+    const { pos: p41, rad: r41 } = wounds(41);
+    expect(woundGridFresh(key, p41, r41, 41, tol)).toBe(false);
+    expect(woundGridFresh(key, pos, rad.map((r, i) => (i === 7 ? r + 0.01 : r)), 40, tol)).toBe(false);
+    // The kept grid still lists every wound a sample can feel at the moved positions, with the slack that is left.
+    const texels = fresh();
+    writeWoundGrid(texels, L, pos, rad, 40, K, OFF, WIDTH, SLACK);
+    const moved = pos.map(p => [p[0] + 0.0055, p[1] - 0.0055, p[2] + 0.0055] as Vec3);   // 9.5 mm
+    expect(woundGridFresh(key, moved, rad, 40, tol)).toBe(true);
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let s = 0; s < 2000; s++) {
+      const p: Vec3 = [3 + (rnd() - 0.5) * 0.7, 0.8 + rnd() * 0.7, -2 + (rnd() - 0.5) * 0.4];
+      const got = woundGridLookup(texels, L, p)!;
+      for (let i = 0; i < 40; i++) {
+        const d = Math.hypot(p[0] - moved[i]![0], p[1] - moved[i]![1], p[2] - moved[i]![2]);
+        if (d <= woundGridReach(rad[i]!, K, OFF, WIDTH, SLACK - tol)) expect(got).toContain(i);
+      }
+    }
+    // Reusing the key's buffer writes in place.
+    expect(woundGridKey(moved, rad, 40, key)).toBe(key);
+    expect(woundGridFresh(key, moved, rad, 40, 0)).toBe(true);
   });
 
   it('?woundgrid: off by default, a slack in centimetres when on, and it switches the baked wound volume off', async () => {
