@@ -15,7 +15,8 @@
 // warm a pipeline nothing draws. So the step turns off frustum culling on ONE real kit mesh, the renderer draws it where
 // it stands (off-screen; the shadow pass skips it, a kit casts none), and the next step turns culling back on. Drawn
 // out of view at real scale is still invisible: nothing in the frustum changes, and a mesh in the frustum was being
-// drawn anyway. renderer.compileAsync is not an option in r186: it builds against a default render context whose keys
+// drawn anyway. ONLY ONCE POSED: before its first pose a kit is a bind pose at the world origin, where a Doom level
+// starts the player, and forcing it drew the cast's pieces one by one around the camera (2026-11-02). renderer.compileAsync is not an option in r186: it builds against a default render context whose keys
 // do not match the real pass (3079ce7d).
 //
 // ONE BUILD A STEP keeps each frame to one material build (30-80 ms CPU each, headless, E1M1). The kits share one environment (kit-overlay.ts
@@ -68,10 +69,10 @@ export function createKitPrewarm(ctx: GameContext): KitPrewarm {
       for (const a of ctx.world.actors) {
         const view = a.character;
         if (!view) continue;
-        if (!view.kit && view.entry.kit) pending++;
+        if ((!view.kit || !view.kit.posed) && view.entry.kit) pending++;
         // The kit, then the held prop (a prop that has not loaded yet is picked up when it has; it is not pending,
         // since an unarmed character never loads one).
-        for (const [root, part] of [[view.kit?.object, 'kit'], [view.prop?.object, 'prop']] as const) {
+        for (const [root, part] of [[view.kit?.posed && view.kit.object, 'kit'], [view.prop?.posed && view.prop.object, 'prop']] as const) {
           // Hidden: by the sight cull on a sector level (warm it anyway, forcedRoot), else by its owner (wait).
           if (!root || done.has(root) || (!root.visible && !ctx.world.sightOccluder)) continue;
           const name = `${a.characterName()}|${part}`;

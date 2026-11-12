@@ -243,18 +243,25 @@ export const K_TILE_SCAN = /* wgsl */ `fn kTileScan(
   counts: ptr<storage, array<u32>, read_write>,
   outHeaders: ptr<storage, array<vec2<u32>>, read_write>,
   outMeta: ptr<storage, array<vec4<f32>>, read_write>,
-  dims: vec4<f32>
+  dims: vec4<f32>,
+  stream: vec4<f32>
 ) -> void {
-  var running = 0u;
+  var m = (*outMeta)[0];
+  // A shared stream (createTileStream) carries on after the frame's earlier bins; a binding's own starts at 0.
+  var running = u32(stream.x * m.x);
+  let cap = u32(stream.y);
+  var dropped = 0u;
   for (var t = 0u; t < u32(dims.w); t++) {
     var h = (*outHeaders)[t];
     h.x = running;
     h.y = (*counts)[t];
+    // Past the end, the tile lists nothing: a hole in this type's bodies for a frame, not a write out of bounds.
+    if (running + h.y > cap) { h.y = 0u; dropped = dropped + 1u; }
     (*outHeaders)[t] = h;
     running = running + h.y;
   }
-  var m = (*outMeta)[0];
   m.x = f32(running);
+  m.y = stream.x * m.y + f32(dropped);
   (*outMeta)[0] = m;
 }`;
 
@@ -329,6 +336,27 @@ export interface ComputeTileBinding {
 }
 
 /**
+ * ONE ENTRY STREAM FOR MANY BINDINGS (2026-11-01). A binding's own stream is sized for every tile listing 64 groups: 5.6 MB
+ * at 960x720, four times that at twice the resolution, and a level has a binding per crowd type (MAP28: 30). A frame's bins
+ * write far less: 16 k entries with five bodies against the camera, 14 % of ONE worst case. So the crowd types bin one
+ * after another into one stream, each carrying on where the last stopped. beginFrame() rewinds it, before the frame's first bin.
+ */
+export const TILE_STREAM_WORST_CASES = 2;
+export interface TileStream {
+  readonly capEntries: number;
+  readonly entriesAttr: THREE.StorageBufferAttribute;
+  readonly metaAttr: THREE.StorageBufferAttribute;
+  beginFrame(): void;
+}
+export function createTileStream(maxWidthPx: number, maxHeightPx: number): TileStream {
+  const { tilesX, tilesY } = worstCaseTiles(maxWidthPx, maxHeightPx);
+  const capEntries = worstCaseEntries(tilesX, tilesY) * TILE_STREAM_WORST_CASES;
+  const entriesAttr = new THREE.StorageBufferAttribute(capEntries * 3, 4);
+  const metaAttr = new THREE.StorageBufferAttribute(4, 1);
+  return { capEntries, entriesAttr, metaAttr, beginFrame() { metaAttr.needsUpdate = true; } };
+}
+
+/**
  * Creates the GPU binner for one tiled view. `maxWidthPx/maxHeightPx` are the
  * WORST-CASE SDF-pass pixel size (the full render size at scale 1.0, not
  * today's scaled size — the whole point is that scale changes reallocate
@@ -336,11 +364,11 @@ export interface ComputeTileBinding {
  */
 export function createComputeTileBinding(
   renderer: import('three/webgpu').WebGPURenderer,
-  maxWidthPx: number, maxHeightPx: number,
+  maxWidthPx: number, maxHeightPx: number, stream?: TileStream,
 ): ComputeTileBinding {
   const { tilesX, tilesY } = worstCaseTiles(maxWidthPx, maxHeightPx);
   const maxTiles = tilesX * tilesY;
-  const capEntries = worstCaseEntries(tilesX, tilesY);
+  const capEntries = stream?.capEntries ?? worstCaseEntries(tilesX, tilesY);
 
   // Buffers, sized once at the worst case. StorageBufferAttribute(count,
   // itemSize) with the element type named in storage() below.
@@ -348,8 +376,8 @@ export function createComputeTileBinding(
   const rangesAttr = new THREE.StorageBufferAttribute(MAX_TILE_GROUPS, 4);
   const countsAttr = new THREE.StorageBufferAttribute(maxTiles, 1);
   const headersAttr = new THREE.StorageBufferAttribute(maxTiles, 2);
-  const entriesAttr = new THREE.StorageBufferAttribute(capEntries * 3, 4);
-  const metaAttr = new THREE.StorageBufferAttribute(4, 1);
+  const entriesAttr = stream?.entriesAttr ?? new THREE.StorageBufferAttribute(capEntries * 3, 4);
+  const metaAttr = stream?.metaAttr ?? new THREE.StorageBufferAttribute(4, 1);
 
   const groupsBuf = storage(groupsAttr, 'vec4', MAX_TILE_GROUPS * 3);
   const rangesBufRw = storage(rangesAttr, 'ivec4', MAX_TILE_GROUPS);
@@ -367,6 +395,7 @@ export function createComputeTileBinding(
   const uProj = uniform(new THREE.Matrix4());
   const uCfg = uniform(new THREE.Vector4());
   const uDims = uniform(new THREE.Vector4());
+  const uStream = uniform(new THREE.Vector4(stream ? 1 : 0, capEntries, 0, 0));
 
   const rangeCall = wgslFn(K_TILE_RANGE)(
     groupsBuf, rangesBufRw, uView, uProj, uCfg, uDims, instanceIndex,
@@ -374,7 +403,7 @@ export function createComputeTileBinding(
   const countsCall = wgslFn(K_TILE_COUNTS)(
     rangesBufRw, countsBufRw, uCfg, uDims, instanceIndex,
   );
-  const scanCall = wgslFn(K_TILE_SCAN)(countsBufRw, headersBufRw, metaBufRw, uDims);
+  const scanCall = wgslFn(K_TILE_SCAN)(countsBufRw, headersBufRw, metaBufRw, uDims, uStream);
   const writeCall = wgslFn(K_TILE_WRITE)(
     groupsBuf, rangesBufRw, headersBufRw, entriesBufRw, uCfg, uDims, instanceIndex,
   );

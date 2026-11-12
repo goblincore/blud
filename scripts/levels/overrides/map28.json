@@ -1,0 +1,9 @@
+{
+  "map": "MAP28",
+  "note": "2026-11-09 owner playtest: the mastermind's approach had 16 chaingun juggernauts (the arachnotron pit s166-s176 and the chaingunner row s134-s138) and the frame rate crawled. Thinned to 9, a mix of imps and zombies. null removes a spawn.",
+  "recast": {
+    "s166": "zombie", "s167": "imp", "s168": null, "s169": "zombie", "s170": null, "s171": null,
+    "s172": "imp", "s173": null, "s174": "zombie", "s175": "imp", "s176": null,
+    "s134": "imp", "s135": null, "s136": "zombie", "s137": "imp", "s138": null
+  }
+}

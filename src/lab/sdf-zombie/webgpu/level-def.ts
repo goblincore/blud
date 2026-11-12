@@ -38,8 +38,9 @@ export const DEFAULT_PALETTE: LevelPalette = {
 
 export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art' | 'sectors';
 export type WallSide = 'n' | 's' | 'e' | 'w';
-export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
-export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
+export type KeyItem = 'key-red' | 'key-yellow' | 'key-blue';
+export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight' | KeyItem;
+export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight', 'key-red', 'key-yellow', 'key-blue'];
 
 /** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
@@ -86,8 +87,8 @@ export interface WindowDef { id: string; view: string; room: number; side: WallS
 export interface PickupDef { id: string; item: PickupItem; pos: Vec3 }
 /** A spawn's kind is the registry character it spawns (game-spawn.ts spawnAll). `teratoma` is the floater
  *  (2026-10-27, E1M1 overrides): it hovers over the floor under it and walks the same sector navigation. */
-export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull' | 'deadeye' | 'butcher' | 'flayer' | 'teratoma' | 'imp';
-export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist', 'juggernaut', 'warbull', 'deadeye', 'butcher', 'flayer', 'teratoma', 'imp'];
+export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull' | 'deadeye' | 'butcher' | 'flayer' | 'teratoma' | 'imp' | 'cerebrax';
+export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist', 'juggernaut', 'warbull', 'deadeye', 'butcher', 'flayer', 'teratoma', 'imp', 'cerebrax'];
 export interface SpawnDef { id: string; kind: SpawnKind; pos: Vec3; yaw: number }
 export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }

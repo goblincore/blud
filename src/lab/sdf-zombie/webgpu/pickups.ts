@@ -25,10 +25,12 @@ export interface Inventory {
   cds: readonly string[];
   /** Dynamic light §2.1: the flashlight, found in the level (levels without one start with it on). */
   flashlight: boolean;
+  /** Door keys held, by colour ('red': a door whose `key` is 'red' opens for the player). */
+  keys: readonly string[];
 }
 
 export function makeInventory(weapons: readonly string[] = []): Inventory {
-  return { weapons: [...weapons], shellsReserve: 0, cds: [], flashlight: false };
+  return { weapons: [...weapons], shellsReserve: 0, cds: [], flashlight: false, keys: [] };
 }
 
 export interface PickupResult {
@@ -66,6 +68,11 @@ export function collectPickups(
       case 'flashlight':
         if (inv.flashlight) continue;
         inv = { ...inv, flashlight: true };
+        break;
+      case 'key-red':
+      case 'key-yellow':
+      case 'key-blue':
+        inv = { ...inv, keys: [...inv.keys, p.item.slice(4)] };
         break;
       case 'cd':
         inv = { ...inv, cds: [...inv.cds, p.id] };

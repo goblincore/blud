@@ -11,10 +11,10 @@ import { sectorSegmentHit } from './sector-ray';
 import { createSectorNavigation } from './sector-navigation';
 import { occludersNear, rayClear } from './sector-bounce';
 import {
-  blockedFraction, closedDoor, coveredAt, doorTravel, leafCover, occupiesDoor, stepDoor, stepDoors, travelBlocked, wantsDoor,
-  DOOR_TRIGGER_M, type DoorState,
+  blockedFraction, closedDoor, coveredAt, createDoorField, createDoorLocks, doorTravel, fireDoorEvent, leafCover, occupiesDoor, stepDoor, stepDoors, travelBlocked, wantsDoor,
+  DOOR_TRIGGER_M, type DoorBody, type DoorState,
 } from './sector-doors';
-import type { SectorDoorDef } from './sector-def';
+import type { SectorDoorDef, SectorMap } from './sector-def';
 
 const doorwayLevel = (): any => ({
   version: 1, id: 'doorway', name: 'Doorway', geometry: 'sectors', ammo: 'infinite', loadout: ['melee'],
@@ -31,6 +31,91 @@ const doorwayLevel = (): any => ({
 
 const parsed = () => parseSectorLevel(doorwayLevel()).sectors!;
 type P = [number, number, number];
+
+describe('locks', () => {
+  const lockedMap = (over: Partial<SectorDoorDef>): SectorMap => {
+    const map = parsed();
+    return { ...map, doors: [{ ...map.doors![0]!, ...over }] };
+  };
+  const run = (map: SectorMap, bodies: DoorBody[], held: string[] = [], on = true, ticks = 30) => {
+    const field = createDoorField(map);
+    const states = [closedDoor()];
+    const locks = createDoorLocks(field.defs, k => held.includes(k), on);
+    const refused: number[] = [];
+    const requests = new Uint8Array(1);
+    return { field, states, locks, refused, requests, go(b = bodies, n = ticks) {
+      for (let i = 0; i < n; i++) stepDoors(field, states, 0.05, b, requests, locks, refused);
+      return states[0]!;
+    } };
+  };
+  const walker: DoorBody = { x: -1, z: 0, vx: 3, vz: 0, r: 0.32, player: true };
+  const enemy: DoorBody = { x: -1, z: 0, vx: 3, vz: 0, r: 0.34 };
+  const stander: DoorBody = { x: 0.25, z: 0, vx: 0, vz: 0, r: 0.32, player: true };
+
+  it('a keyed door stays shut for a player without the key, and says so', () => {
+    const r = run(lockedMap({ key: 'red' }), [walker]);
+    expect(r.go().phase).toBe('closed');
+    expect(r.field.open[0]).toBe(0);
+    expect(r.refused.length).toBeGreaterThan(0);
+  });
+
+  it('a body pressed against a locked door does not open it', () => {
+    expect(run(lockedMap({ key: 'red' }), [stander]).go().phase).toBe('closed');
+  });
+
+  it('the player holding the key opens it, walking at it or standing at it', () => {
+    const a = run(lockedMap({ key: 'red' }), [walker], ['red']);
+    expect(a.go().open).toBeGreaterThan(0);
+    expect(a.locks.locked[0]).toBe(0);
+    expect(a.refused).toEqual([]);
+    expect(run(lockedMap({ key: 'red' }), [stander], ['red']).go().open).toBeGreaterThan(0);
+  });
+
+  it('another colour does not', () => {
+    expect(run(lockedMap({ key: 'red' }), [walker], ['blue']).go().phase).toBe('closed');
+  });
+
+  it('enemies never open a locked door, by trigger or by a held travel, and their request is spent', () => {
+    const r = run(lockedMap({ key: 'red' }), [enemy], ['red']);
+    r.requests[0] = 1;
+    expect(r.go().phase).toBe('closed');
+    expect(r.requests[0]).toBe(0);
+    expect(r.refused).toEqual([]);
+    expect(r.locks.locked[0]).toBe(1);
+  });
+
+  it('once the player has opened it, an enemy can too', () => {
+    const r = run(lockedMap({ key: 'red' }), [walker], ['red']);
+    r.go();
+    r.go([], 200);
+    expect(r.states[0]!.phase).toBe('closed');
+    expect(r.go([enemy]).open).toBeGreaterThan(0);
+  });
+
+  it('a sealed door ignores the player and any key until its event, then opens and stays open', () => {
+    const map = lockedMap({ sealed: true, opensOn: 'switch.a', key: null });
+    const r = run(map, [walker], ['red']);
+    expect(r.go().phase).toBe('closed');
+    expect(r.refused.length).toBeGreaterThan(0);
+    expect(fireDoorEvent(r.field.defs, r.locks, 'other')).toEqual([]);
+    expect(fireDoorEvent(r.field.defs, r.locks, 'switch.a')).toEqual([0]);
+    expect(fireDoorEvent(r.field.defs, r.locks, 'switch.a')).toEqual([]);
+    r.go([], 400);
+    expect(r.states[0]!.phase).toBe('open');
+    expect(r.field.open[0]).toBe(1);
+  });
+
+  it('a door with its own line opens by hand as well as on the event', () => {
+    const map = lockedMap({ opensOn: 'switch.a', key: null });
+    const r = run(map, [walker]);
+    expect(r.locks.locked[0]).toBe(0);
+    expect(r.go().open).toBeGreaterThan(0);
+  });
+
+  it('locks off (?locks=0): a keyed door opens like any other', () => {
+    expect(run(lockedMap({ key: 'red' }), [walker], [], false).go().open).toBeGreaterThan(0);
+  });
+});
 
 describe('the door format', () => {
   it('parses a door with defaults (split, 3 m/s, 4 s, no key)', () => {

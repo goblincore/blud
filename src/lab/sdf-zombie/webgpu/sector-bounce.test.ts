@@ -234,3 +234,16 @@ describe('refineFaces (flats near emitters, item 2g B1)', () => {
     expect(r.faces).toEqual(faces);
   });
 });
+
+describe('lava bounce', () => {
+  it('scales only lava sources', () => {
+    const p: [number, number, number] = [2, 1, 0.01], n: [number, number, number] = [0, 0, 1], into: [number, number] = [0, 1];
+    const map = { vertices: [[0, 0], [4, 0], [4, 4], [0, 4]], lines: [{ v: [0, 1], front: 0, back: -1 }, { v: [1, 2], front: 0, back: -1 }, { v: [2, 3], front: 0, back: -1 }, { v: [3, 0], front: 0, back: -1 }],
+      sectors: [{ floor: 0, ceil: 3, zone: 0, light: 1, special: 'none', hurtPerSec: 0, glow: 'lava', materials: { floor: 'lava', ceil: 'a', wall: 'a' } }] } as unknown as SectorMap;
+    const sources = glowSources(map);
+    expect(sources.length).toBe(1);
+    const a = createGlowBounce(map, sources).at(p, n, into), b = createGlowBounce(map, sources, 2).at(p, n, into);
+    expect(a[0]).toBeGreaterThan(0);
+    expect(b[0]).toBeCloseTo(a[0] * 2);
+  });
+});

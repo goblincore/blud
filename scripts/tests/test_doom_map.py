@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "levels"))
 import doom_map  # noqa: E402
+import doom_route  # noqa: E402
+import doom_tables  # noqa: E402
 
 
 def name8(s: str) -> bytes:
@@ -252,11 +254,100 @@ def test_a_keyed_door_writes_its_key_and_a_misshapen_one_stays_open():
     lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
              {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
     sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
-    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    doors, left = doom_map._door_entities({1}, {1: {26}}, {}, lines, verts, sectors)
     assert left == [] and doors[0]["key"] == "blue" and doors[0]["zones"] == [0, 1] and doors[0]["width"] == 2.0
     verts[2] = [0.5, 2.6]                                   # one face longer: not a doorway
-    doors, left = doom_map._door_entities({1}, {1: {26}}, lines, verts, sectors)
+    doors, left = doom_map._door_entities({1}, {1: {26}}, {}, lines, verts, sectors)
     assert doors == [] and left == [1]
+
+
+def test_a_gun_switch_target_is_sealed_unless_a_line_of_its_own_opens_it():
+    verts = [[0.0, 0.0], [0.0, 2.0], [0.5, 2.0], [0.5, 0.0]]
+    lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
+             {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, _ = doom_map._door_entities({1}, {1: {46}}, {1: 7}, lines, verts, sectors)
+    assert doors[0]["opensOn"] == "switch.tag-7" and doors[0]["sealed"] is True
+    doors, _ = doom_map._door_entities({1}, {1: {46, 31}}, {1: 7}, lines, verts, sectors)
+    assert doors[0]["opensOn"] == "switch.tag-7" and "sealed" not in doors[0]
+
+
+def test_a_door_set_into_a_room_takes_its_long_faces():
+    # MAP28's s16: faces into rooms 0 and 2, the short jambs open onto room 2 as well.
+    verts = [[0.0, 0.0], [2.0, 0.0], [2.0, 0.5], [0.0, 0.5]]
+    lines = [{"v": [1, 0], "front": 1, "back": 0}, {"v": [3, 2], "front": 1, "back": 2},
+             {"v": [0, 3], "front": 1, "back": 2}, {"v": [2, 1], "front": 1, "back": 2}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, left = doom_map._door_entities({1}, {1: {33}}, {}, lines, verts, sectors)
+    assert left == [] and doors[0]["faces"] == [0, 1] and doors[0]["key"] == "red" and doors[0]["width"] == 2.0
+
+
+def test_parallel_faces_a_little_out_of_square_make_a_door_and_far_out_do_not():
+    verts = [[0.0, 0.0], [0.0, 2.0], [1.0, 2.2], [1.0, 0.0]]
+    lines = [{"v": [0, 1], "front": 1, "back": 0}, {"v": [2, 3], "front": 1, "back": 2},
+             {"v": [1, 2], "front": 1}, {"v": [3, 0], "front": 1}]
+    sectors = [{"floor": 0, "ceil": 3, "zone": 0}, {"floor": 0, "ceil": 2, "zone": 0}, {"floor": 0, "ceil": 3, "zone": 1}]
+    doors, left = doom_map._door_entities({1}, {1: {1}}, {}, lines, verts, sectors)
+    assert left == [] and doors[0]["depth"] == 1.0 and doors[0]["width"] == 2.1
+    verts[2] = [1.0, 2.5]
+    assert doom_map._door_entities({1}, {1: {1}}, {}, lines, verts, sectors) == ([], [1])
+
+
+def _locked_row(door):
+    """Rooms 0 | door 1 | room 2, square; a key pickup and a switch can sit in any of them."""
+    return {"vertices": [[0, 0], [0, 4], [4, 4], [4, 0], [5, 0], [5, 4], [9, 4], [9, 0]],
+            "sectors": [{"floor": 0, "ceil": 3} for _ in range(3)],
+            "lines": [{"v": [0, 3], "front": 0}, {"v": [3, 2], "front": 0, "back": 1}, {"v": [2, 1], "front": 0}, {"v": [1, 0], "front": 0},
+                      {"v": [3, 4], "front": 1}, {"v": [4, 5], "front": 1, "back": 2}, {"v": [5, 2], "front": 1},
+                      {"v": [4, 7], "front": 2}, {"v": [7, 6], "front": 2}, {"v": [6, 5], "front": 2}],
+            "start": {"pos": [2, 0, 2]}, "doors": [{"sector": 1, **door}],
+            "triggers": [{"event": "level.end", "min": [7, 0, 2], "max": [8, 2, 3]}], "pickups": []}
+
+
+def test_the_route_needs_the_key_on_the_near_side():
+    lvl = _locked_row({"key": "red"})
+    assert not doom_route.flood(lvl)["exit_reached"]
+    assert doom_route.flood(lvl, locks=False)["exit_reached"]
+    lvl["pickups"] = [{"item": "key-red", "pos": [6, 0, 2]}]    # behind its own lock
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["pickups"] = [{"item": "key-red", "pos": [1, 0, 1]}]
+    r = doom_route.flood(lvl)
+    assert r["exit_reached"] and r["still_locked"] == []
+
+
+def test_the_route_needs_the_switch_of_a_sealed_door():
+    lvl = _locked_row({"sealed": True, "opensOn": "switch.a"})
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["switches"] = [{"id": "s", "line": 9, "event": "switch.a"}]   # in the far room
+    assert not doom_route.flood(lvl)["exit_reached"]
+    lvl["switches"] = [{"id": "s", "line": 2, "event": "switch.a"}]
+    assert doom_route.flood(lvl)["exit_reached"]
+
+
+def test_a_key_below_a_one_way_drop_with_its_door_back_up_is_a_dead_end():
+    # Start room 0 (high) | locked door 1 | room 2 holds the exit; room 3, down a drop from 0, holds the key.
+    lvl = _locked_row({"key": "red"})
+    lvl["vertices"] += [[0, -4], [4, -4]]
+    lvl["sectors"].append({"floor": -3, "ceil": 3})
+    lvl["lines"][0] = {"v": [0, 3], "front": 0, "back": 3}
+    lvl["lines"] += [{"v": [0, 8], "front": 3}, {"v": [8, 9], "front": 3}, {"v": [9, 3], "front": 3}]
+    lvl["pickups"] = [{"item": "key-red", "pos": [2, 0, -2]}]
+    r = doom_route.flood(lvl)
+    assert not r["exit_reached"] and (3, ("key-red",)) in r["dead_ends"]
+    # A lift in the way back makes it a play-through: the drop room rides up.
+    lvl["sectors"][3]["floor"] = -3
+    lvl["lifts"] = [{"sector": 3, "top": 0.0}]
+    assert doom_route.flood(lvl)["exit_reached"]
+
+
+def test_a_moving_lift_writes_its_low_floor_and_top():
+    assert 62 in doom_tables.MOVING_LIFT_SPECIALS and 88 not in doom_tables.MOVING_LIFT_SPECIALS   # E1M1's stays static
+
+
+def test_key_things_become_key_pickups():
+    assert {doom_tables.THING_PICKUPS[t] for t in (5, 40)} == {"key-blue"}
+    assert {doom_tables.THING_PICKUPS[t] for t in (6, 39)} == {"key-yellow"}
+    assert {doom_tables.THING_PICKUPS[t] for t in (13, 38)} == {"key-red"}
 
 
 def test_floor_lower_target_is_lowered(tmp_path):
@@ -495,3 +586,126 @@ def test_exit_push_dims_a_fluorescent_light_near_a_sign(tmp_path):
     [plain], [dim] = fl("none"), fl("exit")
     assert dim["power"] == round(plain["power"] * doom_map.EXIT_FLUORO_DIM, 2)
     assert dim["pos"] == plain["pos"]
+
+
+def test_map_names_of_doom_2_convert(tmp_path):
+    wad = tmp_path / "t.wad"
+    wad.write_bytes(build_wad().replace(name8("E1M1"), name8("MAP28")))
+    out, _ = doom_map.convert(wad, "map28", units_per_m=32)
+    assert out["id"] == "doom-map28"
+
+
+def test_only_slime_01_to_08_is_liquid():
+    assert doom_tables.material_for_flat("SLIME01") == "acid"
+    assert doom_tables.material_for_flat("SLIME08") == "acid"
+    assert doom_tables.material_for_flat("SLIME09") == "concrete"
+    assert doom_tables.material_for_flat("SLIME13") == "metal-plate"
+
+
+def test_doom_2_monsters_land_on_the_cast():
+    assert doom_tables.THING_SPAWNS[3002] == "butcher"
+    assert doom_tables.THING_SPAWNS[3005] == "teratoma"
+    assert 3006 not in doom_tables.THING_SPAWNS     # a lost soul has no stand-in
+
+
+def test_a_tagged_floor_raise_is_written_raised(tmp_path):
+    out, _ = convert_row(tmp_path, (-64, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 119)
+    assert out["sectors"][1]["floor"] == 0
+
+
+def test_the_zone_split_area_is_a_choice(tmp_path):
+    wide, _ = convert_stats(tmp_path)
+    fine, _ = convert_stats(tmp_path, zone_split_m2=1.0)
+    assert len({s["zone"] for s in fine["sectors"]}) >= len({s["zone"] for s in wide["sectors"]})
+
+
+def route_level(mid_floor, mid_ceil):
+    """Three 4 m squares in a row, A, M, B; the exit is in B."""
+    secs = [{"floor": 0, "ceil": 3}, {"floor": mid_floor, "ceil": mid_ceil}, {"floor": 0, "ceil": 3}]
+    vs = [[x, z] for z in (0, 4) for x in (0, 4, 8, 12)]
+    lines = [{"v": [k, k + 1], "front": k} for k in range(3)] + [{"v": [4 + k, 5 + k], "front": k} for k in range(3)]
+    lines += [{"v": [0, 4], "front": 0}, {"v": [1, 5], "front": 0, "back": 1}, {"v": [2, 6], "front": 1, "back": 2}, {"v": [3, 7], "front": 2}]
+    return {"vertices": vs, "sectors": secs, "lines": lines, "start": {"pos": [2, 0, 2]},
+            "triggers": [{"event": "level.end", "min": [9, 0, 1], "max": [11, 2, 3]}]}
+
+
+def test_route_walks_up_a_step_and_under_a_lintel():
+    assert doom_route.flood(route_level(0.7, 2.7))["exit_reached"]
+
+
+def test_route_stops_at_a_high_step_and_a_low_opening():
+    assert not doom_route.flood(route_level(0.8, 3))["exit_reached"]
+    assert not doom_route.flood(route_level(0, 1.8))["exit_reached"]
+
+
+def test_route_goes_one_way_down_a_drop():
+    r = doom_route.flood(route_level(-2, 3))    # down into M, then the 2 m climb to B cannot be walked
+    assert not r["exit_reached"] and r["reached"] == [0, 1]
+
+
+def test_a_floor_that_hurts_glows(tmp_path):
+    out, _ = convert_row(tmp_path, (0, 128, "RROCK01", "CEIL3_5", 160, 5), 0, 0)
+    assert out["sectors"][1]["glow"] == "lava" and out["sectors"][1]["hurtPerSec"] == 10
+
+
+# Monster closets (2026-11-08): what Doom keeps shut until a walk-over line.
+
+def build_pair(mid_sector, special, things=()) -> bytes:
+    """A (x 0..128) and M (x 128..256), 256 deep; M touches A only (a closet, not a doorway). Line 0 (A's south wall)
+    carries `special`, tag 1; M is tagged 1."""
+    verts = [(0, 0), (128, 0), (256, 0), (0, 256), (128, 256), (256, 256)]
+    sectors = [(0, 128, "FLOOR4_8", "CEIL3_5", 160, 0, 0), mid_sector + (1,)]
+    sides = [(0, 0, "-", "-", "STARTAN3", 0), (0, 0, "-", "-", "STARTAN3", 1)]
+    lines = [(1, 0, 1, special, 1, 0, 0xFFFF), (0, 3, 1, 0, 0, 0, 0xFFFF), (3, 4, 1, 0, 0, 0, 0xFFFF),
+             (4, 1, 4, 0, 0, 0, 1),                                                             # A | M
+             (2, 1, 1, 0, 0, 1, 0xFFFF), (5, 2, 1, 0, 0, 1, 0xFFFF), (4, 5, 1, 0, 0, 1, 0xFFFF)]
+    return pack_wad(verts, sectors, sides, lines, [(64, 128, 0, 1, 7)] + list(things))
+
+
+def _convert_pair(tmp_path, *a, **kw):
+    wad = tmp_path / "p.wad"
+    wad.write_bytes(build_pair(*a, **kw))
+    out, stats = doom_map.convert(wad, "E1M1", units_per_m=32)
+    json.dumps(out)
+    return out, stats
+
+
+def test_a_shut_sector_a_walk_over_line_opens_is_a_closet_with_a_trigger_on_the_line(tmp_path):
+    out, stats = _convert_pair(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 2)     # W1 door open stay
+    assert stats["closets"] == [1] and stats["doors_left_open"] == []
+    [c] = out["closets"]
+    assert c == {"id": "closet-1", "sector": 1, "opensOn": "line.tag-1", "moves": "ceil", "shut": out["sectors"][1]["floor"],
+                 "speed": doom_map.DOOR_SPEED_M_S}
+    assert out["sectors"][1]["ceil"] == round((128 - 4) / 32, 4)                        # the file keeps it open
+    [t] = [t for t in out["triggers"] if t["event"] == "line.tag-1"]
+    # Line 0 runs x 128 -> 0 at y 0 (our z 4 from the start at y 128); the box is the line's grown by the pad.
+    pad = doom_map.WALK_LINE_PAD_M
+    assert t["min"][0] == round(-2 - pad, 4) and t["max"][0] == round(2 + pad, 4)
+    assert t["min"][2] == round(4 - pad, 4) and t["max"][2] == round(4 + pad, 4)
+    assert t["once"] is True and "completeOn" not in out
+
+
+def test_a_switch_opened_or_open_sector_is_no_closet(tmp_path):
+    out, stats = _convert_pair(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 63)    # SR: no use key, stays an open hole
+    assert "closets" not in out and stats["doors_left_open"] == [1]
+    out, stats = _convert_pair(tmp_path, (0, 96, "FLOOR4_8", "CEIL3_5", 160, 0), 2)    # open in the WAD: nothing to shut
+    assert "closets" not in out and not any(t["event"].startswith("line.") for t in out["triggers"])
+
+
+def test_a_sealed_alcove_a_walk_over_floor_lower_opens_is_a_floor_closet_its_monsters_on_top(tmp_path):
+    out, stats = _convert_pair(tmp_path, (128, 192, "FLOOR4_8", "CEIL3_5", 160, 0), 36,  # over A's ceiling: sealed
+                               things=[(192, 128, 0, 3004, 7)])
+    [c] = out["closets"]
+    assert c["moves"] == "floor" and c["shut"] == 4.0 and c["speed"] == doom_map.DOOR_BLAZE_SPEED_M_S
+    assert out["sectors"][1]["floor"] == 0.0                                            # the file keeps it lowered
+    [s] = out["spawns"]
+    assert s["pos"][1] == 4.0                                                           # standing on the shut floor
+
+
+def test_a_doorway_a_walk_over_line_opens_is_a_sealed_door_on_its_event(tmp_path):
+    out, _ = convert_row(tmp_path, (0, 0, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 2)
+    [door] = out["doors"]
+    assert door["opensOn"] == "line.tag-1" and door["sealed"] is True and "closets" not in out
+    assert [t["id"] for t in out["triggers"] if t["event"] == "line.tag-1"] == ["line-0"]
+    out, _ = convert_row(tmp_path, (0, 64, "FLOOR4_8", "CEIL3_5", 160, 0), 1, 2)      # open in the WAD: opens on approach
+    assert "opensOn" not in out["doors"][0]

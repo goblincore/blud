@@ -2,6 +2,7 @@
 """Convert a Doom map from a WAD into a Blud sector level.
 
     python3 scripts/levels/doom_map.py <wad> E1M1 [--units-per-m 35] [--out public/assets/levels] [--svg .lab-tmp/doom]
+    python3 scripts/levels/doom_map.py <doom2.wad> MAP28 --svg .lab-tmp/map28
 
 Spec: docs/superpowers/specs/2026-10-24-doom-sector-levels-design.md §5. Reads the vanilla map
 lumps (VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, THINGS; no BSP). Writes <out>/doom-<map>.level.json.
@@ -12,7 +13,11 @@ tagged) are written OPEN (the ceiling at Doom's open height) and remote floor-lo
 sector shaped like a doorway (two parallel two-sided faces of one length, squared ends) also becomes a
 DOOR ENTITY in `doors` (sector-def.ts SectorDoorDef: its faces, centre line a -> b, width, depth,
 height, the zones it joins, speed, wait, key): the game closes it with sliding leaves that open on
-approach. Any other door sector stays an open hole and is listed in the summary. Plan 3a writes
+approach. Any other door sector stays an open hole and is listed in the summary, except a MONSTER CLOSET
+(2026-11-08): a sector the WAD has shut that a walk-over line opens (doom_tables.py WALK_DOOR_SPECIALS) is written to
+`closets` (sector-def.ts SectorClosetDef: the file keeps it open, the game shuts it at load and its ceiling rises on
+`line.tag-N`), and the line becomes a trigger box firing that event. A doorway-shaped one is a door that opens on it.
+A sealed walk-over floor-lower target (an alcove over a room) is a closet whose floor comes down. Plan 3a writes
 monsters (spawns), pickups and an exit trigger in front of each exit switch. Plan 3b writes Doom's
 exploding barrels as our toxic drums (`barrels`, on every skill: they are scenery; multiplayer-only
 ones are still left out). Other things (decorations, keys, ...) are skipped and counted.
@@ -44,9 +49,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
-    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    BLAZE_DOOR_SPECIALS, DOOR_KEY_SPECIALS, DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FAST_FLOOR_SPECIALS, FLOOR_LOWER_SPECIALS, FLOOR_RAISE_SPECIALS, GLOW_MATERIALS, GUN_DOOR_SPECIALS, MOVING_LIFT_SPECIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    WALK_DOOR_SPECIALS, WALK_FLOOR_LOWER_SPECIALS,
     IMP, IMP_VARIANTS, SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
-    material_for_flat, material_for_texture, sector_special,
+    MOODS, material_for_flat, material_for_texture, mood_for_texture, sector_special,
 )
 
 MAP_LUMPS = ("THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SECTORS")
@@ -59,12 +65,16 @@ PLAYER1_START = 1
 # Steps get easier (the 24-unit stairs 0.69 m against SECTOR_STEP_M 0.75) but none newly climbable:
 # the next step up, 28 units (the start room's goo pit to its window sills), is 0.8 m.
 UNITS_PER_M = 35.0
+# A map whose route needs a lower opening than 35 allows gets its own scale. MAP28's corridors are 64 units: 1.83 m at
+# 35, under the headroom, and 86 of its 116 sectors are cut off. 33 makes them 1.94 m (E1M1's door clearance).
+MAP_UNITS_PER_M = {"MAP28": 33.0}
 REFERENCE_UNITS_PER_M = 32.0      # the scale the *_M2 / spacing constants below were tuned at
 DOOR_OPEN_GAP_UNITS = 4          # Doom: a door opens to 4 units below the lowest neighbouring ceiling
 DOOR_SPEED_M_S = 3.0             # leaf travel (game time, not world scale: the leaves are body-sized timing)
 DOOR_BLAZE_SPEED_M_S = 6.0       # Doom's fast doors
 DOOR_WAIT_S = 4.0                # Doom waits 150 tics (4.3 s)
 DOOR_SHAPE_TOL_M = 0.01          # how far a door sector may be off a rectangle and still be a doorway
+DOOR_SKEW_TOL_M = 0.3            # parallel faces whose ends are this far out of square still make a doorway (MAP28's s76)
 # The *_M2 areas and the EMITTER_LIGHT_*_M spacings are map structure: metres at REFERENCE_UNITS_PER_M.
 ZONE_SPLIT_M2 = 600.0            # a zone whose floor area is over this splits (spec §6.5)
 ZONE_MIN_M2 = 50.0               # a smaller zone merges into a neighbour
@@ -72,7 +82,8 @@ LIGHT_MIN_ZONE_M2 = 150.0        # a zone gets a fill light from this area up
 MAX_LIGHTS = 10
 MAX_POOL_LIGHTS = 8             # pool lights do not count toward MAX_LIGHTS
 POOL_MIN_M2 = 4.0
-POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.45, 0.12], "acid": [0.75, 1.0, 0.25]}
+POOL_LAVA_POWER = 1.3           # lava lights the room from below (owner playtest 2026-11-01)
+POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.3, 0.06], "acid": [0.75, 1.0, 0.25]}
 # Emitter lights (hand-off item 2g, part B1): the strongest self-lit surfaces get a real coloured light
 # in the zone of the sector they face into, so bodies are lit by them. Cheap tier (mood "glow",
 # level-tier.ts isLevelCheap): the list node shades it for the level, ~free next to a full-tier light.
@@ -120,6 +131,7 @@ EXIT_DIM_M = 6.0
 EXIT_FLUORO_DIM = 0.7
 EXIT_DEPTH_M = 0.8               # the exit trigger reaches this far in front of the switch line
 EXIT_HEIGHT_M = 2.0
+WALK_LINE_PAD_M = 0.3            # a walk-over line's trigger box: the line's box grown by this (a body-sized margin)
 
 
 def fnv1a32(s: str) -> int:
@@ -248,7 +260,7 @@ def _components(members: set[int], adj: dict[int, set[int]]) -> list[list[int]]:
     return out
 
 
-def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: list[float], bbox) -> list[int]:
+def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: list[float], bbox, split_m2: float = ZONE_SPLIT_M2) -> list[int]:
     """Spec §6.5: sectors joined by lines that touch no door; a door joins its first neighbour.
     A zone whose real area is over ZONE_SPLIT_M2 splits along its longer axis, keeping each part
     connected; a zone under ZONE_MIN_M2 merges into the neighbour it shares most lines with."""
@@ -272,7 +284,7 @@ def _zones(n_sectors: int, pairs: list[tuple[int, int]], doors: set[int], area: 
         return sum(area[s] for s in g)
 
     def split(group: list[int]) -> list[list[int]]:
-        if len(group) < 2 or total(group) <= ZONE_SPLIT_M2:
+        if len(group) < 2 or total(group) <= split_m2:
             return [group]
         members = set(group)
         x0 = min(bbox[s][0] for s in group); x1 = max(bbox[s][2] for s in group)
@@ -347,7 +359,8 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
 
 
 def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, skill: int = 4, zombieman: str = "mix",
-            imp: str = "mix", overrides: dict | None = None) -> tuple[dict, dict]:
+            imp: str = "mix", overrides: dict | None = None,
+            zone_split_m2: float = ZONE_SPLIT_M2) -> tuple[dict, dict]:
     """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
     `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
     "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS; `imp` likewise
@@ -393,6 +406,11 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             door_by.setdefault(sides[ln["left"]]["sector"], set()).add(ln["special"])
     doors = set(door_by)
     lowered: set[int] = set()
+    raised: set[int] = set()
+    gun_tag: dict[int, int] = {}     # door sector -> the tag of a gun switch that opens it
+    walk_tag: dict[int, int] = {}    # sector the WAD has shut -> the tag of the walk-over line that opens it
+    floor_shut: dict[int, int] = {}  # sealed floor-lower closet -> its WAD floor (where it rests until the line)
+    fast_floor: set[int] = set()
     for ln in lines:
         if ln["tag"] == 0:
             continue
@@ -401,16 +419,49 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             doors.update(targets)
             for t in targets:
                 door_by.setdefault(t, set()).add(ln["special"])
+            if ln["special"] in GUN_DOOR_SPECIALS:
+                for t in targets:
+                    gun_tag.setdefault(t, ln["tag"])
+            if ln["special"] in WALK_DOOR_SPECIALS:
+                for t in targets:
+                    if sectors[t]["ceil"] <= sectors[t]["floor"]:
+                        walk_tag.setdefault(t, ln["tag"])
         elif ln["special"] in FLOOR_LOWER_SPECIALS:
             lowered.update(targets)
+            if ln["special"] in WALK_FLOOR_LOWER_SPECIALS:
+                for t in targets:
+                    if neighbours[t] and all(sectors[t]["floor"] >= sectors[k]["ceil"] for k in neighbours[t]):
+                        walk_tag.setdefault(t, ln["tag"])
+                        floor_shut.setdefault(t, sectors[t]["floor"])
+                        if ln["special"] in FAST_FLOOR_SPECIALS:
+                            fast_floor.add(t)
+        elif ln["special"] in FLOOR_RAISE_SPECIALS:
+            raised.update(targets)
     floor = {i: s["floor"] for i, s in enumerate(sectors)}
     ceil = {i: s["ceil"] for i, s in enumerate(sectors)}
     for i in sorted(lowered):
         if neighbours[i]:
             floor[i] = min(floor[i], min(sectors[n]["floor"] for n in neighbours[i]))
+    for i in sorted(raised):
+        higher = [sectors[n]["floor"] for n in neighbours[i] if sectors[n]["floor"] > sectors[i]["floor"]]
+        if higher:
+            floor[i] = min(higher)
     for d in sorted(doors):
         if neighbours[d]:
             ceil[d] = min(sectors[n]["ceil"] for n in neighbours[d]) - DOOR_OPEN_GAP_UNITS
+    # Moving lifts: the file's floor is the low position (the lowest neighbour's floor), `top` where it rests.
+    lift_top: dict[int, float] = {}
+    for ln in lines:
+        if ln["special"] in MOVING_LIFT_SPECIALS and ln["tag"] != 0:
+            for t in (i for i, s in enumerate(sectors) if s["tag"] == ln["tag"]):
+                if t not in lift_top and neighbours[t] and min(floor[n] for n in neighbours[t]) < floor[t]:
+                    lift_top[t] = floor[t]
+    for t in list(lift_top):
+        below = [floor[n] for n in neighbours[t] if n not in lift_top]
+        if below and min(below) < floor[t]:
+            floor[t] = min(below)
+        else:
+            del lift_top[t]                                  # only other lifts beside it: stays static
     for i in range(len(sectors)):
         if ceil[i] <= floor[i]:
             raise ValueError(f"{map_name}: sector {i} (tag {sectors[i]['tag']}) has ceiling {ceil[i]} <= floor {floor[i]} "
@@ -454,18 +505,33 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
     # Structural decisions (zones, which zones / pools / emitters earn a light) read the area at
     # REFERENCE_UNITS_PER_M, so the world scale does not change them; powers read the real area.
     area_ref = [a * (m / REFERENCE_UNITS_PER_M) ** 2 for a in area]
-    zone_of = _zones(n, pairs, doors, area_ref, bbox)
+    zone_of = _zones(n, pairs, doors, area_ref, bbox, zone_split_m2)
+
+    # Each zone's mood: what its wall faces vote for (a sector whose own walls are flesh keeps flesh: it should shock).
+    zone_votes: dict[int, dict[str, int]] = {}
+    for i, counts in faces.items():
+        for tex, k in counts.items():
+            mood = mood_for_texture(tex) if map_name.upper().startswith("MAP") else None   # Doom 2 only: E1M1 stays as it is
+            if mood:
+                votes = zone_votes.setdefault(zone_of[i], {})
+                votes[mood] = votes.get(mood, 0) + k
+    zone_mood = {z: min(v, key=lambda m: (-v[m], m)) for z, v in zone_votes.items()}
 
     out_sectors = []
     for i, s in enumerate(sectors):
         special, hurt = sector_special(s["special"])
         floor_mat = material_for_flat(s["floor_tex"])
+        if hurt and floor_mat not in GLOW_MATERIALS:      # a floor that hurts must read as one (MAP28's rock and blood)
+            floor_mat = "lava"
         wall_tex = max(faces.get(i, {"-": 1}).items(), key=lambda kv: kv[1])[0]
         sec = {
             "floor": H(floor[i]), "ceil": H(ceil[i]), "light": round(max(0, min(255, s["light"])) / 255, 3),
             "zone": zone_of[i],
             "materials": {"floor": floor_mat, "ceil": material_for_flat(s["ceil_tex"]), "wall": material_for_texture(wall_tex)},
         }
+        mood = "flesh" if zone_of[i] in zone_mood and mood_for_texture(wall_tex) == "flesh" else zone_mood.get(zone_of[i])
+        if mood:
+            sec["tint"] = MOODS[mood]["tint"]
         if special != "none":
             sec["special"] = special
         if hurt:
@@ -489,7 +555,22 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         out_lines.append(rec)
 
     verts_m = [[X(x), Z(y)] for x, y in verts]
-    door_entities, doors_left_open = _door_entities(doors, door_by, out_lines, verts_m, out_sectors)
+    door_entities, doors_left_open = _door_entities(doors, door_by, gun_tag, out_lines, verts_m, out_sectors, walk_tag)
+    # Closets: a shut sector a walk-over line opens that is not a door entity rises its ceiling on the line's event (the
+    # file keeps it open: the static mesh, navigation and the portal graph see it open; the game shuts it at load), and a
+    # sealed floor-lower target brings its floor down.
+    closets = []
+    for d in [d for d in doors_left_open if d in walk_tag]:
+        doors_left_open.remove(d)
+        closets.append({"id": f"closet-{d}", "sector": d, "opensOn": f"line.tag-{walk_tag[d]}", "moves": "ceil",
+                        "shut": out_sectors[d]["floor"], "speed": DOOR_BLAZE_SPEED_M_S if door_by.get(d, set()) & BLAZE_DOOR_SPECIALS else DOOR_SPEED_M_S})
+    for d in sorted(floor_shut):
+        if H(floor_shut[d]) >= out_sectors[d]["ceil"] or H(floor_shut[d]) <= out_sectors[d]["floor"]:
+            continue                                         # a patched or degenerate sector: leave it lowered
+        closets.append({"id": f"closet-{d}", "sector": d, "opensOn": f"line.tag-{walk_tag[d]}", "moves": "floor",
+                        "shut": H(floor_shut[d]), "speed": DOOR_BLAZE_SPEED_M_S if d in fast_floor else DOOR_SPEED_M_S})
+    closets.sort(key=lambda c: c["sector"])
+    shut_floor = {c["sector"]: c["shut"] for c in closets if c["moves"] == "floor"}
 
     # Fill lights: one per zone of real area >= LIGHT_MIN_ZONE_M2 (the biggest MAX_LIGHTS), at a point
     # confirmed inside the zone's biggest sector, as far from its walls as the grid finds.
@@ -507,7 +588,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                 continue
             f, c = out_sectors[i]["floor"], out_sectors[i]["ceil"]
             lights.append({"pos": [round(pt[0], 3), round(min(c - 0.4, f + 0.75 * (c - f)), 3), round(pt[1], 3)],
-                           "color": [1.0, 0.92, 0.82], "power": round(3 + 9 * mean, 2), "fixture": "none"})
+                           "color": MOODS[zone_mood[zone]]["light"] if zone in zone_mood else [1.0, 0.92, 0.82], "power": round(3 + 9 * mean, 2), "fixture": "none"})
             break
 
     # Pool lights: connected glow sectors of one kind form a pool; each of at least POOL_MIN_M2 gets a
@@ -528,7 +609,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
             if pt is None:
                 continue
             lights.append({"pos": [round(pt[0], 3), round(out_sectors[i]["floor"] + 0.6, 3), round(pt[1], 3)],
-                           "color": list(POOL_COLOURS[glow[i]]), "power": round(min(14, 4 + 0.15 * total_area), 2),
+                           "color": list(POOL_COLOURS[glow[i]]), "power": round(min(14, 4 + 0.15 * total_area) * (POOL_LAVA_POWER if glow[i] == "lava" else 1), 2),
                            "mood": "fire", "fixture": "none"})
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
@@ -560,7 +641,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         if sec is None:
             in_no_sector += 1
             continue
-        pos = [X(t["x"]), out_sectors[sec]["floor"], Z(t["y"])]
+        pos = [X(t["x"]), shut_floor.get(sec, out_sectors[sec]["floor"]), Z(t["y"])]
         if is_barrel:
             barrels.append({"id": f"b{ti}", "pos": pos})
             continue
@@ -576,8 +657,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         else:
             pickups.append({"id": f"p{ti}", "item": THING_PICKUPS[t["type"]], "pos": pos})
 
-    override_spawns = []
+    override_spawns, recast = [], []
     if overrides is not None:
+        recast = doom_overrides.apply_recast(overrides, spawns)
         used = {s["id"] for s in spawns} | {p["id"] for p in pickups} | {b["id"] for b in barrels}
         override_spawns = doom_overrides.apply_spawns(overrides, spawns, used, verts_m, out_lines, out_sectors, sector_segs)
 
@@ -599,6 +681,19 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
                          "min": [round(min(xs), 4), fl, round(min(zs), 4)],
                          "max": [round(max(xs), 4), round(fl + EXIT_HEIGHT_M, 4), round(max(zs), 4)]})
 
+    # Walk-over lines that open something in the file (a closet, or a door's `opensOn`): a trigger box over each, the
+    # line's box grown by WALK_LINE_PAD_M, from the lower of its two floors up EXIT_HEIGHT_M. A box, not a crossing: a
+    # diagonal line's box reaches further from it than an axis-aligned one's (MAP28's line 404, about a metre).
+    wanted = {c["opensOn"] for c in closets} | {d["opensOn"] for d in door_entities if d.get("opensOn", "").startswith("line.")}
+    for k, ln in enumerate(kept):
+        if ln["special"] not in WALK_DOOR_SPECIALS | WALK_FLOOR_LOWER_SPECIALS or f"line.tag-{ln['tag']}" not in wanted:
+            continue
+        (ax, az), (bx, bz) = (X(verts[ln["v1"]][0]), Z(verts[ln["v1"]][1])), (X(verts[ln["v2"]][0]), Z(verts[ln["v2"]][1]))
+        fl = min(out_sectors[sides[sd]["sector"]]["floor"] for sd in (ln["right"], ln["left"]) if sd is not None)
+        triggers.append({"id": f"line-{k}", "event": f"line.tag-{ln['tag']}", "once": True,
+                         "min": [round(min(ax, bx) - WALK_LINE_PAD_M, 4), fl, round(min(az, bz) - WALK_LINE_PAD_M, 4)],
+                         "max": [round(max(ax, bx) + WALK_LINE_PAD_M, 4), round(fl + EXIT_HEIGHT_M, 4), round(max(az, bz) + WALK_LINE_PAD_M, 4)]})
+
     level = {
         "version": 1, "id": f"doom-{map_name.lower()}", "name": f"Doom {map_name.upper()} (dev placeholder)",
         "geometry": "sectors", "unitsPerM": m, "ammo": "infinite", "loadout": ["melee", "shotgun", "dynamite", "flare"],
@@ -608,10 +703,20 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         "lights": lights,
         "spawns": spawns, "pickups": pickups, "triggers": triggers,
     }
-    if triggers:
+    if any(t["event"] == "level.end" for t in triggers):
         level["completeOn"] = "level.end"
     if door_entities:
         level["doors"] = door_entities
+    # Gun switches: only those that open a door entity (a door left an open hole has nothing to open).
+    opens = {rec["opensOn"] for rec in door_entities if "opensOn" in rec}
+    switches = [{"id": f"sw-{k}", "line": k, "event": f"switch.tag-{ln['tag']}"} for k, ln in enumerate(kept)
+                if ln["special"] in GUN_DOOR_SPECIALS and f"switch.tag-{ln['tag']}" in opens]
+    if switches:
+        level["switches"] = switches
+    if closets:
+        level["closets"] = closets
+    if lift_top:
+        level["lifts"] = [{"id": f"lift-{s}", "sector": s, "top": H(top)} for s, top in sorted(lift_top.items())]
     if barrels:
         level["barrels"] = barrels
 
@@ -622,25 +727,53 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = UNITS_PER_M, ski
         return out
 
     stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "doors_left_open": doors_left_open,
+             "closets": [c["sector"] for c in closets],
              "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
              "emitter_lights": len(emitter_lights),
              "emitter_lights_by_push": {c: len(v) for c, v in push_sets.items()},
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
-             "override_sectors": sector_patches, "override_spawns": override_spawns}
+             "override_sectors": sector_patches, "override_spawns": override_spawns, "recast": recast}
     return level, stats
 
 
-def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, verts_m, out_sectors) -> tuple[list[dict], list[int]]:
+def _door_faces(d: int, out_lines, verts_m) -> list[int]:
+    """The two lines that are door sector d's faces. Usually its only two-sided lines. A rectangle set into a room
+    (MAP28's s16: its jambs open onto the room beyond one face) has more: the longest parallel pair of the same
+    length into two different rooms, when every other two-sided line opens onto one of those rooms."""
+    two_sided = [k for k, ln in enumerate(out_lines) if "back" in ln and ln["front"] != ln["back"] and d in (ln["front"], ln["back"])]
+    if len(two_sided) <= 2:
+        return two_sided
+    beyond = lambda k: out_lines[k]["back"] if out_lines[k]["front"] == d else out_lines[k]["front"]  # noqa: E731
+
+    def run(k):
+        (ax, az), (bx, bz) = verts_m[out_lines[k]["v"][0]], verts_m[out_lines[k]["v"][1]]
+        return bx - ax, bz - az
+    best, best_len = [], 0.0
+    for i, k in enumerate(two_sided):
+        for j in two_sided[i + 1:]:
+            (ux, uz), (vx, vz) = run(k), run(j)
+            lu, lv = math.hypot(ux, uz), math.hypot(vx, vz)
+            if abs(lu - lv) >= DOOR_SHAPE_TOL_M or abs(ux * vz - uz * vx) / max(lu, 1e-9) >= DOOR_SHAPE_TOL_M or lu <= best_len:
+                continue
+            rooms = {beyond(k), beyond(j)}
+            if len(rooms) == 2 and all(beyond(o) in rooms for o in two_sided):
+                best, best_len = [k, j], lu
+    return best
+
+
+def _door_entities(doors: set[int], door_by: dict[int, set[int]], gun_tag: dict[int, int], out_lines, verts_m, out_sectors,
+                   walk_tag: dict[int, int] | None = None) -> tuple[list[dict], list[int]]:
     """The door sectors shaped like a doorway as door entities (sector-def.ts SectorDoorDef), and the
-    others (left open holes). A doorway: exactly two two-sided lines between the sector and another
-    (its faces), the same length, parallel, their ends joined square (a rectangle, the jambs being
-    one-sided track walls). `a` -> `b` runs between the faces' matching ends; the leaves stand on the
-    sector floor up to its (open) ceiling."""
+    others (left open holes). A doorway: two two-sided lines between the sector and other rooms (its
+    faces, _door_faces), parallel, the same length with their ends joined square (a rectangle, the jambs
+    being track walls), or out of square by at most DOOR_SKEW_TOL_M. `a` -> `b` runs between the faces'
+    matching ends; the leaves stand on the sector floor up to its (open) ceiling. A gun switch's target
+    opens on its `opensOn` event, as does a door the WAD has shut that a walk-over line opens (`line.tag-N`, walk_tag; the
+    gun switch wins when both do); `sealed` when nothing else in the file opens it (no line of its own)."""
     out, left_open = [], []
     for d in sorted(doors):
-        faces = [k for k, ln in enumerate(out_lines)
-                 if "back" in ln and ln["front"] != ln["back"] and d in (ln["front"], ln["back"])]
+        faces = _door_faces(d, out_lines, verts_m)
         if len(faces) != 2:
             left_open.append(d)
             continue
@@ -655,10 +788,15 @@ def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, ver
         # Square: both faces as long as the doorway, and each jamb (p0 -> q0, p1 -> q1) across it.
         square = width > 0 and abs(dist(p0, p1) - width) < DOOR_SHAPE_TOL_M and abs(dist(q0, q1) - width) < DOOR_SHAPE_TOL_M \
             and all(abs((q[0] - p[0]) * tx + (q[1] - p[1]) * tz) < DOOR_SHAPE_TOL_M for p, q in ((p0, q0), (p1, q1)))
-        if not square:
-            left_open.append(d)
-            continue
         depth = dist(p0, q0)
+        if not square:
+            # Out of square: parallel faces (every end the same distance off a -> b), ends a little askew.
+            off = [abs((v[0] - a[0]) * -tz + (v[1] - a[1]) * tx) for v in (p0, p1, q0, q1)]
+            skew = max(abs((q[0] - p[0]) * tx + (q[1] - p[1]) * tz) for p, q in ((p0, q0), (p1, q1)))
+            if not (width > 0 and max(off) - min(off) < DOOR_SHAPE_TOL_M and skew <= DOOR_SKEW_TOL_M):
+                left_open.append(d)
+                continue
+            depth = off[0] * 2
         beyond = [out_lines[k]["back"] if out_lines[k]["front"] == d else out_lines[k]["front"] for k in faces]
         by = door_by.get(d, set())
         rec = {"id": f"door-{d}", "sector": d, "faces": faces, "a": a, "b": b,
@@ -669,6 +807,11 @@ def _door_entities(doors: set[int], door_by: dict[int, set[int]], out_lines, ver
         keys = sorted({DOOR_KEY_SPECIALS[sp] for sp in by if sp in DOOR_KEY_SPECIALS})
         if keys:
             rec["key"] = keys[0]
+        opens = f"switch.tag-{gun_tag[d]}" if d in gun_tag else f"line.tag-{walk_tag[d]}" if walk_tag and d in walk_tag else None
+        if opens:
+            rec["opensOn"] = opens
+            if not by & DOOR_SPECIALS:
+                rec["sealed"] = True
         out.append(rec)
     return out, left_open
 
@@ -934,8 +1077,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("wad", type=Path)
     ap.add_argument("map")
-    ap.add_argument("--units-per-m", type=float, default=UNITS_PER_M,
-                    help=f"world scale, Doom units per metre (default {UNITS_PER_M:g}; the bodies are not scaled)")
+    ap.add_argument("--units-per-m", type=float, default=None,
+                    help=f"world scale, Doom units per metre (default {UNITS_PER_M:g}, or the map's own in MAP_UNITS_PER_M; the bodies are not scaled)")
     ap.add_argument("--out", type=Path, default=Path("public/assets/levels"))
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
     ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")
@@ -943,13 +1086,14 @@ def main() -> None:
     ap.add_argument("--imp", choices=("mix",) + IMP_VARIANTS, default="mix", help="what imps become (default: a mix)")
     ap.add_argument("--overrides", type=Path, default=None, help="hand-written edits (default scripts/levels/overrides/<map>.json if it exists)")
     ap.add_argument("--no-overrides", action="store_true", help="convert the WAD only")
+    ap.add_argument("--zone-split", type=float, default=ZONE_SPLIT_M2, help=f"split a zone over this floor area, m^2 at the reference scale (default {ZONE_SPLIT_M2:g})")
     a = ap.parse_args()
     ov_path = None if a.no_overrides else a.overrides or doom_overrides.default_path(a.map)
     if a.overrides and not a.overrides.exists():
         ap.error(f"--overrides {a.overrides}: no such file")
     overrides = doom_overrides.load(ov_path) if ov_path is not None and ov_path.exists() else None
     try:
-        level, stats = convert(a.wad, a.map, a.units_per_m, skill=a.skill, zombieman=a.zombieman, imp=a.imp, overrides=overrides)
+        level, stats = convert(a.wad, a.map, a.units_per_m or MAP_UNITS_PER_M.get(a.map.upper(), UNITS_PER_M), skill=a.skill, zombieman=a.zombieman, imp=a.imp, overrides=overrides, zone_split_m2=a.zone_split)
     except doom_overrides.OverrideError as e:
         sys.exit(f"{ov_path}: {e}")
     a.out.mkdir(parents=True, exist_ok=True)
@@ -959,7 +1103,7 @@ def main() -> None:
     zones = len({s["zone"] for s in level["sectors"]})
     doors = level.get("doors", [])
     print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {len(doors)} doors"
-          f" (sectors {[d['sector'] for d in doors]}; left open: {stats['doors_left_open']}), {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter; by push combo {stats['emitter_lights_by_push']})"
+          f" (sectors {[d['sector'] for d in doors]}; left open: {stats['doors_left_open']}), closets {stats['closets']}, {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter; by push combo {stats['emitter_lights_by_push']})"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
     print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {stats['barrels']} barrels, {len(level['triggers'])} exit triggers"
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")
@@ -968,7 +1112,8 @@ def main() -> None:
     if overrides is not None:
         patched = ", ".join(f"{p['sector']} {sorted(p['set'])}" for p in stats["override_sectors"]) or "none"
         added = ", ".join(f"{s['id']} ({s['kind']}, sector {s['sector']})" for s in stats["override_spawns"]) or "none"
-        print(f"overrides {ov_path}: sectors patched: {patched}; spawns added: {added}")
+        recast = ", ".join(f"{c['id']} {c['from']}->{c['to'] or 'removed'}" for c in stats["recast"]) or "none"
+        print(f"overrides {ov_path}: sectors patched: {patched}; spawns added: {added}; recast: {recast}")
     if a.svg:
         write_svg(level, a.svg / f"{a.map.upper()}.svg")
         print(f"plan: {a.svg / (a.map.upper() + '.svg')}")

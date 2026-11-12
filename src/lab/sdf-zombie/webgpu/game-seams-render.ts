@@ -133,6 +133,28 @@ export function createRenderSeams(ctx: GameContext) {
     get boneMesh() { return ctx.render.boneMesh; },
     /** Cast kit meshes not drawn yet by the kit pre-warm (game-kit-prewarm.ts), -1 before it exists. 0 = all warm. */
     kitPrewarmPending: () => ctx.boot.kitPrewarm?.pending ?? -1,
+    /** Kits and held props that would draw while standing at the world origin, never posed: should always be empty.
+     *  `kitBodyGap`: the worst distance (m, floor plane) from a posed kit's first bone to its body. */
+    kitsShownUnposed: () => ctx.world.actors.flatMap(a => {
+      const c = a.character, out: { id: number; part: string; name: string }[] = [];
+      const drawn = (o: THREE.Object3D) => o.visible && o.children[0]?.visible === true;
+      if (c?.kit && !c.kit.posed && drawn(c.kit.object)) out.push({ id: a.id, part: 'kit', name: a.characterName() });
+      if (c?.prop && !c.prop.posed && drawn(c.prop.object)) out.push({ id: a.id, part: 'prop', name: a.characterName() });
+      return out;
+    }),
+    kitBodyGap: () => {
+      let worst = 0, name = '';
+      const at = new THREE.Vector3();
+      for (const a of ctx.world.actors) {
+        const bone = a.character?.kit?.posed ? a.character.kit.bones.values().next().value : undefined;
+        if (!bone) continue;
+        bone.updateWorldMatrix(true, false);
+        at.setFromMatrixPosition(bone.matrixWorld);
+        const p = a.pose().pos, gap = Math.hypot(at.x - p[0], at.z - p[2]);
+        if (gap > worst) { worst = gap; name = `${a.characterName()}#${a.id}`; }
+      }
+      return { worst, name };
+    },
     /** ZONE CULL + UPDATE LOD (game-zone-cull.ts): this frame's visible zones / sectors, culled level meshes, flood
      *  cost, and per-actor LOD tiers (full / quarter / sleep). null on a room level. */
     zoneCull: () => zoneCullReport(ctx),

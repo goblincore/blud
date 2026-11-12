@@ -34,7 +34,7 @@ export interface HeldProp {
   muzzle(forward?: number): Vec3;
   /** True once released. */
   readonly released: boolean;
-  /** False until the first pose: the prop stands at the world origin until then. */
+  /** False until the first pose: the prop stands at the world origin until then, and is not drawn. */
   readonly posed: boolean;
   /** Reclaim the prop for a fresh body; the caller supplies its next held pose. */
   reset(): void;
@@ -45,6 +45,8 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
   const gltf = await new GLTFLoader().loadAsync(url);
   const object = new THREE.Group();
   object.add(gltf.scene);
+  // Not drawn until the first pose, like a kit (kit-overlay.ts): it stands at the world origin until then.
+  gltf.scene.visible = false;
   // Like the armour, PBR gun metal needs something to reflect. This is a
   // prop-only reflection source; it does not change the level's lighting.
   // It is the renderer's ONE kit environment (kit-overlay.ts kitEnvironment), never disposed: a PMREM of
@@ -96,6 +98,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
     pose(gun, sinceFire, bodyRight, barrelSpin = 0) {
       if (drop) return;
       posed = true;
+      gltf.scene.visible = true;
       if (barrels) barrels.rotation.z = barrelSpin;
       const rise = muzzleRise(sinceFire);
       const quat: Quat = rise === 0 ? gun.quat : qMul(qFromAxisAngle(bodyRight, -rise), gun.quat);

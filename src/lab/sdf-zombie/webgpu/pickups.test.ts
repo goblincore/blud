@@ -6,6 +6,15 @@ import { VITALS, applyDamage, makeVitals } from './player-vitals';
 
 const at = (id: string, item: PickupDef['item'], x: number, z: number): PickupDef => ({ id, item, pos: [x, 0.2, z] });
 
+describe('keys', () => {
+  it('a key goes on the ring, by colour, and only once', () => {
+    const r = collectPickups([{ id: 'k', item: 'key-red', pos: [0, 0, 0] }, { id: 'y', item: 'key-yellow', pos: [0.2, 0, 0] }], new Set(), [0, 0, 0], makeInventory(), makeVitals());
+    expect(r.inventory.keys).toEqual(['red', 'yellow']);
+    expect(r.collected.length).toBe(2);
+    expect(collectPickups([{ id: 'k', item: 'key-red', pos: [0, 0, 0] }], r.taken, [0, 0, 0], r.inventory, r.vitals).collected).toEqual([]);
+  });
+});
+
 describe('collectPickups', () => {
   it('collects only what is within reach, once', () => {
     const defs = [at('near', 'shells', 0.5, 0), at('far', 'shells', 3, 0)];

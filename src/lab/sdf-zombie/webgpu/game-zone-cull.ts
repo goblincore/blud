@@ -42,6 +42,8 @@ export interface ZoneCullRuntime {
   /** This tick's LOD flood (player eye). */
   readonly lodSectors: Uint8Array;
   readonly scratch: FloodScratch;
+  /** The flood's closed lines: shut doors and shut closets. */
+  readonly closed: (line: number) => boolean;
   cullables: Cullable[];
   seenCount: number;
   eyeSector: number;
@@ -66,14 +68,16 @@ export function createZoneCull(ctx: GameContext): ZoneCullRuntime | null {
     sectors: new Uint8Array(graph.sectorCount).fill(1), zones: new Uint8Array(graph.zoneCount).fill(1),
     lodSectors: new Uint8Array(graph.sectorCount).fill(1),
     scratch: createFloodScratch(graph),
+    closed: closedFor(ctx, ctx.world.level.ground as SectorGround),
     cullables: [], seenCount: -1, eyeSector: -1, stats: { steps: 0, failOpen: false }, floodUs: 0, culled: 0, frame: 0,
     clocks: new Map(), tiers: new Map(),
   };
 }
 
-function closedFor(ground: SectorGround): (line: number) => boolean {
+function closedFor(ctx: GameContext, ground: SectorGround): (line: number) => boolean {
   const f = ground.doors;
-  return (line) => { const d = f.lineDoor[line]!; return d >= 0 && f.open[d]! <= 0; };
+  // A shut closet's lines close too (game-closets.ts; read lazily: the closets are made after the cull).
+  return (line) => { const d = f.lineDoor[line]!; return (d >= 0 && f.open[d]! <= 0) || (ctx.world.closets?.lineShut(line) ?? false); };
 }
 
 function flood(z: ZoneCullRuntime, x: number, y: number, zz: number, dx: number, dy: number, dz: number,
@@ -84,7 +88,7 @@ function flood(z: ZoneCullRuntime, x: number, y: number, zz: number, dx: number,
   const half = forceHalf ?? (hl < 1e-4 ? Math.PI : frustumHalfAngle(fovYDeg, aspect, pitch));
   const eye = z.ground.sectorAt(x, zz);
   z.stats = floodSectors(z.graph, { x, z: zz, fx: hl < 1e-4 ? 1 : dx, fz: hl < 1e-4 ? 0 : dz, half }, eye, out,
-    { closed: closedFor(z.ground) }, z.scratch);
+    { closed: z.closed }, z.scratch);
   return eye;
 }
 
@@ -241,6 +245,9 @@ export function kitPoseSkippable(ctx: GameContext, a: ZombieActor, march: Readon
   const z = ctx.world.zoneCull;
   if (!z || !z.on) return false;
   if (ctx.render.visualActors.has(a) || march.has(a)) return false;
+  // Every kit and prop takes one pose as soon as it has loaded: the pre-warm draws only a posed one, wherever it is.
+  const ch = a.character;
+  if ((ch?.kit && !ch.kit.posed) || (ch?.prop && !ch.prop.posed)) return false;
   // A released prop falls inside the pose (and a dying body's kit follows its fall): only a settled body skips.
   if (!(a.settled?.() ?? false) || a.character?.prop?.released) return false;
   const warm = ctx.boot.kitPrewarm?.forcedRoot ?? null;

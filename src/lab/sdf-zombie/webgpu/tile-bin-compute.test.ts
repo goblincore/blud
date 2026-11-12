@@ -14,6 +14,7 @@ import {
   K_TILE_COUNTS,
   K_TILE_RANGE,
   K_TILE_SCAN,
+  createTileStream, TILE_STREAM_WORST_CASES,
   K_TILE_WRITE,
   MAX_TILE_GROUPS,
   packGroups,
@@ -273,5 +274,27 @@ describe('CPU vs kTileRange fixture (perf 7e)', () => {
           .toMatchObject({ matched: cpuList.length });
       }
     }
+  });
+});
+
+describe('the shared tile stream', () => {
+  it('holds two worst cases at most, and a type in it keeps no stream of its own', () => {
+    const s = createTileStream(960, 720);
+    const { tilesX, tilesY } = worstCaseTiles(960, 720);
+    expect(s.capEntries).toBe(worstCaseEntries(tilesX, tilesY) * TILE_STREAM_WORST_CASES);
+    expect(s.entriesAttr.count).toBe(s.capEntries * 3);
+  });
+
+  it('rewinds by uploading its zeroed meta, which no one writes on the CPU', () => {
+    const s = createTileStream(64, 64);
+    const v = s.metaAttr.version;
+    s.beginFrame();
+    expect(s.metaAttr.version).toBe(v + 1);
+    expect([...s.metaAttr.array].every(x => x === 0)).toBe(true);
+  });
+
+  it('the scan carries on from the meta only when shared, and never lists past the end', () => {
+    expect(K_TILE_SCAN).toContain('u32(stream.x * m.x)');
+    expect(K_TILE_SCAN).toContain('if (running + h.y > cap) { h.y = 0u;');
   });
 });

@@ -21,7 +21,7 @@ import {
   createCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, REC_VEC4S, REC_COUNTS, REC_WIND_ALIVE,
   type CrowdRecords,
 } from './crowd-records';
-import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } from './tile-bin-compute';
+import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding, type TileStream } from './tile-bin-compute';
 import { TileBinner, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
 import { crowdScreenRect } from './crowd-rect';
 import { RAY_CULL_SLACK, QUAD_ENTRY_SLACK } from './march.wgsl';
@@ -129,6 +129,10 @@ export function packInstanceAttrs(list: InstanceAttrSource[], out: Float32Array)
 
 export interface CrowdType {
   readonly name: string;
+  /** Bodies it can hold (createCrowdType's opts.capacity). */
+  readonly capacity: number;
+  /** Whether reserveSlot would give a slot. */
+  hasFreeSlot(): boolean;
   /** Active dispatch, stamped into instCfg.y on the next sync() (1 boxes,
    *  2 quad). Swap it with setDispatch(). */
   readonly dispatch: CrowdDispatch;
@@ -236,12 +240,17 @@ export function createCrowdType(
     stride?: number;
     /** EARLY-Z (spec 2026-10-01): build the front-face batch. Boxes dispatch only. */
     earlyz?: boolean;
+    /** Bodies the type can hold, at most MAX_CROWD_INSTANCES (crowd-capacity.ts). Fixed for its life. */
+    capacity?: number;
+    /** One entry stream shared with the other types (tile-bin-compute.ts createTileStream); absent, its own. */
+    tileStream?: TileStream;
   },
 ): CrowdType {
+  const capacity = Math.max(1, Math.min(MAX_CROWD_INSTANCES, opts?.capacity ?? MAX_CROWD_INSTANCES));
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
   // instance capacity up front: a DataTexture cannot resize in place.
-  const atlas = createCrowdPrimAtlas(MAX_CROWD_INSTANCES, (rows, data) => {
+  const atlas = createCrowdPrimAtlas(capacity, (rows, data) => {
     // Fire/gib fix (2026-09-14): ONE partial upload of the dirty prefix into
     // the atlas's EXISTING GPU texture. `backend.updateTexture` accepts an
     // image override and issues a single `queue.writeTexture` of `rows` rows
@@ -254,11 +263,11 @@ export function createCrowdType(
       updateTexture(t: THREE.Texture, o: { image: { data: Float32Array; width: number; height: number } }): void;
     }).updateTexture(atlas.texture, { image: { data, width: atlas.stride, height: rows } });
   }, opts?.stride);
-  const records = createCrowdRecords();
+  const records = createCrowdRecords(capacity);
   // y = 1 marks a crowd material (MARCH_TRACE_SETUP selects instCentre/
   // instHalf for the proxy box); x is the loop's instance-count upper bound.
   const instCfg = uniform(new THREE.Vector4(0, 1, 0, 0));
-  const tiles = createComputeTileBinding(renderer, maxW, maxH);
+  const tiles = createComputeTileBinding(renderer, maxW, maxH, opts?.tileStream);
 
   // Box in [-1, 1]^3, placed per instance by the material's positionNode.
   // NOT [-0.5, 0.5]: iHalf is a HALF extents, so positionGeometry * iHalf must
@@ -268,7 +277,7 @@ export function createCrowdType(
     new THREE.BoxGeometry(2, 2, 2) as unknown as THREE.InstancedBufferGeometry,
   );
   const ib = new THREE.InstancedInterleavedBuffer(
-    new Float32Array(MAX_CROWD_INSTANCES * INST_FLOATS), INST_FLOATS,
+    new Float32Array(capacity * INST_FLOATS), INST_FLOATS,
   );
   ib.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('iCentre', new THREE.InterleavedBufferAttribute(ib, 3, 0));
@@ -284,7 +293,7 @@ export function createCrowdType(
       new THREE.BoxGeometry(2, 2, 2) as unknown as THREE.InstancedBufferGeometry,
     );
     const fib = new THREE.InstancedInterleavedBuffer(
-      new Float32Array(MAX_CROWD_INSTANCES * INST_FLOATS), INST_FLOATS,
+      new Float32Array(capacity * INST_FLOATS), INST_FLOATS,
     );
     fib.setUsage(THREE.DynamicDrawUsage);
     fgeo.setAttribute('iCentre', new THREE.InterleavedBufferAttribute(fib, 3, 0));
@@ -340,8 +349,8 @@ export function createCrowdType(
   let frontDisabled: string | null = null;
 
   const free = new Set<number>();
-  for (let i = 0; i < MAX_CROWD_INSTANCES; i++) free.add(i);
-  const slots: (ZombieGpuView | undefined)[] = new Array(MAX_CROWD_INSTANCES);
+  for (let i = 0; i < capacity; i++) free.add(i);
+  const slots: (ZombieGpuView | undefined)[] = new Array(capacity);
   let tileFallbacks = 0;
   let culledByBudget = 0;
   // Instances actually packed/drawn by the LAST sync(). info().visible reads
@@ -393,7 +402,7 @@ export function createCrowdType(
   }).levelShadowTex;
 
   return {
-    name, atlas, records, uniforms, mesh, depthPreMesh, frontMesh, levelShadowTex, tiles, instCfg, quadRect,
+    name, capacity, atlas, records, uniforms, mesh, depthPreMesh, frontMesh, levelShadowTex, tiles, instCfg, quadRect,
     get dispatch() { return dispatch; },
 
     attach(view) {
@@ -407,8 +416,10 @@ export function createCrowdType(
       return allocateSlot(free);
     },
 
+    hasFreeSlot: () => free.size > 0,
+
     attachAt(view, slot) {
-      if (slot < 0 || slot >= MAX_CROWD_INSTANCES) {
+      if (slot < 0 || slot >= capacity) {
         throw new Error(`[crowd] attachAt: slot ${slot} out of range`);
       }
       if (slots[slot] !== undefined) {
@@ -436,7 +447,7 @@ export function createCrowdType(
       live.length = 0;
       drawnSlots.length = 0;
       let maxBlendK = 0;
-      for (let s = 0; s < MAX_CROWD_INSTANCES; s++) {
+      for (let s = 0; s < capacity; s++) {
         // VISIBLE-ONLY PACKING (perf 7e). `?crowd=1` attaches EVERY actor at
         // spawn; the per-body baseline draws only the frustum+clear-sight
         // culled set (updateVisibleActors). Packing the whole cast made the
@@ -696,7 +707,7 @@ export function createCrowdType(
 
     info() {
       let attached = 0;
-      for (let s = 0; s < MAX_CROWD_INSTANCES; s++) {
+      for (let s = 0; s < capacity; s++) {
         if (!slots[s]) continue;
         attached++;
       }

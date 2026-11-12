@@ -431,7 +431,9 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
   const proxyPos = new Float32Array(MAX_PROXIES * PROXY_VERTS * 3);
   const proxyGeo = new THREE.BufferGeometry();
   const posAttr = new THREE.BufferAttribute(proxyPos, 3);
-  posAttr.setUsage(THREE.DynamicDrawUsage);
+  // NOT DynamicDrawUsage. Three r186's WebGPU renderer writes a dynamic attribute's WHOLE array on every render call
+  // that draws it, changed or not (Attributes.update), and this one is drawn twice a frame (entry, exit): 2.6 MB a
+  // frame. A static attribute is written only when update() below marks it, and only the range it names.
   proxyGeo.setAttribute('position', posAttr);
   const one = proxyIndices();
   const idx = new Uint32Array(MAX_PROXIES * one.length);
@@ -456,6 +458,10 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     if (proxies.length > MAX_PROXIES) { proxies.length = 0; inst.splice(0, inst.length, ...buildOuterHullInstances(bodies, opts)); }
     proxyCount = proxies.length;
     for (let k = 0; k < proxyCount; k++) writeProxyCone(proxies[k]!, proxyPos, k * PROXY_VERTS * 3);
+    // Only the proxies in use go to the GPU: the whole buffer is 1.3 MB (256 proxies), and it was written every update
+    // whatever the count (MAP28, 2026-11-10: 2.6 MB a frame with no body in view). The draw range ends where they do.
+    posAttr.clearUpdateRanges();
+    posAttr.addUpdateRange(0, Math.max(proxyCount, 1) * PROXY_VERTS * 3);
     posAttr.needsUpdate = true;
     proxyGeo.setDrawRange(0, proxyCount * PROXY_TRIS * 3);
     entryProxy.layers.mask = entryMesh.layers.mask;

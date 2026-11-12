@@ -30,11 +30,11 @@ const PX_PER_M = PANEL_SIZE / PANEL_TILE_M;
 
 export type PanelKind =
   | 'techPanel' | 'metalSheet' | 'door' | 'rustBrick' | 'lightPanel'
-  | 'concreteSlab' | 'metalPlate' | 'floorTile'
+  | 'concreteSlab' | 'metalPlate' | 'floorTile' | 'redRock' | 'fleshWall'
   | 'screenBank' | 'viewscreen' | 'fluorescent' | 'exitSign'
   | 'slideDoor';
 export const PANEL_KINDS: readonly PanelKind[] = [
-  'techPanel', 'metalSheet', 'door', 'rustBrick', 'lightPanel', 'concreteSlab', 'metalPlate', 'floorTile',
+  'techPanel', 'metalSheet', 'door', 'rustBrick', 'lightPanel', 'concreteSlab', 'metalPlate', 'floorTile', 'redRock', 'fleshWall',
   'screenBank', 'viewscreen', 'fluorescent', 'exitSign', 'slideDoor',
 ];
 /** The self-lit kinds whose glow is ANIMATED in the shader (webgpu/emitter-glow.wgsl.ts): their
@@ -344,6 +344,32 @@ const rustBrick: Shader = (x, y, seed, o) => {
   o.h = height; o.rough = clamp01(0.86 - 0.5 * wet + 0.08 * mortar); o.e = 0;
 };
 
+/** Red rock: cracked strata, broad ledges running across the wall, darker and redder in the cracks. */
+const redRock: Shader = (x, y, seed, o) => {
+  const warp = tfbm(x, y, seed + 11, 64) * 64;
+  const strata = tnoise2(wrapPx(x + warp), y, seed + 21, 256, 32) * 0.6 + tnoise2(wrapPx(x + warp), y, seed + 23, 128, 16) * 0.4;
+  const crack = smooth(0.0, 0.05, Math.abs(tfbm(x, y, seed + 31, 128, 2) - 0.5));
+  const grain = tfbm(x, y, seed + 41, 16) * 0.25;
+  o.h = clamp01(strata * 0.7 * crack + grain);
+  const shade = 0.55 + 0.6 * strata;
+  o.r = 112 * shade * (0.45 + 0.55 * crack); o.g = 44 * shade * (0.4 + 0.6 * crack); o.b = 30 * shade * (0.4 + 0.6 * crack);
+  o.rough = clamp01(0.92 - 0.1 * strata); o.e = 0;
+};
+
+/** Flesh: wet folds of meat run through with sinew and pale fat. The veins and their pulse are the shader's (sector-flesh.wgsl.ts). */
+const fleshWall: Shader = (x, y, seed, o) => {
+  const warp = (tfbm(x, y, seed + 13, 128, 2) - 0.5) * 96;
+  const fold = 1 - Math.abs(tfbm(wrapPx(x + warp), wrapPx(y + warp * 0.6), seed + 3, 128, 3) * 2 - 1);
+  const sinew = tnoise2(wrapPx(x + warp * 0.5), y, seed + 23, 8, 128);
+  const fat = smooth(0.66, 0.82, tfbm(x, y, seed + 37, 128, 2)) * 0.7;
+  o.h = clamp01(fold * fold * 0.78 + sinew * 0.14 + fat * 0.1);
+  const lit = 0.45 + 0.75 * fold;
+  const meat: [number, number, number] = [118 + 40 * sinew, 22 + 16 * sinew, 26 + 14 * sinew];
+  const pale: [number, number, number] = [150, 92, 70];
+  o.r = (meat[0] * (1 - fat) + pale[0] * fat) * lit; o.g = (meat[1] * (1 - fat) + pale[1] * fat) * lit; o.b = (meat[2] * (1 - fat) + pale[2] * fat) * lit;
+  o.rough = clamp01(0.5 - 0.18 * fold + 0.3 * fat); o.e = 0;
+};
+
 /** A lit grid panel: 1 m cells of a diffuser behind a fine lattice, in a dark frame; a few cells
  *  have failed or dim. Emissive is the diffuser (modest: the sector mesh scales it by the sector light). */
 const lightPanel: Shader = (x, y, seed, o) => {
@@ -591,13 +617,13 @@ const exitSign: Shader = (x, y, seed, o) => {
 };
 
 const SHADERS: Record<PanelKind, Shader> = {
-  techPanel, metalSheet, door, rustBrick, lightPanel, concreteSlab, metalPlate, floorTile, screenBank, viewscreen, fluorescent, exitSign,
+  techPanel, metalSheet, door, rustBrick, lightPanel, concreteSlab, metalPlate, floorTile, redRock, fleshWall, screenBank, viewscreen, fluorescent, exitSign,
   slideDoor,
 };
 /** Height → normal gain per kind. Stone's is 3 × normalStrength over a field that is pebbled
  *  everywhere; these fields are flatter between their features, so the gain is higher. */
 const NORMAL_GAIN: Record<PanelKind, number> = {
-  techPanel: 5, metalSheet: 5, door: 5, rustBrick: 4.5, lightPanel: 4.5, concreteSlab: 4.5, metalPlate: 4.5, floorTile: 4.5,
+  redRock: 5.5, fleshWall: 6.5, techPanel: 5, metalSheet: 5, door: 5, rustBrick: 4.5, lightPanel: 4.5, concreteSlab: 4.5, metalPlate: 4.5, floorTile: 4.5,
   screenBank: 4.5, viewscreen: 4.5, fluorescent: 4, exitSign: 4, slideDoor: 5,
 };
 
@@ -613,6 +639,8 @@ const GRIME: Record<PanelKind, Grime> = {
   techPanel:    { relief: 1.5, grain: 0.07, dent: 0.05, gouge: 0.07, chip: 0.25, ao: 0.6,  drip: 0.6,  rust: 0.30, oil: 0,    dust: 0.25, mottle: 0.4,  wet: 0.35 },
   metalSheet:   { relief: 1.6, grain: 0.07, dent: 0.07, gouge: 0.08, chip: 0.2,  ao: 0.6,  drip: 0.6,  rust: 0.45, oil: 0,    dust: 0.2,  mottle: 0.45, wet: 0.35 },
   door:         { relief: 1.5, grain: 0.07, dent: 0.06, gouge: 0.1,  chip: 0.25, ao: 0.65, drip: 0.6,  rust: 0.5,  oil: 0,    dust: 0.3,  mottle: 0.4,  wet: 0.3 },
+  redRock:      { relief: 1.3, grain: 0.14, dent: 0.08, gouge: 0.02, chip: 0.4,  ao: 0.7,  drip: 0.2,  rust: 0,    oil: 0,    dust: 0.1,  mottle: 0.5,  wet: 0.1 },
+  fleshWall:    { relief: 1.3, grain: 0.03, dent: 0.05, gouge: 0,    chip: 0,    ao: 0.8,  drip: 0.3,  rust: 0,    oil: 0,    dust: 0,    mottle: 0.3,  wet: 0.2 },
   rustBrick:    { relief: 1.0, grain: 0.08, dent: 0.06, gouge: 0.04, chip: 0.35, ao: 0.5,  drip: 0.5,  rust: 0.2,  oil: 0,    dust: 0.2,  mottle: 0.4,  wet: 0.4 },
   lightPanel:   { relief: 1.4, grain: 0.05, dent: 0.04, gouge: 0.05, chip: 0.15, ao: 0.6,  drip: 0.45, rust: 0.25, oil: 0,    dust: 0.3,  mottle: 0.35, wet: 0.2 },
   concreteSlab: { relief: 1.4, grain: 0.14, dent: 0.06, gouge: 0.05, chip: 0.4,  ao: 0.6,  drip: 0.45, rust: 0.15, oil: 0.25, dust: 0.15, mottle: 0.5,  wet: 0.4 },

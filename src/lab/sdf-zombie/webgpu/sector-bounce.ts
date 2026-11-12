@@ -173,7 +173,7 @@ const unit = (x: number, y: number, z: number): [number, number, number] => {
   return l > 1e-9 ? [x / l, y / l, z / l] : [0, 0, 0];
 };
 
-export function createGlowBounce(map: SectorMap, sources: readonly GlowSource[] = glowSources(map)): GlowBounce {
+export function createGlowBounce(map: SectorMap, sources: readonly GlowSource[] = glowSources(map), lavaScale = 1): GlowBounce {
   return {
     sources,
     at(p, n, into, out = [0, 0, 0]) {
@@ -200,8 +200,8 @@ export function createGlowBounce(map: SectorMap, sources: readonly GlowSource[] 
         const L = unit(d1[0] + d2[0], d1[1] + d2[1], d1[2] + d2[2]);
         const facing = Math.max(0, (n[0] * L[0] + n[1] * L[1] + n[2] * L[2] + WRAP) / (1 + WRAP));
         const w = Math.min(1, src.area / POOL_REF_M2) * fall * facing * seen * GLOW_MEAN;
-        const c = GLOW_BASE_RGB[src.kind];
-        out[0] += c[0] * w; out[1] += c[1] * w; out[2] += c[2] * w;
+        const c = GLOW_BASE_RGB[src.kind], gain = src.kind === 'lava' ? lavaScale : 1;
+        out[0] += c[0] * w * gain; out[1] += c[1] * w * gain; out[2] += c[2] * w * gain;
       }
       return out;
     },

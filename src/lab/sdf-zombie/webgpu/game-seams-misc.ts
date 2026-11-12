@@ -34,6 +34,15 @@ export function createMiscSeams(ctx: GameContext) {
     /** Crowd stage a census: the flag, the dispatch, and per type
      *  attached/live slots plus tile-binding fallbacks (bench + hash
      *  diagnostics). */
+    /** What each crowd type holds and how much of its tile stream the last bin wrote (a whole-buffer readback: debug only). */
+    crowdTileUsage: async () => Promise.all([...ctx.crowd.types].map(async ([key, t]) => {
+      const base = { key, capacity: t.capacity, attached: t.info().attached, visible: t.info().visible };
+      if (base.visible === 0) return { ...base, entries: 0 };   // a type that has not binned yet has no GPU buffers to read
+      const r = await t.tiles.readback();
+      let entries = 0;
+      for (let i = 1; i < r.headers.length; i += 2) entries += r.headers[i]!;
+      return { ...base, entries, tiles: r.tilesX * r.tilesY, capEntries: r.entries.length / 12, shared: ctx.crowd.tileStream !== null, frameTotal: r.totalEntries };
+    })),
     crowdInfo: () => ({
       on: ctx.crowd.on,
       // DEFAULT FLIP (task 8, 2026-09-14). `default` is the compiled-in

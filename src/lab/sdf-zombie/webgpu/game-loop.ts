@@ -48,7 +48,9 @@ export interface LoopRuntime {
   /** One instanced draw per item type (game-level-batch.ts); null with `?batch=0`, where every pickup mesh is in the
    *  scene. With batches the meshes in `meshes` are logical only (never in the scene). */
   batches: PickupBatches | null;
-  el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
+  /** Seconds left of the notice line. */
+  noticeLeft: number;
+  el: { status: HTMLDivElement; notice: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
 }
 
 function overlay(title: string, hint: string): HTMLDivElement {
@@ -61,9 +63,15 @@ function overlay(title: string, hint: string): HTMLDivElement {
   return d;
 }
 
+/** A door key: a card on edge, taller than anything else on the floor. */
+function keyGeometry(): THREE.BufferGeometry { return new THREE.BoxGeometry(0.3, 0.44, 0.04); }
+
 /** Simple spinning stand-ins until real pickup models exist. */
 const LOOK: Record<string, { geo: () => THREE.BufferGeometry; color: number }> = {
   shotgun: { geo: () => new THREE.BoxGeometry(0.7, 0.08, 0.12), color: 0x8a6a4a },
+  'key-red': { geo: keyGeometry, color: 0xe01818 },
+  'key-yellow': { geo: keyGeometry, color: 0xf0b808 },
+  'key-blue': { geo: keyGeometry, color: 0x1a50f0 },
   shells: { geo: () => new THREE.BoxGeometry(0.18, 0.12, 0.12), color: 0xc23a2a },
   health: { geo: () => new THREE.OctahedronGeometry(0.16), color: 0xe8e0d0 },
   cd: { geo: () => new THREE.CylinderGeometry(0.12, 0.12, 0.012, 32), color: 0xd8e4ff },
@@ -84,6 +92,10 @@ export function createLoop(ctx: GameContext): LoopRuntime {
   status.setAttribute('style', 'position:fixed; left:16px; bottom:48px; z-index:33; pointer-events:none;'
     + ' font:700 18px/1.2 ui-monospace,Menlo,monospace; color:#f2e6d0; text-shadow:0 2px 0 #000; letter-spacing:.06em;');
   document.body.appendChild(status);
+  const notice = document.createElement('div');
+  notice.setAttribute('style', 'position:fixed; left:0; right:0; top:62%; z-index:33; pointer-events:none; text-align:center; opacity:0;'
+    + ' font:700 20px/1.2 ui-monospace,Menlo,monospace; color:#f2e6d0; text-shadow:0 2px 0 #000; letter-spacing:.08em;');
+  document.body.appendChild(notice);
   const hurt = document.createElement('div');
   hurt.setAttribute('style', 'position:fixed; inset:0; z-index:34; pointer-events:none; opacity:0;'
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
@@ -104,7 +116,8 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     hurts: [],
     meshes: new Map(),
     batches: null,
-    el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
+    noticeLeft: 0,
+    el: { status, notice, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
   };
   if (authored) {
     const batched = levelBatchOn(location.search);
@@ -130,13 +143,25 @@ export function createLoop(ctx: GameContext): LoopRuntime {
   return rt;
 }
 
+const KEY_CSS: Readonly<Record<string, string>> = { red: '#ff4030', yellow: '#ffc820', blue: '#5a8cff' };
+/** Seconds a line of the notice stays up. */
+const NOTICE_S = 2;
+
+/** A line over the status: a locked door's reason, a key found, a switch hit. */
+function notify(rt: LoopRuntime, text: string): void {
+  rt.el.notice.textContent = text;
+  rt.el.notice.style.opacity = '1';
+  rt.noticeLeft = NOTICE_S;
+}
+
 export function updateStatus(ctx: GameContext): void {
   const rt = ctx.world.loop;
   if (!rt) return;
   const low = rt.vitals.health <= 25 ? ' style="color:#ff5a3c"' : '';
   const ammo = rt.finite && rt.inventory.weapons.includes('shotgun')
     ? `&nbsp;&nbsp; SHELLS ${ctx.weapon.shells} | ${rt.inventory.shellsReserve}` : '';
-  rt.el.status.innerHTML = `<span${low}>HEALTH ${rt.vitals.health}</span>${ammo}${rt.god ? '&nbsp;&nbsp; GOD' : ''}`;
+  const keys = rt.inventory.keys.map(k => `&nbsp;&nbsp;<span style="color:${KEY_CSS[k] ?? '#f2e6d0'}">${k.toUpperCase()} KEY</span>`).join('');
+  rt.el.status.innerHTML = `<span${low}>HEALTH ${rt.vitals.health}</span>${ammo}${keys}${rt.god ? '&nbsp;&nbsp; GOD' : ''}`;
 }
 
 export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind): void {
@@ -209,6 +234,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   if (!rt) return;
   rt.vitals = stepVitals(rt.vitals, dt);
   rt.el.hurt.style.opacity = String(Math.max(0, 0.9 - rt.vitals.hurtAge * 2.5));
+  if (rt.noticeLeft > 0 && (rt.noticeLeft -= dt) <= 0) rt.el.notice.style.opacity = '0';
   // The gun hides while the live slot is a weapon the player doesn't own yet.
   if (ctx.weapon.gunGroup) ctx.weapon.gunGroup.visible = ownsSlot(ctx, ctx.weapon.slotState.live);
   for (const m of rt.meshes.values()) if (!m.userData.still) m.rotation.y += dt * 1.6;
@@ -255,6 +281,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
       emitLevelEvent(ctx, `pickup.${p.item}`);
       ctx.telemetry.telemetry.event('pickup', { id: p.id, item: p.item });
       if (p.item === 'flashlight') switchOnFlashlight(ctx);
+      if (p.item.startsWith('key-')) notify(rt, `${p.item.slice(4).toUpperCase()} KEY`);
       if (p.item === 'shotgun' && !hadShotgun) {
         ctx.weapon.shells = MAGAZINE_CAPACITY;   // it comes loaded
         ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'shotgun');
@@ -266,6 +293,8 @@ export function stepLoop(ctx: GameContext, dt: number): void {
     }
     updateStatus(ctx);
   }
+  // The doors the player walked at that stayed shut.
+  for (const d of ctx.world.doors?.takeRefused() ?? []) notify(rt, d.sealed ? 'IT OPENS FROM SOMEWHERE ELSE' : `NEEDS THE ${d.key!.toUpperCase()} KEY`);
   const t = stepTriggers(def.triggers, rt.triggers, feet);
   rt.triggers = t.state;
   for (const ev of t.events) emitLevelEvent(ctx, ev);
@@ -275,6 +304,8 @@ export function stepLoop(ctx: GameContext, dt: number): void {
     for (const id of open) if (!ctx.world.openGates.has(id)) openGate(ctx, id);
     for (const ev of events) {
       ctx.telemetry.telemetry.event('level-event', { event: ev });
+      ctx.world.doors?.levelEvent(ev);
+      ctx.world.closets?.levelEvent(ev);
       for (const cmd of commandsFor(ev, def.completeOn)) runLevelCommand(ctx, cmd);
     }
   }

@@ -9,6 +9,9 @@
 
 import type { GameContext } from './game-context';
 import { createCrowdType, type CrowdType } from './crowd-type';
+import { CROWD_OVERFLOW_CAPACITY, crowdTypeKey } from './crowd-capacity';
+import { MAX_CROWD_INSTANCES } from './crowd-records';
+import { createTileStream } from './tile-bin-compute';
 import { DEPTH_PREPASS_LAYER, SDF_LAYER } from './sdf-layer';
 import { blankFaceTexture, defaultUniforms } from './zombie-gpu';
 
@@ -29,9 +32,18 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
   // lit every instance with the first room's walls and probes — the pale,
   // blotchy zombie (2026-09-14). A type per (character, room) keeps the
   // block honest; rooms are frustum-culled, so few types draw per frame.
-  const key = `${name}@${roomId}`;
-  const existing = ctx.crowd.types.get(key);
-  if (existing) return existing;
+  // A type sized to its cast that has filled up opens another (crowd-capacity.ts); a full-size one stays the answer,
+  // and the caller draws the body per-body as it always has.
+  let overflow = 0;
+  let key = crowdTypeKey(name, roomId);
+  for (let existing = ctx.crowd.types.get(key); existing; existing = ctx.crowd.types.get(key)) {
+    if (existing.hasFreeSlot() || existing.capacity >= MAX_CROWD_INSTANCES) return existing;
+    key = crowdTypeKey(name, roomId, ++overflow);
+  }
+  // `?tilestream=0`: a stream per type, as before (the A/B).
+  if (!ctx.crowd.tileStream && new URLSearchParams(location.search).get('tilestream') !== '0')
+    ctx.crowd.tileStream = createTileStream(ctx.render.sdfLayer.maxWidth, ctx.render.sdfLayer.maxHeight);
+  const capacity = overflow > 0 ? CROWD_OVERFLOW_CAPACITY : ctx.crowd.capacities?.get(key);
   const t = createCrowdType(
     ctx.boot.handle.renderer, key, defaultUniforms(blankFaceTexture()),
     ctx.render.sdfLayer.maxWidth, ctx.render.sdfLayer.maxHeight,
@@ -51,7 +63,7 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
     },
     // `stride` (validate.ts primStride of the first body) fixes the atlas
     // width for the type's life; the caller checks later bodies fit.
-    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry, stride, earlyz: ctx.crowd.earlyz.on },
+    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry, stride, earlyz: ctx.crowd.earlyz.on, capacity, tileStream: ctx.crowd.tileStream ?? undefined },
   );
   t.mesh.layers.set(SDF_LAYER);
   t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
