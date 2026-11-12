@@ -27,6 +27,8 @@ import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { WOUND_VOL, WV_MAX_ENTRIES, WV_TABLE_COL } from './march/wound-volume-flag';
+import { WOUND_GRID, WOUND_GRID_SLACK } from './march/wound-grid-flag';
+import { woundGridFresh, woundGridKey, writeWoundGrid, type WoundGridKey, type WoundGridStats } from '../wound-grid';
 import { woundVolumeAtlas } from './wound-volume-store';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
@@ -149,6 +151,8 @@ export interface ZombieGpuView {
    *  (WV_MAX_ENTRIES x 4 texels, written into the wound rows' free columns) and their union bound, or null to
    *  clear it. The wound bound the shader culls by becomes the union of the list's and this. */
   setWoundVolumes?(table: Float32Array | null, bound: readonly [number, number, number, number] | null): void;
+  /** What the crater grid last wrote for this body (`?woundgrid`, wound-grid.ts), or null. */
+  woundGridStats?(): (WoundGridStats & { builds: number }) | null;
   /** Diagnostic: the per-wound threat masks last written (wound-threat.ts). */
   woundThreats(): number[];
   readonly woundThreatMargin: number;
@@ -2676,6 +2680,9 @@ export function createZombieGpuView(
   let woundBoundR = 1e9;
   // The list's own reach bound and the baked volume's (setWoundVolumes): the uniform carries their union.
   let listBound: [number, number, number, number] | null = null;
+  let lastWoundGrid: WoundGridStats | null = null;
+  let woundGridBuiltFrom: WoundGridKey | null = null;
+  let woundGridBuilds = 0;
   let volBound: readonly [number, number, number, number] | null = null;
   const applyWoundBound = () => {
     // Before the first setWounds the uniform is the no-cull identity, a superset: it stays, boxes or not.
@@ -3168,6 +3175,7 @@ export function createZombieGpuView(
     syncRecord,
     rebind(r) {
       sink = r.sink;
+      woundGridBuiltFrom = null; // another band: its grid rows hold nothing of this body's
       records = r.records;
       slot = r.slot;
       texels = sink.texels;
@@ -3250,10 +3258,20 @@ export function createZombieGpuView(
       const b = woundReachBound(worldPositions, radii, worldPositions.length,
         u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
       listBound = [b[0], b[1], b[2], b[3]];
+      // THE CRATER GRID (?woundgrid, wound-grid.ts): the index applyWounds walks instead of every row.
+      // Rebuilt only when a wound came, went or moved more than a third of the slack since the last build
+      // (woundGridFresh): a body that stands or lies dead keeps its grid.
+      if (WOUND_GRID && !woundGridFresh(woundGridBuiltFrom, worldPositions, radii, u.woundCfg.value.x, WOUND_GRID_SLACK / 3)) {
+        lastWoundGrid = writeWoundGrid(texels, sink.woundLayout, worldPositions, radii, u.woundCfg.value.x,
+          u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x, WOUND_GRID_SLACK, offsetScales);
+        woundGridBuiltFrom = woundGridKey(worldPositions, radii, u.woundCfg.value.x, woundGridBuiltFrom);
+        woundGridBuilds++;
+      }
       applyWoundBound();
       sink.markDirty();
       syncRecord();
     },
+    woundGridStats: () => (lastWoundGrid ? { ...lastWoundGrid, builds: woundGridBuilds } : null),
     setWoundVolumes(table, bound) {
       const L = sink.woundLayout;
       const rows = [L.woundRow, L.metaRow, L.capRow, L.flagsRow];

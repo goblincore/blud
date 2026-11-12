@@ -12,6 +12,8 @@ import {
 import { ROW_PRIM_CLIP, ROW_PRIM_SHELL, ROW_PRIM_WARP } from './march/layout';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
+import { WOUND_GRID } from './march/wound-grid-flag';
+import { wgLoopHead } from './march/fields/wound-grid.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { TILE_REF as TR } from './march/tile-ref-flag';
 import { DATA_ROWS } from './march/layout';
@@ -619,8 +621,8 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
   let boundDistance = length(p - bound.xyz);
   if (abs(boundDistance - bound.w) <= R) { gNgReason = 3; }
   if (boundDistance > bound.w) { return d; }
-  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
-    if (i >= i32(cfg.x)) { break; }
+  ${WOUND_GRID ? wgLoopHead('p', 'i32(cfg.x)') : `for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
+    if (i >= i32(cfg.x)) { break; }`}
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     let v = p - w.xyz;
     let r = length(v);

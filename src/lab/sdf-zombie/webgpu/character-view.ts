@@ -57,6 +57,8 @@ const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import { WOUND_VOL, WV_LIST_KEEP, WV_MAX_ENTRIES } from './march/wound-volume-flag';
+import { WOUND_GRID } from './march/wound-grid-flag';
+import { WG_MAX_WOUNDS } from '../wound-grid';
 import { createBodyWoundVolumes, stampable, woundVolumeAtlas, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
 import {
   MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
@@ -435,6 +437,9 @@ export function createWoundRing(): WoundRing {
   const atlas = volumes ? woundVolumeAtlas() : null;
   let noRoomAt = -1;
   const push = (w: Wound) => {
+    // THE CRATER GRID (`?woundgrid`, wound-grid.ts): every wound stays on the list, WG_MAX_WOUNDS of them, and none
+    // is merged; the oldest is dropped past that.
+    if (WOUND_GRID) { wounds = pushWound(wounds, w, WG_MAX_WOUNDS, 0); return; }
     if (!volumes || noRoomAt === atlas!.frees) { wounds = pushWound(wounds, w, MAX_WOUNDS, mergeMax); return; }
     const before = wounds;
     wounds = pushWound(wounds, w, MAX_WOUNDS, 0);

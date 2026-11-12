@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 65 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 67 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 31 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 32 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -118,6 +118,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/fields/groups.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 - `webgpu/march/fields/tissue.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): tissue ramp and char/fire ramp.
 - `webgpu/march/fields/volume.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): baked hand-volume sample.
+- `webgpu/march/fields/wound-grid.wgsl.ts` — THE CRATER GRID, shader half (`?woundgrid`, ../wound-grid-flag.ts; the builder and the texel layout are ../../../wound-grid.ts).
 - `webgpu/march/fields/wound-volume.wgsl.ts` — THE BAKED WOUND VOLUME, shader half (`?woundvol`, ../wound-volume-flag.ts; the stamp is ../../../wound-volume-stamp.ts and the boxes…
 - `webgpu/march/fields/wounds.wgsl.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): wound field, mask and shadow.
 - `webgpu/march/helpers.ts` — Phase-1 split of march.wgsl.ts (2026-09-18): the HELPERS include list.
@@ -135,6 +136,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/shade-helpers.wgsl.ts` — Small shading helpers — texel fetch, soft shoulder, flicker and the level-only shadow lookup — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/tile-ref-flag.ts` — COMPILE-TIME switch for the TILE REFERENCE LIST (2026-11-09; docs/dev-notes/2026-11-09-sdf-perf-research/ONE-CALL.md).
 - `webgpu/march/wound-fold-flag.ts` — COMPILE-TIME switch for the OWNER RE-FOLD (2026-11-11; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, stage 1; measured in…
+- `webgpu/march/wound-grid-flag.ts` — COMPILE-TIME switch for THE CRATER GRID (2026-11-11, a spike; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stage 1).
 - `webgpu/march/wound-volume-flag.ts` — COMPILE-TIME switch for THE BAKED WOUND VOLUME (2026-11-11; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").
 
 ## webgpu/earlyz/
@@ -927,4 +929,5 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
 - `slump-death.ts` — THE FORWARD SLUMP (owner playtest 2026-11-03: "it's not possible for the zombie to die like his knees bend and he falls over, back bent, rear in the…
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…
+- `wound-grid.ts` — THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stages 1 and 2).
 - `wound-volume-stamp.ts` — THE BAKED WOUND VOLUME, pure half (`?woundvol`; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").

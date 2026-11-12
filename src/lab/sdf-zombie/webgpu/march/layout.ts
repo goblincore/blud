@@ -4,6 +4,8 @@
 // damage mirror — split out of march.wgsl.ts (phase 1, move-only). Pure TS,
 // no WGSL. Imported by the barrel and by the WGSL helper modules.
 
+import { WOUND_GRID } from './wound-grid-flag';
+import { WG_ROWS } from '../../wound-grid';
 import { MAX_PRIMS } from '../../validate';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
@@ -16,7 +18,8 @@ export const RAY_CULL_SLACK = '0.07';
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
 
-export const DATA_ROWS = 26;
+/** Rows a body's band takes. The crater grid (`?woundgrid`, wound-grid-flag.ts) adds its own after the 26. */
+export const DATA_ROWS = 26 + (WOUND_GRID ? WG_ROWS : 0);
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
