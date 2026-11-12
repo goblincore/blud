@@ -166,3 +166,21 @@ kink), not from the taps. Not tried.
 
 - **Open:** `ngBody` is 4 to 6 ms on every mob and has not been looked into. The taps left with `?ngwound=2`
   (2 ms) are the pixels where `ngBody` did not run or gave no usable gradient.
+
+## Where this pass ended (2026-11-12)
+
+- **Owner, MAP28's closet mob with `?woundgrid&ngwound=2&probelean`:** "significant improvement ... not a steady 30
+  but it feels much smoother overall so seems worth the changes". On `?ngwound=2`: the softer lips are noticeable
+  and acceptable for the trade; keep it switchable. Played on the local branch `claude/crater-grid-map28-try` (this
+  branch with PR 92's MAP28 branch merged in; only the generated module index conflicted).
+- **The twinhead's red marks** are its authored scars (18 thin painted bars, the `# SCAR` lines of
+  `characters/twinhead.blob`, there since the character was added on 2026-10-21). They show on an unshot body with
+  every flag off and with `?marchcompute=0` (`prelude-arena-shot.js`, `spawn=twinhead&shots=0`). The owner
+  remembers no marks; not compared with an older commit. Owner: ignore for now.
+- **Open, reported by the owner in play, not investigated:** wounds vanished once on a soldier under `?woundgrid`
+  (not reproduced; a cell past its limit drops its oldest entries, nothing ties that to it); a faint body-part
+  outline inside list wounds that baked wounds do not show (a guess only: the tissue ramp reads the depth under
+  the unwounded skin, `hitField.w`, which creases where two parts meet).
+- **How to time a part of the shader** (what this pass got wrong first): stops inside the shader switched by debug
+  mode on one page, several rounds (`?afterhit`, `FB_MODES`), not one fresh page a variant. One leg a variant on a
+  drifting machine read the taps as free when they are 9 ms.
