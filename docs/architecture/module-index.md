@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 69 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 70 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 28 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -71,6 +71,7 @@ Each line is the first sentence of the module's header comment.
 
 The SDF march shader, split by stage (WGSL).
 
+- `webgpu/march/after-hit-flag.ts` — COMPILE-TIME switch for THE AFTER-HIT STOPS (2026-11-12, a measuring tool; docs/dev-notes/2026-11-11-frame-breakdown/NOTES.md).
 - `webgpu/march/body-lights.wgsl.ts` — `bodyLights` — the shared light list's 4-light presentation loop (spec §4-§5), the shipping path.
 - `webgpu/march/body/blocks/light/ambient.wgsl.ts` — Task-3 split of the march body (2026-09-19): environment bounce, probe grid, bounce spot, dynamic probes.
 - `webgpu/march/body/blocks/light/compose.wgsl.ts` — Task-3 split of the march body (2026-09-19): metal tint, muzzle flash, lit compose, face flat-lit, highlight shoulder.

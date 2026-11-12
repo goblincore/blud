@@ -15,6 +15,7 @@ import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
 import { NG_WOUND_ANALYTIC, NG_WOUND_NO_TAPS } from '../../../normal-wound-flag';
+import { afterHitStop } from '../../../after-hit-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
 const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
@@ -44,7 +45,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // below is byte-for-byte the pre-task-2 call.
   // THE HEAD SPLIT: at pS, the hit piece's un-warped point (split-hit.wgsl.ts), where the rest rows are: the texture
   // rides a half as it opens.
-  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);
+  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);${afterHitStop(37, 'anchor')}
   var n = vec3<f32>(0.0);
   var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
@@ -80,7 +81,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
       ngValid = magnitude2 > 1e-12 && magnitude2 < 1e12;
       if (ngValid) { n = normalize(candidate); } else { ngReason = 2; }
     }
-  }
+  }${afterHitStop(38, 'n + ng0 + vec3<f32>(ngScalar)')}
 ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differentiates the list's wounds and knows nothing of a
   // stamped crater. Inside one's footprint the taps below (which read the volume through mapBody) give the normal.
   let wvHit = wvColour(p, data, gBand, segVolumeAtlas).x > 0.0;

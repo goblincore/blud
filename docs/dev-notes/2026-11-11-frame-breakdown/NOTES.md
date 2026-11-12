@@ -98,9 +98,9 @@ ran on a loaded machine and are not usable).
 | AO and scatter probes both off (`lodCfg.x`, `surfCfg.w` = 0) | 34.8 | 42.0, 42.0 |
 | `?probelean`: both probes on `mapLean` | 34.7, 34.6 | 39.7, 37.6, 37.4 |
 
-- **The normal is not a lever.** `?ngwound` saves nothing; neither does taking the taps away near wounds, nor
-  switching the analytic normal off. Whether the analytic path still gives up on most wounded pixels was not
-  counted. `?ngwound` stays as an off-by-default switch; not pursued.
+- **WITHDRAWN: "the normal is not a lever".** That read came from one leg a variant on a drifting machine. The
+  stops below show the four taps are about 9 ms and `?ngwound=2` removes them. `?ngwound` (=1) does save nothing:
+  the analytic path still gives up on most wounded pixels (the taps stay at 8 to 9 ms with it on).
 - **The two probes are about 7 ms** of the heavy mob's march: each is one whole field call a hit pixel.
 - **`?probelean` takes about 3 ms off** (34.6 against 37.4 to 37.6; 47 against 50 ms on the wall). The probes read
   the bodies without their wounds, so inside a crater they see the flesh that was there: the floor reads fully
@@ -108,5 +108,45 @@ ran on a loaded machine and are not usable).
   (`probelean-close-{off,on}.png`); on the mob the difference is slight (`probelean-mob-{off,on}.png`). Local only.
   Owner's verdict on the two close-up stills (2026-11-12): "Looks fine". Not yet seen by the owner in play; still
   off by default.
-- **Not found:** the shading after the hit is about 21 ms and the probes are 7 of it. The rest is not the normal.
-  What is left: `ngBody` itself, the wound colour and tissue loops, the light list, the materials. Not split.
+
+## The same, by stops inside the shader (2026-11-12)
+
+`?afterhit` (`march/after-hit-flag.ts`) puts nine early returns into the march, one a debug mode, so the pass timed
+at two neighbouring modes gives the cost of what lies between; each return is built from what its stage worked
+out. One page, `frame-breakdown.mjs` with `FB_MODES`, three rounds. Heavy mob, `?woundgrid`, a quiet machine
+(`.lab-tmp/wv/afterhit2-heavy.json`; the first run without the two inner stops agrees within 0.5 ms):
+
+| Stage | March pass up to its end | The stage |
+| --- | --- | --- |
+| the walk (stop 30) | 19.1 to 19.8 ms | 19.3 |
+| the rest anchor (37) | 18.7 to 19.7 | about 0 |
+| the analytic normal, `ngBody` (38) | 23.2 to 23.5 | 4 |
+| the four-tap normal where that gave up (31) | 32.2 to 32.7 | 9 |
+| wound and char masks, tissue, organs, the whole material chain (34) | 33.2 to 35.3 | 1.5 |
+| flashlight, light list, the two probes, the wound and level shadows (36) | 40.3 to 43.3 | 7 (the probes; stop 35 before them read the same as 34) |
+| ambient and compose (0) | 40.4 to 41.9 | under 1 |
+
+So the 21 ms after the hit is the normal (13: 4 analytic, 9 the taps on wounded pixels) and the probes (7). The
+wound colour loops, the materials and the light list are under 2 ms together and not worth work.
+
+On the clean mob (same stops, a noisier run): the walk 13, `ngBody` 6, the taps about 0, the probes about 8.
+`ngBody` is dearer there than on the heavy mob because a wounded pixel gives up early.
+
+**`?ngwound=2` (no taps near wounds: the pixel keeps `ngBody`'s gradient and the skin detail term).** Alternated
+with the baseline, three legs each, the first sample of a page (later samples of a page drifted up on both):
+
+| | March pass | Of it, the taps (stop 38 to 31) |
+| --- | --- | --- |
+| baseline | 37.7, 39.3, 38.4 ms | 8.3, 9.8, 11.7 |
+| `?ngwound=2` | 30.6, 30.6, 30.4 | 2.7, 1.8, 2.0 |
+| `?ngwound=2&probelean` (one leg) | 32.3 (second and third samples; the first read 42.3) | |
+
+About 7 to 8 ms off the heavy mob's march. The one leg with `?probelean` added did not show its 3 ms on top; not
+settled. The look, one zombie with 70 pellets in the chest (`ngwound2-close-{off,on}.png`, mob
+`ngwound2-mob-{off,on}.png`, both shortcuts `ngwound2-probelean-close-on.png`): crater lips and the edges between
+overlapping craters are a little softer, the cavity and the organs read the same. The flag's header calls it a
+sizing switch because the analytic gradient does not carry a crater's exact shape; in the stills that is hard to
+see. Not seen in motion. Local only.
+
+- **Open:** `ngBody` is 4 to 6 ms on every mob and has not been looked into. The taps left with `?ngwound=2`
+  (2 ms) are the pixels where `ngBody` did not run or gave no usable gradient.
