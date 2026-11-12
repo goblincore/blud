@@ -25,14 +25,18 @@
 import type { Vec3 } from './types';
 import { smax } from './validate';
 
-/** Chain values at or below this carve nothing: the fillet reaches 4 k = 6 cm and the near flag reads -0.1. */
-export const WV_FLOOR = -0.12;
+/** Chain values at or below this carve nothing. The fillet only moves the field where the chain is within k (1.5 cm)
+ *  of it, and the near flag reads WV_NEAR; every centimetre of floor is a centimetre of reach, and the reach cubed is
+ *  what a crater costs in the atlas (it was -0.12: two bodies filled the atlas). */
+export const WV_FLOOR = -0.06;
+/** The march's near-a-wound flag is raised where the chain without bumps is above this (the list's is r < 2 depth). */
+export const WV_NEAR = -0.05;
 /** Metres a step of a chain byte, and of a bump byte. */
 export const WV_CHAIN_STEP = 0.001;
 export const WV_BUMP_STEP = 0.00025;
-/** How far past a primitive's capsule its box reaches: a crater's centre sits near the skin and its fillet and
- *  colour reach about this far. */
-export const WV_MARGIN = 0.12;
+/** How far past a primitive's capsule its box reaches: outside the skin only a crater's lip matters (a few
+ *  centimetres), and its colour. */
+export const WV_MARGIN = 0.07;
 /** woundMask's footprint, in radii. */
 export const WV_MASK_REACH = 1.6;
 
@@ -83,7 +87,7 @@ const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, 
 /** How far from its centre a crater can change a voxel. */
 export function stampReach(c: StampCrater): number {
   const carve = c.depth - WV_FLOOR;                                   // the chain leaves the floor inside this
-  const rim = c.depth * (c.rimOffset + 3 * c.rimWidth);               // exp(-9) of the lip: nothing
+  const rim = c.depth * (c.rimOffset + 2.2 * c.rimWidth);             // exp(-4.8) of the lip: under 1 %
   return Math.max(carve, rim, c.radius * WV_MASK_REACH);
 }
 

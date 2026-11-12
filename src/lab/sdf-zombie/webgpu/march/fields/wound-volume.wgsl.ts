@@ -8,7 +8,7 @@
 // entry, in WORLD space, rewritten each frame by the CPU:
 //   ROW_WOUND        bound centre, radius   (radius <= 0 ends the table)
 //   ROW_WOUND_META   quaternion: world direction -> box frame
-//   ROW_WOUND_CAP    the minimum corner (world) of the TOUCHED part of the box, w = voxels along z from a shape
+//   ROW_WOUND_CAP    the minimum corner (world) of the TOUCHED part of the box, w = voxels along x from a shape
 //                    voxel to its colour voxel
 //   ROW_WOUND_FLAGS  that part's origin in the atlas (voxels), w = nx + 256 ny + 65536 nz (its own dims)
 // The voxel's edge is compiled in (the flag sets it).
@@ -16,10 +16,10 @@
 // main diagonal; a point takes the four corners of the one it is in). Continuous across cells and exact at the
 // corners, as trilinear is; half the loads. sampleVolume (../../../wound-volume-stamp.ts) is the CPU twin.
 // THE ATLAS is the 3D texture the shader already takes as `segVolumeAtlas`: RGBA8, a primitive's shape voxels with
-// its colour voxels stacked after them along z. Texel centres sit at integer voxel coordinates.
+// its colour voxels beside them along x. Texel centres sit at integer voxel coordinates.
 import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_META } from '../layout';
 import { WOUND_VOL_VOXEL, WV_MAX_ENTRIES, WV_TABLE_COL } from '../wound-volume-flag';
-import { WV_BUMP_STEP, WV_CHAIN_STEP, WV_FLOOR } from '../../../wound-volume-stamp';
+import { WV_BUMP_STEP, WV_CHAIN_STEP, WV_FLOOR, WV_NEAR } from '../../../wound-volume-stamp';
 
 const f = (v: number) => { const s = String(v); return /[.e]/.test(s) ? s : `${s}.0`; };
 const LIVE = f(WV_FLOOR + 0.002);
@@ -39,7 +39,7 @@ export const WV_READ = /* wgsl */ `fn wvRead(p: vec3<f32>, data: texture_2d<f32>
   let i0 = clamp(vec3<i32>(floor(g)), vec3<i32>(0), dims - vec3<i32>(2));
   let t = clamp(g - vec3<f32>(i0), vec3<f32>(0.0), vec3<f32>(1.0));
   var o = vec3<i32>(a.xyz + vec3<f32>(0.5)) + i0;
-  if (colour) { o.z = o.z + i32(c.w + 0.5); }
+  if (colour) { o.x = o.x + i32(c.w + 0.5); }
   // The largest, middle and smallest of t and the axes they lie on: walk the cell's corners along them.
   var e1 = vec3<i32>(0, 0, 1);
   var e2 = vec3<i32>(0, 1, 0);
@@ -94,7 +94,7 @@ export const WV_APPLY = /* wgsl */ `  for (var e = 0; e < ${WV_MAX_ENTRIES}; e =
     let wvChain = mix(wvChainN, wvChainB, wvGate);
     let wvBumped = d - wvBumps * wvGate;
     d = select(wvBumped, smax(wvBumped, wvChain, woundCfg.y), wvChain > ${LIVE});
-    if (wvChainN > -0.1) { near = 1.0; }
+    if (wvChainN > ${f(WV_NEAR)}) { near = 1.0; }
   }
 `;
 

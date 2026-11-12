@@ -26,6 +26,9 @@ const crater = (centre: Vec3, radius: number, extra: Partial<StampCrater> = {}):
 /** A slab of flesh: the skin is the plane z = 0, flesh below it. */
 const skin = (p: Vec3) => p[2];
 
+/** Metres under the carved surface down to which the volume must agree with the list. */
+const NEAR_SURFACE = -0.03;
+
 describe('the baked wound volume (pure)', () => {
   it('encodes the floor as zero and steps by a millimetre', () => {
     expect(chainByte(WV_FLOOR)).toBe(0);
@@ -57,6 +60,9 @@ describe('the baked wound volume (pure)', () => {
         const dIn = skin(p), want = listField(dIn, p, [c]);
         const got = applyVolumeSample(dIn, dIn, sampleVolume(v, p)!, c.blendK);
         if (Math.abs(want - dIn) > 1e-4) moved++;
+        // Compared where a ray can be: outside the carved body and the first centimetres under its surface. Deeper
+        // than that the volume answers the uncarved flesh (WV_FLOOR: what it holds is paid for in the atlas).
+        if (want < NEAR_SURFACE) continue;
         worst = Math.max(worst, Math.abs(got - want));
       }
       expect(moved).toBeGreaterThan(400);
@@ -74,7 +80,9 @@ describe('the baked wound volume (pure)', () => {
     for (let i = 0; i < 4000; i++) {
       const p: Vec3 = [Math.sin(i * 1.7) * 0.14, Math.cos(i * 2.3) * 0.1, -0.08 + ((i * 37) % 100) / 1000];
       const dIn = skin(p), got = applyVolumeSample(dIn, dIn, sampleVolume(v, p)!, 0.015);
-      worst = Math.max(worst, Math.abs(got - listField(dIn, p, [a, b])));
+      const want = listField(dIn, p, [a, b]);
+      if (want < NEAR_SURFACE) continue;
+      worst = Math.max(worst, Math.abs(got - want));
       worstSwapped = Math.max(worstSwapped, Math.abs(got - listField(dIn, p, [b, a])));
     }
     expect(worst).toBeLessThan(0.005);

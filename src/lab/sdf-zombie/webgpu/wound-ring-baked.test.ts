@@ -13,7 +13,7 @@ import { MAX_WOUNDS, worldHitToWound, type Wound } from '../damage';
 import { boneExposureOf } from '../cut-wound';
 import type { Vec3 } from '../types';
 import { MAX_BAKED_RECORD, createWoundRing } from './character-view';
-import { createWoundVolumeAtlas } from './wound-volume-store';
+import { createWoundVolumeAtlas, woundVolumeAtlas } from './wound-volume-store';
 import { recordWoundCount } from './zombie-gpu';
 
 const body: BuildResult = buildBody(compileBlob(parseBlob(zombieSrc)));
@@ -93,5 +93,38 @@ describe('the wound ring remembers what it baked', () => {
     expect(Math.trunc(marked)).toBe(0);
     expect(marked < 0.5).toBe(false);
     expect(recordWoundCount(u(7, 1))).toBe(7);
+  });
+
+  it('never drops a wound when the atlas is full: it stays on the list, which merges as before the volume', () => {
+    const atlas = woundVolumeAtlas();
+    // Another body bakes first and holds boxes; then the rest of the page's atlas is filled.
+    const other = createWoundRing();
+    for (const w of chestWounds(MAX_WOUNDS + 12)) other.stamp(w, body, 0);
+    other.refresh(gpu, body, 0);
+    expect(other.baked().length).toBeGreaterThan(0);
+    const held: [number, number, number][] = [];
+    for (let o = atlas.alloc([64, 32, 32]); o; o = atlas.alloc([64, 32, 32])) held.push(o);
+    while (atlas.alloc([8, 8, 8])) { /* the last corners */ }
+    const ring = createWoundRing();
+    const shots = chestWounds(MAX_WOUNDS + 12);
+    for (const w of shots.slice(0, MAX_WOUNDS + 1)) ring.stamp(w, body, 0);
+    ring.refresh(gpu, body, 0);                       // the 33rd pushed one out; there is nowhere to bake it
+    expect(ring.baked()).toHaveLength(0);
+    expect(ring.all()).toHaveLength(MAX_WOUNDS);
+    for (const w of shots.slice(MAX_WOUNDS + 1)) ring.stamp(w, body, 0);
+    ring.refresh(gpu, body, 0);
+    expect(ring.baked()).toHaveLength(0);
+    expect(ring.all()).toHaveLength(MAX_WOUNDS);
+    // Merged, not lost: the list's craters have grown to cover what could not be baked.
+    const grown = ring.all().filter(w => w.radius > 0.031).length;
+    expect(grown).toBeGreaterThan(0);
+    // Room again (the other body is gone; a freed box is handed to the next box of its size): the next overflow
+    // is baked.
+    other.dispose();
+    expect(held.length).toBeGreaterThan(0);
+    for (const w of chestWounds(MAX_WOUNDS + 14).slice(MAX_WOUNDS + 12)) ring.stamp(w, body, 0);
+    ring.refresh(gpu, body, 0);
+    expect(ring.baked().length).toBeGreaterThan(0);
+    ring.dispose();
   });
 });

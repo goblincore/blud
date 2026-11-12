@@ -4,7 +4,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
 {
   "APPLY_BONES": "4c611b8478789b59f3ae79fd4851043ac0a2e6cc",
   "APPLY_CARVES": "4ee8e1e5282e147cb54af65435046ea8b2567b9a",
-  "APPLY_WOUNDS": "7eb1ab57a12a1649fcff016d761780b0fe2a3b75",
+  "APPLY_WOUNDS": "51bc2033e7a91a0801194f010e37ae89a1e695b6",
   "CALC_NORMAL": "6de75ca1647c2337dc5bfe193bc0bf52f1aa90db",
   "CHAR_MASK": "9e64f8f5ba660d090d50f5d5aea605b232fba124",
   "CONE_BEND": "e4bfcddb53fef770a36476d55267346ea71bd90b",
@@ -107,7 +107,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "2151c7d3774353131f1165826832053b2aa4322b",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "50",
-  "__HELPERS_joined": "c83b0f33a33bde3f5c7f5967db4e0021bda6229a",
+  "__HELPERS_joined": "93da9f3212803130d6d5f7ec900f6f66d84798cf",
   "__export_names": "8fcf60b7a61df585171b1396f67066466c838de1",
 }
 `;
