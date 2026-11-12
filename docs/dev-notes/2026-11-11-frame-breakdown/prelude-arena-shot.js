@@ -24,3 +24,9 @@
   window.__arenaShot = { landed, listed: __sdfGame.actorWounds(z.id).length };
   console.log('arena-shot', JSON.stringify(window.__arenaShot));
 })();
+// ?novhs=1: the VHS pass off, so two stills differ only by what the shader drew.
+(() => {
+  if (new URLSearchParams(location.search).get('novhs') !== '1') return;
+  __sdfGame.setVhs(null);
+  __sdfGame.step(4);
+})();
