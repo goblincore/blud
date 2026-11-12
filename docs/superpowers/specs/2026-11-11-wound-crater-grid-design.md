@@ -111,3 +111,32 @@ Each ends at a measurement or an owner look; a stage that fails stops the line.
 - Shared pre-baked damage patterns (many bodies pointing at one voxel box): cheap, but old wounds would no longer
   sit where they were shot. Rejected.
 - Sparse voxel bricks: fixes room, not size or the shallow look. Rejected.
+
+## Stage 1, built and timed 2026-11-11 (`?woundgrid`, default off)
+
+`wound-grid.ts` (the builder, pure), `march/wound-grid-flag.ts`, `march/fields/wound-grid.wgsl.ts`; `applyWounds`
+takes its indices from the sample's cell. The off text is unchanged (the golden holds it).
+
+What differs from the design above:
+
+- **No new rows.** The grid sits in the free columns of the wound rows (56 to 127 of four rows, 32 to 127 of the
+  cut row): 384 texels. Up to 216 near-cubic cells (the box is cut to fit its shape) and 2,656 indices, sixteen a
+  texel. A body whose cells need more keeps no grid that frame and walks its list.
+- **The listed reach is tighter than the per-ray list's**, which allowed 20 to 29 cm for a pellet: 2 radii, the rim
+  to two widths, the radius and 4 k, plus the slack (3 cm; `?woundgrid=<cm>`). About 12 to 15 cm.
+- **A sample among 32 wounds over a torso's front walks under 16 of them** (unit test), not one or two.
+- A slot with an open head split stays on the list.
+
+Heavy mob (22 zombies, six shot about 70 times each: 32 listed wounds and baked boxes each), the compute march on,
+whole frames, four rounds, a quiet machine:
+
+| Leg | Frame | Against off |
+| --- | --- | --- |
+| off | 52.31 ms | |
+| off again (control) | 52.56 ms | −0.13 ms (−0.91 to +0.42) |
+| `?woundgrid` | 45.62 ms | −7.01 ms (−11.65 to −6.06), −13.4 % |
+
+- Over the 5 ms line, under the 15 ms hoped for. The stills (`woundgrid-off.png`, `woundgrid-on.png` beside the
+  results, local only) show the same picture: open cavities, ribs.
+- Not measured: how many bodies kept a live grid, the grid's CPU cost, a slack of 0, an exact reach, motion,
+  an open head split, soldiers. Not looked at up close.
