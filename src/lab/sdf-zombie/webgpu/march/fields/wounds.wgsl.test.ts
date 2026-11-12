@@ -25,6 +25,7 @@ import { declaredName } from '../../march-test-support';
 import { WOUND_MASKS_BLOCK } from '../body/blocks/post/wound-masks.wgsl';
 import { SKIN_NORMAL } from '../body/blocks/light/skin-detail-proto';
 import { MAX_WOUNDS } from '../../../damage';
+import { WG_CELL_MAX } from '../../../wound-grid';
 
 describe('ported features reach the entry point', () => {
 
@@ -75,15 +76,16 @@ describe('ported features reach the entry point', () => {
     // w = 1e9 is the no-cull identity (chunk torn ends, hands view).
     expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
     const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
+    // The crater grid (wound-grid-flag.ts, on by default) bounds the loop at a cell's count.
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${WG_CELL_MAX}; k = k + 1)`);
     const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND} + band)`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
     expect(iFirstLoad).toBeGreaterThan(iLoop);
     // Threading: mapBody hands it to applyWounds, and every entry point
     // that can reach a wounded field declares and forwards it.
-    // The last argument is the baked wound volume's atlas (wound-volume-flag.ts, on by default).
-    expect(MAP_BODY).toContain('applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band, segVolumeAtlas)');
+    // No atlas argument: the baked wound volume is off under the crater grid (on by default since 2026-11-12).
+    expect(MAP_BODY).toContain('applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band)');
     // crowd stage a: woundBound moves to the instance record; every mapBody
     // caller forwards the record pointer instead of per-instance uniforms.
     expect(MAP_BODY).toContain('let woundBound = gInstWoundBound;');
@@ -278,8 +280,8 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain(`cs < max(depthT, wCut.w) * 2.0) { near = max(near, ${f(CUT_NEAR)}); }`);
     expect(branch).not.toContain('near = 1.0');
     // Every other branch still reports 1 (the preset, the crater).
-    // Three: the two crater rows' and the baked wound volume's (wound-volume-flag.ts, on by default).
-    expect(APPLY_WOUNDS.replace(branch, '').match(/near = 1\.0;/g)).toHaveLength(3);
+    // Two: the two crater rows' (the baked wound volume's third is off under the crater grid, the default).
+    expect(APPLY_WOUNDS.replace(branch, '').match(/near = 1\.0;/g)).toHaveLength(2);
     expect(MAP_BODY).toContain(`if ((nearWound > ${(1 + CUT_NEAR) / 2} || (nearWound > 0.5 && gWoundRaisers != 0u) || counts2.y > 0.5) && counts2.x > 0.0) {`);
     // The trace's own reader keeps the plain test, and so does the re-fold's trigger.
     expect(MARCH_BODY).toContain('let nearWound = dres.z > 0.5;');

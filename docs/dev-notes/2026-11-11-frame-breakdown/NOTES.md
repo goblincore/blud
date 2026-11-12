@@ -213,3 +213,20 @@ default; with it off, by 0.005):
   default's 47 to 55 in the same run; the taps about 0 in both). The ragged path's own cost is NOT measured: that
   mob has no ragged wounds. A mob of wounded soldiers would show it.
 - Not seen in motion. Not looked at: cloth holes (ragged too), cuts and torn wounds (they still take the taps).
+
+## The three are the default (2026-11-12, owner's call)
+
+"I'm fine with making ngwound default to 8 and the other optimizations on as well."
+
+- **On with no parameter:** the crater grid (`?woundgrid`, 3 cm slack), `?ngwound=8`, `?probelean`. Each takes `=0`
+  for the text of before, to the byte: `?woundgrid=0&ngwound=0&probelean=0` is the golden snapshot the default held
+  until today (checked value for value before the default was re-recorded).
+- **The baked wound volume is off beside the grid**, so it now runs only on a `?woundgrid=0` page. A body keeps up to
+  128 exact wounds; nothing merges at 32 (the sever rules see single wounds, as they did with the volume).
+- **Whole frame, heavy mob** (22 bodies, six shot 70 times; three rounds, alternated, a machine that drifted upward
+  during the run): old defaults 61 to 78 ms, new 49 to 53 ms. The two loads of the old page differed by up to 9 ms,
+  so read it as "about 12 to 16 ms less", not a figure.
+- **Tests that pinned the old default text** now pin the new one (the wound loop's bound, the tap rule, the probe
+  site, the band's row count), or take the `?woundgrid=0` page where they test the volume.
+- **Not done:** no GPU gate re-taken. Not seen in motion with `=8`. The soldier wound that vanished once under the
+  grid and the outline inside list wounds are still open, and are now on the default path.

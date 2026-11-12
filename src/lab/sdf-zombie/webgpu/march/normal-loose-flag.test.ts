@@ -10,9 +10,11 @@ describe('?ngloose', () => {
     expect(normalLooseOn('?ngloose')).toBe(true);
     expect(normalLooseOn('?level=doom-map28&ngloose=1')).toBe(true);
   });
-  it('puts the cheaper fallback in the default text, and keeps the full normal near wounds', () => {
-    // `&& !wvHit`: a baked crater's pixels keep the full normal too (wound-volume-flag.ts, on by default).
-    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && !hitNearWound && !wvHit) {');
+  it('puts the cheaper fallback in the default text, and keeps the full normal near a wound the analytic one does not support', () => {
+    // Near a wound the taps are kept only for a shape the analytic normal does not support (reason 1: a cut, a torn
+    // wound): `?ngwound=8` is the default (normal-wound-flag.ts). No `&& !wvHit`: the baked volume is off under the
+    // crater grid.
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && (!hitNearWound || ngReason != 1)) {');
     expect(SHADING_NORMAL_BLOCK).toContain('  if ((!ngValid && !ngLoose) || debugNormal12) {');
   });
 });

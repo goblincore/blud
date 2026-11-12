@@ -15,17 +15,19 @@
 // Under the switch the list no longer merges at its cap, which changes what the wound-driven rules see (a merged
 // crater grows and can sever; a stamped one has left the list).
 //
-// ON BY DEFAULT since 2026-11-11 (owner's call, after playing it on E1M1 and MAP28: "you can make it default").
+// ON BY DEFAULT since 2026-11-11 (owner's call, after playing it on E1M1 and MAP28: "you can make it default"),
+// BUT ONLY WITHOUT THE CRATER GRID, which is itself on by default since 2026-11-12 (wound-grid-flag.ts) and keeps
+// every wound on the list. So the volume now runs only on a page that asks for `?woundgrid=0`; there:
 //   (no parameter), ?woundvol, ?woundvol=1   on, 2 cm voxels
 //   ?woundvol=<cm>                           on, voxels of that many centimetres (1 to 4; 1.5 for finer than 2 cm)
 //   ?woundvol=0                              off: the shader text of before the switch, byte for byte
 //   ?skeleton=volume                         off too: that mode needs the 3D texture for its own volumes
-//   ?woundgrid                               off too: the crater grid carries every wound on the list
+//   anything but ?woundgrid=0                off too: the crater grid carries every wound on the list
 export function woundVolumeVoxel(search: string): number {
   const q = new URLSearchParams(search);
   if (q.get('skeleton') === 'volume') return 0;
   // The crater grid (wound-grid-flag.ts) keeps every wound on the list: nothing overflows into the volume.
-  if (q.get('woundgrid') !== null && q.get('woundgrid') !== '0') return 0;
+  if (q.get('woundgrid') !== '0') return 0;
   const v = q.get('woundvol');
   if (v === '0') return 0;
   const cm = Number(v);
@@ -37,7 +39,7 @@ export const WOUND_VOL_VOXEL: number = (() => {
   try {
     return woundVolumeVoxel((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return 0.02;
+    return 0;
   }
 })();
 export const WOUND_VOL: boolean = WOUND_VOL_VOXEL > 0;

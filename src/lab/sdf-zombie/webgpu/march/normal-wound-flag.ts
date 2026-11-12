@@ -14,7 +14,10 @@
 // body's pixels went back to the analytic normal, 13 % off the pass, and the skin's mottling shifted a little over
 // the wounded area. Cuts and torn wounds still take the taps.
 //
-//   (no parameter), ?ngwound=0   off: the shader text of before the switch, byte for byte
+// DEFAULT `=8` since 2026-11-12 (owner's call: =2's softer crater lips were "acceptable given the tradeoff", and =8
+// gives a soldier's ragged wounds their relief back at about the same cost).
+//   (no parameter)               as ?ngwound=8
+//   ?ngwound=0                   off: the shader text of before the switch, byte for byte
 //   ?ngwound, ?ngwound=1         on
 //   ?ngwound=2                   on, AND a pixel the analytic path still gives up near a wound takes ngBody's own
 //                                gradient (the cheaper fallback, normal-loose-flag.ts) and not the four taps. That
@@ -40,25 +43,32 @@
 //                                soldier's wounds shaded as smooth round bowls. With =8 ngWounds differentiates the
 //                                ragged crater (the lobe noise's slope by three more noise reads a ragged wound).
 //   ?ngwound=9                   =8 as the error picture of =7.
-export function normalWoundOn(search: string): boolean {
+/** The page's `?ngwound` value: '8' with no parameter, '1' for a bare `?ngwound`. */
+export function normalWoundMode(search: string): string {
   const v = new URLSearchParams(search).get('ngwound');
-  return v !== null && v !== '0';
+  return v === null ? '8' : v === '' ? '1' : v;
 }
-
-export const NG_WOUND_ANALYTIC: boolean = (() => {
+const MODE: string = (() => {
   try {
-    return normalWoundOn((globalThis as { location?: { search?: string } }).location?.search ?? '');
+    return normalWoundMode((globalThis as { location?: { search?: string } }).location?.search ?? '');
   } catch {
-    return false;
+    return '8';
   }
 })();
+
+export function normalWoundOn(search: string): boolean {
+  return normalWoundMode(search) !== '0';
+}
+
+export const NG_WOUND_ANALYTIC: boolean = MODE !== '0';
 
 /** The WGSL condition (led by ` && `) under which a pixel the analytic path gave up keeps ngBody's own gradient
  *  and skips the four taps. Off and `?ngwound=1`: never near a wound. `=2`: always. `=3`: near a wound unless the
  *  give-up was a KINK (reason 3: a crater lip, the ridge between two craters), so the taps still draw the edges.
- *  `=4`: the reverse of 3 (taps everywhere near a wound but at kinks), to size the two halves. */
+ *  `=4`: the reverse of 3 (taps everywhere near a wound but at kinks), to size the two halves. `=5` and up: near a
+ *  wound unless the shape is unsupported (reason 1); `=6` also where the pixel is on a raised rim. */
 export function normalWoundTapRule(search: string): string {
-  const v = new URLSearchParams(search).get('ngwound');
+  const v = normalWoundMode(search);
   if (v === '2') return '';
   if (v === '3') return ' && (!hitNearWound || ngReason != 3)';
   if (v === '4') return ' && (!hitNearWound || ngReason == 3)';
@@ -67,49 +77,16 @@ export function normalWoundTapRule(search: string): string {
   return ' && !hitNearWound';
 }
 
-export const NG_WOUND_TAP_RULE: string = (() => {
-  try {
-    return normalWoundTapRule((globalThis as { location?: { search?: string } }).location?.search ?? '');
-  } catch {
-    return ' && !hitNearWound';
-  }
-})();
+export const NG_WOUND_TAP_RULE: string = normalWoundTapRule(`?ngwound=${MODE}`);
 
-/** `?ngwound=5` and `=6`: ngBody carries on past a numerical give-up (see the header). */
-export const NG_WOUND_COMPLETE: boolean = (() => {
-  try {
-    const v = new URLSearchParams((globalThis as { location?: { search?: string } }).location?.search ?? '').get('ngwound') ?? '';
-    return v === '5' || v === '6' || v === '7' || v === '8' || v === '9';
-  } catch {
-    return false;
-  }
-})();
+/** `?ngwound=5` and up: ngBody carries on past a numerical give-up (see the header). */
+export const NG_WOUND_COMPLETE: boolean = ['5', '6', '7', '8', '9'].includes(MODE);
 
 /** `?ngwound=6`: ngWounds marks a pixel on a crater's raised rim (gNgRim), and such a pixel takes the taps. */
-export const NG_WOUND_RIM: boolean = (() => {
-  try {
-    return new URLSearchParams((globalThis as { location?: { search?: string } }).location?.search ?? '').get('ngwound') === '6';
-  } catch {
-    return false;
-  }
-})();
+export const NG_WOUND_RIM: boolean = MODE === '6';
 
-/** `?ngwound=7`: the angle between the kept analytic normal and the taps', as a picture. */
-export const NG_WOUND_DIFF: boolean = (() => {
-  try {
-    const w = new URLSearchParams((globalThis as { location?: { search?: string } }).location?.search ?? '').get('ngwound') ?? '';
-    return w === '7' || w === '9';
-  } catch {
-    return false;
-  }
-})();
+/** `?ngwound=7` and `=9`: the angle between the kept analytic normal and the taps', as a picture. */
+export const NG_WOUND_DIFF: boolean = MODE === '7' || MODE === '9';
 
 /** `?ngwound=8` and `=9`: ngWounds differentiates a ragged crater's outline. */
-export const NG_WOUND_RAGGED: boolean = (() => {
-  try {
-    const w = new URLSearchParams((globalThis as { location?: { search?: string } }).location?.search ?? '').get('ngwound') ?? '';
-    return w === '8' || w === '9';
-  } catch {
-    return false;
-  }
-})();
+export const NG_WOUND_RAGGED: boolean = MODE === '8' || MODE === '9';
