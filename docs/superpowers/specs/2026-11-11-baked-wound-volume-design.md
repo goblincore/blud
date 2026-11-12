@@ -343,3 +343,62 @@ switch byte for byte (the golden holds it) and the merge on overflow.
   `applyWounds(...)` call text and needs `woundvol=0` captures.
 - Pages with their own renderer (not `lab-renderer.ts`) never call `bindRenderer`, so a stamp there re-uploads the
   whole 19 MB atlas; the game does not.
+
+## A baked wound is still a hole, 2026-11-11 (later)
+
+Two things read only the exact list, so a wound stopped counting the moment it was baked:
+
+- **The sever rules and the wounded limbs** (`game-actor.ts`: `cutLimbs`, `cutChains`, `woundedLimbs`) and **the
+  skeleton's and organs' exposure** (`cut-wound.ts boneExposureOf`: an organ mesh is drawn only where one of its
+  owner's wounds reaches it). The ring now keeps a record of what it baked (`WoundRing.baked`, up to 256, a dead
+  primitive's dropped) and these read the list and the record.
+- **The lean walk.** A body with boxes and an EMPTY list was marched as unwounded: the craters' colour, none of
+  their shape. Its record's wound count is now 0.75 (`recordWoundCount`): the list's loops still run zero times and
+  the lean test fails. On `main` this case could not arise (boxes only exist past a full list).
+
+### `?woundlist=<n>`: keep only the newest n bakeable wounds exact (a try; default 32 = no change)
+
+Same heavy mob, compute march on, whole frames, three rounds, a loaded machine (read the sizes loosely):
+
+| Kept exact | Against 32 | Control (32 against 32) |
+| --- | --- | --- |
+| 0 | −14.4 ms (−21.8 to −12.0), 56 to 42 ms | +13.4 (−0.1 to +48.4) |
+| 8 | −12.2 ms (−21.1 to +3.5) | −3.5 (−15.1 to +1.1) |
+
+- An earlier keep-0 run read −37 %: it was the lean walk drawing uncarved bodies, not a result.
+- Look: fully baked bodies read as wounded, blockier, with less of the white rib detail
+  (`docs/dev-notes/2026-11-11-wound-volume/woundlist-{32,8-fixed,0-fixed}.png`, local only). Owner to judge.
+- Not tested: an actual sever driven by baked wounds in play; soldiers; a fresh burn baked at once (it bakes at
+  the depth it has that instant).
+
+## The atlas was far too small, 2026-11-11 (owner playtest of `?woundlist=0`)
+
+The owner played `?woundlist=0` and `=8`: after a while wounds stopped appearing, and at 8 the list filled and
+older wounds vanished. Cause: the atlas held about TWO fully wounded bodies (50 boxes; the allocator reached 6.8 of
+its 19 MB), and a stamp that found no room dropped its wound. On `main` the same loss sets in past the 32nd wound
+of a body once the atlas is full.
+
+- **A wound is never dropped.** A stamp that finds no room (`BodyWoundVolumes.noRoom`) leaves its wound on the list,
+  and the list merges at its cap as before the volume until a box is freed (`WoundVolumeAtlas.frees`).
+- **Smaller boxes:** `WV_FLOOR` −0.12 → −0.06 (the volume answers the uncarved flesh more than 3 cm under the carved
+  surface), the lip's reach 3 → 2.2 widths, `WV_MARGIN` 0.12 → 0.07, the near flag at `WV_NEAR` −0.05, and the
+  colour voxels beside the shape's along x so the atlas packs in slabs. About 6 fully wounded bodies (119 boxes),
+  10 front-shot ones in the mob (`prelude-mob-full.js`: fourteen bodies shot, ten baked whole, four fell back to
+  merging, none lost).
+- **Baked craters were never cavities:** the stamp did not pass `Wound.cavity`. It does now (the viscera colour).
+
+### Not solved: a baked chest shows no ribs
+
+One zombie at 1 m, 70 pellets in the chest (`prelude-one-close.js`; stills `close-32-exact.png`,
+`close-0-baked-2cm.png`, `close-0-baked-1cm.png`, local only). With 32 exact wounds the chest opens into a deep
+cavity with the ribs in it. Fully baked it is a shallow, blocky red surface with no ribs, at 2 cm and at 1 cm
+alike, with the exposure spheres and the cavity flag in. The carve formula is the list's; why the baked chest is
+shallower is not found. Until it is, `?woundlist` below 32 loses the look.
+
+### Where this points
+
+Six to ten bodies is not a level, a 3 cm pellet crater is 1.5 voxels across at 2 cm, and 1 cm is 8 times the
+memory. Owner's question, 2026-11-11: can bodies share wounds in the atlas? Two ways: shared pre-baked damage
+patterns (cheap; old wounds no longer where they were shot), or no voxels at all: every crater is one formula, so
+a body part keeps a small grid of which craters are near each cell and the march reads those few. Exact shapes,
+a few numbers a crater, no cap. Not built, not measured.

@@ -40,6 +40,8 @@ interface WebGpuBackendLike {
 export interface WoundVolumeAtlas {
   readonly texture: THREE.Data3DTexture;
   readonly data: Uint8Array;
+  /** Boxes freed so far: a body that found no room tries again once this has moved. */
+  frees: number;
   /** A free box of these voxels, or null when the atlas is full. */
   alloc(dims: readonly [number, number, number]): [number, number, number] | null;
   free(origin: readonly [number, number, number], dims: readonly [number, number, number]): void;
@@ -70,6 +72,7 @@ export function createWoundVolumeAtlas(dims: readonly [number, number, number] =
   let backend: WebGpuBackendLike | undefined;
   return {
     texture, data,
+    frees: 0,
     alloc(d) {
       const key = d.join('x');
       const again = freed.get(key)?.pop();
@@ -95,6 +98,7 @@ export function createWoundVolumeAtlas(dims: readonly [number, number, number] =
       if (!freed.has(key)) freed.set(key, []);
       freed.get(key)!.push([origin[0], origin[1], origin[2]]);
       boxes--; bytes -= d[0] * d[1] * d[2] * 4;
+      this.frees++;
     },
     upload(lo, hi) {
       const gpuTex = backend?.isWebGPUBackend && backend.device ? backend.get(texture)?.texture : undefined;
@@ -147,7 +151,7 @@ interface Entry {
   primIdx: number;
   vol: PrimVolume;
   origin: [number, number, number];
-  /** Shape box dims; the atlas box is twice as deep. */
+  /** Shape box dims; the atlas box is twice as wide (the colour voxels sit beside the shape's along x). */
   axis0: Vec3 | undefined;
   /** What the stamps have touched, in the box's frame (metres): the entry's bound. */
   lo: [number, number, number];
@@ -169,6 +173,9 @@ export interface BodyWoundVolumes {
     xf?: (v: Vec3, primIdx: number, dir: boolean) => Vec3,
   ): { count: number; bound: [number, number, number, number] } | null;
   readonly size: number;
+  /** True when the last stamp failed for want of room (the atlas is full, or the body has WV_MAX_ENTRIES boxes):
+   *  the caller keeps that wound on its list. */
+  readonly noRoom: boolean;
   dispose(): void;
 }
 
@@ -179,22 +186,25 @@ export function stampable(w: Wound): boolean {
 
 export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtlas(), voxel: number = WOUND_VOL_VOXEL || 0.02): BodyWoundVolumes {
   const entries = new Map<number, Entry>();
+  let noRoom = false;
   const [AW, AH] = [atlas.texture.image.width as number, atlas.texture.image.height as number];
   const make = (w: Wound, prim: Primitive, bodyYaw: number): Entry | null => {
-    if (entries.size >= WV_MAX_ENTRIES) return null;
+    if (entries.size >= WV_MAX_ENTRIES) { noRoom = true; return null; }
     const f = woundFrame(prim, bodyYaw, w.axis0);
     const lb = in3(f, [prim.b[0] - prim.a[0], prim.b[1] - prim.a[1], prim.b[2] - prim.a[2]]);
     const reach = Math.max(prim.radius, prim.radiusB ?? 0) * Math.max(1, prim.scale[0], prim.scale[1], prim.scale[2]) + WV_MARGIN;
     const lo: Vec3 = [Math.min(0, lb[0]) - reach, Math.min(0, lb[1]) - reach, Math.min(0, lb[2]) - reach];
     const hi: Vec3 = [Math.max(0, lb[0]) + reach, Math.max(0, lb[1]) + reach, Math.max(0, lb[2]) + reach];
     const vol = createPrimVolume(lo, hi, voxel);
-    const origin = atlas.alloc([vol.dims[0], vol.dims[1], vol.dims[2] * 2]);
-    if (!origin) return null;
+    const origin = atlas.alloc([vol.dims[0] * 2, vol.dims[1], vol.dims[2]]);
+    if (!origin) { noRoom = true; return null; }
     return { primIdx: w.primIdx, vol, origin, axis0: w.axis0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9], vlo: [1e9, 1e9, 1e9], vhi: [-1, -1, -1] };
   };
   return {
     get size() { return entries.size; },
+    get noRoom() { return noRoom; },
     stamp(w, prims, bodyYaw, cfg = WV_DEFAULT_CFG) {
+      noRoom = false;
       const prim = prims[w.primIdx];
       if (!prim || prim.dead || !stampable(w)) return false;
       let e = entries.get(w.primIdx);
@@ -219,7 +229,7 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
         rimOffset: cfg.rimOffset * profile.rimOffsetScale,
         rimWidth: cfg.rimWidth,
         rimAmp: depth * cfg.rimSplay * profile.rimSplayScale * (w.rimScale ?? 1) * (burn ? 0.25 : 1),
-        tear: wet || torn, wetOnly: wet && !torn,
+        cavity: !!w.cavity, tear: wet || torn, wetOnly: wet && !torn,
       };
       const hit = stampCrater(e.vol, crater);
       if (!hit) return false;
@@ -229,17 +239,17 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
         // One voxel of empty border round what was written, as the whole box has.
         e.vlo[k] = Math.min(e.vlo[k]!, hit.lo[k]! - 1); e.vhi[k] = Math.max(e.vhi[k]!, hit.hi[k]! + 1);
       }
-      // The touched voxels into the atlas (shape, then colour stacked after it along z) and on to the GPU.
-      const [nx, ny, nz] = e.vol.dims;
-      for (const [src, zOff] of [[e.vol.shape, 0], [e.vol.colour, nz]] as const) {
+      // The touched voxels into the atlas (shape, then colour beside it along x) and on to the GPU.
+      const [nx, ny] = e.vol.dims;
+      for (const [src, xOff] of [[e.vol.shape, 0], [e.vol.colour, nx]] as const) {
         for (let z = hit.lo[2]; z <= hit.hi[2]; z++) for (let y = hit.lo[1]; y <= hit.hi[1]; y++) {
           const s = ((z * ny + y) * nx + hit.lo[0]) * 4;
-          const d = (((e.origin[2] + zOff + z) * AH + e.origin[1] + y) * AW + e.origin[0] + hit.lo[0]) * 4;
+          const d = (((e.origin[2] + z) * AH + e.origin[1] + y) * AW + e.origin[0] + xOff + hit.lo[0]) * 4;
           atlas.data.set(src.subarray(s, s + (hit.hi[0] - hit.lo[0] + 1) * 4), d);
         }
         atlas.upload(
-          [e.origin[0] + hit.lo[0], e.origin[1] + hit.lo[1], e.origin[2] + zOff + hit.lo[2]],
-          [e.origin[0] + hit.hi[0], e.origin[1] + hit.hi[1], e.origin[2] + zOff + hit.hi[2]],
+          [e.origin[0] + xOff + hit.lo[0], e.origin[1] + hit.lo[1], e.origin[2] + hit.lo[2]],
+          [e.origin[0] + xOff + hit.hi[0], e.origin[1] + hit.hi[1], e.origin[2] + hit.hi[2]],
         );
       }
       return true;
@@ -262,8 +272,8 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
         const o = n * 16;
         out.set([c[0], c[1], c[2], r], o);
         out.set(q, o + 4);
-        // .w: how far along z the colour voxels sit after the shape's (the WHOLE box's depth).
-        out.set([corner[0], corner[1], corner[2], e.vol.dims[2]], o + 8);
+        // .w: how far along x the colour voxels sit from the shape's (the WHOLE box's width).
+        out.set([corner[0], corner[1], corner[2], e.vol.dims[0]], o + 8);
         out.set([e.origin[0] + e.vlo[0], e.origin[1] + e.vlo[1], e.origin[2] + e.vlo[2], sub[0]! + sub[1]! * 256 + sub[2]! * 65536], o + 12);
         centres.push(c[0], c[1], c[2], r);
         n++;
@@ -276,7 +286,7 @@ export function createBodyWoundVolumes(atlas: WoundVolumeAtlas = woundVolumeAtla
       return { count: n, bound: [m[0]!, m[1]!, m[2]!, R] };
     },
     dispose() {
-      for (const e of entries.values()) atlas.free(e.origin, [e.vol.dims[0], e.vol.dims[1], e.vol.dims[2] * 2]);
+      for (const e of entries.values()) atlas.free(e.origin, [e.vol.dims[0] * 2, e.vol.dims[1], e.vol.dims[2]]);
       entries.clear();
     },
   };

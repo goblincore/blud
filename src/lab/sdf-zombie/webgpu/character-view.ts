@@ -56,8 +56,8 @@ import { levelBatchOn } from './level-batch';
 const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.search);
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
-import { WOUND_VOL, WV_MAX_ENTRIES } from './march/wound-volume-flag';
-import { createBodyWoundVolumes, stampable, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
+import { WOUND_VOL, WV_LIST_KEEP, WV_MAX_ENTRIES } from './march/wound-volume-flag';
+import { createBodyWoundVolumes, stampable, woundVolumeAtlas, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
 import {
   MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
   type Wound, type WoundType,
@@ -359,6 +359,11 @@ export type WoundPointTransform = (v: Vec3, primIdx: number, dir: boolean) => Ve
 export interface WoundRing {
   /** The live ring, oldest evicted at MAX_WOUNDS. */
   all(): readonly Wound[];
+  /** The wounds that left the ring into the baked wound volume (wound-volume-store.ts), oldest first; empty without
+   *  the volume. They are still holes in the body: what asks "where is this body wounded" (the sever rules, the
+   *  wounded limbs, the skeleton's and organs' exposure) reads these beside all(). Capped at MAX_BAKED_RECORD
+   *  (the oldest forgotten); a wound whose primitive has died is dropped. */
+  baked(): readonly Wound[];
   /**
    * Push a freshly stamped wound and record where it was placed.
    * `posed` and `bodyYaw` are the pose it was stamped against — the caller
@@ -409,6 +414,9 @@ export interface WoundRing {
   dispose(): void;
 }
 
+/** Baked wounds a ring remembers for the rules that read wounds (WoundRing.baked). */
+export const MAX_BAKED_RECORD = 256;
+
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
   let nextEventId = 1;
@@ -418,13 +426,31 @@ export function createWoundRing(): WoundRing {
   // overflows it waits here for the next refresh (which has the pose) and is stamped into its primitive's box.
   const volumes = WOUND_VOL ? createBodyWoundVolumes() : null;
   let overflow: Wound[] = [];
+  let bakedRecord: Wound[] = [];
   let tableUp = false;
   const table = volumes ? new Float32Array(WV_MAX_ENTRIES * 16) : null;
+  // NO ROOM: the atlas is full (or this body has every box it may have). A wound is never dropped for it: the one
+  // that could not be baked goes back on the list, and from then on the list merges at its cap as it did before
+  // the volume, until a box is freed somewhere (the atlas counts them) and baking is tried again.
+  const atlas = volumes ? woundVolumeAtlas() : null;
+  let noRoomAt = -1;
   const push = (w: Wound) => {
-    if (!volumes) { wounds = pushWound(wounds, w, MAX_WOUNDS, mergeMax); return; }
+    if (!volumes || noRoomAt === atlas!.frees) { wounds = pushWound(wounds, w, MAX_WOUNDS, mergeMax); return; }
     const before = wounds;
     wounds = pushWound(wounds, w, MAX_WOUNDS, 0);
     for (const o of before) if (!wounds.includes(o) && stampable(o)) overflow.push(o);
+    // `?woundlist=<n>` (wound-volume-flag.ts): only the newest n bakeable wounds stay exact; the oldest past that
+    // is baked now. The list is oldest first.
+    if (WV_LIST_KEEP < MAX_WOUNDS) {
+      let n = 0;
+      for (const o of wounds) if (stampable(o)) n++;
+      for (let i = 0; i < wounds.length && n > WV_LIST_KEEP; i++) {
+        if (!stampable(wounds[i]!)) continue;
+        overflow.push(wounds[i]!);
+        wounds = wounds.filter((_, j) => j !== i);
+        i--; n--;
+      }
+    }
   };
   const volumeCfg = (gpu: ZombieGpuView): WoundVolumeCfg => {
     const c = gpu.uniforms?.woundCfg?.value, c2 = gpu.uniforms?.woundCfg2?.value;
@@ -437,6 +463,7 @@ export function createWoundRing(): WoundRing {
   };
   return {
     all: () => wounds,
+    baked: () => bakedRecord,
     stamp(wound, posed, bodyYaw) {
       identify(wound); push(wound);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
@@ -448,12 +475,17 @@ export function createWoundRing(): WoundRing {
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
     setMergeMaxRadius(r) { mergeMax = Number.isFinite(r) && r > 0 ? r : MERGE.maxRadius; },
-    dispose() { volumes?.dispose(); overflow = []; },
+    dispose() { volumes?.dispose(); overflow = []; bakedRecord = []; },
     refresh(gpu, posed, bodyYaw, visual, xf) {
       if (volumes && table && typeof gpu.setWoundVolumes === 'function') {
         if (overflow.length) {
           const cfg = volumeCfg(gpu);
-          for (const o of overflow) volumes.stamp(o, posed.prims, bodyYaw, cfg);
+          const next = bakedRecord.filter(w => !posed.prims[w.primIdx]?.dead);
+          for (const o of overflow) {
+            if (volumes.stamp(o, posed.prims, bodyYaw, cfg)) next.push(o);
+            else if (volumes.noRoom) { noRoomAt = atlas!.frees; wounds = pushWound(wounds, o, MAX_WOUNDS, mergeMax); }
+          }
+          bakedRecord = next.length > MAX_BAKED_RECORD ? next.slice(next.length - MAX_BAKED_RECORD) : next;
           overflow = [];
         }
         if (volumes.size || tableUp) {

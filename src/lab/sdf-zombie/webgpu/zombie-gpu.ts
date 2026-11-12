@@ -1830,6 +1830,14 @@ export interface CrowdMaterialSources {
  * OWN single-band DataTexture per draw and share only the record buffer, so
  * they pass band 0 — their slot indexes the record, not a band.
  */
+/** The wound count a body's record carries. With boxes in the baked wound volume and NO wound on the list it is
+ *  0.75: the list's loops still run zero times (they take i32 of it), and the lean walk's test (lean-walk.wgsl.ts,
+ *  "wound count < 0.5") fails, so the body is marched by mapBody, which reads the boxes. At 0 the lean field drew
+ *  such a body with its craters' colour and none of their shape. */
+export function recordWoundCount(u: { woundCfg: { value: { x: number } }; woundVolumeOn?: { value: number } }): number {
+  return u.woundCfg.value.x > 0 ? u.woundCfg.value.x : (u.woundVolumeOn?.value ? 0.75 : 0);
+}
+
 export function writeViewRecord(
   records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
   split?: SplitWarp | null,
@@ -1840,7 +1848,7 @@ export function writeViewRecord(
     windDrift: u.windDrift.value.toArray(), meltCfg: u.meltCfg.value.toArray(),
     bodyFlash: u.bodyFlash.value.toArray(),
     noiseShift: [u.faceCfg3.value.z, u.lodCfg.value.z, u.faceCfg3.value.w], bodyYaw: u.lodCfg.value.z,
-    headCentre: u.headCentre.value.toArray(), woundCount: u.woundCfg.value.x,
+    headCentre: u.headCentre.value.toArray(), woundCount: recordWoundCount(u),
     headQuat: u.headQuat.value.toArray(), volumePose0: u.volumePose0.value.toArray(),
     volumePose1: u.volumePose1.value.toArray(),
     bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
@@ -2670,7 +2678,8 @@ export function createZombieGpuView(
   let listBound: [number, number, number, number] | null = null;
   let volBound: readonly [number, number, number, number] | null = null;
   const applyWoundBound = () => {
-    if (!listBound) return; // before the first setWounds the uniform is the no-cull identity, a superset
+    // Before the first setWounds the uniform is the no-cull identity, a superset: it stays, boxes or not.
+    if (!listBound) return;
     let b: readonly number[] = listBound;
     if (volBound) {
       const dx = volBound[0] - b[0]!, dy = volBound[1] - b[1]!, dz = volBound[2] - b[2]!, dist = Math.hypot(dx, dy, dz);
@@ -3254,6 +3263,7 @@ export function createZombieGpuView(
         else texels.fill(0, o, o + 4);
       }
       volBound = table ? bound : null;
+      (u as { woundVolumeOn?: { value: number } }).woundVolumeOn = { value: table ? 1 : 0 };
       applyWoundBound();
       sink.markDirty();
       syncRecord();

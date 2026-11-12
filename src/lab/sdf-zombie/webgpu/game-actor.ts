@@ -479,6 +479,8 @@ export interface ZombieActor {
   wounds: () => readonly Wound[];
   /** Rendered carve spheres, also used to exclude occluder hulls. */
   visualWounds: () => readonly Wound[];
+  /** The wounds baked into the wound volume (WoundRing.baked): off the ring, still holes in the body. */
+  bakedWounds: () => readonly Wound[];
   /** Preview transitions advance even while the motion/rig is frozen. */
   advanceWoundPreview(dt: number): boolean;
   /** Where `wound` was placed at stamp time, before the recoil shove — see
@@ -1102,10 +1104,16 @@ export function createZombieActor(opts: {
   // block inside step().
   let detourSide: -1 | 0 | 1 = 0;
 
+  /** Every hole in the body: the ring's wounds and the ones baked into the wound volume (WoundRing.baked). The sever
+   *  rules and the wounded limbs read this; a baked wound has left the ring, not the body. */
+  const woundsWithBaked = (): readonly Wound[] => {
+    const baked = woundRing.baked?.() ?? [];
+    return baked.length ? [...baked, ...woundRing.all()] : woundRing.all();
+  };
   function woundedLimbs() {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).wounded;
     const w = { armL: false, armR: false, legL: false, legR: false };
-    for (const wound of woundRing.all()) {
+    for (const wound of woundsWithBaked()) {
       const prim = current.prims[wound.primIdx];
       if (!prim) continue;
       if ((prim.limb === 'armL' || prim.limb === 'armR'
@@ -1383,7 +1391,7 @@ export function createZombieActor(opts: {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
-    const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
+    const cuttingWounds = soldierDamage ? woundsWithBaked().filter(w => !w.injuryIgnored) : [...woundsWithBaked()];
     // The injury rules sever an arm or leg by points, not by where the shots cut: that takes it at the
     // elbow/knee (midJointCut), the same short piece a cut there makes — the shoulder stays hard.
     const injuryCuts = (injury?.sever ?? []).map(limb => (limb === 'head' || limb === 'torso' ? null : midJointCut(current, limb)) ?? limb);
@@ -1397,7 +1405,7 @@ export function createZombieActor(opts: {
       if (typeof cut === 'string' || fullCuts.includes(cut.limb)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()], 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS)) {
+    for (const cut of cutChains(current, cuttingWounds, 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS)) {
       if (injuryCuts.some(c => typeof c !== 'string' && c.limb === cut.limb)) continue;
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
@@ -2839,6 +2847,7 @@ export function createZombieActor(opts: {
     // restore): nothing is owed to setViewSync after either.
     pauseForBake: (paused: boolean) => { bakePaused = paused; viewStale = false; },
     wounds: () => woundRing.all(),
+    bakedWounds: () => woundRing.baked?.() ?? [],
     visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
