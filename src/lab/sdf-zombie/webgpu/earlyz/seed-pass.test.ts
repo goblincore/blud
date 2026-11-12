@@ -114,7 +114,8 @@ describe('seed pass wiring (source pins)', () => {
     // Hidden right after the whole branch chain, before the far pass and every later pass.
     const hide = marchBlock.lastIndexOf('if (seed) seed.mesh.visible = false;');
     expect(hide).toBeGreaterThan(marchBlock.indexOf('renderer.render(scene, camera)'));
-    expect(marchBlock.slice(hide).trim()).toBe('if (seed) seed.mesh.visible = false;');
+    // Only the compute march's end (which draws nothing with the seed) may follow it in the block.
+    expect(marchBlock.slice(hide).trim()).toBe('if (seed) seed.mesh.visible = false;\n      endMarchCompute();');
   });
 
   it("hides the seed before the 'split' chunks-only render (the first render already wrote it)", () => {
