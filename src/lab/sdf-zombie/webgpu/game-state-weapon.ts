@@ -28,6 +28,7 @@
 import type { Rocket } from '../rockets';
 import type { Bile } from '../bile';
 import type { Fireball } from '../fireball';
+import type { WailNote } from '../wail';
 import type { FlareHarness } from './game-flare';
 import type { FlailWeapon } from './game-flail';
 import type { ViewmodelLights } from './viewmodel-lights';
@@ -195,6 +196,10 @@ export interface WeaponState {
   fireballs: Fireball[];
   /** Tracer views for the fireballs, pooled, tinted fire-orange. */
   fireballViews: TracerView[];
+  /** The organ's wail notes in flight (wail.ts). */
+  wailNotes: WailNote[];
+  /** Tracer views for the wail notes, pooled, tinted a pale bone-violet. */
+  wailViews: TracerView[];
   /** The one shared plane geometry every tracer quad reuses. */
   pelletGeo: THREE.PlaneGeometry;
   /** Tracer views for the player pellets, pooled. */
@@ -295,6 +300,8 @@ export function makeWeaponState(): WeaponState {
     bileViews: [],
     fireballs: [],
     fireballViews: [],
+    wailNotes: [],
+    wailViews: [],
     pelletGeo: unbuilt<THREE.PlaneGeometry>(),
     pelletViews: [],
     cooldown: 0,
@@ -364,6 +371,8 @@ export const WEAPON_BINDINGS = {
   bileViews: 'weapon.bileViews',
   fireballs: 'weapon.fireballs',
   fireballViews: 'weapon.fireballViews',
+  wailNotes: 'weapon.wailNotes',
+  wailViews: 'weapon.wailViews',
   pelletGeo: 'weapon.pelletGeo',
   pelletViews: 'weapon.pelletViews',
   cooldown: 'weapon.cooldown',

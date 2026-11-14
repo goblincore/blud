@@ -81,7 +81,9 @@ export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 
   // The imp's overhand fireball throw (fireball.ts): the right arm only, never a contact.
   | 'throw'
   // The gutcrawler's rear-and-slam (hound-attack.ts 'slam').
-  | 'slam';
+  | 'slam'
+  // The organ's wail (hound-attack.ts 'wail', wail.ts): the body only, never a contact.
+  | 'wail';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
  *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
@@ -126,6 +128,7 @@ export const SWING_ARCS: Record<SwingVariant, {
   pounce: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
   stab: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
   squirt: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
+  wail: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
   // THE THROW (the imp, fireball.ts): an overhand pitch. The arm cocks UP AND BACK past the vertical with the hand
   // over the shoulder (2.4 rad, past the overhead chop's 1.35), a little out, then whips forward and down at the
   // target, a touch across the body. 0.45, not more: at 1.05 the follow-through stopped with the arm 45 deg up and

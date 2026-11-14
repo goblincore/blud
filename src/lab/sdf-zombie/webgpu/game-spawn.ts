@@ -30,9 +30,10 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeOrganMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
 import { spawnFireball } from '../fireball';
+import { ORGAN_TUNING, spawnWailNote } from '../wail';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
@@ -440,6 +441,25 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
       },
     } : {}),
+    // A WAILER (the organ): bites up close and, at range, a chord of three slow notes from the trumpets on its back
+    // (MotionProfile.spit) at the player's chest, each from its own bells and fanned (wail.ts ORGAN_TUNING),
+    // enemy-mind.ts makeOrganMind. Listed after the BITE branch above on purpose: its mind replaces the plain hound's.
+    ...(characterEntry(name).profile.throws === 'wail' ? (() => {
+      let note = 0;
+      return {
+        mind: makeOrganMind(),
+        onFire: ({ origin, direction }: { origin: Vec3; direction: Vec3 }) => {
+          ctx.world.encounter.shot(zombieId);
+          const k = note++ % ORGAN_TUNING.notes.length;
+          // The body's left (+x of a body facing +z) from its heading: (dz, 0, -dx).
+          const h = Math.hypot(direction[0], direction[2]) || 1;
+          const bx = ORGAN_TUNING.bell[k]! * ORGAN_TUNING.bellX;
+          const o: Vec3 = [origin[0] + (direction[2] / h) * bx, origin[1], origin[2] - (direction[0] / h) * bx];
+          const pp = ctx.player.player.pos;
+          ctx.weapon.wailNotes.push(spawnWailNote(o, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId, ORGAN_TUNING.fan[k]!));
+        },
+      };
+    })() : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
     // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
     // gun, the juggernaut's chaingun. Was `name === 'soldier'`.

@@ -618,6 +618,25 @@ export const GIBBET_STALK: GaitProfile = {
   rockAmp: 0.02,
 };
 
+/** The ORGAN's tread (characters/organ.blob): the gorehound's four-beat walk on a heavier, slower body. A bellows
+ *  on legs: short deliberate steps, a deep bob and roll so the barrel's weight shows on every footfall, and the head
+ *  nodding low. */
+export const ORGAN_TREAD: GaitProfile = {
+  ...GOREHOUND,
+  name: 'organ-tread',
+  strideFreq: 1.3,
+  stanceDuty: 0.62,
+  strideLen: 0.34,
+  footLift: 0.11,
+  kneeBend: 0.10,
+  kneeLift: 0.05,
+  elbowBow: 0.08,
+  swayAmp: 0.035,
+  bobAmp: 0.035,
+  rockAmp: 0.025,
+  headBob: 0.6,
+};
+
 /** The CEREBRAX's stride (characters/cerebrax.blob): a boss brain carried on four long spider legs. The gibbet's
  *  four-beat stalk on legs four times its size, so slower (a big body takes big, unhurried steps) and longer, each
  *  foot lifted high and set down on its point. Its knees ride HIGH: both pairs are poled up and out (the arms'

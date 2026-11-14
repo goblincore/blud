@@ -4317,6 +4317,8 @@ async function main() {
   ctx.weapon.bileViews = [];
   ctx.weapon.fireballs = [];
   ctx.weapon.fireballViews = [];
+  ctx.weapon.wailNotes = [];
+  ctx.weapon.wailViews = [];
   // The gather's tracer provider (declared at the top, next to probeGather) can
   // only be wired once both lists exist — see the boot-race note there.
   ctx.lighting.liveTracers = () => [...ctx.weapon.pellets, ...ctx.weapon.soldierPellets];

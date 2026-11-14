@@ -921,3 +921,44 @@ offset inside the brain, or a mind that never fires, which no turntable shows.
   - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
 - A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
 - With a baked normal atlas ("Kit normal maps" under Budget) the ribbing survives too: the cerebrax went 94k -> 74k triangles (tendrils 9000 -> 5000, harness 9000 -> 6500, struts, knees and collars down a third). Its 20 tiles fill a 2048 atlas at 56% of their baked size; the big parts (harness, frame, tendrils) come out at about 500 px per metre.
+
+## An instrument on legs: the organ (2026-11-14)
+
+The organ (`characters/organ.blob`, kit `assets-source/organ-kit/`, hide `scripts/organ-detail-gen.ts`) is a heavy
+quadruped whose back is a pipe organ: a pleated bellows barrel of flesh with human mouths down its flanks, ranks of
+fluted bone-metal pipes on a saddle, and trumpets en chamade fanned forward over the shoulders. It WAILS. The
+gorehound's rig and legs (`make_legs.py` from `gorehound-kit/`, run at its default HEAVY). What it added:
+
+- **A stack of discs can be the read.** SKILL.md calls stacked rings a defect on a limb. A bellows IS one: five
+  disc-shaped fold prims (`deep 0.42`, 13 cm thick on an 18 cm spacing, blend 22 mm) over a thinner core bar give
+  pleats whose creases stay creases. Keep the core ~5 cm inside the folds or it fills them.
+- **Breathing reuses the cerebrax's swell, not a new system.** `MotionProfile.joystick` with `amp 0` and a `swell`
+  period drives the `swell` morph on a slow breath and throbs it full through any attack (joystick.ts
+  `joystickSwell`), so a ranged attack is telegraphed by the body filling. Alternate folds swell more
+  (`*(1.07,1.08,1.30)` against `*(1.04,1.05,1.20)`) so the breath ripples rather than inflating a balloon; the
+  same channel parts the mouths' lips (upper up, lower down, the gullet `*(1,3.2,1)`).
+- **Flesh mouths with kit teeth.** Two lip ellipsoids long along the body (their ends taper to the corners by
+  themselves), AJAR, over a thin dark gullet slab standing just inside them; a row of small human teeth (kit,
+  `tooth`, icospheres at subdivision 1: 108 teeth for ~8.6k tris) just proud of the slab and behind the lips' outer
+  face. What failed on the way, each a look: 25 cm lips, red and shut, read as one raspberry clump down the flank at
+  3 m; red lips on an 8 mm blend read as beans stuck on; teeth seated in the gullet were hidden by it; `a0605a`
+  still renders pillar-box red (the palette's lighting saturates paint), `9c6e68` reads as maroon flesh. Stagger
+  the mouths in height: a row of level mouths reads as a pattern, staggered ones as wrong.
+- **Rigid kit vs the bending spine.** An attack pose that offsets `spineA`/`spineB` bends the SDF along the spine
+  (the prims follow the rig points) while kit on `spine` stays rigid on the bone, so the flank teeth slid off
+  their lips. The `wail` pose moves only the hips, chest, neck and head. A little drift remains at the wail's peak.
+- **Pipes are bones, not cylinders.** Each flue pipe: a conical foot sunk in the saddle, a shaft fluted with four
+  ridges and banded twice, the organ pipe's MOUTH (a dark `void` slot under an arched upper lip) facing forward and
+  out, a rolled rim crowned with five small curled points, and a dark bore. Ranks leaning 5-9 deg read as a V from
+  the front; 2-5 deg reads as one facade. Bores and bells are one `void` part, voxel-fused; a full sphere of the
+  bell's radius read as a black cannonball sitting in it, so the bell's void is a disc set back 3 cm.
+- **The attack's origin should be the most legible part.** The notes leave the trumpets en chamade (horizontal
+  reed pipes pointing at you), not the tall pipes' tops: a projectile from 2 m up behind the head reads as coming
+  from nowhere. `spit` is the midpoint of the two sides' bells; game-spawn moves each note out to its own side.
+- **The wail is projectiles, not a sonic effect.** `wail.ts`: a chord of three slow notes (6 m/s, r 0.15) a beat
+  apart, the outer two fanned 0.09 rad, drawn as pale tracers that tremble (`wailWobble`, render-only: collision
+  stays on the true path). A burst feeds the post-aa blast ring when that experiment is on. A real sound wave
+  (a refracting cone) is a render feature of its own and a follow-up.
+- **A mask that reads as a headband** sat under the flesh's surface noise and stopped short of the face; lift a
+  head plate ~2 cm (not 1) on a noisy flesh head and run it down over the brow onto the face.
+- **Veins on a 0.7 m barrel bake as cracks** at the recipe's 5-6.5 mm; 7.5-8 mm trunks, 5 mm proud, read better.
