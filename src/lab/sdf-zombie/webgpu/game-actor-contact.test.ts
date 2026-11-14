@@ -201,3 +201,42 @@ describe('a thrown corpse meets the world', () => {
     setDeathFall({ on: true });
   });
 });
+
+// Owner 2026-11-14: "the ragdoll corpses that never fall asleep". A quarter of shotgun deaths were still awake at
+// 10 s: most in a small cycle that went nowhere (game-actor.ts GOING NOWHERE), a few turning on the floor for good
+// (collapse.ts THE FLOOR STOPS A CONE).
+describe('a ragdoll corpse comes to rest', () => {
+  const dead = (seed: number) => {
+    const a = createZombieActor({
+      id: 1, room: 1, body: translateBody(built, [0, 0, 0]), view: stubView() as never, start: [0, 0, 0], seed,
+      bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [],
+    });
+    for (let i = 0; i < 12; i++) a.step(1 / 60);
+    shootDead(a, seed);
+    return a;
+  };
+  const pose = (a: ReturnType<typeof dead>) => a.rigJoints().points.map(p => [...p]);
+  const apart = (a: number[][], b: number[][]) => Math.max(...a.map((p, i) => Math.hypot(p[0]! - b[i]![0]!, p[1]! - b[i]![1]!, p[2]! - b[i]![2]!)));
+
+  it('one left bobbing a toe, its head or its pelvis is asleep 8 s after the death', () => {
+    setDeathFall({ on: false });
+    for (const seed of [101, 106, 114]) {
+      const a = dead(seed);
+      for (let i = 0; i < 480; i++) a.step(1 / 60);
+      const still = pose(a);
+      for (let i = 0; i < 60; i++) a.step(1 / 60);
+      expect(apart(pose(a), still), `seed ${seed}`).toBe(0);
+    }
+    setDeathFall({ on: true });
+  });
+
+  it('one whose neck cone turned it round on the floor (2 m arcs, for good) lies still', () => {
+    setDeathFall({ on: false });
+    const a = dead(160);
+    for (let i = 0; i < 360; i++) a.step(1 / 60);
+    const at6 = pose(a);
+    for (let i = 0; i < 240; i++) a.step(1 / 60);
+    expect(apart(pose(a), at6)).toBeLessThan(0.05);
+    setDeathFall({ on: true });
+  });
+});

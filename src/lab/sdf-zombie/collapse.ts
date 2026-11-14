@@ -1158,8 +1158,17 @@ function rotateAbout(v: Vec3, k: Vec3, angle: number): Vec3 {
   return [v[0] * c + kv[0] * s + k[0] * kd, v[1] * c + kv[1] * s + k[1] * kd, v[2] * c + kv[2] * s + k[2] * kd];
 }
 
+// THE FLOOR STOPS A CONE (owner 2026-11-14: "the ragdoll corpses that never fall asleep"). A cone turns its tip
+// about the pivot whatever is under it. A corpse lying with its head held up off its chest by the floor has a neck
+// past its cone that the floor will not let back in: the cone turned the neck its full `maxStep` into the floor
+// every step, the floor put it back, and what the bones made of the difference turned the whole body, which went
+// round on the floor at 1 m/s for good (2 of 180 probe deaths, feet tracing 2 m arcs; the neck's cone moved it
+// exactly 2.00 cm a step). With `floorOf` (the height point i rests at), a turn stops where the first point it
+// moves meets its floor. 180 probe deaths with the sleep's stray test (game-actor.ts GOING NOWHERE): 2 awake at 10 s
+// without this, both going round; 1 with it (travelling 90 cm in 4 s, cause not found).
 export function relaxSpineCones(
   points: readonly RigPoint[], body: CorpseBody | null | undefined, limits: { maxStep: number } = SPINE_CONES,
+  floorOf?: (i: number, p: RigPoint) => number,
 ): RigPoint[] {
   if (!body?.cones.length) return points as RigPoint[];
   let out: RigPoint[] | null = null;
@@ -1186,6 +1195,17 @@ export function relaxSpineCones(
     // The tip moves 2 L sin(turn / 2): cap it.
     const tipMove = 2 * L * Math.sin(turn / 2);
     if (tipMove > limits.maxStep) turn = 2 * Math.asin(Math.min(1, limits.maxStep / (2 * L)));
+    if (floorOf) {
+      let share = 1;
+      for (const i of [c.tip, ...c.carry]) {
+        const p = src[i];
+        if (!p || p.pinned) continue;
+        const y1 = Pv.pos[1] + rotateAbout(sub(p.pos, Pv.pos), k, turn)[1], g = floorOf(i, p);
+        if (y1 < g && y1 < p.pos[1]) share = Math.min(share, Math.max(0, (p.pos[1] - g) / (p.pos[1] - y1)));
+      }
+      if (share < 1e-3) continue;
+      turn *= share;
+    }
     out ??= points.slice() as RigPoint[];
     for (const i of [c.tip, ...c.carry]) {
       const p = out[i];

@@ -33,8 +33,17 @@ Branch `claude/ragdoll-contact-fixes` (draft PR); not played in game, headless a
   (`game-actor.ts` THE FALL GOES LIMP, `motion.ts` releaseFall): 6 of 6 probe deaths lying down asleep in 2-4 s.
   This also ends an authored corpse leaning on a standing body. Tests: `corpse-contact.test.ts`,
   `game-actor-contact.test.ts`.
-- [ ] **A ragdoll corpse now and then never sleeps** (2 of 6 beside a wall: a toe on the wall's face bobbing 1 cm a
-  step; a head nodding 1 cm, 75 cm from any wall). The constraint buzz CORPSE SLEEP already notes, not the wall.
+- [x] **A quarter of ragdoll corpses never fell asleep** (2026-11-14; 45 of 180 shotgun deaths awake at 10 s, the
+  same on `main`). Two causes. Most went nowhere: a toe, a head or the pelvis lifted a centimetre a step by one pass
+  and dropped by gravity, a leg swung 10 cm to and fro, each faster than the sleep's speed limit. A corpse now also
+  sleeps when every joint has stayed within 12 cm of where it was for 0.75 s (`game-actor.ts` GOING NOWHERE). And two
+  went round on the floor for good (feet tracing 2 m arcs at 1 m/s): the neck's cone turned the head its full 2 cm
+  into the floor every step. A cone now stops where the point it moves meets its floor (`collapse.ts` THE FLOOR
+  STOPS A CONE). After: 1 of 180 awake at 10 s; median asleep 2.6 s after the death, as before.
+  Tests: `game-actor-contact.test.ts`.
+- [ ] **One corpse in 180 still travels** (seed 126, open floor: 90 cm in 4 s, never asleep). Cause not found. The
+  small cycles themselves are still there until the body sleeps (the passes disagree: ankle springs and braces
+  against the rig step's bones, 0.7-1.8 cm a step each way); the sleep ends them, it does not remove them.
 - [x] **A thrown body knocks the standing body it hits, and no longer passes through it** (owner: "a thrown body cant
   like knock or displace another body"). The body contact is swept (`corpse-contact.ts` SWEPT): a joint stops where its
   path first meets a standing body's cylinder or a corpse's trunk sphere, instead of leaving by the far side from past
