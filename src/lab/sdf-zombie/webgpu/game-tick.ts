@@ -431,6 +431,9 @@ export function tick(ctx: GameContext, dt: number) {
       if (viewCull) a.setViewSync(!a.crowd || ctx.render.visualActors.has(a), false);
       a.step(adt);
     }
+    // A thrown corpse knocks the standing body it struck (game-actor.ts BODY_KNOCK).
+    for (const a of ctx.world.actors) for (const h of a.takeBodyHits?.() ?? [])
+      ctx.world.actors.find(b => b.id === h.id)?.bodyKnock?.(h.dir, h.speed);
     // 'body-step' CLOSES HERE, before the kit pose below, because that is
     // the boundary main's telemetry numbers were taken with. Widening a
     // counter to cover more work without saying so makes every recorded

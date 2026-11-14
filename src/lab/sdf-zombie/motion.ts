@@ -186,6 +186,10 @@ export const STANDING_RIG = {
   restStiffness: 0.18,
 } as const;
 
+/** A flail arm whose target yaw is within this of straight opposite its hand goes round its own side (motion.ts
+ *  A TOSS-UP GOES OUTWARD). */
+const FLAIL_TOSSUP_RAD = 0.05;
+
 /** Combat steps keep enough flexion for a weight-bearing knee bend. */
 const SOLDIER_STANCE = {
   blendRate: 6,
@@ -502,6 +506,9 @@ export interface MotionConfig {
   /** AUTHORED DEATHS (death-fall.ts): asked once, on the first frame a killed body is down, for the fall it plays.
    *  Absent = a neutral pick from the gait seed. */
   deathFall?: () => DeathFallChoice;
+  /** The authored fall met something it cannot go through (a wall, a body: game-actor.ts THE FALL GOES LIMP): every
+   *  point's rest pull is dropped (MotionFrame.restRelease) and the body falls from there under its own weight. */
+  releaseFall?: boolean;
   /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
    *  the wider of the two wins. Undefined or 0 changes nothing. */
   jawGape?: number;
@@ -1400,7 +1407,12 @@ export function stepMotion(
       const fullRaisedHand = qRotate(qFromAxisAngle([1,0,0], lift),
         qRotate(qFromAxisAngle([0,0,1], -sign * flail.abduct), base.hand));
       const fromYaw = Math.atan2(fullRaisedHand[0], fullRaisedHand[2]);
-      const yawDelta = Math.atan2(Math.sin(sign * flail.yawOut - fromYaw), Math.cos(sign * flail.yawOut - fromYaw));
+      let yawDelta = Math.atan2(Math.sin(sign * flail.yawOut - fromYaw), Math.cos(sign * flail.yawOut - fromYaw));
+      // A TOSS-UP GOES OUTWARD. A target almost straight opposite the hand (the cultist's left hand on his gun:
+      // 3.140 rad away) is as far one way round as the other, and the shorter way was picked on a hair: 0.0016 rad
+      // made that arm fling out wide, and a hand 2 cm over swung it across the chest instead (2026-11-12, when a rig
+      // fix moved his resting hand). Within FLAIL_TOSSUP_RAD of opposite, the arm goes round its own side.
+      if (Math.PI - Math.abs(yawDelta) < FLAIL_TOSSUP_RAD) yawDelta = sign * Math.abs(yawDelta);
       const qOut = qFromAxisAngle([0,1,0], yawDelta * w);
       const qLocal = qMul(qOut, qMul(qLift, qAbduct));
       const rotateFull = (v: Vec3) => qRotate(qLocal, v);
@@ -1727,6 +1739,8 @@ export function stepMotion(
       if (some.length) restRelease = some;
     }
   }
+
+  if (structural && fallKind && cfg.releaseFall) restRelease = targets.map((_, i) => i);
 
   // --- the pose layer -------------------------------------------------------
   // After every other target writer (gait, carry, aim, plants, the soldier fall) so the authored pose has the last word.

@@ -25,6 +25,8 @@
   bake parity in CI, all ten maps re-baked on the GPU and committed (gamer's and teratoma's were stale: torso axis moved).
   Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
 
+- [~] **Bullet-time hit freakout and thrown bodies through walls** (owner, 2026-11-12; branch `claude/ragdoll-contact-fixes`, draft PR) — [combat and gore](docs/tasks/combat-and-gore.md#bullet-time-hit-freakout-thrown-bodies-through-walls--2026-11-12). The keep-out runaway, the wall-box leak and the body knock are done and tested headless; not played. A thrown corpse now stops at a standing body and knocks it (stagger and root knock). Corpses meet sector wall lines, and an authored fall stopped by a wall or body goes limp instead of thrashing (2026-11-14). Open: the knock's feel and a per-kind weight; the odd ragdoll corpse that never sleeps.
+
 - [~] **Damage model: elbow/knee cuts, corpse integrity, no neck stub** (owner, 2026-11-02; branch `claude/character-damage-ragdoll-9ca95f`) — [combat and gore](docs/tasks/combat-and-gore.md#limb-toughness-corpse-integrity-the-neck-stub--2026-11-02). Built and tested; owner look and slider tuning pending.
 
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.

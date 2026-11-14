@@ -57,3 +57,37 @@ describe('impulseAt is a 60 Hz shove', () => {
     expect(speed(1 / 60)).toBeCloseTo(3, 6); // 5 cm per 1/60 s
   });
 });
+
+describe('a keep-out adds no speed (stepRig KEEP-OUTS ADD NO SPEED)', () => {
+  // An arm whose shoulder end sits inside its torso guard, as authored: the guard pushes the hand out, the bone
+  // pulls it back, every pass of every step. The push used to move `prev` with the hand, so each pass the bone undid
+  // left the hand a little faster into the guard; at a bullet-time step nothing bled it and the speed ran away.
+  const arm = (dt: number): RigState => ({
+    points: [
+      { pos: [0, 0, 0], prev: [0, 0, 0], pinned: true },
+      { pos: [0.3, 0, 0], prev: [0.3, 0, 0], pinned: false },
+      { pos: [0.03, 0.02, 0], prev: [0.03, 0.02, 0], pinned: true },
+    ],
+    constraints: [{ a: 0, b: 1, rest: 0.3, stiffness: 1 }],
+    restPose: [[0, 0, 0], [0.3, 0, 0], [0.03, 0.02, 0]],
+    torsoGuards: [{ point: 2, offset: [0, 0, 0], limbs: [{ a: 0, b: 1, samples: [{ s: 0.1, clearance: 0.1 }] }] }],
+    stepDt: dt,
+  });
+  /** The hand's top speed (m/s) in the last 0.2 s of a second of steps. */
+  const speedAtRest = (dt: number): number => {
+    let rig = arm(dt), most = 0;
+    const n = Math.round(1 / dt);
+    for (let i = 0; i < n; i++) {
+      rig = stepRig(rig, dt, { ...OPTS, iterations: 4, damping: 0.06 });
+      const p = rig.points[1]!;
+      if (i >= n * 0.8) most = Math.max(most, Math.hypot(p.pos[0] - p.prev[0], p.pos[1] - p.prev[1], p.pos[2] - p.prev[2]) / dt);
+    }
+    return most;
+  };
+
+  it('a limb its bone holds inside a guard comes to rest, at 1/60 and at a bullet-time step', () => {
+    // Before: 46 m/s for ever at 1/60, 202 m/s at 1/300.
+    expect(speedAtRest(1 / 60)).toBeLessThan(0.1);
+    expect(speedAtRest(1 / 300)).toBeLessThan(0.1);
+  });
+});
