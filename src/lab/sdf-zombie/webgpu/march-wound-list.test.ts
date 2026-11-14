@@ -24,6 +24,7 @@
 import { describe, it, expect } from 'vitest';
 import { APPLY_WOUNDS, MARCH_BODY, RAY_CULL_SLACK } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+import { WG_CELL_MAX } from '../wound-grid';
 
 /** The shared reach formula. Both APPLY_WOUNDS (the per-step cull) and
  *  MARCH_BODY (the preload) must carry it verbatim; MARCH_BODY may append
@@ -40,7 +41,8 @@ describe('per-ray wound list', () => {
   it('keeps the union-reach early return BEFORE the loop (the cull must stay first)', () => {
     const iBound = APPLY_WOUNDS.indexOf(
       'if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
+    // The crater grid (wound-grid-flag.ts, on by default) bounds the loop at a cell's count.
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${WG_CELL_MAX}; k = k + 1)`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
   });
@@ -52,12 +54,14 @@ describe('per-ray wound list', () => {
   it('an open head split bypasses the list: the fold takes it only for a slot with no split', () => {
     // The list is the wounds the WORLD ray reaches; a split slot's pieces read wounds at their un-warped points.
     const iGate = APPLY_WOUNDS.indexOf('let listOn = gWoundListOn > 0.5 && !gInstSplitOpen;');
-    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
+    // The crater grid (wound-grid-flag.ts, on by default) bounds the loop at a cell's count.
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${WG_CELL_MAX}; k = k + 1)`);
     expect(iGate).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iGate);
     // The gate is the only reader of the switch in the fold: the loop branches on it and nothing else.
     expect(APPLY_WOUNDS.split('gWoundListOn > 0.5').length - 1).toBe(1);
-    expect(APPLY_WOUNDS.slice(iLoop)).toContain('if (listOn) {\n      if (k >= gWoundN) { break; }\n      i = gWoundList[k];');
+    // Behind the grid's own index source; the list holds MAX_WOUNDS entries, the grid's wounds can be more.
+    expect(APPLY_WOUNDS.slice(iLoop)).toContain(`} else if (listOn) {\n      if (k >= gWoundN || k >= ${MAX_WOUNDS}) { break; }\n      i = gWoundList[k];`);
   });
 
   it('pins the reach formula text in BOTH the fold and the preload (they cannot drift)', () => {

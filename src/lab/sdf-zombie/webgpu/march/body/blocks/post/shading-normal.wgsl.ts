@@ -14,6 +14,8 @@ import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 import { WOUND_VOL } from '../../../wound-volume-flag';
 import { NORMAL_LOOSE } from '../../../normal-loose-flag';
+import { NG_WOUND_ANALYTIC, NG_WOUND_DIFF, NG_WOUND_RIM, NG_WOUND_TAP_RULE } from '../../../normal-wound-flag';
+import { afterHitStop } from '../../../after-hit-flag';
 
 /** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
 const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
@@ -43,7 +45,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // below is byte-for-byte the pre-task-2 call.
   // THE HEAD SPLIT: at pS, the hit piece's un-warped point (split-hit.wgsl.ts), where the rest rows are: the texture
   // rides a half as it opens.
-  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);
+  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);${afterHitStop(37, 'anchor')}
   var n = vec3<f32>(0.0);
   var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
@@ -65,8 +67,8 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   if (normalGradientCfg.x > 0.5 && ${SPLIT_IN}) { ngReason = ${NG_REASON_SPLIT}; }
   if (normalGradientCfg.x > 0.5 && !${SPLIT_IN}) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
-    gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);
-    let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));
+    gNgOwnedOk = select(0.0, 1.0, ${NG_WOUND_ANALYTIC ? '' : 'gInstCounts2.z % 128.0 > 63.5 && '}hitRefold == 0.0);
+    let noiseAmplitude = marchCfg.z * (1.0 - max(max(gloss, metal), cloth));${NG_WOUND_RIM ? '\n    gNgRim = 0.0;' : ''}
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
     ngScalar = ng.x;${NORMAL_LOOSE ? '\n    ngRan = true;\n    ngLooseG = ng.yzw;\n    if ((gNgDebugMask & 8u) == 0u) { ngLooseG = ngLooseG + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }' : ''}
@@ -79,7 +81,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
       ngValid = magnitude2 > 1e-12 && magnitude2 < 1e12;
       if (ngValid) { n = normalize(candidate); } else { ngReason = 2; }
     }
-  }
+  }${afterHitStop(38, 'n + ng0 + vec3<f32>(ngScalar)')}
 ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differentiates the list's wounds and knows nothing of a
   // stamped crater. Inside one's footprint the taps below (which read the volume through mapBody) give the normal.
   let wvHit = wvColour(p, data, gBand, segVolumeAtlas).x > 0.0;
@@ -91,7 +93,7 @@ ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differ
   // THE CHEAPER FALLBACK (normal-loose-flag.ts): where ngBody ran and gave up, its own gradient (with the skin's
   // detail term, as on the analytic path) stands in for the taps. Not near a wound: there the taps carry the
   // crater's shape, which ngBody's gradient does not.
-  if (!ngValid && ngRan && !hitNearWound${WOUND_VOL ? ' && !wvHit' : ''}) {
+  if (!ngValid && ngRan${NG_WOUND_TAP_RULE}${WOUND_VOL ? ' && !wvHit' : ''}) {
     let ngLoose2 = dot(ngLooseG, ngLooseG);
     if (ngLoose2 > 1e-12 && ngLoose2 < 1e12) { nFD = normalize(ngLooseG); ngLoose = true; }
   }
@@ -106,7 +108,13 @@ ${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): ngBody differ
   }
   if (!ngValid) {
     n = nFD;
-  }${SKIN_NORMAL}
+  }${NG_WOUND_DIFF ? `
+  // THE ERROR PICTURE (normal-wound-flag.ts, ?ngwound=7).
+  if (ngLoose || ngValid) {
+    let tapN = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(max(gloss, metal), cloth)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    return vec4<f32>(clamp((1.0 - dot(n, tapN)) * 8.0, 0.0, 1.0), select(0.0, 0.35, hitNearWound), 0.0, t);
+  }
+  if (t > -1e30) { return vec4<f32>(0.0, 0.0, 0.25, t); }` : ''}${SKIN_NORMAL}
   // CLOTH FOLDS (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): hanging pleats in the SHADING only, so the
   // march pays nothing — the field's own warp= folds are a centimetre and vanish at game range. Nine folds round the
   // hit shell's own axis, deepening toward its open end (s 0 at a, 1 at b), wandering a little, with a wave that runs

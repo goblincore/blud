@@ -33,10 +33,11 @@ describe('the crater grid', () => {
       seen.add(o);
     }
     expect(seen.size).toBe(WG_TEXELS);
-    expect((await import('./webgpu/march/layout')).DATA_ROWS).toBe(WG_ROW0);
-    vi.resetModules();
-    vi.stubGlobal('location', { search: '?woundgrid' });
+    // On by default since 2026-11-12.
     expect((await import('./webgpu/march/layout')).DATA_ROWS).toBe(WG_ROW0 + WG_ROWS);
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?woundgrid=0' });
+    expect((await import('./webgpu/march/layout')).DATA_ROWS).toBe(WG_ROW0);
   });
 
   it('lists at a sample every wound whose reach holds it, in rising order, and far fewer than all of them', () => {
@@ -137,25 +138,29 @@ describe('the crater grid', () => {
     expect(woundGridFresh(key, moved, rad, 40, 0)).toBe(true);
   });
 
-  it('?woundgrid: off by default, a slack in centimetres when on, and it switches the baked wound volume off', async () => {
+  it('?woundgrid: on unless the page turns it off, a slack in centimetres, and it switches the baked wound volume off', async () => {
     const { woundGridSlack } = await import('./webgpu/march/wound-grid-flag');
-    expect(woundGridSlack('')).toBe(-1);
+    expect(woundGridSlack('')).toBe(0.03);
+    expect(woundGridSlack('?level=doom-map28')).toBe(0.03);
     expect(woundGridSlack('?woundgrid=0')).toBe(-1);
     expect(woundGridSlack('?woundgrid')).toBe(0.03);
     expect(woundGridSlack('?woundgrid=1')).toBe(0.03);
     expect(woundGridSlack('?woundgrid=8')).toBeCloseTo(0.08, 9);
     const { woundVolumeVoxel } = await import('./webgpu/march/wound-volume-flag');
+    expect(woundVolumeVoxel('')).toBe(0);
     expect(woundVolumeVoxel('?woundgrid')).toBe(0);
     expect(woundVolumeVoxel('?woundgrid=0')).toBe(0.02);
   });
 
-  it('leaves the default text without a trace of the grid; on, every loop over the wounds takes the cell\'s', async () => {
+  it('leaves the ?woundgrid=0 text without a trace of the grid; on (the default), every loop over the wounds takes the cell\'s', async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', { search: '?woundgrid=0' });
     const off = await import('./webgpu/march.wgsl');
     const offAll = [...Object.values(off).filter((v): v is string => typeof v === 'string'), ...(off.HELPERS as string[])].join('\n');
     expect(offAll).not.toContain('wgBegin');
     expect(offAll).not.toContain('wgTexel');
     vi.resetModules();
-    vi.stubGlobal('location', { search: '?woundgrid' });
+    vi.unstubAllGlobals();
     const { APPLY_WOUNDS, WOUND_MASK } = await import('./webgpu/march/fields/wounds.wgsl');
     const { NG_WOUNDS } = await import('./webgpu/normal-gradient.wgsl');
     const tissue = await import('./webgpu/march/fields/tissue.wgsl');

@@ -40,3 +40,15 @@ __sdfGame.step(4);
   window.__mobWounds = { landed, listed: bodies.map((z) => __sdfGame.actorWounds(z.id).length) };
   console.log('mob-heavy wounds', JSON.stringify(window.__mobWounds));
 })();
+// ?novhs=1: the VHS pass off, so two stills differ only by what the shader drew (its noise swamps a small change).
+(() => {
+  if (new URLSearchParams(location.search).get('novhs') !== '1') return;
+  __sdfGame.setVhs(null);
+  __sdfGame.step(4);
+})();
+// ?showng=1: the shading normal as colour (normalGradientCfg.y = 1), to compare two normal paths without the lighting.
+(() => {
+  if (new URLSearchParams(location.search).get('showng') !== '1') return;
+  __sdfGame.setUniformAll('normalGradientCfg', 1, 1);
+  __sdfGame.step(4);
+})();

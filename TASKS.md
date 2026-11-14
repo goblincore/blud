@@ -78,6 +78,8 @@
   same picture to the bit; the march pass −15 % on a clean close-up and a 12-zombie crowd, +1.9 % on a wounded
   close-up, 3 s more cold compile. `?leanwalk=0` turns it off. The march golden snapshot was re-recorded; the
   `march-hash` pins are stale on Chrome 157 (not re-pinned). Next: the same choice per sample on wounded bodies.
+- [~] **Wounded mobs: the crater grid and two shading shortcuts are the default (2026-11-12, owner's call; PR 123).** The crater grid (128 exact wounds a body), `?ngwound=8` (no four-tap normal near wounds; follows a soldier's ragged craters) and `?probelean` (cheaper AO and scatter probes). Heavy mob's whole frame 61 to 78 ms before, 49 to 53 after (one noisy run). `?woundgrid=0&ngwound=0&probelean=0` restores the old text. No GPU gate re-taken; open items in [rendering](docs/tasks/rendering.md).
+
 - [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
   frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
   `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's

@@ -3,7 +3,10 @@
 // A wound baked into the wound volume has left the ring, not the body (WoundRing.baked). The sever rules, the
 // wounded limbs and the skeleton's / organs' exposure read the ring's wounds AND the baked ones; before this they
 // read the ring alone, so a body's 33rd wound stopped counting toward a sever and exposed no bone.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+// The baked volume runs only without the crater grid (wound-grid-flag.ts, on by default since 2026-11-12): the page
+// of these tests is `?woundgrid=0`, set before the flag modules load.
+vi.hoisted(() => { (globalThis as { location?: unknown }).location = { search: '?woundgrid=0' }; });
 import zombieSrc from '../characters/zombie.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob } from '../blob-compile';

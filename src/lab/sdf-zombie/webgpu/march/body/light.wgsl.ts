@@ -9,6 +9,7 @@ import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
 import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
 import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
 import { DISPLAY_DEBUG_BLOCK } from './blocks/light/display-debug.wgsl';
+import { afterHitStop } from '../after-hit-flag';
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
   // Run 5b: the normal attachment's alpha carries a per-body KEY (gInstCentre is the record's per-body centre, read from the
@@ -68,9 +69,9 @@ ${LIGHT_LIST_BLOCK}
   // the 1.6x wound wetness lands on top, and whole patches clip to white and
   // sweep across the cavity as the camera moves (X1.17). The wet glisten a
   // wound SHOULD have is the tight specular term, which keeps the boost.
-  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wmRim);
+  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wmRim);${afterHitStop(35, 'albedo * diff * keyC * keyI + listDiff + listSpec + listRim + vec3<f32>(shine * wet + fres + glow.x)')}
 
-${OCCLUSION_BLOCK}
+${OCCLUSION_BLOCK}${afterHitStop(36, '(albedo * diff * keyC * keyI + listDiff + listSpec + listRim + vec3<f32>(shine * wet + fres + glow.x)) * ao * wShadow * lvl + scatter')}
 
 ${AMBIENT_BLOCK}
 ${COMPOSE_BLOCK}
