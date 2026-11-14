@@ -76,7 +76,10 @@ import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
 import { HOUND_TUNING } from '../hound-attack';
 import type { MissingLimbs } from '../collapse';
-import { CORPSE_CONTACT, pushOutOfBodies, pushOutOfBoxes, type BodyObstacle, type ContactBox } from '../corpse-contact';
+import {
+  CORPSE_CONTACT, clearOfBoxes, clearOfSegs, pushOutOfBodies, pushOutOfBoxes, pushOutOfSegs,
+  type BodyHit, type BodyObstacle, type ContactBox, type ContactSeg,
+} from '../corpse-contact';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
@@ -140,6 +143,20 @@ const BLAST_KNOCK_MPS = 1.2;
 const BLAST_KNOCK_DECAY = 7;
 /** A death this soon after the last volley (sim s) is that volley's kill: it may blow him away (blow-away.ts). */
 const KILL_VOLLEY_SEC = 0.5;
+/**
+ * A THROWN CORPSE KNOCKS THE BODY IT HITS (owner playtest 2026-11-12: "a thrown body cant like knock or displace
+ * another body"). A corpse joint that meets a standing body at `minSpeed` (m/s into it) or faster gives that body the
+ * blast-class reaction (stagger.ts lurch; a soldier's medium stagger) and a root knock along the blow of `knockPerMps`
+ * of the joint's speed, capped at `knockMax` (m/s; it decays at BLAST_KNOCK_DECAY, so 3 m/s is 43 cm of travel).
+ * `gain` scales the stagger from `minSpeed` to `fullSpeed`. One knock a `cooldown` (sim s), and a corpse strikes a
+ * body only in the step it arrives (`arrival`, s: noteBodyHit). No wound, no meter: it staggers, it does not hurt.
+ * Probe (a zombie shot dead by double-barrel volleys 0.6-1.6 m in front of another, ragdoll and authored fall, 60 Hz
+ * and bullet time): the first joints arrive at 3-7 m/s, one knock of 1-2.4 m/s a throw (15-35 cm of travel), the
+ * same at both step sizes; a corpse settling against a body's shins is under 2 m/s.
+ */
+export const BODY_KNOCK = {
+  minSpeed: 3, fullSpeed: 12, gain: [0.6, 1.2], knockPerMps: 0.35, knockMax: 3, cooldown: 0.6, arrival: 0.3,
+} as const;
 
 /**
  * THE BLAST SIGNAL'S DIRECTION MUST BE A UNIT VECTOR, and handing it a VELOCITY
@@ -459,6 +476,12 @@ export interface ZombieActor {
   setBodyObstacles?(obstacles: readonly BodyObstacle[]): void;
   /** What a thrown corpse hits of this body: an upright cylinder while it stands, its trunk once it is down. */
   bodyObstacles?(): BodyObstacle[];
+  /** The standing bodies this actor's corpse struck since the last call (drained): whose, the way the blow drives it
+   *  (unit, level) and the joint's speed into it (m/s), the fastest per body. game-tick hands each to bodyKnock. */
+  takeBodyHits?(): { id: number; dir: Vec3; speed: number }[];
+  /** A thrown corpse struck this body (BODY_KNOCK): stagger and a root knock along `dir`. False when it took none
+   *  (too slow, knocked a moment ago, or already down or dying). */
+  bodyKnock?(dir: Vec3, speed: number): boolean;
   /** True while game-main should submit this body to crowd separation at the
    *  wider engaged radius. */
   engagedForCrowd(): boolean;
@@ -1463,6 +1486,9 @@ export function createZombieActor(opts: {
   const CORPSE_CONES = { ...SPINE_CONES, maxStep: 0.02 };
   /** This frame's bodies round this one (setBodyObstacles). */
   let nearBodies: readonly BodyObstacle[] = [];
+  /** Where each of the corpse's rig points last was clear of the level's boxes (corpse-contact.ts pushOutOfBoxes):
+   *  the side of a wall a point inside it goes back out on. Empty while the body stands. */
+  let corpseSafe: (Vec3 | undefined)[] = [];
   // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
   // agree: the bones, the stops, the hip cones, the ankles and the floor each nudge it a little every step, and a
   // body lying still drifted 2-7 cm a second at 7 s (the hip cones and the solver's own loop carried it sideways). So
@@ -1470,13 +1496,38 @@ export function createZombieActor(opts: {
   // speed, until something stirs it (a shot, a blast, a sever: the damage revision; or any impulse: a point whose
   // pos and prev part). 24 probe deaths each way: 21-24 asleep a median 2.7-3.1 s after the blow, at 60 Hz and in full
   // bullet time; at 0.2 m/s the feet still buzzing kept 2-5 of them awake.
-  const CORPSE_SLEEP = { speed: 0.35, time: 0.75 };
+  //
+  // GOING NOWHERE (owner 2026-11-14: "the ragdoll corpses that never fall asleep"). The speed test alone left 45 of
+  // 180 shotgun deaths awake at 10 s (a quarter, the same on main), all but six of them going nowhere: a toe, a head
+  // or the pelvis lifted a centimetre a step by one pass and dropped again by gravity (0.4-1 m/s, 3 cm of travel), a
+  // leg swung 10 cm to and fro by the ankle springs and the braces against the rig step's bones. So a corpse also
+  // sleeps when every joint has stayed within `stray` (m) of where it was for `time`. The speed test already lets a
+  // joint travel 26 cm in that time; a body that is falling or thrown leaves 12 cm in a sixth of a second. Awake at
+  // 10 s of 180 (90 on open floor, 90 beside a wall), by `stray`: none 45, 4 cm 7, 8 cm 3, 12 cm 2, 16 cm 2; the
+  // last two went round on the floor (collapse.ts THE FLOOR STOPS A CONE: with that, 1). Median asleep 2.6-2.8 s
+  // after the death throughout.
+  const CORPSE_SLEEP = { speed: 0.35, time: 0.75, stray: 0.12 };
+  let corpseAnchor: Vec3[] | null = null, corpseNearT = 0;
+  // THE FALL GOES LIMP (found 2026-11-14 probing sector walls). An authored fall (death-fall.ts) carries its pose
+  // 1.6-2.4 m along the shot whatever is in the way, and holds every joint to it. A wall in the way stops the joints
+  // and the pose goes on: every joint ends flat against the wall's face, the corpse re-anchors to that crushed shape,
+  // and its bones fight the hold for good (shoulders at 12-15 m/s nine seconds after the death, never asleep). So
+  // once a step's contacts (walls, bodies) move one joint more than `joint` or all of them more than `body` (m)
+  // against the pose, the fall lets go (MotionConfig.releaseFall) and the body drops from there as a ragdoll.
+  // A corpse lying with a hand against a wall is moved under a millimetre a step.
+  const FALL_WALLED = { joint: 0.03, body: 0.1 };
+  let fallWalled = false;
+  /** A corpse's wall lines are asked once per this much height (m): corpseContacts SECTOR WALLS. */
+  const CORPSE_WALL_BUCKET_M = 0.1;
+  const NO_CONTACT_SEGS: readonly ContactSeg[] = [];
   let corpseStillT = 0, corpseSleeping = false, corpseSleepRevision = -1;
   function corpseContacts(points: RigPoint[], pointR: readonly number[] | undefined): RigPoint[] {
     const rad = (i: number) => pointR?.[i] ?? CORPSE_POINT_R;
+    const arrived = points;
+    corpseStepN++;
     const boxes = opts.colliders?.() ?? [];
-    if (boxes.length) {
-      // Only the boxes near the body (a level has hundreds).
+    if (boxes.length || ground) {
+      // Only the boxes and wall lines near the body (a level has hundreds).
       let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
       for (const p of points) for (const q of [p.pos, p.prev]) {
         x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); z0 = Math.min(z0, q[2]);
@@ -1485,16 +1536,83 @@ export function createZombieActor(opts: {
       const m = 0.3;
       const near = boxes.filter(b => b.max[0] > x0 - m && b.min[0] < x1 + m && b.max[1] > y0 - m && b.min[1] < y1 + m
         && b.max[2] > z0 - m && b.min[2] < z1 + m);
-      if (near.length) points = pushOutOfBoxes(points, near, rad);
+      // SECTOR WALLS: the lines that block at each point's own height (a line is a wall to a point below the floor
+      // behind it and open to one above it: an arm over a ledge hangs down its face, a body thrown onto a ledge
+      // lands on it), asked once per CORPSE_WALL_BUCKET_M of height for the whole body.
+      const segsAt = new Map<number, readonly ContactSeg[]>();
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, reach = Math.hypot(x1 - x0, z1 - z0) / 2 + m;
+      const segsFor = (i: number): readonly ContactSeg[] => {
+        if (!ground) return NO_CONTACT_SEGS;
+        const k = Math.floor((points[i]!.pos[1] - rad(i)) / CORPSE_WALL_BUCKET_M);
+        let segs = segsAt.get(k);
+        if (!segs) segsAt.set(k, segs = ground.blockingNear(cx, cz, reach, k * CORPSE_WALL_BUCKET_M));
+        return segs;
+      };
+      const clear = (q: Vec3, i: number) => clearOfBoxes(q, rad(i), near) && clearOfSegs(q, rad(i), segsFor(i));
+      if (near.length || ground) {
+        // The corpse's first step: each point's clear place is where it was. One with none (the body died with it
+        // in a wall) takes the root, at the point's height: the root only ever stands where a body can.
+        points.forEach((p, i) => { if (!corpseSafe[i] && clear(p.prev, i)) corpseSafe[i] = p.prev; });
+        const root = state.wander.pos;
+        const safe = (i: number): Vec3 => corpseSafe[i] ?? [root[0], points[i]!.pos[1], root[2]];
+        if (near.length) points = pushOutOfBoxes(points, near, rad, undefined, safe);
+        if (ground) points = pushOutOfSegs(points, segsFor, rad, undefined, safe);
+        points.forEach((p, i) => { if (clear(p.pos, i)) corpseSafe[i] = p.pos; });
+      } else points.forEach((p, i) => { corpseSafe[i] = p.pos; });
     }
-    if (nearBodies.length) points = pushOutOfBodies(points, nearBodies, opts.id, rad);
+    if (nearBodies.length) points = pushOutOfBodies(points, nearBodies, opts.id, rad, undefined, undefined, undefined, noteBodyHit);
+    if (points !== arrived && !fallWalled && state.fallKind) {
+      let most = 0, sum = 0;
+      for (let i = 0; i < points.length; i++) {
+        const a = arrived[i]!.pos, b = points[i]!.pos, d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        most = Math.max(most, d); sum += d;
+      }
+      if (most > FALL_WALLED.joint || sum > FALL_WALLED.body) fallWalled = true;
+    }
     return points;
+  }
+  /** The standing bodies this corpse struck (BODY_KNOCK), by actor id: the fastest blow each. A blow counts only on
+   *  ARRIVAL: an authored fall's pose pulls its joints at a body in the way 17 cm a step for as long as it stands
+   *  there (10 m/s "into" it, every step, with the corpse not moving at all), so a body this corpse was already
+   *  pressing within `BODY_KNOCK.arrival` is not struck again. */
+  const bodyHits = new Map<number, { dir: Vec3; speed: number }>();
+  const bodyPressT = new Map<number, number>(), bodyArrivedN = new Map<number, number>();
+  let corpseStepN = 0;
+  const noteBodyHit: BodyHit = (o, n, into) => {
+    if (o.kind !== 'upright') return;
+    const speed = into / CORPSE_STEP;
+    if (speed < BODY_KNOCK.minSpeed) return;
+    const last = bodyPressT.get(o.id);
+    bodyPressT.set(o.id, corpseStepN);
+    if (last === undefined || (corpseStepN - last) * CORPSE_STEP >= BODY_KNOCK.arrival) bodyArrivedN.set(o.id, corpseStepN);
+    // Only the step it arrived in strikes (the fastest joint of that step).
+    if (bodyArrivedN.get(o.id) !== corpseStepN) return;
+    if (speed > (bodyHits.get(o.id)?.speed ?? 0)) bodyHits.set(o.id, { dir: [-n[0], 0, -n[2]], speed });
+  };
+  let bodyKnockCool = 0;
+  function bodyKnock(dir: Vec3, speed: number): boolean {
+    const l = Math.hypot(dir[0], dir[2]);
+    if (speed < BODY_KNOCK.minSpeed || l < 1e-6 || bodyKnockCool > 0) return false;
+    if (doomed || softKilled || dyingT > 0 || state.collapse.phase !== 'standing' || lastFrame?.collapsed) return false;
+    bodyKnockCool = BODY_KNOCK.cooldown;
+    const k = Math.min(1, (speed - BODY_KNOCK.minSpeed) / (BODY_KNOCK.fullSpeed - BODY_KNOCK.minSpeed));
+    const gain = BODY_KNOCK.gain[0] + (BODY_KNOCK.gain[1] - BODY_KNOCK.gain[0]) * k;
+    const dirWorld: Vec3 = [dir[0] / l, 0, dir[2] / l];
+    selectPendingShot({
+      type: 'blast', dirWorld, woundWorld: bodyCentreWorld(), torso: true,
+      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
+      gain: SLUG_GAIN * gain,
+    });
+    if (soldierDamage) mind.stagger(soldierStaggerDuration('medium'));
+    knockV = Math.max(knockV, Math.min(BODY_KNOCK.knockMax, speed * BODY_KNOCK.knockPerMps));
+    knockDir = dirWorld;
+    return true;
   }
   function corpseAsleep(): boolean {
     if (!corpseSleeping) return false;
     const stirred = damageRevision !== corpseSleepRevision || bound.rig.points.some(p =>
       p.pos[0] !== p.prev[0] || p.pos[1] !== p.prev[1] || p.pos[2] !== p.prev[2]);
-    if (stirred) { corpseSleeping = false; corpseStillT = 0; }
+    if (stirred) { corpseSleeping = false; corpseStillT = 0; corpseAnchor = null; corpseNearT = 0; }
     return corpseSleeping;
   }
   /** After a corpse step: counts the time every joint has stayed slow, and puts the body to sleep once it is enough. */
@@ -1506,7 +1624,14 @@ export function createZombieActor(opts: {
       most = Math.max(most, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
     }
     corpseStillT = most <= CORPSE_SLEEP.speed * dt ? corpseStillT + dt : 0;
-    if (corpseStillT < CORPSE_SLEEP.time) return;
+    // GOING NOWHERE: every joint within `stray` of where it was when the clock started.
+    let strayed = !corpseAnchor || corpseAnchor.length !== now.length;
+    for (let i = 0; !strayed && i < now.length; i++) {
+      const a = now[i]!.pos, b = corpseAnchor![i]!;
+      strayed = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > CORPSE_SLEEP.stray;
+    }
+    if (strayed) { corpseAnchor = now.map(p => p.pos); corpseNearT = 0; } else corpseNearT += dt;
+    if (corpseStillT < CORPSE_SLEEP.time && corpseNearT < CORPSE_SLEEP.time) return;
     corpseSleeping = true;
     corpseSleepRevision = damageRevision;
     bound = { ...bound, rig: { ...bound.rig, points: now.map(p => ({ ...p, prev: p.pos })) } };
@@ -1542,6 +1667,8 @@ export function createZombieActor(opts: {
       corpseBank = 0;
       corpseBefore = null;
       corpseBlend = 1;
+      if (corpseSafe.length) corpseSafe = [];
+      fallWalled = false;
       return planSubSteps(dt);
     }
     corpseBank = Math.min(corpseBank + Math.max(0, dt), SUBSTEP_TUNING.maxCatchup);
@@ -1564,6 +1691,7 @@ export function createZombieActor(opts: {
       opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
     reactionTime += Math.max(0, dt);
+    bodyKnockCool = Math.max(0, bodyKnockCool - Math.max(0, dt));
     let firstSub = true;
     let forceCollapseFed = false;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
@@ -1855,6 +1983,7 @@ export function createZombieActor(opts: {
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
           ...(DEATH_FALL.on && !softTarget && !physicsDeath ? { deathFall } : {}),
+          ...(fallWalled ? { releaseFall: true } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
@@ -1997,7 +2126,7 @@ export function createZombieActor(opts: {
         }
       }
       // A sleeping corpse (CORPSE SLEEP) steps as usual below and keeps the pose it had.
-      if (!f.collapsed) { corpseSleeping = false; corpseStillT = 0; }
+      if (!f.collapsed) { corpseSleeping = false; corpseStillT = 0; corpseAnchor = null; corpseNearT = 0; }
       const rigBefore = bound.rig, restingRig = f.collapsed && corpseAsleep() ? rigBefore : null;
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
@@ -2044,7 +2173,10 @@ export function createZombieActor(opts: {
       // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
       // hip cones, so a joint limit has the last word over a contact.
       // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
-      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES), f.corpseBody, CORPSE_BODY);
+      // The floor a point rests at: a spine cone stops there (collapse.ts THE FLOOR STOPS A CONE).
+      const restLift = f.collapsed ? corpseLift(f) : undefined;
+      const restFloor = (i: number, p: RigPoint) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : f.floorY) + (restLift?.[i] ?? 0);
+      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES, restFloor), f.corpseBody, CORPSE_BODY);
       if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
@@ -2064,7 +2196,7 @@ export function createZombieActor(opts: {
         points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
         // One more brace pass after the floor moved points, then the floor again
         // so the last word keeps the corpse out of the ground.
-        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxSpineCones(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_CONES), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxSpineCones(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_CONES, restFloor), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
         // A CORPSE MEETS THE WORLD (corpse-contact.ts): the walls and the bodies round it, last, so a thrown body
         // stops at a wall even where its bones would pull it on through.
         points = corpseContacts(points, f.corpseBody?.pointR);
@@ -2816,6 +2948,13 @@ export function createZombieActor(opts: {
         return k === undefined || !pts[k] ? [] : [{ id: opts.id, kind: 'sphere' as const, c: pts[k]!.pos, r: CORPSE_CONTACT.trunkR }];
       });
     },
+    takeBodyHits: () => {
+      if (!bodyHits.size) return [];
+      const hits = [...bodyHits].map(([id, h]) => ({ id, ...h }));
+      bodyHits.clear();
+      return hits;
+    },
+    bodyKnock,
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;

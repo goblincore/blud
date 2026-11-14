@@ -362,7 +362,7 @@ export function headCapsule(points: readonly RigPoint[], ko: RigHeadKeepOut): [V
  * them so the correction injects no velocity (a limb pressed against the head
  * slides along it instead of bouncing off). Pinned points do not move.
  */
-export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefined): RigPoint[] {
+export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefined, pushed?: Vec3[]): RigPoint[] {
   if (!ko || ko.limbs.length === 0) return points;
   const cap = headCapsule(points, ko);
   if (!cap) return points;
@@ -395,16 +395,27 @@ export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefi
     const denom = wA * wA + wB * wB;
     if (denom < 1e-9) continue;
     if (out === points) out = points.slice();
-    if (wA > 0) { const d = scale(n, (push * wA) / denom); out[limb.a] = { ...A, pos: add(A.pos, d), prev: add(A.prev, d) }; }
-    if (wB > 0) { const d = scale(n, (push * wB) / denom); out[limb.b] = { ...B, pos: add(B.pos, d), prev: add(B.prev, d) }; }
+    if (wA > 0) out[limb.a] = keptOut(A, scale(n, (push * wA) / denom), limb.a, pushed);
+    if (wB > 0) out[limb.b] = keptOut(B, scale(n, (push * wB) / denom), limb.b, pushed);
   }
   return out;
+}
+
+/** One keep-out push on one point. Alone (no `pushed`), `prev` moves with it, so the push adds no speed. Inside
+ *  stepRig's solve (`pushed`: the push each point has had this step) only the position moves, and stepRig settles
+ *  the speed once at the end (KEEP-OUTS ADD NO SPEED). */
+function keptOut(p: RigPoint, d: Vec3, i: number, pushed: Vec3[] | undefined): RigPoint {
+  if (!pushed) return { ...p, pos: add(p.pos, d), prev: add(p.prev, d) };
+  pushed[i] = add(pushed[i] ?? [0, 0, 0], d);
+  return { ...p, pos: add(p.pos, d) };
 }
 
 /** Push limb segments out of the guard spheres. Same position-based scheme as the
  *  head capsule (applyHeadKeepOut): ends move by their share, `prev` moves with
  *  them so no velocity is injected, pinned ends stay. */
-export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardSphere[] | undefined, bodyYaw = 0): RigPoint[] {
+export function applyGuardSpheres(
+  points: RigPoint[], guards: readonly RigGuardSphere[] | undefined, bodyYaw = 0, pushed?: Vec3[],
+): RigPoint[] {
   if (!guards || guards.length === 0) return points;
   const cy = Math.cos(bodyYaw), sy = Math.sin(bodyYaw);
   let out = points;
@@ -433,8 +444,8 @@ export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardS
         const denom = wA * wA + wB * wB;
         if (denom < 1e-9) continue;
         if (out === points) out = points.slice();
-        if (wA > 0) { const d = scale(n, (push * wA) / denom); out[limb.a] = { ...A, pos: add(A.pos, d), prev: add(A.prev, d) }; }
-        if (wB > 0) { const d = scale(n, (push * wB) / denom); out[limb.b] = { ...B, pos: add(B.pos, d), prev: add(B.prev, d) }; }
+        if (wA > 0) out[limb.a] = keptOut(A, scale(n, (push * wA) / denom), limb.a, pushed);
+        if (wB > 0) out[limb.b] = keptOut(B, scale(n, (push * wB) / denom), limb.b, pushed);
       }
     }
   }
@@ -484,6 +495,19 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
   // displacement, into this step (a slow-motion step is shorter, so it moves less), and bleed per 1/60 s.
   const carry = (state.stepDt ? Math.min(20, Math.max(0.05, dt / state.stepDt)) : 1)
     * Math.pow(1 - opts.damping, frames);
+  // KEEP-OUTS ADD NO SPEED. A keep-out push used to move `prev` with the point, each pass. Where the bones then pulled
+  // the point back in (an arm's shoulder end sits at the torso by design), the position ended where it began and
+  // `prev` kept the shove: every pass of every step left the limb moving INTO the keep-out by the push. The rest pull
+  // bleeds that at a 1/60 s step; at a bullet-time step it bleeds a fifth as much and the speed doubled each step
+  // (owner clip 2026-11-12: a standing zombie under shotgun fire whips its head and arms about; 116 m/s and bones
+  // 29% out of length at 0.2x, 18 m/s and 3% at full speed). So the passes move positions only, and one settle at
+  // the end moves `prev` by the share of the push the solve let stand (`free`: where each point was before it).
+  // A corpse (state.collapsed) keeps the old push: it steps a fixed 1/60 s (game-actor.ts FIXED CORPSE STEPS), where
+  // the rest of its stack was tuned on it, and with the settle a lying corpse kept one joint stirring and never fell
+  // asleep (game-actor-corpse-steps.test.ts).
+  const keepOuts = !!(state.headKeepOut || state.torsoGuards) && !state.collapsed;
+  const pushed: Vec3[] | undefined = keepOuts ? [] : undefined;
+  const free: Vec3[] = [];
   let points = state.points.map((p, i) => {
     if (state.posePins?.includes(i)) return { pos: state.restPose[i]!, prev: state.restPose[i]!, pinned: true };
     if (p.pinned) return { ...p, prev: p.pos };
@@ -492,7 +516,9 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
     if (state.clothForce && (state.restScale?.[i] ?? 1) < 1) next = add(next, scale(state.clothForce, dt * dt));
     const sti = stOf(i);
     if (sti > 0) next = lerp(next, state.restPose[i]!, sti);
-    return { pos: sanitize(next, p.pos), prev: p.pos, pinned: false };
+    next = sanitize(next, p.pos);
+    if (keepOuts) free[i] = next;
+    return { pos: next, prev: p.pos, pinned: false };
   });
 
   for (let it = 0; it < opts.iterations; it++) {
@@ -505,23 +531,42 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
       if (!pa.pinned) pa.pos = add(pa.pos, correction);
       if (!pb.pinned) pb.pos = sub(pb.pos, correction);
     }
-    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0);
+    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut, pushed), state.torsoGuards, state.bodyYaw ?? 0, pushed);
     points = constrainRigBends({ ...state, points }).points;
   }
 
   // One more keep-out pass, THEN the elbow stop as the last word: the anatomical
   // limit outranks the clearance (the keep-outs are 1.5 cm generous, so the stop's
   // sub-millimetre correction cannot put an arm back inside).
-  const result = constrainRigBends({
-    ...state,
-    stepDt: dt,
-    points: state.headKeepOut || state.torsoGuards
-      ? applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0)
-      : points,
-  });
+  if (state.headKeepOut || state.torsoGuards) {
+    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut, pushed), state.torsoGuards, state.bodyYaw ?? 0, pushed);
+    if (pushed) points = settleKeptOut(points, pushed, free);
+  }
+  const result = constrainRigBends({ ...state, stepDt: dt, points });
   if (!state.posePins?.length) return result;
   return { ...result, points: result.points.map((p, i) => state.posePins!.includes(i)
     ? { ...p, pinned: state.points[i]!.pinned } : p) };
+}
+
+/** The end of a step's keep-out passes (stepRig KEEP-OUTS ADD NO SPEED). `pushed` is the push each point had over
+ *  the step's passes, `free` where it was before the solve. `prev` moves by the share of the push that STOOD: how
+ *  far the solve moved the point along its push, no more than the push and no less than nothing. A push the bones let
+ *  stand adds no speed, as before; one they undid leaves `prev` alone (it used to move by the whole push, which was
+ *  the speed into the keep-out); and what the bones give the point on top of the push (a flail's whip) is its own. */
+function settleKeptOut(points: RigPoint[], pushed: readonly (Vec3 | undefined)[], free: readonly (Vec3 | undefined)[]): RigPoint[] {
+  let out = points;
+  pushed.forEach((push, i) => {
+    const p = out[i], was = free[i];
+    if (!push || !p || !was || p.pinned) return;
+    const l = len(push);
+    if (l < 1e-9) return;
+    const n = scale(push, 1 / l);
+    const stood = Math.min(l, dot(sub(p.pos, was), n));
+    if (stood <= 0) return;
+    if (out === points) out = points.slice();
+    out[i] = { ...p, prev: add(p.prev, scale(n, stood)) };
+  });
+  return out;
 }
 
 /** Guards against NaN/Infinity poisoning the whole rig after an extreme impulse. */

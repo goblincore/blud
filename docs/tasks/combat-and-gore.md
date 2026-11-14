@@ -2,6 +2,59 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Bullet-time hit freakout, thrown bodies through walls — 2026-11-12
+
+Branch `claude/ragdoll-contact-fixes` (draft PR); not played in game, headless actor tests only. Owner look pending.
+
+- [x] **A standing body shot in bullet time whipped about and stretched** (owner clip `jiggle.mov`). Not the jiggle's size:
+  a runaway in the arm keep-outs (`rig.ts` KEEP-OUTS ADD NO SPEED). Each keep-out push moved `prev` with the point even
+  where the bones then undid the push, which left speed INTO the keep-out every pass; a 1/60 s step's rest pull bled it,
+  a bullet-time step's did not, and about a quarter second after a volley a shoulder's speed doubled each step. One
+  10-pellet volley: bones 31-38% out of length at a 1/300 s step before, 2-5% after; 3-10% at 1/60 s, unchanged. Standing
+  bodies only: a corpse keeps the old push (with the settle a lying corpse never fell asleep).
+  Tests: `rig-timestep.test.ts`, `game-actor-bullet-time-hit.test.ts`.
+- [x] **The cultist's throw-back picked its left arm's way round on a hair** (0.0016 rad from a tie; the fix above moved
+  his resting hand 2 cm and flipped it). A tie now goes round the arm's own side (`motion.ts` A TOSS-UP GOES OUTWARD).
+- [x] **A blown-away body went through wall boxes** (`corpse-contact.ts`). A joint the contact had left on a wall's face
+  was not counted as entering it, sank a step in every other step, and from past the middle left by the far face; the
+  body followed (an authored 'blown' fall: 1.5 m past a 30 cm wall). Also a body that died touching a wall, and thin
+  walls. The entry at the face now counts, and a joint goes back out toward where it was last clear
+  (`game-actor.ts` corpseSafe). 27 probe deaths (ragdoll and authored, 10 and 30 cm walls, 1x and 0.2x): no joint past
+  the face; flesh at most 10 cm into it mid-fall, 5 cm at rest. Tests: `corpse-contact.test.ts`, `game-actor-contact.test.ts`.
+- [x] **Sector levels: a corpse now meets the walls** (2026-11-14). A sector level's walls are lines
+  (`LevelGround.blockingNear`), which the corpse contact never read. Each joint is now kept on its side of the lines
+  that block at its own height (`corpse-contact.ts` SECTOR WALLS, `game-actor.ts` corpseContacts): an arm over a ledge
+  hangs down its face, a body thrown onto a ledge lands on it, a shut door's leaves block. 24 probe deaths against a
+  line wall: no joint past it, the same numbers as a box wall.
+- [x] **An authored fall stopped by a wall thrashed for good** (found probing the above; box walls too). The fall
+  carries its pose 1.6-2.4 m along the shot whatever is in the way: every joint ended flat against the wall, the
+  corpse re-anchored to that crushed shape and its bones fought the hold (shoulders at 12-15 m/s nine seconds after
+  the death, never asleep). The fall now lets go when a wall or a body stops it and the body drops as a ragdoll
+  (`game-actor.ts` THE FALL GOES LIMP, `motion.ts` releaseFall): 6 of 6 probe deaths lying down asleep in 2-4 s.
+  This also ends an authored corpse leaning on a standing body. Tests: `corpse-contact.test.ts`,
+  `game-actor-contact.test.ts`.
+- [x] **A quarter of ragdoll corpses never fell asleep** (2026-11-14; 45 of 180 shotgun deaths awake at 10 s, the
+  same on `main`). Two causes. Most went nowhere: a toe, a head or the pelvis lifted a centimetre a step by one pass
+  and dropped by gravity, a leg swung 10 cm to and fro, each faster than the sleep's speed limit. A corpse now also
+  sleeps when every joint has stayed within 12 cm of where it was for 0.75 s (`game-actor.ts` GOING NOWHERE). And two
+  went round on the floor for good (feet tracing 2 m arcs at 1 m/s): the neck's cone turned the head its full 2 cm
+  into the floor every step. A cone now stops where the point it moves meets its floor (`collapse.ts` THE FLOOR
+  STOPS A CONE). After: 1 of 180 awake at 10 s; median asleep 2.6 s after the death, as before.
+  Tests: `game-actor-contact.test.ts`.
+- [ ] **One corpse in 180 still travels** (seed 126, open floor: 90 cm in 4 s, never asleep). Cause not found. The
+  small cycles themselves are still there until the body sleeps (the passes disagree: ankle springs and braces
+  against the rig step's bones, 0.7-1.8 cm a step each way); the sleep ends them, it does not remove them.
+- [x] **A thrown body knocks the standing body it hits, and no longer passes through it** (owner: "a thrown body cant
+  like knock or displace another body"). The body contact is swept (`corpse-contact.ts` SWEPT): a joint stops where its
+  path first meets a standing body's cylinder or a corpse's trunk sphere, instead of leaving by the far side from past
+  the middle. A joint arriving at 3 m/s or more gives the standing body the blast stagger and a root knock along the
+  blow (`game-actor.ts` BODY_KNOCK, wired in `game-tick.ts`): 1-2.4 m/s in the probe, 15-35 cm of travel, one a throw,
+  the same at 60 Hz and in bullet time. No wound, no meter. An authored fall that keeps pulling at a body in its way
+  strikes it once, on arrival. Tests: `corpse-contact.test.ts`, `game-actor-contact.test.ts`.
+- [ ] **Bodies against bodies, what is left.** Limbs are not obstacles (a standing body is one cylinder from the knees
+  up, a corpse three trunk spheres). The knock is one size for every kind (a warbull takes a zombie's corpse as a zombie does): owner's call on the feel
+  and on a per-kind weight.
+
 ## Limb toughness, corpse integrity, the neck stub — 2026-11-02
 
 Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2026-11-02-limb-toughness-corpse-integrity-design.md) ·
