@@ -1,0 +1,177 @@
+# THE ORGAN — a heavy quadruped whose back is a pipe organ (owner's second
+# pick among the left-field ideas, 2026-11-14, after the chair). The body is a
+# BELLOWS: a barrel of flesh pleated into folds like an accordion's, which
+# heaves (the `swell` morph). Ranks of fluted bone-metal pipes rise from the
+# spine (kit), and along both flanks, set into the folds, are HUMAN MOUTHS that
+# open as the bellows fill. It wails: the bellows swell full, every mouth gapes,
+# and the pipes sound a slow note at you (wail.ts, enemy-mind.ts makeOrganMind).
+# Influences: Cronenberg's soft machines (the body as instrument), Eraserhead's
+# hum, Giger's ribbed tubes; Garage's flesh furniture.
+#
+# THE RIG is the gorehound's (biomech-style.md, "Non-humanoid rigs"): the arms
+# are the front legs ('foreleg' gait), the hind leg is the butcher's dog leg on
+# thigh / shin / foot, every bone a standard name. Bigger and lower-slung: the
+# barrel is 0.66 m across and its belly hangs to ~0.47 m, between legs that
+# are flesh to the knee and elbow and bone-metal below (the gorehound kit's
+# make_legs.py, run heavy).
+#
+# THE BELLOWS HEAVE is the cerebrax's breathing morph, not a new system:
+# MotionProfile.joystick.swell drives the `swell` channel on a slow breath and
+# throbs it to full through an attack (joystick.ts joystickSwell). The folds
+# swell fat along the body (the pleats close up), the belly sags, and the
+# mouths' lips part (their `morph=swell:` offsets). So the wail is telegraphed
+# by the whole body filling before the note leaves.
+#
+# No `stance` line (a dog's hind leg fails the format's chord test: see the
+# gorehound's header).
+model organ
+  height 1.30
+
+skeleton
+  # Hips at 0.90 (root 0.80 + len 0.10).
+  root pelvis at 0.80 len=0.10
+  # THE BACK LINE: a long, nearly level barrel (the bellows), rising a little
+  # to the withers (0, 1.005, 0.854) so the front stands taller than the rump.
+  bone spine parent=pelvis dir=up pitch=83  len=0.86
+  # The neck falls forward and down off the withers; the head is slung LOW and
+  # forward like a bull's, its mouth at about 0.8 m.
+  bone chest parent=spine  dir=up pitch=112 len=0.18
+  bone neck  parent=chest  dir=up pitch=100 len=0.14
+  bone skull parent=neck   dir=up pitch=104 len=0.30
+  # The jaw hinges far back (hinge=0.12): the head is mostly mouth.
+  bone jaw   parent=neck   dir=up pitch=118 len=0.28 hinge=0.12
+
+  mirror
+    # Forelegs: the gorehound's chain (shoulder-to-wrist ~91% of the chain, so
+    # the elbow has room to fold), a little longer for the taller withers. The
+    # scapula is flatter and longer than the hound's (tilt -40, 0.32 m) and the
+    # humerus splays out (tilt 10): the first pass hung the legs at x 0.20,
+    # inside a barrel 0.34 m wide, and they read as sticks under a sack. A
+    # heavy body stands WIDE.
+    bone clavicle parent=spine    dir=side tilt=-40 len=0.32
+    bone upperarm parent=clavicle dir=down pitch=-28 tilt=10 len=0.33
+    bone forearm  parent=upperarm dir=down pitch=22        len=0.34
+    bone hand     parent=forearm  dir=down pitch=52        len=0.30
+    # Hind legs: the gorehound's dog leg scaled 1.08 for the 0.90 hip line,
+    # splayed like the forelegs (side 0.25, tilt 10).
+    bone thigh parent=pelvis side=0.25 dir=down pitch=38 tilt=10 len=0.37
+    bone shin  parent=thigh  dir=down pitch=-48         len=0.36
+    bone foot  parent=shin   dir=down pitch=10          len=0.35
+  end
+
+body
+  # --- THE BELLOWS: a pleated barrel of flesh. ---------------------------------
+  # The core of the barrel, the bone the folds hang on.
+  bar  torso on spine from=0.00 to=1.00 r=0.22 wide=1.30 tall=1.30 offset=(0,-0.05,0) blend=0.040 core
+  # FIVE FOLDS, the accordion's pleats: discs (deep 0.42, so 0.126 m thick
+  # along the body against a 0.18 m spacing) with a small blend, so the creases
+  # between them stay creases. A stack of discs is a defect on a limb (SKILL.md,
+  # "STACKED"); here it is the read. Every other fold swells more, so the
+  # breath ripples down the body instead of inflating it like a balloon.
+  blob torso on spine at=0.08 r=0.30 wide=1.08 tall=1.10 deep=0.42 offset=(0,-0.05,0) blend=0.022 morph=swell:(0,0.010,0)*(1.04,1.05,1.20)
+  blob torso on spine at=0.29 r=0.31 wide=1.10 tall=1.12 deep=0.42 offset=(0,-0.05,0) blend=0.022 morph=swell:(0,0.016,0)*(1.07,1.08,1.30)
+  blob torso on spine at=0.50 r=0.32 wide=1.10 tall=1.12 deep=0.42 offset=(0,-0.05,0) blend=0.022 morph=swell:(0,0.010,0)*(1.04,1.05,1.20)
+  blob torso on spine at=0.71 r=0.31 wide=1.10 tall=1.12 deep=0.42 offset=(0,-0.05,0) blend=0.022 morph=swell:(0,0.016,0)*(1.07,1.08,1.30)
+  blob torso on spine at=0.92 r=0.29 wide=1.08 tall=1.10 deep=0.42 offset=(0,-0.05,0) blend=0.022 morph=swell:(0,0.010,0)*(1.04,1.05,1.20)
+  # The haunch: the rump's mass behind the last fold, round and low.
+  blob torso on pelvis at=1.00 r=0.25 wide=1.25 tall=1.00 deep=0.90 offset=(0,-0.03,-0.08) blend=0.040
+  # The belly: slack flesh hanging under the folds, the bellows' bag. It
+  # drops further on the swell (the bag fills).
+  blob torso on spine at=0.50 r=0.26 wide=1.10 tall=0.70 deep=1.65 offset=(0,-0.24,0) blend=0.055 morph=swell:(0,-0.020,0)*(1.05,1.10,1.02)
+  # The shoulder hump over the forelegs, carrying the front of the windchest.
+  blob torso on spine at=0.98 r=0.25 wide=1.25 tall=0.95 deep=0.85 offset=(0,-0.02,0) blend=0.040
+  # The brisket, hanging between the forelegs.
+  blob torso on chest at=0.55 r=0.19 wide=1.10 tall=1.10 deep=1.00 offset=(0,-0.15,0) blend=0.035
+  # The bull neck: as wide as the head.
+  bar  torso on neck from=0.00 to=1.00 r=0.15 wide=1.25 tall=1.05 blend=0.030
+
+  # --- THE MOUTHS: three human mouths down each flank, one in each of the middle
+  # folds, lips laid along the body (a mouth seen side-on is wide, not tall).
+  # Each is two lips (ellipsoids long in z: their ends taper to the corners by
+  # themselves) over a dark gullet, AJAR at rest: the lips' lens-shaped gap
+  # shows the dark and the kit teeth (organ-kit make_head.py flankteeth). On the
+  # swell they part (upper up, lower down) and the gullet grows tall: the
+  # bellows filling opens every mouth.
+  # Round 2: lips 25 cm long, red and shut read as one raspberry clump down
+  # the flank at 3 m. Round 3: red lips on a 8 mm blend read as beans stuck
+  # on. Now 16 cm, a dull mauve lip blended into the hide (18 mm; a0605a still rendered pillar-box red), the gullet a
+  # thin dark slab standing just inside the lips so the split reads as a dark
+  # line, and STAGGERED in height (y offsets -0.095 / -0.060 / -0.112 from
+  # the spine), which is wrong in the way a face is not.
+  blob torso on spine at=0.29 r=0.100 wide=0.40 tall=0.40 deep=0.80 offset=(0.320,-0.045,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,0.022,0)
+  blob torso on spine at=0.29 r=0.100 wide=0.42 tall=0.44 deep=0.74 offset=(0.316,-0.149,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,-0.026,0)
+  blob torso on spine at=0.29 r=0.085 wide=0.42 tall=0.22 deep=0.85 offset=(0.310,-0.097,0) blend=0.003 both color=160404 gloss=0.9 morph=swell:(0,0,0)*(1,3.2,1)
+  blob torso on spine at=0.50 r=0.100 wide=0.40 tall=0.40 deep=0.80 offset=(0.334,-0.010,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,0.022,0)
+  blob torso on spine at=0.50 r=0.100 wide=0.42 tall=0.44 deep=0.74 offset=(0.330,-0.114,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,-0.026,0)
+  blob torso on spine at=0.50 r=0.085 wide=0.42 tall=0.22 deep=0.85 offset=(0.324,-0.062,0) blend=0.003 both color=160404 gloss=0.9 morph=swell:(0,0,0)*(1,3.2,1)
+  blob torso on spine at=0.71 r=0.100 wide=0.40 tall=0.40 deep=0.80 offset=(0.318,-0.062,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,0.022,0)
+  blob torso on spine at=0.71 r=0.100 wide=0.42 tall=0.44 deep=0.74 offset=(0.314,-0.166,0) blend=0.018 both color=9c6e68 gloss=0.6 morph=swell:(0.004,-0.026,0)
+  blob torso on spine at=0.71 r=0.085 wide=0.42 tall=0.22 deep=0.85 offset=(0.308,-0.114,0) blend=0.003 both color=160404 gloss=0.9 morph=swell:(0,0,0)*(1,3.2,1)
+
+  # --- THE HEAD: the cantor. Eyeless; nearly all of it is one human mouth. ------
+  blob head on skull at=0.30 r=0.14 wide=1.20 tall=0.95 deep=1.10 offset=(0,0.050,0) blend=0.025 core
+  blob head on skull at=0.72 r=0.12 wide=1.10 tall=0.80 deep=1.00 offset=(0,0.010,0) blend=0.022
+  # The upper lip, full and rolled, across the front of the face.
+  blob head on skull at=1.00 r=0.085 wide=1.00 tall=0.34 deep=0.45 offset=(0,-0.030,-0.010) blend=0.016 color=9c6e68 gloss=0.6
+  # The gullet, only seen once the jaw drops.
+  blob head on skull at=0.80 r=0.090 wide=1.15 tall=0.55 deep=1.20 offset=(0,-0.060,0) blend=0.008 color=2a0808 gloss=0.9
+  # The lower jaw and its lip.
+  blob head on jaw at=0.62 r=0.110 wide=1.30 tall=0.50 deep=1.20 offset=(0,-0.055,0) blend=0.018
+  blob head on jaw at=1.00 r=0.080 wide=1.00 tall=0.36 deep=0.50 offset=(0,-0.040,0.010) blend=0.016 color=9c6e68 gloss=0.6
+
+  # --- FORELEGS: flesh to the elbow, machine below (kit sleeves the cores). ------
+  blob arm on clavicle at=1.00 r=0.15 blend=0.025 mirror core
+  bar  arm on upperarm from=0.00 to=1.00 r=0.135 r2=0.095 blend=0.020 mirror
+  blob arm on upperarm at=0.50 r=0.100 tall=1.50 offset=(0,0,-0.045) blend=0.020 mirror
+  blob arm on forearm at=0.00 r=0.035 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on forearm from=0.05 to=0.95 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob arm on hand at=0.00 r=0.030 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on hand from=0.05 to=0.90 r=0.020 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+  # --- HIND LEGS: a haunch of flesh on a machine leg. ---------------------------
+  blob leg on thigh at=0.00 r=0.16 blend=0.025 mirror core
+  bar  leg on thigh from=0.05 to=0.95 r=0.150 r2=0.095 deep=1.20 blend=0.020 mirror
+  blob leg on shin at=0.00 r=0.035 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin from=0.05 to=0.95 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on foot at=0.00 r=0.030 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot from=0.05 to=0.90 r=0.020 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+face
+  # No generated face: the head is prims (twinhead's blanking block).
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+palette
+  # Bellows hide: a pale, waxy, stretched grey-pink (old leather and a corpse's
+  # skin), going livid red in the pleats, with a yellowed mottle like stained
+  # ivory keys.
+  baseColor     0.60 0.47 0.44
+  deepColor     0.48 0.10 0.12
+  charColor     0.08 0.05 0.06
+  specIntensity 0.65
+  specRoughness 0.30
+  fresnelBoost  0.60
+  translucency  0.32
+  wetness       0.55
+  surfaceNoiseAmp    0.040
+  silhouetteNoiseAmp 0.012
+  mottleAmp     0.35
+  mottleScale   1.5
+  mottleColor   0.58 0.50 0.30
+  grain         0.12
+
+sheet
+  # No face sheet (biomech-style.md: a non-person wears none).
+  enabled 0

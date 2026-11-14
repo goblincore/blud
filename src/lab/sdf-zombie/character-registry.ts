@@ -49,6 +49,7 @@ import deadeyeBlobSrc from './characters/deadeye.blob?raw';
 import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import gibbetBlobSrc from './characters/gibbet.blob?raw';
+import organBlobSrc from './characters/organ.blob?raw';
 import chairBlobSrc from './characters/chair.blob?raw';
 import gamerBlobSrc from './characters/gamer.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
@@ -418,6 +419,19 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/gibbet-body-n.png', meta: '/assets/lab/gibbet-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: GIBBET_PROFILE,
+  },
+  // The walking pipe organ (organ.blob's header): a heavy quadruped whose barrel is a pleated bellows of flesh with
+  // human mouths down its flanks, ranks of fluted bone-metal pipes rising off its spine. It wails. Kit:
+  // assets-source/organ-kit/. No face sheet: the face is a mouth of prims.
+  organ: {
+    name: 'organ', src: organBlobSrc,
+    kit: '/assets/lab/organ-kit.gltf',
+    kitSheds: true,
+    // The bellows' pleat wrinkles, the veins feeding the flank mouths and the saddle's puckering (characters/organ.detail,
+    // baked along the body: scripts/organ-detail-gen.ts has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/organ-body-n.png', meta: '/assets/lab/organ-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('organ'),
   },
   // The walking throne (chair.blob's header): a man fused seated into a
   // chair of bone and bone-metal, his thighs the seat, his forearms the

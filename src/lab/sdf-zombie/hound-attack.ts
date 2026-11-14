@@ -21,13 +21,15 @@ import type { Vec3 } from './types';
 import { ATTACK_TUNING, attackDrive, type AttackPose, type SwingVariant } from './attack';
 import { BRAIN_TUNING, type BrainTuning } from './brain';
 import { wrapPi } from './wander';
+import { ORGAN_TUNING } from './wail';
 
 /** The hound's bite and pounce, and the gibbet's two (characters/gibbet.blob): the STAB (both front legs rear up and
  *  drive their spike tips forward) and the SQUIRT (the caged sac swings back, then forward, and lobs a glob of bile
- *  from its drip: bile.ts; the squirt never makes contact itself). */
-export type HoundVariant = 'bite' | 'pounce' | 'stab' | 'squirt' | 'slam';
+ *  from its drip: bile.ts; the squirt never makes contact itself). The organ's WAIL (characters/organ.blob, wail.ts):
+ *  the body braces and fills, the head thrown back, holds a trembling note while its trumpets fire, and settles. */
+export type HoundVariant = 'bite' | 'pounce' | 'stab' | 'squirt' | 'slam' | 'wail';
 export function isHoundVariant(v: SwingVariant): v is HoundVariant {
-  return v === 'bite' || v === 'pounce' || v === 'stab' || v === 'squirt' || v === 'slam';
+  return v === 'bite' || v === 'pounce' || v === 'stab' || v === 'squirt' || v === 'slam' || v === 'wail';
 }
 
 export const HOUND_TUNING = {
@@ -85,6 +87,18 @@ export const HOUND_TUNING = {
     advance: 0.9, stopShort: 1.2,
   },
   slamAirborne: { from: 0.04, to: 0.53 },
+  /** WAIL, the ORGAN's (characters/organ.blob, wail.ts): a singer's breath on four legs. Its own clock
+   *  (ORGAN_TUNING.filled / held): over the FILL the haunches sink and the front rises, the chest swelling up and the
+   *  neck and head thrown up and back (the cantor's mouth to the sky); through the HOLD the whole front TREMBLES, a
+   *  vibrato of a few cm at `tremHz` cycles over the wail, while the trumpets on the back fire their chord; then it
+   *  settles. The front feet stay planted: a brace, not a rear. (m, body-local) */
+  wail: {
+    // First pass (head +0.30, neck +0.20, chest +0.10) read only as the jaw dropping in a 3 m swing sweep: the
+    // head throw is the telegraph, so it nearly doubles, and the haunches sink further to tip the barrel up.
+    haunch: 0.11, haunchBack: 0.04, chestUp: 0.18, chestBack: 0.06, neckUp: 0.38, neckBack: 0.12,
+    headUp: 0.55, headBack: 0.16, rootUp: 0.03,
+    trem: 0.025, tremHz: 22,
+  },
   /** Root travel over one pounce (m), and how close it may land (m). */
   pounceDistance: 1.6,
   pounceStopShort: 0.8,
@@ -95,12 +109,12 @@ export const HOUND_TUNING = {
   airborne: { from: 0.22, to: 0.62 },
   stabAirborne: { from: 0.04, to: 0.88 },
   /** The jaw (rad): wide on the wind-up, snapped shut by the strike's end. The gibbet's attacks are not bites. */
-  gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0, slam: 0 } as Record<HoundVariant, number>,
+  gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0, slam: 0, wail: 0.7 } as Record<HoundVariant, number>,
   /** Contact: on the phase the jaws (or the spikes) close, inside this reach and cone. The squirt's reach is 0: the
    *  glob hits or misses on its own (bile.ts). */
   contact: {
-    phase: { bite: 0.45, pounce: 0.48, stab: 0.50, squirt: 1, slam: 0.53 } as Record<HoundVariant, number>,
-    reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0, slam: 1.9 } as Record<HoundVariant, number>,
+    phase: { bite: 0.45, pounce: 0.48, stab: 0.50, squirt: 1, slam: 0.53, wail: 1 } as Record<HoundVariant, number>,
+    reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0, slam: 1.9, wail: 0 } as Record<HoundVariant, number>,
     cone: 0.7,
   },
   brain: {
@@ -159,7 +173,40 @@ function slamDrive(phase: number): number {
   return 1 - smooth((phase - S.hold) / (1 - S.hold));
 }
 
+/** The wail's held envelope (ORGAN_TUNING): 0 -> 1 over the fill, held, back to 0 after `held`. Exactly 0 at the ends. */
+export function wailEnvelope(phase: number): number {
+  if (!(phase > 0) || phase >= 1) return 0;
+  const T = ORGAN_TUNING;
+  if (phase < T.filled) return smooth(phase / T.filled);
+  if (phase < T.held) return 1;
+  return 1 - smooth((phase - T.held) / (1 - T.held));
+}
+
 function houndPoseRaw(phase: number, variant: HoundVariant, side: 'L' | 'R'): AttackPose {
+  if (variant === 'wail') {
+    const W = HOUND_TUNING.wail;
+    const c = wailEnvelope(phase);
+    const reach0 = { pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 };
+    if (c === 0) return { offsets: {}, rootOffset: Z, reach: reach0 };
+    // The vibrato: only while the note is held (c = 1 exactly between filled and held), two beating frequencies.
+    const T = ORGAN_TUNING;
+    const hold = phase > T.filled && phase < T.held ? Math.sin(Math.PI * (phase - T.filled) / (T.held - T.filled)) : 0;
+    const w = 2 * Math.PI * W.tremHz * phase;
+    const tr = W.trem * hold * (0.7 * Math.sin(w) + 0.3 * Math.sin(w * 1.6 + 0.8));
+    const haunch: Vec3 = [0, -c * W.haunch, -c * W.haunchBack];
+    return {
+      offsets: {
+        // No spineA / spineB offsets: bending the spine's middle moves the flesh mouths (SDF along the bent spine)
+        // off their kit teeth (rigid on the bone), and the first pass bared rows of teeth floating beside the lips.
+        hips: haunch, hipL: haunch, hipR: haunch,
+        chest: [0, c * W.chestUp + tr, -c * W.chestBack],
+        neck: [0, c * W.neckUp + tr * 1.5, -c * W.neckBack],
+        head: [tr * 0.6, c * W.headUp + tr * 2, -c * W.headBack],
+      },
+      rootOffset: [0, c * W.rootUp - c * W.haunch * 0.5, -c * W.haunchBack],
+      reach: reach0,
+    };
+  }
   const d = variant === 'stab' ? stabDrive(phase) : variant === 'slam' ? slamDrive(phase) : attackDrive(phase, ATTACK_TUNING);
   const reach = { pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 };
   if (d === 0) return { offsets: {}, rootOffset: Z, reach };
@@ -286,6 +333,21 @@ export const GIBBET_TUNING = {
   squirtFirst: 1.2,
 } as const;
 
+/** The ORGAN's melee brain (characters/organ.blob): the ring brain BITING with its mouth of a head, no pounce (a
+ *  bellows does not leap; the wail is its answer to range, enemy-mind.ts makeOrganMind), slow and heavy. */
+export const ORGAN_BRAIN: BrainTuning = {
+  ...BRAIN_TUNING,
+  // The lips reach ~1.5 m ahead of the pelvis at rest, ~1.75 m at the bite's strike.
+  meleeRadius: 1.55,
+  outerRadius: 2.6,
+  engageRange: 4.5,
+  releaseRange: 5.5,
+  pickVariant: () => 'bite',
+  swingSec: 0.85,
+  swingSecFor: { bite: 0.85 },
+  cooldownSec: 1.2,
+} satisfies BrainTuning as BrainTuning;
+
 /** The GUTCRAWLER's mind tuning: the hound mind SLAMMING in reach and from the band just beyond (the slam's surge
  *  closes it), slower and heavier than the hound. */
 export const GUTCRAWLER_TUNING = {
@@ -329,6 +391,8 @@ function squatEnvelope(phase: number): number {
  *  holds to mid-strike, snaps shut by strikeEnd. Exactly 0 outside
  *  (0, strikeEnd). Pure. */
 export function houndGapeAt(phase: number, variant: HoundVariant): number {
+  // The wail's mouth opens with the fill and stays wide through the note (its own clock, not the swing's).
+  if (variant === 'wail') return HOUND_TUNING.gape.wail * wailEnvelope(phase);
   const T = ATTACK_TUNING;
   if (!(phase > 0) || phase >= T.strikeEnd) return 0;
   const peak = HOUND_TUNING.gape[variant];

@@ -66,6 +66,8 @@ exports[`packBody byte pin > mouse.blob packs the pinned bytes 1`] = `"c013fa83b
 
 exports[`packBody byte pin > ogre.blob packs the pinned bytes 1`] = `"486aee6455496158"`;
 
+exports[`packBody byte pin > organ.blob packs the pinned bytes 1`] = `"1a6ea0120e5c040e"`;
+
 exports[`packBody byte pin > schoolgirl.blob packs the pinned bytes 1`] = `"b73a387271e4fcc8"`;
 
 exports[`packBody byte pin > schoolgirl-alt.blob packs the pinned bytes 1`] = `"48c3879e03b60fcd"`;

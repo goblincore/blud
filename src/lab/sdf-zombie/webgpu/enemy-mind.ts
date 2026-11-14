@@ -20,9 +20,10 @@ import {
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
-import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, slamAdvance, squirtFires, stabAdvance } from '../hound-attack';
+import { GIBBET_TUNING, HOUND_TUNING, ORGAN_BRAIN, houndContact, isHoundVariant, pounceAdvance, slamAdvance, squirtFires, stabAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
 import { IMP_TUNING, throwFires } from '../fireball';
+import { ORGAN_TUNING, wailNotesCrossed } from '../wail';
 import { BRAIN_TUNING, type BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
@@ -392,6 +393,60 @@ export function makeGibbetMind(): EnemyMind {
     debug: () => {
       const d = melee.debug();
       return squirtT >= 0 ? { ...d, state: 'squirt', variant: 'squirt', cooldown } : { ...d, cooldown };
+    },
+  };
+}
+
+/** The ORGAN's two attacks (characters/organ.blob, wail.ts): up close the hound mind on ORGAN_BRAIN BITES with the
+ *  head's human mouth; at range it WAILS. A seen player it is alert to between ORGAN_TUNING.band.min and .max, with the
+ *  wail off cooldown and no bite running, starts one: the body halts and turns to face, braces and fills (the `wail`
+ *  pose, the bellows' swell throbbing full through it: joystick.ts joystickSwell), and `fire` goes up once for each of
+ *  the chord's three notes (wailNotesCrossed). game-actor fires each from the trumpets (MotionProfile.spit) and
+ *  game-spawn sends wail.ts's note at the player, fanned per note. A stagger cancels a wail: shoot it while it fills. */
+export function makeOrganMind(): EnemyMind {
+  const T = ORGAN_TUNING;
+  const melee = makeHoundMind(ORGAN_BRAIN);
+  let wailT = -1;            // seconds into a running wail; -1 = none
+  let cooldown: number = T.first;
+  let prev = 0;
+  const halted = (input: MindInput, phase: number, fire: boolean): MindOutput => ({
+    target: null, halt: true,
+    attack: { phase, side: 'R', variant: 'wail' },
+    fire, weaponUp: false,
+    faceHeading: input.player ? Math.atan2(input.player.x - input.self.x, input.player.z - input.self.z) : null,
+    engaged: true, committed: true, contact: false, aimError: 0,
+  });
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      cooldown = Math.max(0, cooldown - input.dt);
+      if (wailT >= 0) {
+        wailT += input.dt;
+        const phase = wailT / T.wailSec;
+        if (phase < 1) {
+          const fire = wailNotesCrossed(prev, phase).length > 0;
+          prev = phase;
+          return halted(input, phase, fire);
+        }
+        wailT = -1; prev = 0; cooldown = T.cooldown;
+      }
+      const out = melee.step(input);
+      const p = input.player;
+      // The brain's own ALERT (it has noticed the player), not input.alerted (a shot fired in this room this frame).
+      if (!out.attack && p && melee.debug().alert && input.lineOfSight !== false && cooldown <= 0) {
+        const dist = Math.hypot(p.x - input.self.x, p.z - input.self.z);
+        if (dist >= T.band.min && dist <= T.band.max) {
+          wailT = 0; prev = 0;
+          return halted(input, 0, false);
+        }
+      }
+      return out;
+    },
+    stagger(holdSec) { wailT = -1; prev = 0; melee.stagger(holdSec); },
+    debug: () => {
+      const d = melee.debug();
+      return wailT >= 0 ? { ...d, state: 'wail', variant: 'wail', swingT: wailT / T.wailSec, cooldown } : { ...d, cooldown };
     },
   };
 }

@@ -13,6 +13,7 @@
   "gibbet": ["512", "320", "--torso-axis", "0,1.12,-0.025:0,0.08,0.395", "--limb", "skull:0:1:0.14:96"],
   "gorehound": ["512", "320", "--torso-axis", "0,0.86,-0.34:0,0.94,1.06", "--limb", "upperarm.l:0:1:0.20:96", "--limb", "upperarm.r:0:1:0.20:96", "--limb", "thigh.l:0:1:0.21:96", "--limb", "thigh.r:0:1:0.21:96"],
   "gutcrawler": ["768", "640", "--torso-axis", "0,0.10,-1.14:0,0.30,0.64", "--limb", "upperarm.l:0:1:0.12:128", "--limb", "upperarm.r:0:1:0.12:128", "--limb", "forearm.l:0:1:0.10:128", "--limb", "forearm.r:0:1:0.10:128"],
+  "organ": ["512", "320", "--torso-axis", "0,0.86,-0.36:0,0.92,1.20", "--limb", "upperarm.l:0:1:0.20:96", "--limb", "upperarm.r:0:1:0.20:96", "--limb", "thigh.l:0:1:0.21:96", "--limb", "thigh.r:0:1:0.21:96"],
   "imp": ["512", "256", "--torso-axis", "0,1.32,0.19:0,0.66,-0.06", "--limb", "upperArm.l:0:1:0.13:80", "--limb", "foreArm.l:0:1:0.12:80", "--limb", "upperArm.r:0:1:0.13:80", "--limb", "foreArm.r:0:1:0.12:80",
     "--limb", "thigh.l:0:1:0.15:80", "--limb", "shin.l:0:1:0.12:80", "--limb", "foot.l:0:1:0.09:64", "--limb", "thigh.r:0:1:0.15:80", "--limb", "shin.r:0:1:0.12:80", "--limb", "foot.r:0:1:0.09:64"],
   "teratoma": ["512", "256"],

@@ -22,6 +22,8 @@ import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
 import { BILE, stepBile } from '../bile';
 import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
+import { WAIL, stepWailNotes, wailPlayerDamage, wailWobble } from '../wail';
+import { blastRefractionStrength } from '../blast-refraction';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -1249,6 +1251,28 @@ export function tick(ctx: GameContext, dt: number) {
         else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
       }
     }
+    // WAIL NOTES (the organ's chord, wail.ts): slow straight balls of sound. A hit hurts; a burst beside the player
+    // shoves a little (stopped by sector geometry, like a blast). Only the player is hurt, never the organ or its kin.
+    // No fire: a burst feeds the post-aa blast ring when that experiment is on (the closest thing to a sound wave).
+    if (ctx.weapon.wailNotes.length) {
+      const pp = ctx.player.player.pos;
+      const stepped = stepWailNotes(ctx.weapon.wailNotes, dt, {
+        hitsWorld: (from, to) => (ctx.world.level.def?.sectors ? sectorWorldHit(ctx, from, to) !== null
+          : to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2]))
+          || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+        hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius + WAIL.radius, PLAYER.height),
+      });
+      ctx.weapon.wailNotes = stepped.live;
+      for (const b of stepped.bursts) {
+        ctx.telemetry.telemetry.event('wail-burst', { cause: b.cause, owner: b.owner, x: b.at[0], y: b.at[1], z: b.at[2] });
+        const centre: Vec3 = [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]];
+        const hurt = wailPlayerDamage(b, centre);
+        if (hurt > 0 && (b.cause === 'player' || !blastShielded(ctx, b.at, centre))) damagePlayer(ctx, hurt, 'blast');
+        if (b.cause !== 'age' && ctx.render.postAa.blastDistort) {
+          ctx.render.postAa.pushBlastDistort([b.at[0], b.at[1], b.at[2]], WAIL.radius * 1.5, blastRefractionStrength(0.5));
+        }
+      }
+    }
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.
@@ -1275,6 +1299,19 @@ export function tick(ctx: GameContext, dt: number) {
       const v = ctx.weapon.fireballViews[k]!;
       const b = ctx.weapon.fireballs[k];
       if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
+      else hideTracer(ctx, v);
+    }
+    while (ctx.weapon.wailViews.length < ctx.weapon.wailNotes.length) {
+      const view = newTracerView(ctx);
+      // Sound, not fire: the additive tracer tinted a pale bone-violet.
+      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(0.78, 0.70, 1.0);
+      ctx.weapon.wailViews.push(view);
+    }
+    for (let k = 0; k < ctx.weapon.wailViews.length; k++) {
+      const v = ctx.weapon.wailViews[k]!;
+      const n = ctx.weapon.wailNotes[k];
+      // Drawn trembling (wailWobble): the vibrato is the note's read, the sim keeps the true path.
+      if (n) { const w = wailWobble(n); placeTracer(ctx, v, { pos: w.pos, vel: n.vel, ageSec: n.ageSec, radius: w.radius, kind: 'slug' }, tracerEye); }
       else hideTracer(ctx, v);
     }
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {

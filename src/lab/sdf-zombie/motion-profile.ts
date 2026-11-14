@@ -5,7 +5,7 @@
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
 import type { FleshJiggleSpec } from './flesh-jiggle';
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, ORGAN_TREAD, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -103,8 +103,9 @@ export interface MotionProfile {
    *  on the arm, so the arm's own swing carries it. */
   armWeapon?: { side: 'L' | 'R'; damage: number };
   /** A THROWER (the imp): the zombie's mind and claws up close, and at range a wind-up and an overhand throw of a
-   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). */
-  throws?: 'fireball';
+   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). 'wail' is the organ's: the
+   *  hound mind's bite up close and, at range, a WAIL of slow notes from its pipes (wail.ts, makeOrganMind). */
+  throws?: 'fireball' | 'wail';
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -518,6 +519,34 @@ export const GIBBET_PROFILE: MotionProfile = {
   spit: { from: 'hem', offset: [0, -0.20, 0.02] },
 };
 
+/** THE ORGAN (characters/organ.blob): a heavy quadruped whose back is a pipe organ, its barrel a pleated bellows with
+ *  human mouths down the flanks. Walks on ORGAN_TREAD (the gorehound's four-beat walk, heavier and slower). Up close it
+ *  BITES with its mouth of a head (the hound mind); at range it WAILS (enemy-mind.ts makeOrganMind, wail.ts): it plants,
+ *  the bellows fill, the head is thrown back, and the pipes sound three slow notes at you, a chord you can sidestep. */
+export const ORGAN_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  physicsDeath: false,
+  name: 'organ',
+  gait: { walk: ORGAN_TREAD, run: ORGAN_TREAD },
+  runBand: { from: Infinity, to: Infinity },
+  // Slow: the wail is the threat, not the walk.
+  cruise: 0.85,
+  turnRate: 1.6,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+  throws: 'wail',
+  // The notes leave from the TRUMPETS EN CHAMADE fanned forward over the shoulders: between the two sides' middle
+  // bells (assets-source/organ-kit/make_pipes.py prints CHAMADE_BELL: blob (+-0.184, 1.422, 1.029)), body-local from
+  // the hips' rig point (the pelvis tail, (0, 0.90, 0)), plus 5 cm so a note leaves clear of the bells. game-spawn
+  // moves each note out to its own side's bells (wail.ts ORGAN_TUNING.bell / bellX).
+  spit: { from: 'pelvis', offset: [0, 0.52, 1.08] },
+  // THE BELLOWS BREATHE (joystick.ts joystickSwell on the `swell` morph, the cerebrax's breath): a slow heave, in over
+  // 40% of 2.8 s, throbbing full through the wail, so the body fills before the note leaves. No stick (amp 0).
+  joystick: { amp: 0, idle: 0, swell: { period: 2.8 } },
+  // Heavy: it soaks more than a hound (between the gorehound's shared rule and the cerebrax boss).
+  toughness: { pellet: 2.2, blast: 1.6, sever: 2.2 },
+};
+
 /** THE CHAIR (characters/chair.blob): a throne with a man fused into it,
  *  walked on four legs (CHAIR_WADDLE). It uses the hound's mind
  *  (hound-attack.ts): the BITE is the sitter throwing his head and shoulders
@@ -747,6 +776,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
+  organ: ORGAN_PROFILE,
   chair: CHAIR_PROFILE,
   gamer: GAMER_PROFILE,
   teratoma: TERATOMA_PROFILE,
