@@ -252,7 +252,7 @@ def build_spine():
 
 
 # ----------------------------------------------------------------------------------------------------------------
-# The ribcage: ten flat ribs a side on T1..T10, a three-part sternum, the costal margin.
+# The ribcage: six fat ribs a side, a sternum, the costal margin.
 # ----------------------------------------------------------------------------------------------------------------
 # The cage's envelope by height: (y of the rib's head, half-width, half-depth to the front, drop to its sternal end).
 # The six rows below 1.40 are the table the SDF cage was fitted to the flesh with (scripts/zombie-skeleton-gen.ts).
@@ -280,31 +280,36 @@ def rib_point(yh, th, th0):
     return V(A * math.sin(th), yh - drop * ((th - th0) / (math.pi - th0)) ** 1.3, cz - B * math.cos(th))
 
 
+RIB_HEADS = [1.375, 1.333, 1.291, 1.249, 1.207, 1.165]   # the six rows of CAGE below 1.40, 4.2 cm apart
+
+
 def build_ribs():
+    """SIX FAT RIBS A SIDE, not ten flat ones (owner, 2026-11-15, looking through a chest wound in the game: the ten
+    thin bands read as not part of the body, "too thin and too many", where the old cage of six thick hoops "feels
+    much more grounded"). They are the old cage's ribs: the same six heights, the same envelope, a section about as
+    fat as its tubes were (2.7 cm tall, 1.9 cm through), now on real vertebrae and a real sternum. Ribs 1-4 reach
+    the sternum; 5 and 6 hang off the costal margin."""
     s = Shells()
-    ht = (Y_T1 - Y_L1) / 12
     ends = []
-    for i in range(10):
-        yh = Y_T1 - ht * (i + 0.5)
+    for i, yh in enumerate(RIB_HEADS):
         A = cage_at(yh)[0]
         th0 = math.asin(min(1, 0.016 / A))
-        th1 = math.pi - math.asin(0.010 / A) if i < 7 else math.radians((152, 134, 116)[i - 7])
-        n = 13 if i < 7 else (11, 10, 9)[i - 7]
+        th1 = math.pi - math.asin(0.012 / A) if i < 4 else math.radians((150, 124)[i - 4])
+        n = 13 if i < 4 else (11, 9)[i - 4]
         path = [rib_point(yh, lerp(th0, th1, k / (n - 1)), th0) for k in range(n)]
-        # Bands 1.5 cm tall and a centimetre thick: a rib has to read through a chest wound, at game distance.
-        w = 0.0078 if i > 0 else 0.0068
-        left = Shells(); left.add(*loft(path, [(0.0055, 0.005)] + [(w, 0.005)] * 4 + [(w * 0.9, 0.0045)], sides=6, up=(0, 1, 0)))
+        w = 0.0135 if i > 0 else 0.0115
+        left = Shells(); left.add(*loft(path, [(0.008, 0.0075)] + [(w, 0.0095)] * 4 + [(w * 0.85, 0.008)], sides=8, up=(0, 1, 0)))
         s.merge(left); s.merge(left.mirrored())
         ends.append(path[-1])
-    # The costal margin: ribs 8-10 hang off one strip of cartilage that climbs to the foot of the sternum.
-    foot = V(0.012, ends[6].y - 0.004, ends[6].z)
-    margin = Shells(); margin.add(*loft([ends[9], ends[8], ends[7], lerp(ends[7], foot, 0.55), foot], [(0.0062, 0.0042)] * 5, sides=5, up=(0, 1, 0), per=3))
+    # The costal margin: ribs 5 and 6 hang off one strip of cartilage that climbs to the foot of the sternum.
+    foot = V(0.012, ends[3].y - 0.006, ends[3].z)
+    margin = Shells(); margin.add(*loft([ends[5], ends[4], lerp(ends[4], foot, 0.55), foot], [(0.010, 0.0075)] * 4, sides=6, up=(0, 1, 0), per=3))
     s.merge(margin); s.merge(margin.mirrored())
-    # Sternum: manubrium, body, xiphoid, through the sternal ends of ribs 1-7.
-    top = V(0, ends[0].y + 0.012, ends[0].z - 0.004)
-    mid = [V(0, e.y, e.z + 0.001) for e in ends[:7]]
-    xiph = V(0, ends[6].y - 0.026, ends[6].z - 0.006)
-    s.add(*loft([top] + mid + [xiph], [(0.024, 0.006), (0.025, 0.0062), (0.016, 0.0055), (0.014, 0.005), (0.014, 0.005), (0.014, 0.005), (0.015, 0.005), (0.013, 0.0048), (0.005, 0.003)], sides=8, up=(1, 0, 0)))
+    # Sternum: manubrium, body, xiphoid, through the sternal ends of ribs 1-4.
+    top = V(0, ends[0].y + 0.014, ends[0].z - 0.004)
+    mid = [V(0, e.y, e.z + 0.001) for e in ends[:4]]
+    xiph = V(0, ends[3].y - 0.034, ends[3].z - 0.006)
+    s.add(*loft([top] + mid + [xiph], [(0.026, 0.008), (0.027, 0.0085), (0.019, 0.0078), (0.018, 0.0075), (0.019, 0.0075), (0.007, 0.004)], sides=8, up=(1, 0, 0)))
     return s, top
 
 

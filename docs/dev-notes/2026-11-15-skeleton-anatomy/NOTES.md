@@ -18,7 +18,7 @@ are the game (arena, `__sdfGame.bareSkeleton(true)`), front, side and back.
 | Segment | Bones in its piece | Melt / gib group |
 | --- | --- | --- |
 | `axial:2-3` | 7 cervical vertebrae on a disc column | skull |
-| `axial:1-2` | 12 thoracic and 5 lumbar vertebrae, 10 flat ribs a side, costal margin, sternum, sacrum and coccyx | cage |
+| `axial:1-2` | 12 thoracic and 5 lumbar vertebrae, 6 fat ribs a side, costal margin, sternum, sacrum and coccyx | cage |
 | `axial:0-1` | the two hip bones: iliac wing and crest, socket, pubic ring | pelvis |
 | `limb:arm*:5-5` (shoulder ball) | clavicle, scapula (blade, spine, acromion, socket, coracoid) | cage |
 | `limb:arm*:5-7` | humerus: head, tubercle, shaft, condyles | upperArm |
@@ -38,7 +38,7 @@ because the rig's hip joints sit at the top of its pelvis bone.
 | | Vertices | Triangles | Segment meshes |
 | --- | --- | --- | --- |
 | Before (19 segments, surface nets) | 15,110 | 30,284 | 19 |
-| After (19 kit pieces) | 7,342 | 13,732 | 19 |
+| After (19 kit pieces) | 6,992 | 13,064 | 19 |
 
 Same number of meshes and instanced batches as before: a piece replaces a segment's geometry one for one. The skull
 (9,144 vertices in the default sculpt) and the organs are unchanged.
@@ -75,6 +75,20 @@ Three things did that:
 
 Also: leg and one-point limb segments now turn with the body's yaw (`contract.ts`). They did not before, which no one
 could see on a round capsule and which pointed a femur's neck at world +x whichever way the body faced.
+
+## The ribcage and the colour, after the owner's first look in the game
+
+Owner, 2026-11-15, looking through a chest wound: the old ribcage "definitely looks better in game, like it feels
+inside the body", and the new one did not feel part of the body: colour and texture, and "too thin and too many ribs".
+The first kit had ten flat bands painted as clean ivory.
+
+- **Six fat ribs a side**, on the old cage's six heights and envelope, about as thick as its tubes were (2.7 cm tall,
+  1.9 cm through). Ribs 1-4 reach the sternum, 5 and 6 the costal margin.
+- **A bone a wound exposes is meat.** Both bone paints give a kit piece the skull's ivory only where no wound is
+  near (`woundNear`: full within 15 cm of a wound's edge, gone 30 cm out). Through a wound it wears the same patchy
+  red tissue an extracted bone always wore. The ivory is for the body with no wound near: the melt.
+
+`game-chest-wound-new-vs-old.png`: the same six slugs to the chest, kit on the left, `?bonekit=0` on the right.
 
 ## Contracts
 

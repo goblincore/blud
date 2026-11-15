@@ -58,8 +58,9 @@ const CLASSIC = {
   // MOVED 2026-11-15 on purpose (the skeleton kit; the owner: "match the color of the skeleton and skull"): the first
   // paint reads feature.w 0.5 as a skeleton-kit piece and wears it as the skull's ivory (meshBoneSurface boneFlag). A
   // head's flag is step(0.75, w) where it was min(w, 1): the same 0 / 1 for the 0, 1 and 2 a head or an extracted
-  // bone carries, so no head and no extracted bone changed colour. Before: 8232c6723fa94dba.
-  wgsl: '50a328afd3db4710',
+  // bone carries, so no head and no extracted bone changed colour. A kit piece near a wound (woundNear) wears the meat instead.
+  // Before: 8232c6723fa94dba.
+  wgsl: '059c2d6828e72b2c',
 };
 const DEFAULT = {
   zombie: { key: 'zombie:head:2:77b0c2d:skull-sculpt-2@0.005', verts: 9144, tris: 18296, bytes: '44f3c7f58b87817c' },
@@ -71,10 +72,10 @@ const DEFAULT = {
   // paint reads feature.w 0.5 as a skeleton-kit piece and gives it the skull's bone base (boneFlag), and a head's flag
   // is step(0.75, w) where it was min(w, 1): the same 0 / 1 for the 0, 1 and 2 a head or an extracted bone carries,
   // so no head and no extracted bone changed. The head meshes above did not move. Before: wgsl ed73609fd46628d7.
-  wgsl: '93c3269b05fa4aa6',
+  wgsl: '8c1e4f8199000945',
   // Every WGSL text the default page's bone material reaches (the second paint, the bone hash and noise, the shade).
   // MOVED 2026-11-15 with both paints' text (see CLASSIC.wgsl and wgsl above). Before: a6c2599add05ffc5.
-  material: '95263c35bb01f0aa',
+  material: 'a3be7b0aae7cea78',
 };
 /** The name a WGSL source declares first. */
 const nameOf = (src: string): string => /\bfn (\w+)/.exec(src)![1]!;

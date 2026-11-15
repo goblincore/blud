@@ -9,9 +9,9 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
 
 - [x] **Kit** `public/assets/lab/skeleton-kit.glb`, built headless in Blender by `scripts/skeleton-kit/build.sh`
   (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
-  Vertebrae on a disc column, ten flat ribs a side, sternum, sacrum, two hip bones with sockets at the rig's hip
+  Vertebrae on a disc column, six fat ribs a side, sternum, sacrum, two hip bones with sockets at the rig's hip
   joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
-  fibula, talus, a foot. 7,342 vertices and 13,732 triangles a body where the extraction was 15,110 and 30,284; the
+  fibula, talus, a foot. 6,992 vertices and 13,064 triangles a body where the extraction was 15,110 and 30,284; the
   same 19 meshes and batches.
 - [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
   cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
@@ -20,7 +20,9 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
   63), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
   bones follow the hip joints and the shoulder girdle the rig's clavicle (`KitFrame`); leg segments turn with the
   body's yaw (`contract.ts`).
-- [x] **Colour** matches the skull: both bone paints wear a kit piece as the skull's ivory with tissue in patches.
+- [x] **Colour**: a kit bone with no wound near it wears the skull's ivory with tissue in patches (the melt); one a wound
+  exposes wears the meat an extracted bone always wore. Owner's first look (2026-11-15): ten thin ivory ribs through a
+  chest wound did not feel part of the body, so the cage went back to six fat ribs and exposed bone back to meat.
 - [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
   `kitJointGaps` measure joint separation.
 - [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);

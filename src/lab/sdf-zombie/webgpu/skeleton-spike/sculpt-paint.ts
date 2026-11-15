@@ -234,6 +234,8 @@ export interface SculptPaintSurface {
  *  fewer blood blotches than the first paint, shaded hollows, stained rims, the lines, the teeth and the cavities. */
 export function sculptPaintSurface(
   L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: number, boneColor: Vec3, deepColor: Vec3, expo: number, foot = 0,
+  /** The WGSL's woundNear: 1 within 15 cm of a wound's edge, 0 from 30 cm out. Only a skeleton-kit piece reads it. */
+  near = expo > 0 ? 1 : 0,
 ): SculptPaintSurface {
   const headFlag = w >= 0.75 ? 1 : 0, soldierHead = w >= 1.5 ? 1 : 0;   // 0.5 is a skeleton-kit piece: not a head
   const noise = (s: number, o: Vec3) => boneNoise3([pLocal[0] * s + o[0], pLocal[1] * s + o[1], pLocal[2] * s + o[2]]);
@@ -241,7 +243,8 @@ export function sculptPaintSurface(
   const weave = noise(44, [7.1, 3.3, 9.7]), grain = noise(110, [2, 5, 1]);
   const blood = smoothstep(0.50, 0.60, blotch * 0.72 + warp * 0.28);
   const connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1 - blood * 0.85);
-  const boneFlag = Math.max(headFlag, ((w >= 0.25 ? 1 : 0) - headFlag) * 0.85);   // a skeleton-kit piece wears the skull's bone
+  // A skeleton-kit piece wears the skull's bone where no wound is near, and an extracted bone's meat where one is.
+  const boneFlag = Math.max(headFlag, ((w >= 0.25 ? 1 : 0) - headFlag) * 0.85 * (1 - near));
   const ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1 - blood * 0.85) * (1 - boneFlag);
   const bloodCol = mix3([0.055, 0.004, 0.008], [deepColor[0] * 0.55, deepColor[1] * 0.55, deepColor[2] * 0.55], 0.35);
   const mul = (a: Vec3, b: Vec3): Vec3 => [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
@@ -473,11 +476,13 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let soldierHead = step(1.5, feature.w);
   let q = feature.xyz;
   var expo = 0.0;
+  var woundNear = 0.0;   // 1 within 15 cm of a wound's edge, 0 from 30 cm out: what a wound can show of a bone
   for (var i = 0; i < 64; i = i + 1) {
     if (f32(i) >= woundCount) { break; }
     let w = textureLoad(woundTex, vec2<i32>(i, 0), 0);
     let dist = length(pWorld - w.xyz);
     expo = max(expo, clamp(1.0 - dist / max(w.w * 1.15, 1e-3), 0.0, 1.0));
+    woundNear = max(woundNear, clamp(2.0 - (dist - w.w) / 0.15, 0.0, 1.0));
   }
   expo = smoothstep(0.0, 1.0, expo);
 
@@ -487,9 +492,11 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let grain = boneNoise(pLocal * 110.0 + vec3<f32>(2.0, 5.0, 1.0));
   let blood = smoothstep(0.50, 0.60, blotch * 0.72 + warp * 0.28);
   let connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1.0 - blood * 0.85);
-  // A skeleton-kit piece (feature.w 0.5, skeleton-kit.ts) is a whole bone seen bare beside the skull: it wears the
-  // skull's bone base, with tissue left in patches (boneFlag). The skull's own marks stay the head's alone.
-  let boneFlag = max(headFlag, (step(0.25, feature.w) - headFlag) * 0.85);
+  // A skeleton-kit piece (feature.w 0.5, skeleton-kit.ts) seen with NO wound near it is a whole bone bare beside the
+  // skull (the melt): it wears the skull's bone base, with tissue left in patches (boneFlag). Where a wound exposes
+  // it, it is bone inside a body, and wears the meat an extracted bone always wore: clean ivory ribs through a chest
+  // wound read as not part of the body (owner, 2026-11-15). The skull's own marks stay the head's alone.
+  let boneFlag = max(headFlag, (step(0.25, feature.w) - headFlag) * 0.85 * (1.0 - woundNear));
   let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1.0 - blood * 0.85) * (1.0 - boneFlag);
   let bloodCol = mix(vec3<f32>(0.055, 0.004, 0.008), deepColor * 0.55, 0.35);
   let boneBase = boneColor * vec3<f32>(0.84, 0.76, 0.56);

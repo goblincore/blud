@@ -5,7 +5,7 @@
 // The surface-nets mesh of a bone segment IS its SDF capsules, so a bare skeleton read as sausages: a ball for a
 // shoulder, one rod for a forearm, no vertebrae, femurs that began below the pelvis (owner, 2026-11-15, watching the
 // melt strip a body). The kit is one low-poly mesh for each segment, built in Blender against the zombie's rig
-// (scripts/skeleton-kit/build_kit.py, public/assets/lab/skeleton-kit.glb): vertebrae on a disc column, ten flat ribs
+// (scripts/skeleton-kit/build_kit.py, public/assets/lab/skeleton-kit.glb): vertebrae on a disc column, six fat ribs
 // and a sternum, a pelvis with sockets at the rig's hip joints, clavicle and scapula on the shoulder, humerus, radius
 // and ulna, a fist, femur with head and neck, kneecap, tibia and fibula, a foot.
 //
