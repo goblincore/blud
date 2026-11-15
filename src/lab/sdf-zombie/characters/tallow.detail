@@ -31,12 +31,12 @@
   bar  torso on chest from=0.6541 to=0.6541 offset=(-0.3906,-0.0687,0.3234) tip=(-0.0104,0.015,-0.0392) bend=(-0.0021,-0.0065,0.0042) r=0.02 blend=0.01
   blob torso on spine1 at=0.1209 offset=(0.0162,0.0659,0.6268) r=0.01 blend=0.004
   blob torso on spine1 at=0.156 offset=(0.0114,0.0659,0.6269) r=0.01 blend=0.004
-  blob torso on spine1 at=0.1705 offset=(0,0.0659,0.627) r=0.01 blend=0.004
+  blob torso on spine1 at=0.1705 offset=(0,0.0659,0.6269) r=0.01 blend=0.004
   blob torso on spine1 at=0.156 offset=(-0.0114,0.0659,0.6269) r=0.01 blend=0.004
   blob torso on spine1 at=0.1209 offset=(-0.0162,0.0659,0.6268) r=0.01 blend=0.004
-  blob torso on spine1 at=0.0859 offset=(-0.0115,0.0659,0.6266) r=0.01 blend=0.004
+  blob torso on spine1 at=0.086 offset=(-0.0115,0.0659,0.6266) r=0.01 blend=0.004
   blob torso on spine1 at=0.0715 offset=(0,0.0658,0.6265) r=0.01 blend=0.004
-  blob torso on spine1 at=0.0859 offset=(0.0115,0.0659,0.6266) r=0.01 blend=0.004
+  blob torso on spine1 at=0.086 offset=(0.0115,0.0659,0.6266) r=0.01 blend=0.004
 
   # ---- nipples: a low disc and a small swelling, low on each breast ----
   blob torso on chest at=0.9565 offset=(0.1518,-0.081,0.3812) r=0.03 deep=0.30 blend=0.005
@@ -49,19 +49,19 @@
   blob torso on pelvis at=0 offset=(-0.3914,-0.0776,-0.2152) r=0.0175 blend=0.008
   blob torso on spine1 at=0.4691 offset=(-0.562,-0.0076,-0.0724) r=0.015 blend=0.008
   blob torso on pelvis at=0.7552 offset=(-0.6548,0,0.0907) r=0.0146 blend=0.008
-  blob torso on spine1 at=0.1143 offset=(0.6254,0.0246,0.2337) r=0.0189 blend=0.008
+  blob torso on spine1 at=0.1143 offset=(0.6256,0.0246,0.2338) r=0.0189 blend=0.008
   blob torso on pelvis at=0 offset=(0.432,-0.0471,-0.1621) r=0.0139 blend=0.008
-  blob torso on pelvis at=0.4017 offset=(0.6241,0,0.1365) r=0.0155 blend=0.008
+  blob torso on pelvis at=0.4017 offset=(0.6242,0,0.1365) r=0.0155 blend=0.008
   blob torso on pelvis at=0.8107 offset=(0.655,0,-0.0263) r=0.0187 blend=0.008
-  blob torso on pelvis at=0 offset=(0.3209,-0.111,0.4946) r=0.0123 blend=0.008
+  blob torso on pelvis at=0 offset=(0.3307,-0.1133,0.5068) r=0.0123 blend=0.008
   blob torso on pelvis at=0 offset=(-0.2562,-0.056,-0.404) r=0.016 blend=0.008
-  blob torso on pelvis at=0.4653 offset=(0.6292,0,0.1419) r=0.0143 blend=0.008
+  blob torso on pelvis at=0.4653 offset=(0.6291,0,0.1419) r=0.0143 blend=0.008
   blob torso on pelvis at=0.5106 offset=(-0.6179,0,-0.1108) r=0.0145 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.4632,-0.0939,0.3877) r=0.0137 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.4729,-0.0963,0.3941) r=0.0137 blend=0.008
   blob torso on pelvis at=0.4573 offset=(-0.3518,0,-0.3289) r=0.0188 blend=0.008
   blob torso on spine1 at=0.5584 offset=(0.5088,-0.0083,-0.0786) r=0.0185 blend=0.008
   blob torso on pelvis at=0.6363 offset=(0.6452,0,-0.0659) r=0.0131 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.5156,-0.041,0.3601) r=0.0136 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.5147,-0.0423,0.3596) r=0.0136 blend=0.008
   blob torso on spine1 at=0.1501 offset=(-0.5718,-0.0222,-0.2111) r=0.0196 blend=0.008
   blob torso on pelvis at=0.6154 offset=(-0.6462,0,-0.005) r=0.019 blend=0.008
   blob torso on pelvis at=0.0889 offset=(0.4118,0,-0.2561) r=0.0184 blend=0.008
@@ -71,58 +71,58 @@
   blob torso on spine1 at=0.1946 offset=(-0.6296,0.0238,0.2261) r=0.0144 blend=0.008
   blob torso on pelvis at=0.1144 offset=(-0.0672,0,-0.4065) r=0.0178 blend=0.008
   blob torso on spine1 at=0 offset=(-0.6379,0.0209,0.2124) r=0.0126 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4566,-0.1224,0.3215) r=0.0174 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4779,-0.1251,0.3335) r=0.0174 blend=0.008
   blob torso on spine1 at=0.5328 offset=(-0.5656,0.0013,0.0128) r=0.017 blend=0.008
   blob torso on pelvis at=0 offset=(0.3536,-0.0836,-0.312) r=0.0142 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.535,-0.0291,0.331) r=0.0131 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.5326,-0.0299,0.3299) r=0.0131 blend=0.008
   blob torso on pelvis at=0.755 offset=(0.3298,0,-0.344) r=0.0147 blend=0.008
   blob torso on pelvis at=0.6381 offset=(-0.6456,0,-0.0285) r=0.0187 blend=0.008
   blob torso on pelvis at=0.7579 offset=(-0.303,0,-0.3623) r=0.0158 blend=0.008
   blob torso on pelvis at=0 offset=(0.3507,-0.0074,-0.3403) r=0.0148 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2735,-0.0199,0.5481) r=0.0168 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2721,-0.021,0.5456) r=0.0168 blend=0.008
   blob torso on spine1 at=0.5018 offset=(0.5377,-0.01,-0.0953) r=0.0121 blend=0.008
   blob torso on spine1 at=0.1427 offset=(-0.6108,-0.0175,-0.1665) r=0.0196 blend=0.008
   blob torso on spine1 at=0.1557 offset=(0.216,-0.0406,-0.3862) r=0.0138 blend=0.008
   blob torso on pelvis at=0 offset=(-0.1754,-0.0099,-0.4295) r=0.0132 blend=0.008
   blob torso on pelvis at=0 offset=(0.3424,-0.0228,-0.342) r=0.0192 blend=0.008
   blob torso on pelvis at=0.9673 offset=(0.5744,0,-0.2159) r=0.0156 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4186,-0.1258,0.3846) r=0.02 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2284,-0.0732,0.5472) r=0.0159 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4867,-0.0638,0.375) r=0.0193 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4401,-0.1297,0.4) r=0.02 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2305,-0.0755,0.5512) r=0.0159 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4896,-0.0669,0.3769) r=0.0193 blend=0.008
   blob torso on spine1 at=0.1073 offset=(0.6581,0.0083,0.0792) r=0.0196 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.2309,-0.0209,0.5647) r=0.0135 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.2298,-0.0217,0.5623) r=0.0135 blend=0.008
   blob torso on pelvis at=0.579 offset=(-0.5121,0,-0.2307) r=0.0155 blend=0.008
-  blob torso on spine1 at=0.012 offset=(0.6215,0.0262,0.2493) r=0.017 blend=0.008
+  blob torso on spine1 at=0.012 offset=(0.6217,0.0262,0.2493) r=0.017 blend=0.008
   blob torso on pelvis at=0.5085 offset=(-0.3183,0,-0.3602) r=0.0164 blend=0.008
-  blob torso on spine1 at=0.0792 offset=(0.6355,0.0212,0.2017) r=0.0188 blend=0.008
+  blob torso on spine1 at=0.0792 offset=(0.6354,0.0212,0.2017) r=0.0188 blend=0.008
   blob torso on pelvis at=0.586 offset=(-0.1802,0,-0.4119) r=0.0186 blend=0.008
   blob torso on pelvis at=0 offset=(-0.0444,-0.0365,-0.3962) r=0.0197 blend=0.008
-  blob torso on pelvis at=0.2981 offset=(0.5906,0,0.231) r=0.0174 blend=0.008
+  blob torso on pelvis at=0.3008 offset=(0.5888,0,0.2303) r=0.0174 blend=0.008
   blob torso on pelvis at=0 offset=(0.3997,-0.0272,-0.2598) r=0.014 blend=0.008
   blob torso on spine1 at=0.2376 offset=(0.6487,0.0072,0.0689) r=0.0164 blend=0.008
-  blob torso on pelvis at=0 offset=(0.3601,-0.1207,0.4592) r=0.0147 blend=0.008
+  blob torso on pelvis at=0 offset=(0.3745,-0.1237,0.4738) r=0.0147 blend=0.008
   blob torso on pelvis at=0.261 offset=(0.1404,0,-0.4249) r=0.0129 blend=0.008
   blob torso on pelvis at=0 offset=(-0.0979,-0.0919,-0.3986) r=0.0153 blend=0.008
   blob torso on pelvis at=0.1664 offset=(-0.4813,0,-0.2057) r=0.0131 blend=0.008
   blob torso on pelvis at=0.3421 offset=(0.553,0,-0.1725) r=0.0144 blend=0.008
   blob torso on pelvis at=0 offset=(0.3721,-0.0798,-0.2712) r=0.0179 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4123,-0.0228,0.4824) r=0.0131 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4102,-0.0238,0.4803) r=0.0131 blend=0.008
   blob torso on pelvis at=0.4987 offset=(-0.6428,0,0.0932) r=0.0123 blend=0.008
   blob torso on spine1 at=0.0556 offset=(-0.6415,0.0195,0.1856) r=0.0174 blend=0.008
   blob torso on pelvis at=0 offset=(0.4695,-0.0203,-0.1493) r=0.0157 blend=0.008
   blob torso on pelvis at=0 offset=(-0.4452,-0.0061,-0.2013) r=0.0169 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.3773,-0.0931,0.4675) r=0.0172 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.3851,-0.0964,0.475) r=0.0172 blend=0.008
   blob torso on pelvis at=0.8198 offset=(-0.6486,0,0.1143) r=0.019 blend=0.008
   blob torso on pelvis at=0 offset=(-0.0974,-0.0062,-0.4157) r=0.017 blend=0.008
   blob torso on spine1 at=0.5089 offset=(0.5418,-0.0063,-0.0604) r=0.0182 blend=0.008
   blob torso on spine1 at=0.0923 offset=(-0.6127,0.0299,0.2845) r=0.0137 blend=0.008
   blob torso on pelvis at=0.13 offset=(-0.2592,0,-0.411) r=0.0124 blend=0.008
   blob torso on pelvis at=0 offset=(-0.1295,-0.026,-0.4239) r=0.0148 blend=0.008
-  blob torso on pelvis at=0 offset=(0.3353,-0.0768,0.5072) r=0.0132 blend=0.008
+  blob torso on pelvis at=0 offset=(0.339,-0.0789,0.5117) r=0.0132 blend=0.008
   blob torso on pelvis at=0 offset=(0.3748,-0.0055,-0.3034) r=0.0178 blend=0.008
   blob torso on pelvis at=0.6048 offset=(0.6486,0,0.0598) r=0.0161 blend=0.008
   blob torso on spine1 at=0.0983 offset=(-0.6394,-0.013,-0.1235) r=0.0162 blend=0.008
-  blob torso on pelvis at=0.489 offset=(0.6361,0,0.099) r=0.0166 blend=0.008
+  blob torso on pelvis at=0.489 offset=(0.636,0,0.099) r=0.0166 blend=0.008
   blob torso on pelvis at=0.3576 offset=(0.3256,0,-0.3591) r=0.0161 blend=0.008
   blob torso on pelvis at=0 offset=(-0.1526,-0.0673,-0.4164) r=0.0175 blend=0.008
   blob torso on pelvis at=0 offset=(-0.2879,-0.0951,-0.3692) r=0.0179 blend=0.008
@@ -131,44 +131,44 @@
   blob torso on pelvis at=0 offset=(-0.4529,-0.0233,-0.1561) r=0.0196 blend=0.008
   blob torso on pelvis at=0 offset=(0.1066,-0.0378,-0.4134) r=0.0182 blend=0.008
   blob torso on pelvis at=0 offset=(0.3552,-0.0317,-0.3335) r=0.0139 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4702,-0.1117,0.3265) r=0.016 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4866,-0.1143,0.3358) r=0.016 blend=0.008
   blob torso on spine1 at=0.1143 offset=(0.657,0.0128,0.1218) r=0.0143 blend=0.008
   blob torso on pelvis at=0.0681 offset=(0.2796,0,-0.4005) r=0.0136 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.3121,-0.1152,0.4864) r=0.0192 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.3233,-0.1193,0.5001) r=0.0192 blend=0.008
   blob torso on pelvis at=0.3109 offset=(-0.3909,0,-0.2935) r=0.0161 blend=0.008
   blob torso on pelvis at=0 offset=(-0.194,-0.0178,-0.422) r=0.0193 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.3658,-0.0251,0.5041) r=0.0185 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.3641,-0.0265,0.5021) r=0.0185 blend=0.008
   blob torso on pelvis at=0 offset=(-0.0454,-0.0331,-0.3988) r=0.0182 blend=0.008
   blob torso on pelvis at=0.3309 offset=(-0.0561,0,-0.4068) r=0.012 blend=0.008
   blob torso on spine1 at=0.0565 offset=(-0.6522,0.0157,0.1496) r=0.0155 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2969,-0.0741,0.5254) r=0.0138 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2656,-0.0336,0.55) r=0.0145 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.29,-0.1054,0.5054) r=0.0184 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2997,-0.0761,0.5293) r=0.0138 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2649,-0.0348,0.5486) r=0.0145 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.2978,-0.1091,0.5163) r=0.0184 blend=0.008
   blob torso on pelvis at=0.2856 offset=(0.351,0,-0.3312) r=0.0196 blend=0.008
   blob torso on pelvis at=0.4289 offset=(0.6246,0,-0.0532) r=0.018 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4356,-0.0612,0.4482) r=0.0132 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4377,-0.0631,0.4499) r=0.0132 blend=0.008
   blob torso on pelvis at=0 offset=(0.2955,-0.0993,-0.3641) r=0.0158 blend=0.008
   blob torso on pelvis at=0.197 offset=(0.0061,0,-0.3982) r=0.0123 blend=0.008
   blob torso on pelvis at=0.3645 offset=(0.2153,0,-0.4189) r=0.014 blend=0.008
   blob torso on pelvis at=0.4935 offset=(-0.1526,0,-0.4214) r=0.0121 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4569,-0.0893,0.3899) r=0.0196 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4658,-0.0931,0.3959) r=0.0196 blend=0.008
   blob torso on pelvis at=0 offset=(-0.3577,-0.0826,-0.2946) r=0.0197 blend=0.008
   blob torso on spine1 at=0.1927 offset=(-0.0245,-0.037,-0.3523) r=0.0177 blend=0.008
-  blob torso on pelvis at=0.4165 offset=(0.617,0,0.1737) r=0.015 blend=0.008
+  blob torso on pelvis at=0.4181 offset=(0.617,0,0.1735) r=0.015 blend=0.008
   blob torso on spine1 at=0.2027 offset=(-0.2295,-0.0384,-0.3649) r=0.0182 blend=0.008
   blob torso on spine1 at=0 offset=(0.6668,0.0025,0.0627) r=0.0136 blend=0.008
   blob torso on pelvis at=0 offset=(0.055,-0.0064,-0.4) r=0.0179 blend=0.008
   blob torso on pelvis at=0 offset=(0.4411,-0.0435,-0.1521) r=0.0135 blend=0.008
   blob torso on spine1 at=0.2673 offset=(0.6225,0.0226,0.2146) r=0.0191 blend=0.008
-  blob torso on pelvis at=0 offset=(0.3679,-0.0787,0.4882) r=0.0132 blend=0.008
+  blob torso on pelvis at=0 offset=(0.3723,-0.0809,0.4928) r=0.0132 blend=0.008
   blob torso on pelvis at=0 offset=(-0.1764,-0.1038,-0.4076) r=0.0127 blend=0.008
   blob torso on pelvis at=0 offset=(-0.3613,-0.0917,-0.2846) r=0.0171 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4552,-0.0994,0.3943) r=0.0126 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4665,-0.1016,0.4021) r=0.0126 blend=0.008
   blob torso on pelvis at=0 offset=(-0.1662,-0.0222,-0.4274) r=0.015 blend=0.008
   blob torso on pelvis at=0 offset=(-0.2459,-0.0101,-0.4121) r=0.0174 blend=0.008
-  blob torso on pelvis at=0 offset=(0.486,-0.0951,0.3415) r=0.0133 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4964,-0.0972,0.3474) r=0.0133 blend=0.008
   blob torso on spine1 at=0.2162 offset=(-0.4939,-0.0261,-0.2487) r=0.0174 blend=0.008
-  blob torso on pelvis at=0.3589 offset=(-0.6056,0,0.1875) r=0.0182 blend=0.008
+  blob torso on pelvis at=0.3615 offset=(-0.605,0,0.1871) r=0.0182 blend=0.008
   blob torso on spine1 at=0.2399 offset=(0.6449,0.0064,0.0608) r=0.0197 blend=0.008
   blob torso on pelvis at=0 offset=(0.0305,-0.0448,-0.3934) r=0.0153 blend=0.008
   blob torso on spine1 at=0.176 offset=(-0.5939,-0.0206,-0.1962) r=0.0128 blend=0.008
@@ -185,19 +185,19 @@
   blob torso on spine1 at=0.0175 offset=(0.6697,0.0019,0.0181) r=0.0133 blend=0.008
   blob torso on pelvis at=0.6381 offset=(0.1679,0,-0.4132) r=0.0159 blend=0.008
   blob torso on pelvis at=0 offset=(0.204,-0.013,-0.4202) r=0.0199 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4801,-0.0664,0.3827) r=0.0193 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4835,-0.0696,0.385) r=0.0193 blend=0.008
   blob torso on pelvis at=0.8697 offset=(0.2453,0,-0.3931) r=0.0121 blend=0.008
   blob torso on spine1 at=0 offset=(-0.6534,0.004,0.1182) r=0.0193 blend=0.008
   blob torso on pelvis at=0 offset=(0.3856,-0.0721,-0.2564) r=0.0142 blend=0.008
   blob torso on pelvis at=0.8084 offset=(0.0052,0,-0.3811) r=0.0125 blend=0.008
   blob torso on pelvis at=0 offset=(-0.2995,-0.0647,-0.3756) r=0.0171 blend=0.008
-  blob torso on pelvis at=1 offset=(0.6633,0.0011,0.0211) r=0.0189 blend=0.008
+  blob torso on spine1 at=0 offset=(0.6633,0.0011,0.0211) r=0.0189 blend=0.008
   blob torso on pelvis at=0 offset=(-0.3935,-0.0935,-0.1677) r=0.016 blend=0.008
   blob torso on spine1 at=0.2366 offset=(0.2022,-0.039,-0.3712) r=0.0126 blend=0.008
   blob torso on pelvis at=0.0096 offset=(-0.0333,0,-0.4045) r=0.0121 blend=0.008
   blob torso on spine1 at=0.1268 offset=(0.6365,0.0225,0.2136) r=0.0136 blend=0.008
   blob torso on pelvis at=0.5125 offset=(0.2877,0,-0.3837) r=0.0154 blend=0.008
-  blob torso on pelvis at=0.836 offset=(-0.6179,0,0.2391) r=0.0145 blend=0.008
+  blob torso on pelvis at=0.837 offset=(-0.6179,0,0.239) r=0.0145 blend=0.008
   blob torso on spine1 at=0.1445 offset=(0.3226,-0.0339,-0.3221) r=0.0189 blend=0.008
   blob torso on spine1 at=0.2256 offset=(0.0003,-0.0357,-0.3398) r=0.0192 blend=0.008
   blob torso on spine1 at=0.2469 offset=(-0.2441,-0.0373,-0.355) r=0.0122 blend=0.008
@@ -208,12 +208,12 @@
   blob torso on spine1 at=0.3215 offset=(-0.6313,-0.0041,-0.0389) r=0.0131 blend=0.008
   blob torso on pelvis at=0.5452 offset=(-0.6428,0,0.0423) r=0.0185 blend=0.008
   blob torso on pelvis at=0 offset=(-0.411,-0.0814,-0.1334) r=0.0152 blend=0.008
-  blob torso on pelvis at=0 offset=(-0.3778,-0.0888,0.4714) r=0.0164 blend=0.008
+  blob torso on pelvis at=0 offset=(-0.3846,-0.0919,0.478) r=0.0164 blend=0.008
   blob torso on pelvis at=0.5526 offset=(-0.6284,0,0.1504) r=0.0179 blend=0.008
   blob torso on pelvis at=0 offset=(0.3194,-0.0593,-0.3642) r=0.0149 blend=0.008
   blob torso on pelvis at=0 offset=(0.0156,-0.0999,-0.3726) r=0.0128 blend=0.008
   blob torso on spine1 at=0.5231 offset=(-0.5617,-0.0008,-0.0072) r=0.017 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2815,-0.062,0.5358) r=0.0143 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2829,-0.0638,0.5379) r=0.0143 blend=0.008
   blob torso on pelvis at=0.4204 offset=(0.6112,0,-0.0875) r=0.019 blend=0.008
   blob torso on spine1 at=0.0975 offset=(-0.6621,-0.0045,-0.0424) r=0.0156 blend=0.008
   blob torso on spine1 at=0.3843 offset=(-0.6188,0.0226,0.2149) r=0.0123 blend=0.008
@@ -222,25 +222,25 @@
   blob torso on pelvis at=0.1145 offset=(0.1832,0,-0.4227) r=0.0186 blend=0.008
   blob torso on spine1 at=0.1185 offset=(-0.5404,-0.0252,-0.2393) r=0.0151 blend=0.008
   blob torso on spine1 at=0.3743 offset=(0.5856,-0.0104,-0.099) r=0.0198 blend=0.008
-  blob torso on pelvis at=0.3992 offset=(-0.5992,0,0.2177) r=0.0186 blend=0.008
+  blob torso on pelvis at=0.4026 offset=(-0.5983,0,0.2172) r=0.0186 blend=0.008
   blob torso on spine1 at=0.4511 offset=(-0.6055,0.0104,0.0985) r=0.0175 blend=0.008
   blob torso on spine1 at=0.3815 offset=(-0.5988,0.0287,0.2735) r=0.0189 blend=0.008
   blob torso on pelvis at=0.7536 offset=(-0.5925,0,-0.1826) r=0.0162 blend=0.008
   blob torso on spine1 at=0.3033 offset=(-0.6352,0.0026,0.0243) r=0.0178 blend=0.008
   blob torso on spine1 at=0.1961 offset=(-0.6087,-0.0183,-0.1742) r=0.0127 blend=0.008
-  blob torso on pelvis at=0.4872 offset=(-0.5791,0,0.2874) r=0.0188 blend=0.008
+  blob torso on pelvis at=0.4927 offset=(-0.5772,0,0.2865) r=0.0188 blend=0.008
   blob torso on pelvis at=0.638 offset=(-0.6493,0,-0.0415) r=0.0139 blend=0.008
-  blob torso on pelvis at=0.514 offset=(0.6221,0,0.1581) r=0.0195 blend=0.008
+  blob torso on pelvis at=0.5146 offset=(0.6221,0,0.158) r=0.0195 blend=0.008
   blob torso on pelvis at=0 offset=(0.4207,-0.0792,-0.1114) r=0.0144 blend=0.008
   blob torso on spine1 at=0.0693 offset=(0.6526,-0.0089,-0.0847) r=0.0166 blend=0.008
   blob torso on spine1 at=0.1009 offset=(0.5671,-0.0233,-0.2216) r=0.0152 blend=0.008
   blob torso on pelvis at=0.8598 offset=(-0.3016,0,-0.3551) r=0.0178 blend=0.008
   blob torso on pelvis at=0.7061 offset=(-0.652,0,0.0032) r=0.0191 blend=0.008
   blob torso on pelvis at=0 offset=(-0.4594,-0.0051,-0.1796) r=0.0198 blend=0.008
-  blob torso on pelvis at=0 offset=(0.2831,-0.0264,0.5449) r=0.0152 blend=0.008
+  blob torso on pelvis at=0 offset=(0.2819,-0.0275,0.5429) r=0.0152 blend=0.008
   blob torso on pelvis at=0.4581 offset=(0.0742,0,-0.4043) r=0.0123 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4244,-0.1042,0.4237) r=0.0134 blend=0.008
-  blob torso on pelvis at=0.3777 offset=(0.5864,0,0.2729) r=0.0132 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4363,-0.1068,0.4331) r=0.0134 blend=0.008
+  blob torso on pelvis at=0.3806 offset=(0.5841,0,0.2719) r=0.0132 blend=0.008
   blob torso on spine1 at=0.1716 offset=(-0.6385,0.0179,0.1702) r=0.0196 blend=0.008
   blob torso on spine1 at=0.4644 offset=(-0.5852,0.0311,0.2962) r=0.0177 blend=0.008
   blob torso on spine1 at=0 offset=(-0.6605,0.0067,0.1114) r=0.014 blend=0.008
@@ -261,12 +261,12 @@
   blob torso on pelvis at=0 offset=(0.1138,-0.106,-0.3929) r=0.0177 blend=0.008
   blob torso on pelvis at=0 offset=(0.1346,-0.0157,-0.4235) r=0.0165 blend=0.008
   blob torso on spine1 at=0.0718 offset=(-0.6399,-0.0118,-0.1123) r=0.02 blend=0.008
-  blob torso on pelvis at=0 offset=(0.4045,-0.0167,0.4815) r=0.0194 blend=0.008
+  blob torso on pelvis at=0 offset=(0.4021,-0.018,0.4791) r=0.0194 blend=0.008
   blob torso on pelvis at=0 offset=(-0.3849,-0.0789,-0.2293) r=0.0196 blend=0.008
-  blob torso on pelvis at=0.5883 offset=(0.6233,0,0.1832) r=0.0166 blend=0.008
+  blob torso on pelvis at=0.5894 offset=(0.6232,0,0.1831) r=0.0166 blend=0.008
   blob torso on spine1 at=0.0254 offset=(-0.6639,0.0107,0.1023) r=0.0129 blend=0.008
   blob torso on pelvis at=0.4835 offset=(0.1312,0,-0.4117) r=0.0191 blend=0.008
-  blob torso on pelvis at=0 offset=(0.5181,-0.0384,0.3522) r=0.0158 blend=0.008
+  blob torso on pelvis at=0 offset=(0.5169,-0.0399,0.3516) r=0.0158 blend=0.008
   blob torso on pelvis at=0 offset=(-0.2392,-0.0053,-0.4159) r=0.016 blend=0.008
   blob torso on pelvis at=0 offset=(0.3393,-0.0731,-0.335) r=0.0163 blend=0.008
   blob torso on pelvis at=0.5976 offset=(0.0055,0,-0.3853) r=0.0164 blend=0.008
@@ -307,20 +307,20 @@
   blob torso on spine1 at=0.2776 offset=(-0.6287,-0.0097,-0.0927) r=0.0145 blend=0.008
 
   # ---- stretch marks: gut sides, flanks, breasts ----
-  bar  torso on spine1 from=0.1793 to=0.1793 offset=(0.5036,0.0481,0.4573) tip=(0.0108,-0.0227,-0.0082) bend=(0.001,-0.0003,-0.0002) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.1794 to=0.1794 offset=(0.5036,0.0481,0.4573) tip=(0.0108,-0.0227,-0.0082) bend=(0.001,-0.0003,-0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.1019 to=0.1019 offset=(0.5143,0.047,0.4468) tip=(0.0091,-0.0227,-0.0095) bend=(0.0009,0,-0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.6209 to=0.6209 offset=(0.4575,0.0483,0.4593) tip=(0.0198,-0.023,-0.0021) bend=(0.0015,-0.0018,0.0004) r=0.004 blend=0.002
   bar  torso on spine1 from=0.5401 to=0.5401 offset=(0.4773,0.0478,0.4548) tip=(0.0182,-0.0229,-0.0041) bend=(0.0015,-0.0015,0.0003) r=0.004 blend=0.002
   bar  torso on spine1 from=0.4778 to=0.4778 offset=(0.5393,0.042,0.3993) tip=(0.0235,-0.0393,-0.0112) bend=(0.0021,-0.0012,0.0006) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3424 to=0.3424 offset=(0.5628,0.0404,0.3841) tip=(0.0179,-0.0393,-0.015) bend=(0.0018,-0.0007,0.0005) r=0.004 blend=0.002
   bar  torso on spine1 from=0.1409 to=0.1409 offset=(0.4404,0.0533,0.5068) tip=(0.0084,-0.026,-0.0046) bend=(0.0011,-0.0002,-0.0001) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.0502 to=0.0502 offset=(0.4488,0.0525,0.4995) tip=(0.0066,-0.026,-0.0063) bend=(0.0013,0.0002,0) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.0503 to=0.0503 offset=(0.4488,0.0525,0.4995) tip=(0.0067,-0.026,-0.0062) bend=(0.0011,0.0002,-0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.7168 to=0.7168 offset=(0.4473,0.0474,0.4506) tip=(0.0338,-0.0346,-0.0039) bend=(0.0026,-0.002,0.0012) r=0.004 blend=0.002
   bar  torso on spine1 from=0.5953 to=0.5953 offset=(0.4811,0.0466,0.4431) tip=(0.0302,-0.0346,-0.0087) bend=(0.0023,-0.0016,0.0008) r=0.004 blend=0.002
   bar  torso on spine1 from=0.6539 to=0.6539 offset=(0.3773,0.0535,0.5088) tip=(0.0244,-0.0363,0.0061) bend=(0.0022,-0.0018,0.0012) r=0.004 blend=0.002
   bar  torso on spine1 from=0.5226 to=0.5226 offset=(0.4018,0.0537,0.5111) tip=(0.0216,-0.0363,0.0019) bend=(0.0019,-0.0014,0.0008) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.5408 to=0.5408 offset=(0.4931,0.0463,0.4402) tip=(0.0188,-0.0228,-0.0059) bend=(0.0015,-0.0015,0.0003) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.462 to=0.462 offset=(0.5119,0.0454,0.432) tip=(0.0173,-0.0228,-0.0075) bend=(0.0015,-0.0013,0.0002) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.5408 to=0.5408 offset=(0.4931,0.0463,0.4402) tip=(0.0189,-0.0228,-0.0058) bend=(0.0013,-0.0015,0.0001) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.462 to=0.462 offset=(0.5121,0.0454,0.4321) tip=(0.0171,-0.0228,-0.0077) bend=(0.0013,-0.0013,0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.2915 to=0.2915 offset=(0.3842,0.0565,0.5375) tip=(0.0111,-0.0236,-0.0013) bend=(0.0011,-0.0007,0) r=0.004 blend=0.002
   bar  torso on spine1 from=0.2081 to=0.2081 offset=(0.3953,0.0561,0.5337) tip=(0.01,-0.0236,-0.0028) bend=(0.0011,-0.0004,0) r=0.004 blend=0.002
   bar  torso on spine1 from=0.5541 to=0.5541 offset=(0.3526,0.0562,0.5345) tip=(0.023,-0.0244,-0.0008) bend=(0.0015,-0.0015,0.0006) r=0.004 blend=0.002
@@ -328,7 +328,7 @@
   bar  torso on spine1 from=0.5434 to=0.5434 offset=(0.4096,0.053,0.504) tip=(0.0258,-0.0303,-0.003) bend=(0.0018,-0.0015,0.0007) r=0.004 blend=0.002
   bar  torso on spine1 from=0.437 to=0.437 offset=(0.4354,0.0523,0.4978) tip=(0.0238,-0.0303,-0.0063) bend=(0.0016,-0.0011,0.0004) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3429 to=0.3429 offset=(0.448,0.0521,0.4959) tip=(0.0117,-0.0238,-0.0022) bend=(0.0012,-0.0009,0) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.2591 to=0.2591 offset=(0.4598,0.0516,0.4912) tip=(0.0104,-0.0238,-0.0036) bend=(0.0011,-0.0006,-0.0001) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.2591 to=0.2591 offset=(0.4597,0.0516,0.4912) tip=(0.0104,-0.0238,-0.0036) bend=(0.0011,-0.0006,-0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3269 to=0.3269 offset=(0.4876,0.049,0.4663) tip=(0.0208,-0.0385,-0.0098) bend=(0.0018,-0.0007,0.0004) r=0.004 blend=0.002
   bar  torso on spine1 from=0.1938 to=0.1938 offset=(0.5084,0.0476,0.4526) tip=(0.0165,-0.0385,-0.0136) bend=(0.0017,-0.0002,0.0003) r=0.004 blend=0.002
   bar  torso on spine1 from=0.6725 to=0.6725 offset=(0.5758,0.0101,0.0959) tip=(0.0158,-0.0236,-0.001) bend=(0.0015,-0.0022,0.0011) r=0.004 blend=0.002
@@ -368,24 +368,24 @@
   bar  torso on spine1 from=0.7938 to=0.7938 offset=(-0.5018,0.0395,0.3762) tip=(-0.0303,-0.0319,-0.0054) bend=(-0.0028,-0.0023,0.0011) r=0.004 blend=0.002
   bar  torso on spine1 from=0.6825 to=0.6825 offset=(-0.5321,0.0386,0.3676) tip=(-0.0263,-0.0319,-0.009) bend=(-0.0021,-0.002,0.0007) r=0.004 blend=0.002
   bar  torso on spine1 from=0.246 to=0.246 offset=(-0.4718,0.0507,0.4826) tip=(-0.0138,-0.0211,-0.0076) bend=(-0.001,-0.0005,-0.0002) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.1739 to=0.1739 offset=(-0.4856,0.0497,0.4729) tip=(-0.0125,-0.0211,-0.009) bend=(-0.001,-0.0003,-0.0002) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.174 to=0.174 offset=(-0.4856,0.0497,0.4729) tip=(-0.0125,-0.0211,-0.009) bend=(-0.001,-0.0003,-0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3749 to=0.3749 offset=(-0.3964,0.0554,0.5267) tip=(-0.0127,-0.0209,-0.0014) bend=(-0.0012,-0.001,0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3012 to=0.3012 offset=(-0.4091,0.055,0.5232) tip=(-0.0118,-0.0209,-0.0026) bend=(-0.0011,-0.0007,-0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.56 to=0.56 offset=(-0.4522,0.0497,0.4726) tip=(-0.0235,-0.0401,0.0012) bend=(-0.0022,-0.0015,0.0009) r=0.004 blend=0.002
   bar  torso on spine1 from=0.4173 to=0.4173 offset=(-0.4757,0.0494,0.4696) tip=(-0.0193,-0.04,-0.0031) bend=(-0.002,-0.001,0.0006) r=0.004 blend=0.002
   bar  torso on spine1 from=0.5763 to=0.5763 offset=(-0.3793,0.0544,0.5179) tip=(-0.0305,-0.0369,-0.0006) bend=(-0.0021,-0.0015,0.0011) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.4455 to=0.4455 offset=(-0.4098,0.054,0.5135) tip=(-0.028,-0.0369,-0.0053) bend=(-0.0018,-0.0011,0.0006) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.4455 to=0.4455 offset=(-0.4098,0.054,0.5135) tip=(-0.028,-0.0369,-0.0053) bend=(-0.002,-0.0011,0.0009) r=0.004 blend=0.002
   bar  torso on spine1 from=0.444 to=0.444 offset=(-0.5099,0.0459,0.4363) tip=(-0.0199,-0.0282,-0.0089) bend=(-0.0015,-0.0012,0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3473 to=0.3473 offset=(-0.5298,0.0446,0.4246) tip=(-0.0173,-0.0282,-0.0113) bend=(-0.0013,-0.0008,0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.1897 to=0.1897 offset=(-0.5358,0.0447,0.425) tip=(-0.0066,-0.0211,-0.0054) bend=(-0.0008,-0.0003,-0.0003) r=0.004 blend=0.002
   bar  torso on spine1 from=0.1166 to=0.1166 offset=(-0.5424,0.0439,0.4175) tip=(-0.0052,-0.0211,-0.0063) bend=(-0.0008,0,-0.0003) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.5337 to=0.5337 offset=(-0.4726,0.0483,0.4597) tip=(-0.015,-0.0195,-0.0028) bend=(-0.0013,-0.0015,0.0002) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.5337 to=0.5337 offset=(-0.4726,0.0483,0.4597) tip=(-0.015,-0.0195,-0.0028) bend=(-0.0014,-0.0015,0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.4657 to=0.4657 offset=(-0.4876,0.0478,0.4549) tip=(-0.0139,-0.0195,-0.0041) bend=(-0.0012,-0.0013,0) r=0.004 blend=0.002
   bar  torso on spine1 from=0.6422 to=0.6422 offset=(-0.5274,0.0404,0.3844) tip=(-0.0254,-0.0327,-0.0081) bend=(-0.0022,-0.0018,0.0007) r=0.004 blend=0.002
   bar  torso on spine1 from=0.529 to=0.529 offset=(-0.5528,0.0392,0.373) tip=(-0.0214,-0.0327,-0.0113) bend=(-0.0018,-0.0014,0.0005) r=0.004 blend=0.002
   bar  torso on spine1 from=0.423 to=0.423 offset=(-0.4442,0.0518,0.4929) tip=(-0.015,-0.0214,-0.0033) bend=(-0.0012,-0.0011,0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3481 to=0.3481 offset=(-0.4593,0.0512,0.4874) tip=(-0.0139,-0.0214,-0.0047) bend=(-0.0011,-0.0009,-0.0001) r=0.004 blend=0.002
-  bar  torso on spine1 from=0.2142 to=0.2142 offset=(-0.5286,0.0454,0.4324) tip=(-0.0187,-0.0354,-0.0175) bend=(-0.0017,-0.0003,0.0003) r=0.004 blend=0.002
+  bar  torso on spine1 from=0.2142 to=0.2142 offset=(-0.5286,0.0454,0.4323) tip=(-0.0187,-0.0354,-0.0175) bend=(-0.0017,-0.0003,0.0003) r=0.004 blend=0.002
   bar  torso on spine1 from=0.0951 to=0.0951 offset=(-0.5473,0.0432,0.4113) tip=(-0.0137,-0.0354,-0.0209) bend=(-0.0015,0.0002,0.0002) r=0.004 blend=0.002
   bar  torso on spine1 from=0.3527 to=0.3527 offset=(-0.6395,0.0129,0.1224) tip=(-0.0166,-0.0299,-0.009) bend=(-0.0015,-0.0019,0.0001) r=0.004 blend=0.002
   bar  torso on spine1 from=0.2498 to=0.2498 offset=(-0.6561,0.0116,0.1104) tip=(-0.0123,-0.0297,-0.0095) bend=(-0.0019,-0.0014,-0.0002) r=0.004 blend=0.002
@@ -850,19 +850,19 @@
   bar  torso on spine1 from=0.1908 to=0.1908 offset=(0.4267,0.0541,0.5146) tip=(0.0044,-0.0084,-0.0017) bend=(0.0011,-0.0006,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1617 to=0.1617 offset=(0.4311,0.0538,0.512) tip=(0.0041,-0.0084,-0.0019) bend=(0.001,-0.0005,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1327 to=0.1327 offset=(0.4352,0.0535,0.5093) tip=(0.004,-0.0084,-0.0021) bend=(0.001,-0.0003,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.1037 to=0.1037 offset=(0.4392,0.0532,0.5064) tip=(0.0038,-0.0084,-0.0022) bend=(0.001,-0.0002,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.1037 to=0.1037 offset=(0.4392,0.0532,0.5064) tip=(0.0038,-0.0084,-0.0023) bend=(0.001,-0.0002,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0748 to=0.0748 offset=(0.443,0.0529,0.5033) tip=(0.0036,-0.0084,-0.0024) bend=(0.001,0,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0459 to=0.0459 offset=(0.4467,0.0526,0.5) tip=(0.0035,-0.0084,-0.0026) bend=(0.001,0.0001,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.0172 to=0.0172 offset=(0.4501,0.0522,0.4966) tip=(0.0031,-0.0084,-0.0029) bend=(0.0011,0.0002,-0.0005) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0 to=0 offset=(0.4533,0.0486,0.4931) tip=(0.0031,-0.0084,-0.003) bend=(0.001,0.0004,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.0172 to=0.0172 offset=(0.4501,0.0522,0.4966) tip=(0.0033,-0.0084,-0.0028) bend=(0.001,0.0002,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0 to=0 offset=(0.4534,0.0486,0.4932) tip=(0.0029,-0.0084,-0.0031) bend=(0.0011,0.0004,-0.0005) r=0.009 blend=0.0016
   blob torso on chest at=0.4609 offset=(0.2724,-0.103,0.4844) r=0.0188 blend=0.002
   blob torso on chest at=0.3935 offset=(0.2951,-0.1056,0.497) r=0.0157 blend=0.002
   blob torso on spine1 at=0.5483 offset=(0.3672,0.0547,0.5205) r=0.0161 blend=0.002
   blob torso on spine1 at=0.3275 offset=(0.3947,0.0549,0.5219) r=0.0174 blend=0.002
   blob torso on spine1 at=0.2452 offset=(0.4126,0.0541,0.5147) r=0.0173 blend=0.002
   blob torso on spine1 at=0.1331 offset=(0.431,0.0529,0.5029) r=0.0186 blend=0.002
-  blob torso on spine1 at=0.0761 offset=(0.44,0.0524,0.4988) r=0.0163 blend=0.002
-  blob torso on spine1 at=0 offset=(0.449,0.049,0.4872) r=0.0182 blend=0.002
+  blob torso on spine1 at=0.0761 offset=(0.4399,0.0524,0.4988) r=0.0163 blend=0.002
+  blob torso on spine1 at=0 offset=(0.4491,0.049,0.4873) r=0.0182 blend=0.002
   bar  torso on chest from=0.4813 to=0.4813 offset=(0.275,-0.1044,0.491) tip=(-0.0011,-0.0079,0.0049) bend=(0.0008,-0.0011,0.0003) r=0.0059 blend=0.0016
   bar  torso on chest from=0.4591 to=0.4591 offset=(0.2739,-0.1057,0.4973) tip=(-0.0023,-0.0074,0.0051) bend=(0.0008,-0.0011,0.0003) r=0.0059 blend=0.0016
   bar  torso on chest from=0.4384 to=0.4384 offset=(0.2716,-0.1071,0.5037) tip=(-0.0026,-0.0074,0.0052) bend=(0.0008,-0.0011,0.0004) r=0.0059 blend=0.0016
@@ -951,7 +951,7 @@
   bar  torso on spine1 from=0.0867 to=0.0867 offset=(0.6568,0.018,0.1717) tip=(0.0016,-0.0084,-0.0039) bend=(0.0003,-0.0005,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0585 to=0.0585 offset=(0.6585,0.0175,0.167) tip=(0.0012,-0.0084,-0.004) bend=(0.0002,-0.0002,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0303 to=0.0303 offset=(0.6597,0.017,0.1622) tip=(0.0008,-0.0083,-0.004) bend=(0.0003,0.0001,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.0022 to=0.0022 offset=(0.6605,0.0165,0.1573) tip=(0.0003,-0.0083,-0.0041) bend=(0.0003,0.0004,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.0022 to=0.0022 offset=(0.6604,0.0165,0.1573) tip=(0.0003,-0.0083,-0.0041) bend=(0.0003,0.0004,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0 to=0 offset=(0.6607,0.0088,0.1532) tip=(-0.0002,-0.0083,-0.0041) bend=(0.0004,0.0007,-0.0006) r=0.009 blend=0.0016
   blob torso on spine1 at=0.4379 offset=(0.6144,0.0224,0.2128) r=0.0167 blend=0.002
   blob torso on spine1 at=0.4099 offset=(0.6201,0.0221,0.2103) r=0.0146 blend=0.002
@@ -1007,11 +1007,11 @@
   bar  torso on spine1 from=0.1904 to=0.1904 offset=(-0.4265,0.0541,0.5147) tip=(-0.0046,-0.0083,-0.0019) bend=(-0.0011,-0.0006,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1617 to=0.1617 offset=(-0.4311,0.0538,0.512) tip=(-0.0041,-0.0084,-0.0019) bend=(-0.001,-0.0005,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1327 to=0.1327 offset=(-0.4352,0.0535,0.5093) tip=(-0.004,-0.0084,-0.0021) bend=(-0.001,-0.0003,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.1037 to=0.1037 offset=(-0.4392,0.0532,0.5064) tip=(-0.0038,-0.0084,-0.0022) bend=(-0.001,-0.0002,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.1037 to=0.1037 offset=(-0.4392,0.0532,0.5064) tip=(-0.0038,-0.0084,-0.0023) bend=(-0.001,-0.0002,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0748 to=0.0748 offset=(-0.443,0.0529,0.5033) tip=(-0.0036,-0.0084,-0.0024) bend=(-0.001,0,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.0459 to=0.0459 offset=(-0.4467,0.0526,0.5) tip=(-0.0035,-0.0084,-0.0026) bend=(-0.001,0.0001,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.0172 to=0.0172 offset=(-0.4501,0.0522,0.4966) tip=(-0.0031,-0.0084,-0.0029) bend=(-0.0011,0.0002,-0.0005) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0 to=0 offset=(-0.4533,0.0486,0.4931) tip=(-0.0031,-0.0084,-0.003) bend=(-0.001,0.0004,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.046 to=0.046 offset=(-0.4467,0.0526,0.5) tip=(-0.0035,-0.0084,-0.0026) bend=(-0.001,0.0001,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.0172 to=0.0172 offset=(-0.4501,0.0522,0.4965) tip=(-0.0033,-0.0084,-0.0028) bend=(-0.001,0.0002,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0 to=0 offset=(-0.4534,0.0486,0.4932) tip=(-0.0029,-0.0084,-0.0031) bend=(-0.0011,0.0004,-0.0005) r=0.009 blend=0.0016
   blob torso on chest at=0.7267 offset=(-0.2227,-0.0914,0.4299) r=0.015 blend=0.002
   blob torso on chest at=0.6692 offset=(-0.234,-0.0933,0.4387) r=0.0184 blend=0.002
   blob torso on chest at=0.6457 offset=(-0.2395,-0.0947,0.4453) r=0.0175 blend=0.002
@@ -1023,14 +1023,14 @@
   blob torso on spine1 at=0.1899 offset=(-0.4242,0.0537,0.5112) r=0.0151 blend=0.002
   bar  torso on spine1 from=0.0744 to=0.0744 offset=(-0.4439,0.053,0.5046) tip=(-0.0055,-0.0061,-0.0037) bend=(-0.0004,0,-0.0002) r=0.0059 blend=0.0016
   bar  torso on spine1 from=0.0543 to=0.0543 offset=(-0.4494,0.0526,0.5003) tip=(-0.0058,-0.0053,-0.0042) bend=(-0.0004,0,-0.0002) r=0.0059 blend=0.0016
-  bar  torso on spine1 from=0.0372 to=0.0372 offset=(-0.4552,0.0521,0.4956) tip=(-0.006,-0.0044,-0.0047) bend=(-0.0003,0,-0.0004) r=0.0059 blend=0.0016
-  bar  torso on spine1 from=0.0234 to=0.0234 offset=(-0.4613,0.0515,0.4905) tip=(-0.0066,-0.0033,-0.0051) bend=(-0.0004,0.0001,-0.0003) r=0.0059 blend=0.0016
-  bar  torso on spine1 from=0.0135 to=0.0135 offset=(-0.4679,0.051,0.4851) tip=(-0.0067,-0.003,-0.0054) bend=(-0.0004,0.0001,-0.0003) r=0.0059 blend=0.0016
-  bar  torso on spine1 from=0.005 to=0.005 offset=(-0.4746,0.0504,0.4795) tip=(-0.0063,-0.0035,-0.0053) bend=(-0.0004,0.0001,-0.0003) r=0.0059 blend=0.0016
+  bar  torso on spine1 from=0.0372 to=0.0372 offset=(-0.4552,0.0521,0.4956) tip=(-0.0062,-0.0044,-0.0046) bend=(-0.0004,0,-0.0003) r=0.0059 blend=0.0016
+  bar  torso on spine1 from=0.0234 to=0.0234 offset=(-0.4614,0.0516,0.4906) tip=(-0.0065,-0.0033,-0.0052) bend=(-0.0003,0.0001,-0.0004) r=0.0059 blend=0.0016
+  bar  torso on spine1 from=0.0135 to=0.0135 offset=(-0.4678,0.051,0.4851) tip=(-0.0067,-0.003,-0.0054) bend=(-0.0004,0.0001,-0.0003) r=0.0059 blend=0.0016
+  bar  torso on spine1 from=0.005 to=0.005 offset=(-0.4745,0.0504,0.4795) tip=(-0.0063,-0.0035,-0.0053) bend=(-0.0004,0.0001,-0.0003) r=0.0059 blend=0.0016
   bar  torso on spine1 from=0 to=0 offset=(-0.4809,0.0483,0.474) tip=(-0.0058,-0.0042,-0.0052) bend=(-0.0004,0.0002,-0.0003) r=0.0059 blend=0.0016
   bar  torso on spine1 from=0 to=0 offset=(-0.4867,0.0441,0.4688) tip=(-0.0052,-0.0052,-0.005) bend=(-0.0004,0.0002,-0.0002) r=0.0059 blend=0.0016
   bar  torso on spine1 from=0 to=0 offset=(-0.4919,0.0388,0.4639) tip=(-0.0052,-0.0049,-0.0052) bend=(-0.0004,0.0002,-0.0002) r=0.0059 blend=0.0016
-  bar  torso on spine1 from=0 to=0 offset=(-0.4971,0.0339,0.4587) tip=(-0.0054,-0.0044,-0.0055) bend=(-0.0004,0.0003,-0.0002) r=0.0059 blend=0.0016
+  bar  torso on spine1 from=0 to=0 offset=(-0.4971,0.0339,0.4586) tip=(-0.0053,-0.0044,-0.0055) bend=(-0.0004,0.0003,-0.0002) r=0.0059 blend=0.0016
   blob torso on spine1 at=0.0381 offset=(-0.4537,0.0519,0.4935) r=0.0099 blend=0.002
   bar  torso on chest from=0.739 to=0.739 offset=(-0.2233,-0.0923,0.4342) tip=(0.0041,-0.0072,0.0044) bend=(-0.0012,-0.0011,0.0004) r=0.0059 blend=0.0016
   bar  torso on chest from=0.7186 to=0.7186 offset=(-0.2191,-0.0935,0.4399) tip=(0.0029,-0.0078,0.0048) bend=(-0.0012,-0.0011,0.0005) r=0.0059 blend=0.0016
@@ -1107,12 +1107,12 @@
   bar  torso on spine1 from=0.224 to=0.224 offset=(-0.6436,0.0208,0.1983) tip=(-0.0031,-0.0081,-0.0047) bend=(-0.0004,-0.0014,0) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1968 to=0.1968 offset=(-0.6467,0.0203,0.1928) tip=(-0.003,-0.0081,-0.005) bend=(-0.0004,-0.0013,-0.0001) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.17 to=0.17 offset=(-0.6497,0.0197,0.187) tip=(-0.0028,-0.0081,-0.0049) bend=(-0.0003,-0.0011,-0.0002) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.1431 to=0.1431 offset=(-0.6525,0.0191,0.1813) tip=(-0.0024,-0.0083,-0.0041) bend=(-0.0003,-0.0009,-0.0003) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.1431 to=0.1431 offset=(-0.6524,0.0191,0.1813) tip=(-0.0024,-0.0083,-0.0041) bend=(-0.0003,-0.0009,-0.0003) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.1151 to=0.1151 offset=(-0.6548,0.0185,0.1764) tip=(-0.002,-0.0084,-0.0038) bend=(-0.0003,-0.0007,-0.0004) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0867 to=0.0867 offset=(-0.6568,0.018,0.1717) tip=(-0.0016,-0.0084,-0.0039) bend=(-0.0003,-0.0005,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0585 to=0.0585 offset=(-0.6585,0.0175,0.167) tip=(-0.0012,-0.0084,-0.004) bend=(-0.0002,-0.0002,-0.0005) r=0.009 blend=0.0016
   bar  torso on spine1 from=0.0303 to=0.0303 offset=(-0.6597,0.017,0.1622) tip=(-0.0008,-0.0083,-0.004) bend=(-0.0003,0.0001,-0.0006) r=0.009 blend=0.0016
-  bar  torso on spine1 from=0.0022 to=0.0022 offset=(-0.6605,0.0165,0.1573) tip=(-0.0003,-0.0083,-0.0041) bend=(-0.0003,0.0004,-0.0006) r=0.009 blend=0.0016
+  bar  torso on spine1 from=0.0022 to=0.0022 offset=(-0.6604,0.0165,0.1573) tip=(-0.0003,-0.0083,-0.0041) bend=(-0.0003,0.0004,-0.0006) r=0.009 blend=0.0016
   bar  torso on spine1 from=0 to=0 offset=(-0.6607,0.0088,0.1532) tip=(0.0002,-0.0083,-0.0041) bend=(-0.0004,0.0007,-0.0006) r=0.009 blend=0.0016
   blob torso on spine1 at=0.7031 offset=(-0.568,0.0274,0.2605) r=0.0184 blend=0.002
   blob torso on spine1 at=0.4968 offset=(-0.6075,0.0232,0.2207) r=0.0162 blend=0.002
@@ -1391,651 +1391,602 @@
   bar  arm on upperarm from=0.9144 to=0.9144 offset=(0.1031,0.0547,-0.1139) tip=(0.0106,0.0001,0.0088) r=0.0038 r2=0.0032 blend=0.0016 side=l
   bar  arm on upperarm from=0.9322 to=0.9322 offset=(0.1079,0.0612,-0.1072) tip=(0.0093,-0.0012,0.0082) r=0.0032 r2=0.0032 blend=0.0016 side=l
   blob arm on upperarm at=0.8796 offset=(0.0883,0.0378,-0.1243) r=0.0108 blend=0.002 side=l
-  bar  leg on thigh from=0.0999 to=0.0999 offset=(0.0732,0.0051,0.2254) tip=(0.0122,-0.0082,-0.0055) r=0.0061 r2=0.0066 blend=0.0016 side=l
-  bar  leg on thigh from=0.1225 to=0.1225 offset=(0.0847,0.0059,0.2198) tip=(0.0103,-0.0083,-0.0058) r=0.0066 r2=0.007 blend=0.0016 side=l
-  bar  leg on thigh from=0.145 to=0.145 offset=(0.0944,0.0066,0.2141) tip=(0.0086,-0.0085,-0.0057) r=0.007 r2=0.0075 blend=0.0016 side=l
-  bar  leg on thigh from=0.1676 to=0.1676 offset=(0.1023,0.0072,0.2083) tip=(0.0075,-0.0085,-0.0058) r=0.0075 r2=0.0079 blend=0.0016 side=l
-  bar  leg on thigh from=0.1901 to=0.1901 offset=(0.1091,0.0076,0.2026) tip=(0.0055,-0.0087,-0.0051) r=0.0079 r2=0.0082 blend=0.0016 side=l
-  bar  leg on thigh from=0.2127 to=0.2127 offset=(0.114,0.008,0.1974) tip=(0.0033,-0.0088,-0.004) r=0.0082 r2=0.0086 blend=0.0016 side=l
-  bar  leg on thigh from=0.2352 to=0.2352 offset=(0.1166,0.0082,0.1934) tip=(0.0013,-0.0089,-0.0029) r=0.0086 r2=0.0089 blend=0.0016 side=l
-  bar  leg on thigh from=0.2577 to=0.2577 offset=(0.1174,0.0082,0.1905) tip=(-0.0003,-0.009,-0.002) r=0.0089 r2=0.0092 blend=0.0016 side=l
-  bar  leg on thigh from=0.2802 to=0.2802 offset=(0.1164,0.0081,0.1885) tip=(-0.0012,-0.0091,-0.0016) r=0.0092 r2=0.0094 blend=0.0016 side=l
-  bar  leg on thigh from=0.3028 to=0.3028 offset=(0.1146,0.008,0.1869) tip=(-0.0018,-0.0092,-0.0013) r=0.0094 r2=0.0096 blend=0.0016 side=l
-  bar  leg on thigh from=0.3253 to=0.3253 offset=(0.1122,0.0078,0.1855) tip=(-0.0032,-0.0093,-0.0008) r=0.0096 r2=0.0097 blend=0.0016 side=l
-  bar  leg on thigh from=0.3479 to=0.3479 offset=(0.1083,0.0076,0.1847) tip=(-0.0049,-0.0094,0.0003) r=0.0097 r2=0.0098 blend=0.0016 side=l
-  bar  leg on thigh from=0.3704 to=0.3704 offset=(0.1028,0.0072,0.185) tip=(-0.0036,-0.0093,-0.0008) r=0.0098 r2=0.0099 blend=0.0016 side=l
-  bar  leg on thigh from=0.3931 to=0.3931 offset=(0.0986,0.0069,0.1843) tip=(-0.0044,-0.0094,-0.0005) r=0.0099 r2=0.0099 blend=0.0016 side=l
-  bar  leg on thigh from=0.4157 to=0.4157 offset=(0.0936,0.0065,0.1838) tip=(-0.0037,-0.0094,-0.0011) r=0.0099 r2=0.0098 blend=0.0016 side=l
-  bar  leg on thigh from=0.4384 to=0.4384 offset=(0.0892,0.0062,0.1827) tip=(-0.0013,-0.0092,-0.0026) r=0.0098 r2=0.0097 blend=0.0016 side=l
-  bar  leg on thigh from=0.4611 to=0.4611 offset=(0.0873,0.0061,0.1801) tip=(0.0002,-0.0091,-0.0035) r=0.0097 r2=0.0096 blend=0.0016 side=l
-  bar  leg on thigh from=0.4839 to=0.4839 offset=(0.0869,0.0061,0.1766) tip=(0.0013,-0.0091,-0.0042) r=0.0096 r2=0.0094 blend=0.0016 side=l
-  bar  leg on thigh from=0.5067 to=0.5067 offset=(0.0876,0.0061,0.1724) tip=(0.0031,-0.009,-0.0052) r=0.0094 r2=0.0092 blend=0.0016 side=l
-  bar  leg on thigh from=0.5296 to=0.5296 offset=(0.0901,0.0063,0.1672) tip=(0.0046,-0.0089,-0.0063) r=0.0092 r2=0.0089 blend=0.0016 side=l
-  bar  leg on thigh from=0.5525 to=0.5525 offset=(0.0941,0.0066,0.1609) tip=(0.0046,-0.0089,-0.0064) r=0.0089 r2=0.0086 blend=0.0016 side=l
-  bar  leg on thigh from=0.5754 to=0.5754 offset=(0.098,0.0069,0.1545) tip=(0.0061,-0.0089,-0.0075) r=0.0086 r2=0.0082 blend=0.0016 side=l
-  bar  leg on thigh from=0.5987 to=0.5987 offset=(0.1035,0.0072,0.1469) tip=(0.0066,-0.0089,-0.0074) r=0.0082 r2=0.0079 blend=0.0016 side=l
-  bar  leg on thigh from=0.622 to=0.622 offset=(0.1094,0.0077,0.1395) tip=(0.0062,-0.0089,-0.0067) r=0.0079 r2=0.0075 blend=0.0016 side=l
-  bar  leg on thigh from=0.6452 to=0.6452 offset=(0.115,0.008,0.1328) tip=(0.006,-0.0088,-0.006) r=0.0075 r2=0.007 blend=0.0016 side=l
-  bar  leg on thigh from=0.6683 to=0.6683 offset=(0.1204,0.0084,0.1268) tip=(0.0051,-0.0089,-0.0046) r=0.007 r2=0.0066 blend=0.0016 side=l
-  bar  leg on thigh from=0.6912 to=0.6912 offset=(0.1249,0.0087,0.1222) tip=(0.0038,-0.0089,-0.0024) r=0.0066 r2=0.0061 blend=0.0016 side=l
-  bar  leg on thigh from=0.7141 to=0.7141 offset=(0.1281,0.009,0.1198) tip=(0.003,-0.0089,-0.0009) r=0.0061 r2=0.0057 blend=0.0016 side=l
-  bar  leg on thigh from=0.7369 to=0.7369 offset=(0.1305,0.0091,0.1188) tip=(0.0021,-0.009,0.0008) r=0.0057 r2=0.0054 blend=0.0016 side=l
-  bar  leg on thigh from=0.7596 to=0.7596 offset=(0.132,0.0092,0.1196) tip=(0.0013,-0.009,0.0016) r=0.0054 r2=0.0054 blend=0.0016 side=l
-  bar  leg on thigh from=0.7823 to=0.7823 offset=(0.1326,0.0093,0.1212) tip=(0.0011,-0.009,0.0019) r=0.0054 r2=0.0054 blend=0.0016 side=l
-  bar  leg on thigh from=0.8051 to=0.8051 offset=(0.1331,0.0093,0.123) tip=(-0.0005,-0.0091,0.004) r=0.0054 r2=0.0054 blend=0.0016 side=l
-  bar  leg on thigh from=0.8278 to=0.8278 offset=(0.1319,0.0092,0.127) tip=(-0.0013,-0.0092,0.0047) r=0.0054 r2=0.0054 blend=0.0016 side=l
-  blob leg on thigh at=0.2103 offset=(0.1108,0.0077,0.1927) r=0.0171 blend=0.002 side=l
-  blob leg on thigh at=0.3421 offset=(0.104,0.0073,0.1785) r=0.0199 blend=0.002 side=l
-  blob leg on thigh at=0.4111 offset=(0.0908,0.0063,0.1792) r=0.0176 blend=0.002 side=l
-  blob leg on thigh at=0.7819 offset=(0.1336,0.0093,0.1218) r=0.0091 blend=0.002 side=l
-  bar  leg on thigh from=0.395 to=0.395 offset=(0.0911,0.0064,0.1915) tip=(-0.0089,-0.0097,0.0013) r=0.004 r2=0.0049 blend=0.0016 side=l
-  bar  leg on thigh from=0.4176 to=0.4176 offset=(0.0816,0.0057,0.1928) tip=(-0.009,-0.0097,0.0008) r=0.0049 r2=0.0057 blend=0.0016 side=l
-  bar  leg on thigh from=0.4402 to=0.4402 offset=(0.0719,0.005,0.1936) tip=(-0.0089,-0.0097,0.0003) r=0.0057 r2=0.0062 blend=0.0016 side=l
-  bar  leg on thigh from=0.4629 to=0.4629 offset=(0.0624,0.0044,0.1939) tip=(-0.0091,-0.0098,-0.0001) r=0.0062 r2=0.0064 blend=0.0016 side=l
-  bar  leg on thigh from=0.4857 to=0.4857 offset=(0.0527,0.0037,0.1939) tip=(-0.0103,-0.0099,-0.0001) r=0.0064 r2=0.0063 blend=0.0016 side=l
-  bar  leg on thigh from=0.5086 to=0.5086 offset=(0.0417,0.0029,0.1937) tip=(-0.0102,-0.0099,-0.0007) r=0.0063 r2=0.0058 blend=0.0016 side=l
-  bar  leg on thigh from=0.5315 to=0.5315 offset=(0.0309,0.0022,0.193) tip=(-0.0112,-0.01,-0.0011) r=0.0058 r2=0.0051 blend=0.0016 side=l
-  bar  leg on thigh from=0.5545 to=0.5545 offset=(0.019,0.0013,0.1919) tip=(-0.012,-0.0101,-0.0017) r=0.0051 r2=0.0042 blend=0.0016 side=l
-  bar  leg on thigh from=0.5776 to=0.5776 offset=(0.0063,0.0004,0.1903) tip=(-0.0128,-0.0101,-0.0023) r=0.0042 r2=0.0035 blend=0.0016 side=l
-  bar  leg on thigh from=0.6006 to=0.6006 offset=(-0.0071,-0.0005,0.1879) tip=(-0.0134,-0.0101,-0.0029) r=0.0035 r2=0.0035 blend=0.0016 side=l
-  blob leg on thigh at=0.4375 offset=(0.0707,0.0049,0.1909) r=0.011 blend=0.002 side=l
-  bar  leg on thigh from=0.1496 to=0.1496 offset=(0.0291,0.002,-0.2359) tip=(0.0034,-0.0088,0.0016) r=0.0056 r2=0.006 blend=0.0016 side=l
-  bar  leg on thigh from=0.1722 to=0.1722 offset=(0.0319,0.0022,-0.2343) tip=(0.0035,-0.0088,0.0019) r=0.006 r2=0.0064 blend=0.0016 side=l
-  bar  leg on thigh from=0.1948 to=0.1948 offset=(0.0347,0.0024,-0.2323) tip=(0.0046,-0.0087,0.0024) r=0.0064 r2=0.0068 blend=0.0016 side=l
-  bar  leg on thigh from=0.2174 to=0.2174 offset=(0.0387,0.0027,-0.2299) tip=(0.0032,-0.0088,0.0024) r=0.0068 r2=0.0072 blend=0.0016 side=l
-  bar  leg on thigh from=0.2399 to=0.2399 offset=(0.0412,0.0029,-0.2275) tip=(0.0025,-0.0089,0.0025) r=0.0072 r2=0.0075 blend=0.0016 side=l
-  bar  leg on thigh from=0.2625 to=0.2625 offset=(0.0431,0.003,-0.225) tip=(0.0019,-0.0089,0.0026) r=0.0075 r2=0.0078 blend=0.0016 side=l
-  bar  leg on thigh from=0.285 to=0.285 offset=(0.0444,0.0031,-0.2224) tip=(0.002,-0.0089,0.0031) r=0.0078 r2=0.0081 blend=0.0016 side=l
-  bar  leg on thigh from=0.3075 to=0.3075 offset=(0.0457,0.0032,-0.2193) tip=(-0.0004,-0.0091,0.0025) r=0.0081 r2=0.0083 blend=0.0016 side=l
-  bar  leg on thigh from=0.3301 to=0.3301 offset=(0.0446,0.0031,-0.2169) tip=(-0.0023,-0.0092,0.0022) r=0.0083 r2=0.0086 blend=0.0016 side=l
-  bar  leg on thigh from=0.3527 to=0.3527 offset=(0.0417,0.0029,-0.2147) tip=(-0.0041,-0.0093,0.002) r=0.0086 r2=0.0087 blend=0.0016 side=l
-  bar  leg on thigh from=0.3752 to=0.3752 offset=(0.037,0.0026,-0.2127) tip=(-0.0063,-0.0095,0.0018) r=0.0087 r2=0.0089 blend=0.0016 side=l
-  bar  leg on thigh from=0.3978 to=0.3978 offset=(0.0301,0.0021,-0.2109) tip=(-0.0063,-0.0095,0.0022) r=0.0089 r2=0.009 blend=0.0016 side=l
-  bar  leg on thigh from=0.4205 to=0.4205 offset=(0.0231,0.0016,-0.2087) tip=(-0.0056,-0.0095,0.0026) r=0.009 r2=0.009 blend=0.0016 side=l
-  bar  leg on thigh from=0.4432 to=0.4432 offset=(0.0169,0.0012,-0.2062) tip=(-0.0058,-0.0095,0.0028) r=0.009 r2=0.009 blend=0.0016 side=l
-  bar  leg on thigh from=0.4659 to=0.4659 offset=(0.0105,0.0007,-0.2034) tip=(-0.0071,-0.0096,0.003) r=0.009 r2=0.009 blend=0.0016 side=l
-  bar  leg on thigh from=0.4886 to=0.4886 offset=(0.0028,0.0002,-0.2004) tip=(-0.0056,-0.0095,0.0033) r=0.009 r2=0.0089 blend=0.0016 side=l
-  bar  leg on thigh from=0.5114 to=0.5114 offset=(-0.0035,-0.0002,-0.1971) tip=(-0.0035,-0.0094,0.0033) r=0.0089 r2=0.0087 blend=0.0016 side=l
-  bar  leg on thigh from=0.5342 to=0.5342 offset=(-0.0076,-0.0005,-0.1939) tip=(-0.0029,-0.0094,0.0032) r=0.0087 r2=0.0086 blend=0.0016 side=l
-  bar  leg on thigh from=0.5571 to=0.5571 offset=(-0.0111,-0.0008,-0.1906) tip=(-0.0012,-0.0093,0.003) r=0.0086 r2=0.0083 blend=0.0016 side=l
-  bar  leg on thigh from=0.58 to=0.58 offset=(-0.0129,-0.0009,-0.1876) tip=(0.0008,-0.0091,0.0026) r=0.0083 r2=0.0081 blend=0.0016 side=l
-  bar  leg on thigh from=0.6029 to=0.6029 offset=(-0.0128,-0.0009,-0.185) tip=(0.0013,-0.0091,0.0023) r=0.0081 r2=0.0078 blend=0.0016 side=l
-  bar  leg on thigh from=0.6259 to=0.6259 offset=(-0.0121,-0.0008,-0.1827) tip=(0.0023,-0.009,0.002) r=0.0078 r2=0.0075 blend=0.0016 side=l
-  bar  leg on thigh from=0.6488 to=0.6488 offset=(-0.0104,-0.0007,-0.1807) tip=(0.0043,-0.0089,0.0016) r=0.0075 r2=0.0072 blend=0.0016 side=l
-  bar  leg on thigh from=0.6718 to=0.6718 offset=(-0.0068,-0.0005,-0.1791) tip=(0.0048,-0.0089,0.0014) r=0.0072 r2=0.0068 blend=0.0016 side=l
-  bar  leg on thigh from=0.6947 to=0.6947 offset=(-0.0026,-0.0002,-0.1777) tip=(0.0047,-0.0088,0.0013) r=0.0068 r2=0.0064 blend=0.0016 side=l
-  bar  leg on thigh from=0.7175 to=0.7175 offset=(0.0014,0.0001,-0.1765) tip=(0.0037,-0.0089,0.0013) r=0.0064 r2=0.006 blend=0.0016 side=l
-  bar  leg on thigh from=0.7403 to=0.7403 offset=(0.0045,0.0003,-0.1751) tip=(0.003,-0.009,0.0013) r=0.006 r2=0.0056 blend=0.0016 side=l
-  bar  leg on thigh from=0.7632 to=0.7632 offset=(0.0068,0.0005,-0.1738) tip=(0.0007,-0.0091,0.0009) r=0.0056 r2=0.0052 blend=0.0016 side=l
-  bar  leg on thigh from=0.7861 to=0.7861 offset=(0.0069,0.0005,-0.173) tip=(0.0001,-0.0092,0.0005) r=0.0052 r2=0.005 blend=0.0016 side=l
-  bar  leg on thigh from=0.809 to=0.809 offset=(0.0064,0.0004,-0.1725) tip=(-0.0016,-0.0093,0.0002) r=0.005 r2=0.005 blend=0.0016 side=l
-  bar  leg on thigh from=0.8318 to=0.8318 offset=(0.0041,0.0003,-0.1722) tip=(-0.0024,-0.0093,0.0001) r=0.005 r2=0.005 blend=0.0016 side=l
-  bar  leg on thigh from=0.8545 to=0.8545 offset=(0.0011,0.0001,-0.1722) tip=(-0.0044,-0.0094,-0.0001) r=0.005 r2=0.005 blend=0.0016 side=l
-  bar  leg on thigh from=0.8773 to=0.8773 offset=(-0.004,-0.0003,-0.1723) tip=(-0.005,-0.0095,0.0003) r=0.005 r2=0.005 blend=0.0016 side=l
-  blob leg on thigh at=0.2164 offset=(0.0383,0.0027,-0.2279) r=0.0122 blend=0.002 side=l
-  blob leg on thigh at=0.2596 offset=(0.0419,0.0029,-0.22) r=0.0156 blend=0.002 side=l
-  blob leg on thigh at=0.3034 offset=(0.0443,0.0031,-0.2135) r=0.0168 blend=0.002 side=l
-  blob leg on thigh at=0.5061 offset=(-0.0033,-0.0002,-0.1912) r=0.0172 blend=0.002 side=l
-  blob leg on thigh at=0.6706 offset=(-0.0067,-0.0005,-0.1767) r=0.0127 blend=0.002 side=l
-  blob leg on thigh at=0.8545 offset=(0.0011,0.0001,-0.1728) r=0.0088 blend=0.002 side=l
-  bar  leg on thigh from=0.536 to=0.536 offset=(0.0078,0.0005,-0.1958) tip=(0.0184,-0.0077,0.0051) r=0.0036 r2=0.0044 blend=0.0016 side=l
-  bar  leg on thigh from=0.5583 to=0.5583 offset=(0.0255,0.0018,-0.1907) tip=(0.0161,-0.0079,0.0065) r=0.0044 r2=0.0051 blend=0.0016 side=l
-  bar  leg on thigh from=0.5807 to=0.5807 offset=(0.041,0.0029,-0.1842) tip=(0.0138,-0.008,0.0072) r=0.0051 r2=0.0056 blend=0.0016 side=l
-  bar  leg on thigh from=0.6032 to=0.6032 offset=(0.0542,0.0038,-0.177) tip=(0.0124,-0.0082,0.0077) r=0.0056 r2=0.0058 blend=0.0016 side=l
-  bar  leg on thigh from=0.6257 to=0.6257 offset=(0.066,0.0046,-0.1693) tip=(0.0104,-0.0083,0.0076) r=0.0058 r2=0.0058 blend=0.0016 side=l
-  bar  leg on thigh from=0.6483 to=0.6483 offset=(0.0757,0.0053,-0.1617) tip=(0.0099,-0.0084,0.008) r=0.0058 r2=0.0056 blend=0.0016 side=l
-  bar  leg on thigh from=0.671 to=0.671 offset=(0.085,0.0059,-0.1537) tip=(0.0087,-0.0085,0.0078) r=0.0056 r2=0.0051 blend=0.0016 side=l
-  bar  leg on thigh from=0.6936 to=0.6936 offset=(0.0931,0.0065,-0.1459) tip=(0.0081,-0.0085,0.0075) r=0.0051 r2=0.0044 blend=0.0016 side=l
-  bar  leg on thigh from=0.7162 to=0.7162 offset=(0.1005,0.007,-0.1384) tip=(0.0083,-0.0085,0.0083) r=0.0044 r2=0.0036 blend=0.0016 side=l
-  bar  leg on thigh from=0.7389 to=0.7389 offset=(0.1082,0.0076,-0.1302) tip=(0.0078,-0.0085,0.0079) r=0.0036 r2=0.0032 blend=0.0016 side=l
-  bar  leg on thigh from=0.7615 to=0.7615 offset=(0.1153,0.0081,-0.1222) tip=(0.0081,-0.0085,0.0085) r=0.0032 r2=0.0032 blend=0.0016 side=l
-  blob leg on thigh at=0.7388 offset=(0.1079,0.0075,-0.1299) r=0.0071 blend=0.002 side=l
-  blob leg on thigh at=0.5177 offset=(0.1234,0.0086,-0.1278) r=0.0134 blend=0.006 side=l
-  blob leg on thigh at=0.2884 offset=(0.1962,0.0137,0.0265) r=0.014 blend=0.006 side=l
-  blob leg on thigh at=0.2501 offset=(0.1854,0.013,0.0907) r=0.0121 blend=0.006 side=l
-  blob leg on thigh at=0.5748 offset=(0.1505,0.0105,-0.078) r=0.0091 blend=0.006 side=l
-  blob leg on thigh at=0.6618 offset=(0.1431,0.01,0.0776) r=0.0104 blend=0.006 side=l
-  blob leg on thigh at=0.1534 offset=(-0.1024,-0.0072,-0.2035) r=0.009 blend=0.006 side=l
-  blob leg on thigh at=0.3689 offset=(0.1397,0.0098,-0.1431) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.0827 offset=(-0.0203,-0.0014,-0.2329) r=0.009 blend=0.006 side=l
-  blob leg on thigh at=0.5759 offset=(0.0894,0.0063,-0.1501) r=0.0129 blend=0.006 side=l
-  blob leg on thigh at=0.0913 offset=(0.1759,0.0123,-0.1262) r=0.0121 blend=0.006 side=l
-  blob leg on thigh at=0.5818 offset=(-0.015,-0.001,-0.1802) r=0.0114 blend=0.006 side=l
-  blob leg on thigh at=0.5153 offset=(0.0179,0.0012,-0.1904) r=0.0098 blend=0.006 side=l
-  blob leg on thigh at=0.1744 offset=(0.1465,0.0102,-0.1592) r=0.0139 blend=0.006 side=l
-  blob leg on thigh at=0.3077 offset=(0.0465,0.0033,-0.2107) r=0.0124 blend=0.006 side=l
-  blob leg on thigh at=0.1149 offset=(0.1411,0.0099,-0.1743) r=0.0096 blend=0.006 side=l
-  blob leg on thigh at=0.5036 offset=(0.1496,0.0105,-0.1002) r=0.0095 blend=0.006 side=l
-  blob leg on thigh at=0.5862 offset=(0.1606,0.0112,0.0035) r=0.0133 blend=0.006 side=l
-  blob leg on thigh at=0.5365 offset=(0.0461,0.0032,-0.1809) r=0.0102 blend=0.006 side=l
-  blob leg on thigh at=0.5938 offset=(0.1444,0.0101,-0.0744) r=0.0137 blend=0.006 side=l
-  blob leg on thigh at=0.6544 offset=(0.1548,0.0108,0.0125) r=0.0134 blend=0.006 side=l
-  blob leg on thigh at=0.2951 offset=(0.1179,0.0082,-0.1774) r=0.0112 blend=0.006 side=l
-  blob leg on thigh at=0.5568 offset=(0.1473,0.0103,-0.0839) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.3774 offset=(0.1888,0.0132,0.0423) r=0.0091 blend=0.006 side=l
-  blob leg on thigh at=0.5318 offset=(-0.0722,-0.005,-0.1715) r=0.0098 blend=0.006 side=l
-  blob leg on thigh at=0.5939 offset=(0.1627,0.0114,-0.0214) r=0.0094 blend=0.006 side=l
-  blob leg on thigh at=0.1706 offset=(0.1928,0.0135,0.0834) r=0.0129 blend=0.006 side=l
-  blob leg on thigh at=0.4483 offset=(0.1665,0.0116,-0.0722) r=0.013 blend=0.006 side=l
-  blob leg on thigh at=0.0775 offset=(0.1985,0.0139,-0.0719) r=0.0132 blend=0.006 side=l
-  blob leg on thigh at=0.3596 offset=(0.0742,0.0052,-0.1945) r=0.0121 blend=0.006 side=l
-  blob leg on thigh at=0.2666 offset=(0.1967,0.0138,-0.0388) r=0.0138 blend=0.006 side=l
-  blob leg on thigh at=0.3107 offset=(-0.1165,-0.0081,-0.1758) r=0.0117 blend=0.006 side=l
-  blob leg on thigh at=0.4262 offset=(0.1108,0.0077,-0.1581) r=0.0139 blend=0.006 side=l
-  blob leg on thigh at=0.1864 offset=(0.1888,0.0132,-0.0973) r=0.0107 blend=0.006 side=l
-  blob leg on thigh at=0.6257 offset=(0.1559,0.0109,0.0237) r=0.0127 blend=0.006 side=l
-  blob leg on thigh at=0.1173 offset=(0.1902,0.0133,-0.098) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.5891 offset=(0.0679,0.0047,-0.1612) r=0.0134 blend=0.006 side=l
-  blob leg on thigh at=0.5483 offset=(0.1691,0.0118,0.0066) r=0.0092 blend=0.006 side=l
-  blob leg on thigh at=0.0543 offset=(0.1427,0.01,-0.1678) r=0.0129 blend=0.006 side=l
-  blob leg on thigh at=0.0896 offset=(0.2091,0.0146,0.0438) r=0.0096 blend=0.006 side=l
-  blob leg on thigh at=0.5636 offset=(0.164,0.0115,0.0089) r=0.0122 blend=0.006 side=l
-  blob leg on thigh at=0.4263 offset=(0.054,0.0038,-0.1958) r=0.0094 blend=0.006 side=l
-  blob leg on thigh at=0.3251 offset=(0.1954,0.0137,0.0173) r=0.0119 blend=0.006 side=l
-  blob leg on thigh at=0.3111 offset=(0.1305,0.0091,-0.1631) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.1799 offset=(0.021,0.0015,-0.2272) r=0.0117 blend=0.006 side=l
-  blob leg on thigh at=0.577 offset=(0.1587,0.0111,-0.0389) r=0.0123 blend=0.006 side=l
-  blob leg on thigh at=0.6097 offset=(0.1475,0.0103,-0.069) r=0.0112 blend=0.006 side=l
-  blob leg on thigh at=0.5157 offset=(0.165,0.0115,0.0599) r=0.0091 blend=0.006 side=l
-  blob leg on thigh at=0.0818 offset=(0.0652,0.0046,-0.2199) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.248 offset=(0.1676,0.0117,-0.1294) r=0.0104 blend=0.006 side=l
-  blob leg on thigh at=0.4346 offset=(0.1689,0.0118,0.07) r=0.0135 blend=0.006 side=l
-  blob leg on thigh at=0.1726 offset=(0.1802,0.0126,-0.1103) r=0.0137 blend=0.006 side=l
-  blob leg on thigh at=0.2381 offset=(0.1016,0.0071,-0.1969) r=0.0099 blend=0.006 side=l
-  blob leg on thigh at=0.559 offset=(-0.0889,-0.0062,-0.1537) r=0.0126 blend=0.006 side=l
-  blob leg on thigh at=0.431 offset=(-0.0507,-0.0035,-0.1949) r=0.0106 blend=0.006 side=l
-  blob leg on thigh at=0.1826 offset=(0.0236,0.0017,-0.2293) r=0.0093 blend=0.006 side=l
-  blob leg on thigh at=0.6866 offset=(0.1457,0.0102,0.0641) r=0.0127 blend=0.006 side=l
-  blob leg on thigh at=0.0999 offset=(-0.0903,-0.0063,-0.2102) r=0.0106 blend=0.006 side=l
-  blob leg on thigh at=0.6975 offset=(0.1499,0.0105,-0.0495) r=0.0093 blend=0.006 side=l
-  blob leg on thigh at=0.1201 offset=(0.1522,0.0106,-0.1576) r=0.0128 blend=0.006 side=l
-  blob leg on thigh at=0.1212 offset=(0.1692,0.0118,-0.1344) r=0.0131 blend=0.006 side=l
-  blob leg on thigh at=0.5565 offset=(0.1584,0.0111,0.0623) r=0.0094 blend=0.006 side=l
-  blob leg on thigh at=0.131 offset=(0.2059,0.0144,0.0344) r=0.0135 blend=0.006 side=l
-  blob leg on thigh at=0.4138 offset=(-0.1096,-0.0077,-0.1674) r=0.0095 blend=0.006 side=l
-  blob leg on thigh at=0.1056 offset=(0.111,0.0078,-0.1951) r=0.0128 blend=0.006 side=l
-  blob leg on thigh at=0.688 offset=(0.1492,0.0104,0.0617) r=0.0101 blend=0.006 side=l
-  blob leg on thigh at=0.1443 offset=(0.1943,0.0136,-0.0927) r=0.0093 blend=0.006 side=l
-  blob leg on thigh at=0.2639 offset=(0.0118,0.0008,-0.2212) r=0.0124 blend=0.006 side=l
-  blob leg on thigh at=0.4445 offset=(0.1678,0.0117,-0.0803) r=0.0097 blend=0.006 side=l
-  blob leg on thigh at=0.1999 offset=(0.2045,0.0143,-0.015) r=0.0136 blend=0.006 side=l
-  blob leg on thigh at=0.0688 offset=(0.0878,0.0061,-0.212) r=0.01 blend=0.006 side=l
-  blob leg on thigh at=0.5515 offset=(0.0457,0.0032,-0.1772) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.0657 offset=(0.1174,0.0082,-0.1929) r=0.0109 blend=0.006 side=l
-  blob leg on thigh at=0.6894 offset=(-0.0393,-0.0027,-0.1669) r=0.0096 blend=0.006 side=l
-  blob leg on thigh at=0.0972 offset=(0.2081,0.0145,0.0429) r=0.0107 blend=0.006 side=l
-  blob leg on thigh at=0.1281 offset=(0.0975,0.0068,-0.2044) r=0.0117 blend=0.006 side=l
-  blob leg on thigh at=0.1647 offset=(0.2062,0.0144,-0.0476) r=0.0097 blend=0.006 side=l
-  blob leg on thigh at=0.5899 offset=(-0.1075,-0.0075,-0.1313) r=0.0138 blend=0.006 side=l
-  blob leg on thigh at=0.3324 offset=(0.181,0.0127,0.0811) r=0.0117 blend=0.006 side=l
-  blob leg on thigh at=0.6735 offset=(0.1191,0.0083,-0.1068) r=0.0129 blend=0.006 side=l
-  blob leg on thigh at=0.5004 offset=(-0.0589,-0.0041,-0.1808) r=0.011 blend=0.006 side=l
-  blob leg on thigh at=0.6455 offset=(0.1588,0.0111,0.0176) r=0.0095 blend=0.006 side=l
-  blob leg on thigh at=0.5553 offset=(-0.1126,-0.0079,-0.1362) r=0.0111 blend=0.006 side=l
-  blob leg on thigh at=0.3519 offset=(0.1784,0.0125,0.08) r=0.0121 blend=0.006 side=l
-  blob leg on thigh at=0.4877 offset=(0.1684,0.0118,-0.053) r=0.0114 blend=0.006 side=l
-  blob leg on thigh at=0.6333 offset=(0.0443,0.0031,-0.1657) r=0.0137 blend=0.006 side=l
-  blob leg on thigh at=0.1899 offset=(-0.083,-0.0058,-0.2088) r=0.0118 blend=0.006 side=l
-  blob leg on thigh at=0.699 offset=(0.1483,0.0104,0.0617) r=0.0111 blend=0.006 side=l
-  blob leg on thigh at=0.638 offset=(0.1378,0.0096,-0.087) r=0.01 blend=0.006 side=l
-  blob leg on thigh at=0.5704 offset=(0.1612,0.0113,-0.0308) r=0.012 blend=0.006 side=l
-  blob leg on thigh at=0.5522 offset=(-0.0681,-0.0048,-0.1665) r=0.0132 blend=0.006 side=l
-  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.0298,0.101,0.1047) tip=(0.0019,0.0075,-0.0053) r=0.0061 r2=0.0068 blend=0.0016 side=r
-  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.0306,0.1021,0.1059) tip=(0.0011,0.0077,-0.0053) r=0.0068 r2=0.0074 blend=0.0016 side=r
-  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.0306,0.1034,0.1072) tip=(0.0001,0.0079,-0.0053) r=0.0074 r2=0.008 blend=0.0016 side=r
-  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.0295,0.1049,0.1084) tip=(-0.0006,0.0079,-0.0053) r=0.008 r2=0.0085 blend=0.0016 side=r
-  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.0278,0.1063,0.1096) tip=(-0.0019,0.008,-0.0054) r=0.0085 r2=0.009 blend=0.0016 side=r
-  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.0248,0.108,0.1106) tip=(-0.0019,0.0078,-0.0055) r=0.009 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.434 to=0.434 offset=(0.0218,0.1094,0.1116) tip=(-0.0019,0.0074,-0.0058) r=0.0093 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.0188,0.1106,0.1121) tip=(-0.0016,0.0071,-0.0061) r=0.0096 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.0161,0.1113,0.1124) tip=(-0.0003,0.0065,-0.0064) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3723 to=0.3723 offset=(0.0148,0.1116,0.1124) tip=(0.0005,0.0062,-0.0066) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3517 to=0.3517 offset=(0.0141,0.1115,0.1122) tip=(0.0016,0.0059,-0.0068) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3309 to=0.3309 offset=(0.0146,0.111,0.1119) tip=(0.0027,0.0056,-0.007) r=0.0098 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.3102 to=0.3102 offset=(0.0162,0.1102,0.1114) tip=(0.0034,0.0054,-0.0071) r=0.0096 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.2893 to=0.2893 offset=(0.0185,0.1092,0.1108) tip=(0.0048,0.0051,-0.0072) r=0.0093 r2=0.0089 blend=0.0016 side=r
-  bar  arm on forearm from=0.2684 to=0.2684 offset=(0.0221,0.1079,0.1101) tip=(0.0049,0.0051,-0.0072) r=0.0089 r2=0.0084 blend=0.0016 side=r
-  bar  arm on forearm from=0.2474 to=0.2474 offset=(0.0259,0.1065,0.1094) tip=(0.0045,0.0053,-0.0071) r=0.0084 r2=0.0079 blend=0.0016 side=r
-  bar  arm on forearm from=0.2263 to=0.2263 offset=(0.0293,0.1054,0.1088) tip=(0.0053,0.0053,-0.007) r=0.0079 r2=0.0073 blend=0.0016 side=r
-  bar  arm on forearm from=0.2051 to=0.2051 offset=(0.0335,0.1042,0.1084) tip=(0.0051,0.0061,-0.0063) r=0.0073 r2=0.0067 blend=0.0016 side=r
-  bar  arm on forearm from=0.1838 to=0.1838 offset=(0.0375,0.1037,0.1087) tip=(0.0055,0.0068,-0.0056) r=0.0067 r2=0.006 blend=0.0016 side=r
-  bar  arm on forearm from=0.1626 to=0.1626 offset=(0.0419,0.104,0.1097) tip=(0.0045,0.0075,-0.0048) r=0.006 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1418 to=0.1418 offset=(0.0453,0.1051,0.1114) tip=(0.0033,0.0078,-0.0047) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1209 to=0.1209 offset=(0.0474,0.1065,0.1131) tip=(0.0027,0.0081,-0.0046) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1 to=0.1 offset=(0.049,0.1082,0.1151) tip=(0.0016,0.0085,-0.0044) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob arm on forearm at=0.4941 offset=(0.0285,0.1013,0.1047) r=0.0165 blend=0.002 side=r
-  blob arm on forearm at=0.4744 offset=(0.0273,0.1044,0.1076) r=0.0143 blend=0.002 side=r
-  blob arm on forearm at=0.2482 offset=(0.0249,0.1035,0.1063) r=0.0159 blend=0.002 side=r
-  blob arm on forearm at=0.2268 offset=(0.0281,0.102,0.1053) r=0.0162 blend=0.002 side=r
-  bar  arm on forearm from=0.5592 to=0.5592 offset=(-0.1215,0.0705,0.0483) tip=(-0.0018,0.0058,-0.0077) r=0.0061 r2=0.0068 blend=0.0016 side=r
-  bar  arm on forearm from=0.5382 to=0.5382 offset=(-0.1244,0.0698,0.0472) tip=(-0.0025,0.0051,-0.0085) r=0.0068 r2=0.0074 blend=0.0016 side=r
-  bar  arm on forearm from=0.5172 to=0.5172 offset=(-0.1281,0.0685,0.0452) tip=(-0.0034,0.0038,-0.0099) r=0.0074 r2=0.008 blend=0.0016 side=r
-  bar  arm on forearm from=0.4963 to=0.4963 offset=(-0.1326,0.0659,0.0418) tip=(-0.0041,0.0025,-0.0112) r=0.008 r2=0.0085 blend=0.0016 side=r
-  bar  arm on forearm from=0.4753 to=0.4753 offset=(-0.1379,0.062,0.0371) tip=(-0.0044,0.0012,-0.0125) r=0.0085 r2=0.009 blend=0.0016 side=r
-  bar  arm on forearm from=0.4544 to=0.4544 offset=(-0.1433,0.0568,0.0311) tip=(-0.003,0.0024,-0.0111) r=0.009 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.4336 to=0.4336 offset=(-0.1474,0.0528,0.0264) tip=(-0.0029,0.0007,-0.0126) r=0.0093 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.413 to=0.413 offset=(-0.1515,0.0472,0.0202) tip=(-0.0016,0.0013,-0.0118) r=0.0096 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3925 to=0.3925 offset=(-0.1542,0.0423,0.0149) tip=(-0.0008,0.0015,-0.0115) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3719 to=0.3719 offset=(-0.1561,0.0374,0.0098) tip=(0.0002,0.0028,-0.0101) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3513 to=0.3513 offset=(-0.157,0.0339,0.0061) tip=(0.0008,0.0042,-0.0086) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3305 to=0.3305 offset=(-0.1574,0.0317,0.0039) tip=(0.0011,0.0055,-0.0073) r=0.0098 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.3097 to=0.3097 offset=(-0.1573,0.0309,0.0031) tip=(0.0012,0.0062,-0.0067) r=0.0096 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.2888 to=0.2888 offset=(-0.1573,0.0306,0.0029) tip=(0.0012,0.0071,-0.0058) r=0.0093 r2=0.0089 blend=0.0016 side=r
-  bar  arm on forearm from=0.2679 to=0.2679 offset=(-0.1572,0.0314,0.0036) tip=(0.0011,0.0074,-0.0056) r=0.0089 r2=0.0084 blend=0.0016 side=r
-  bar  arm on forearm from=0.247 to=0.247 offset=(-0.1572,0.0323,0.0045) tip=(0.0009,0.0084,-0.0046) r=0.0084 r2=0.0079 blend=0.0016 side=r
-  bar  arm on forearm from=0.226 to=0.226 offset=(-0.1574,0.0343,0.0064) tip=(0.0007,0.0084,-0.0046) r=0.0079 r2=0.0073 blend=0.0016 side=r
-  bar  arm on forearm from=0.2051 to=0.2051 offset=(-0.1578,0.0363,0.0083) tip=(0.0006,0.0086,-0.0044) r=0.0073 r2=0.0067 blend=0.0016 side=r
-  bar  arm on forearm from=0.1842 to=0.1842 offset=(-0.1583,0.0385,0.0104) tip=(0.0009,0.009,-0.0039) r=0.0067 r2=0.006 blend=0.0016 side=r
-  bar  arm on forearm from=0.1635 to=0.1635 offset=(-0.1586,0.0411,0.0129) tip=(0.001,0.0069,-0.006) r=0.006 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1427 to=0.1427 offset=(-0.1587,0.0416,0.0134) tip=(0.0013,0.0062,-0.0067) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1218 to=0.1218 offset=(-0.1585,0.0413,0.0132) tip=(0.0013,0.0054,-0.0074) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.101 to=0.101 offset=(-0.1584,0.0404,0.0123) tip=(0.001,0.0041,-0.0088) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob arm on forearm at=0.5157 offset=(-0.1255,0.0671,0.0443) r=0.0142 blend=0.002 side=r
-  blob arm on forearm at=0.4737 offset=(-0.1349,0.0607,0.0363) r=0.0148 blend=0.002 side=r
-  blob arm on forearm at=0.452 offset=(-0.1385,0.055,0.0301) r=0.017 blend=0.002 side=r
-  blob arm on forearm at=0.1842 offset=(-0.1587,0.0385,0.0103) r=0.0103 blend=0.002 side=r
-  blob arm on forearm at=0.1635 offset=(-0.1587,0.0411,0.0129) r=0.0104 blend=0.002 side=r
-  bar  arm on forearm from=0.5592 to=0.5592 offset=(-0.1167,-0.0545,-0.0739) tip=(-0.0014,0.007,-0.0064) r=0.0061 r2=0.0068 blend=0.0016 side=r
-  bar  arm on forearm from=0.5382 to=0.5382 offset=(-0.1193,-0.0539,-0.0738) tip=(-0.001,0.0065,-0.0068) r=0.0068 r2=0.0074 blend=0.0016 side=r
-  bar  arm on forearm from=0.5173 to=0.5173 offset=(-0.1214,-0.0538,-0.074) tip=(-0.0004,0.006,-0.0071) r=0.0074 r2=0.008 blend=0.0016 side=r
-  bar  arm on forearm from=0.4964 to=0.4964 offset=(-0.1229,-0.0541,-0.0747) tip=(0.0005,0.0052,-0.0077) r=0.008 r2=0.0085 blend=0.0016 side=r
-  bar  arm on forearm from=0.4755 to=0.4755 offset=(-0.1235,-0.0553,-0.0759) tip=(0.0007,0.0052,-0.0077) r=0.0085 r2=0.009 blend=0.0016 side=r
-  bar  arm on forearm from=0.4547 to=0.4547 offset=(-0.124,-0.0565,-0.0772) tip=(0.0012,0.0049,-0.0079) r=0.009 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.4339 to=0.4339 offset=(-0.1239,-0.0579,-0.0786) tip=(0.0014,0.005,-0.0076) r=0.0093 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.4134 to=0.4134 offset=(-0.1236,-0.0592,-0.0798) tip=(0.0016,0.0054,-0.0072) r=0.0096 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3929 to=0.3929 offset=(-0.1231,-0.0601,-0.0806) tip=(0.0014,0.0061,-0.0065) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3724 to=0.3724 offset=(-0.1228,-0.0603,-0.0807) tip=(0.0013,0.0067,-0.006) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3518 to=0.3518 offset=(-0.1227,-0.0599,-0.0803) tip=(0.0008,0.0075,-0.0053) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3312 to=0.3312 offset=(-0.123,-0.0587,-0.0792) tip=(0.0002,0.0084,-0.0046) r=0.0098 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.3104 to=0.3104 offset=(-0.1239,-0.0566,-0.0773) tip=(-0.0003,0.0093,-0.0039) r=0.0096 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.2896 to=0.2896 offset=(-0.1253,-0.0538,-0.0747) tip=(-0.0004,0.0096,-0.0036) r=0.0093 r2=0.0089 blend=0.0016 side=r
-  bar  arm on forearm from=0.2687 to=0.2687 offset=(-0.1268,-0.0505,-0.0718) tip=(-0.0014,0.0109,-0.0026) r=0.0089 r2=0.0084 blend=0.0016 side=r
-  bar  arm on forearm from=0.2477 to=0.2477 offset=(-0.1293,-0.0461,-0.0679) tip=(-0.0016,0.0111,-0.0025) r=0.0084 r2=0.0079 blend=0.0016 side=r
-  bar  arm on forearm from=0.2265 to=0.2265 offset=(-0.132,-0.0415,-0.0638) tip=(-0.0019,0.0114,-0.0023) r=0.0079 r2=0.0073 blend=0.0016 side=r
-  bar  arm on forearm from=0.2053 to=0.2053 offset=(-0.1351,-0.0366,-0.0595) tip=(-0.002,0.0109,-0.0028) r=0.0073 r2=0.0067 blend=0.0016 side=r
-  bar  arm on forearm from=0.1841 to=0.1841 offset=(-0.1382,-0.0322,-0.0557) tip=(-0.0023,0.0105,-0.0032) r=0.0067 r2=0.006 blend=0.0016 side=r
-  bar  arm on forearm from=0.163 to=0.163 offset=(-0.1417,-0.0282,-0.0523) tip=(-0.0021,0.0092,-0.0043) r=0.006 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1421 to=0.1421 offset=(-0.1449,-0.0253,-0.0501) tip=(-0.0015,0.0087,-0.0047) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1213 to=0.1213 offset=(-0.1475,-0.023,-0.0483) tip=(-0.0011,0.0083,-0.005) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1004 to=0.1004 offset=(-0.1498,-0.0212,-0.0468) tip=(-0.0005,0.0073,-0.0058) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob arm on forearm at=0.4539 offset=(-0.1223,-0.0557,-0.0761) r=0.0137 blend=0.002 side=r
-  blob arm on forearm at=0.249 offset=(-0.1255,-0.0447,-0.0659) r=0.016 blend=0.002 side=r
-  blob arm on forearm at=0.1213 offset=(-0.1476,-0.0231,-0.0483) r=0.0102 blend=0.002 side=r
-  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.0441,-0.1048,-0.0955) tip=(0.0042,0.0055,-0.0069) r=0.0061 r2=0.0068 blend=0.0016 side=r
-  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.0471,-0.1057,-0.0959) tip=(0.0048,0.0057,-0.0066) r=0.0068 r2=0.0074 blend=0.0016 side=r
-  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.0509,-0.1064,-0.0959) tip=(0.0063,0.0061,-0.0059) r=0.0074 r2=0.008 blend=0.0016 side=r
-  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.0561,-0.1067,-0.0953) tip=(0.007,0.0065,-0.0054) r=0.008 r2=0.0085 blend=0.0016 side=r
-  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.062,-0.1066,-0.0942) tip=(0.0063,0.0066,-0.0054) r=0.0085 r2=0.009 blend=0.0016 side=r
-  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.0672,-0.1064,-0.0932) tip=(0.0063,0.0068,-0.0051) r=0.009 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.4339 to=0.4339 offset=(0.0723,-0.106,-0.0918) tip=(0.0053,0.0069,-0.0051) r=0.0093 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.0765,-0.1054,-0.0906) tip=(0.005,0.0073,-0.0047) r=0.0096 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.0804,-0.1045,-0.0889) tip=(0.0037,0.0073,-0.005) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3724 to=0.3724 offset=(0.083,-0.1035,-0.0875) tip=(0.0027,0.0073,-0.0052) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3518 to=0.3518 offset=(0.0846,-0.1025,-0.0863) tip=(0.0017,0.0072,-0.0055) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3311 to=0.3311 offset=(0.0852,-0.1017,-0.0853) tip=(0.0008,0.007,-0.0059) r=0.0098 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.3104 to=0.3104 offset=(0.0848,-0.101,-0.0847) tip=(-0.0001,0.0068,-0.0062) r=0.0096 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.2895 to=0.2895 offset=(0.0836,-0.1005,-0.0845) tip=(-0.0009,0.0067,-0.0065) r=0.0093 r2=0.0089 blend=0.0016 side=r
-  bar  arm on forearm from=0.2686 to=0.2686 offset=(0.0816,-0.1002,-0.0845) tip=(-0.0012,0.0064,-0.007) r=0.0089 r2=0.0084 blend=0.0016 side=r
-  bar  arm on forearm from=0.2476 to=0.2476 offset=(0.0792,-0.1003,-0.085) tip=(-0.0026,0.0057,-0.008) r=0.0084 r2=0.0079 blend=0.0016 side=r
-  bar  arm on forearm from=0.2264 to=0.2264 offset=(0.0755,-0.1011,-0.0864) tip=(-0.001,0.0059,-0.0076) r=0.0079 r2=0.0073 blend=0.0016 side=r
-  bar  arm on forearm from=0.2052 to=0.2052 offset=(0.0734,-0.1017,-0.0874) tip=(-0.0015,0.0052,-0.0084) r=0.0073 r2=0.0067 blend=0.0016 side=r
-  bar  arm on forearm from=0.184 to=0.184 offset=(0.0707,-0.103,-0.0892) tip=(0.0001,0.005,-0.0083) r=0.0067 r2=0.006 blend=0.0016 side=r
-  bar  arm on forearm from=0.1628 to=0.1628 offset=(0.0697,-0.1045,-0.0908) tip=(0.0005,0.0046,-0.0083) r=0.006 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.142 to=0.142 offset=(0.0691,-0.1063,-0.0927) tip=(0.0015,0.0051,-0.0077) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1212 to=0.1212 offset=(0.0695,-0.1077,-0.094) tip=(0.0028,0.0054,-0.0071) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1003 to=0.1003 offset=(0.0711,-0.1086,-0.0946) tip=(0.0036,0.0057,-0.0067) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob arm on forearm at=0.4322 offset=(0.0697,-0.1022,-0.0886) r=0.0175 blend=0.002 side=r
-  blob arm on forearm at=0.1209 offset=(0.0692,-0.1073,-0.0936) r=0.0109 blend=0.002 side=r
-  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.1458,0.0027,0.0279) tip=(0.0029,0.0061,-0.0065) r=0.0061 r2=0.0068 blend=0.0016 side=r
-  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.1476,0.0024,0.028) tip=(0.0028,0.0067,-0.0059) r=0.0068 r2=0.0074 blend=0.0016 side=r
-  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.1493,0.0027,0.0285) tip=(0.0025,0.0075,-0.0052) r=0.0074 r2=0.008 blend=0.0016 side=r
-  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.1507,0.0037,0.0298) tip=(0.0023,0.008,-0.0047) r=0.008 r2=0.0085 blend=0.0016 side=r
-  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.1518,0.0053,0.0316) tip=(0.002,0.0083,-0.0045) r=0.0085 r2=0.009 blend=0.0016 side=r
-  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.1527,0.0072,0.0336) tip=(0.0018,0.0081,-0.0046) r=0.009 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.434 to=0.434 offset=(0.1535,0.009,0.0355) tip=(0.0013,0.0083,-0.0044) r=0.0093 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.1537,0.011,0.0375) tip=(0.0009,0.0082,-0.0045) r=0.0096 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.1535,0.0129,0.0393) tip=(0.0004,0.008,-0.0048) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3724 to=0.3724 offset=(0.1528,0.0146,0.0409) tip=(0.0005,0.0069,-0.006) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  arm on forearm from=0.3518 to=0.3518 offset=(0.1522,0.0151,0.0413) tip=(0.0003,0.0066,-0.0063) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  arm on forearm from=0.3311 to=0.3311 offset=(0.1514,0.0154,0.0415) tip=(0.0004,0.0057,-0.0072) r=0.0098 r2=0.0096 blend=0.0016 side=r
-  bar  arm on forearm from=0.3103 to=0.3103 offset=(0.1507,0.0148,0.0407) tip=(0.0006,0.005,-0.0079) r=0.0096 r2=0.0093 blend=0.0016 side=r
-  bar  arm on forearm from=0.2895 to=0.2895 offset=(0.1502,0.0134,0.0393) tip=(0.0008,0.0046,-0.0084) r=0.0093 r2=0.0089 blend=0.0016 side=r
-  bar  arm on forearm from=0.2685 to=0.2685 offset=(0.1498,0.0116,0.0375) tip=(0.0009,0.0041,-0.0089) r=0.0089 r2=0.0084 blend=0.0016 side=r
-  bar  arm on forearm from=0.2474 to=0.2474 offset=(0.1496,0.0093,0.0351) tip=(0.0018,0.0032,-0.0097) r=0.0084 r2=0.0079 blend=0.0016 side=r
-  bar  arm on forearm from=0.2261 to=0.2261 offset=(0.1503,0.006,0.032) tip=(0.0023,0.0041,-0.0089) r=0.0079 r2=0.0073 blend=0.0016 side=r
-  bar  arm on forearm from=0.2048 to=0.2048 offset=(0.1514,0.0035,0.0298) tip=(0.0033,0.0033,-0.0095) r=0.0073 r2=0.0067 blend=0.0016 side=r
-  bar  arm on forearm from=0.1835 to=0.1835 offset=(0.1535,0.0003,0.0269) tip=(0.0043,0.0035,-0.0089) r=0.0067 r2=0.006 blend=0.0016 side=r
-  bar  arm on forearm from=0.1624 to=0.1624 offset=(0.1567,-0.0027,0.0246) tip=(0.0045,0.0041,-0.0082) r=0.006 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1416 to=0.1416 offset=(0.1601,-0.005,0.0229) tip=(0.0049,0.0042,-0.008) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.1206 to=0.1206 offset=(0.1639,-0.0072,0.0214) tip=(0.0053,0.0052,-0.007) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  arm on forearm from=0.0996 to=0.0996 offset=(0.168,-0.0084,0.0209) tip=(0.0057,0.0059,-0.0063) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob arm on forearm at=0.5168 offset=(0.1483,0.0026,0.0284) r=0.012 blend=0.002 side=r
-  blob arm on forearm at=0.2699 offset=(0.1445,0.0112,0.0361) r=0.0171 blend=0.002 side=r
-  bar  arm on upperarm from=0.08 to=0.08 offset=(-0.0171,0.0814,0.1966) tip=(-0.01,-0.0034,-0.0004) r=0.006 r2=0.0063 blend=0.0016 side=r
-  bar  arm on upperarm from=0.0978 to=0.0978 offset=(-0.0214,0.0843,0.1941) tip=(-0.0083,-0.0048,0.0003) r=0.0063 r2=0.0066 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1156 to=0.1156 offset=(-0.0239,0.086,0.1923) tip=(-0.0071,-0.0057,0.0008) r=0.0066 r2=0.0069 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1334 to=0.1334 offset=(-0.0252,0.0867,0.1909) tip=(-0.0057,-0.0068,0.0014) r=0.0069 r2=0.0072 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1511 to=0.1511 offset=(-0.0251,0.0863,0.1901) tip=(-0.0041,-0.0079,0.0021) r=0.0072 r2=0.0074 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1688 to=0.1688 offset=(-0.0234,0.0848,0.19) tip=(-0.003,-0.0089,0.0022) r=0.0074 r2=0.0077 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1866 to=0.1866 offset=(-0.0206,0.0823,0.1901) tip=(-0.0034,-0.0086,0.0019) r=0.0077 r2=0.008 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2043 to=0.2043 offset=(-0.0183,0.0802,0.1899) tip=(-0.0016,-0.01,0.0025) r=0.008 r2=0.0082 blend=0.0016 side=r
-  bar  arm on upperarm from=0.222 to=0.222 offset=(-0.0142,0.0766,0.1902) tip=(-0.0032,-0.0089,0.0014) r=0.0082 r2=0.0084 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2397 to=0.2397 offset=(-0.0116,0.074,0.1895) tip=(-0.0024,-0.0097,0.0015) r=0.0084 r2=0.0086 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2574 to=0.2574 offset=(-0.0082,0.0707,0.1888) tip=(-0.0034,-0.0089,0.0008) r=0.0086 r2=0.0088 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2751 to=0.2751 offset=(-0.0059,0.0682,0.1874) tip=(-0.0043,-0.0083,0.0002) r=0.0088 r2=0.009 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2929 to=0.2929 offset=(-0.0045,0.0663,0.1855) tip=(-0.0053,-0.0077,-0.0003) r=0.009 r2=0.0092 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3107 to=0.3107 offset=(-0.004,0.065,0.1831) tip=(-0.0064,-0.0068,-0.0008) r=0.0092 r2=0.0093 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3285 to=0.3285 offset=(-0.0046,0.0646,0.1801) tip=(-0.0073,-0.0062,-0.0012) r=0.0093 r2=0.0094 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3463 to=0.3463 offset=(-0.0061,0.0648,0.1768) tip=(-0.0079,-0.0058,-0.0014) r=0.0094 r2=0.0095 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3642 to=0.3642 offset=(-0.0082,0.0655,0.1733) tip=(-0.0085,-0.0053,-0.0016) r=0.0095 r2=0.0095 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3821 to=0.3821 offset=(-0.0108,0.0667,0.1696) tip=(-0.0096,-0.0045,-0.002) r=0.0095 r2=0.0096 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4 to=0.4 offset=(-0.0146,0.0686,0.1654) tip=(-0.0103,-0.0039,-0.0023) r=0.0096 r2=0.0096 blend=0.0016 side=r
-  bar  arm on upperarm from=0.418 to=0.418 offset=(-0.0191,0.0712,0.1609) tip=(-0.0107,-0.0037,-0.0025) r=0.0096 r2=0.0096 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4359 to=0.4359 offset=(-0.0239,0.074,0.1562) tip=(-0.01,-0.0042,-0.0022) r=0.0096 r2=0.0096 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4539 to=0.4539 offset=(-0.0281,0.0762,0.1519) tip=(-0.0088,-0.005,-0.0015) r=0.0096 r2=0.0095 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4719 to=0.4719 offset=(-0.0311,0.0777,0.1482) tip=(-0.0077,-0.0058,-0.0007) r=0.0095 r2=0.0094 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4899 to=0.4899 offset=(-0.0329,0.0784,0.1452) tip=(-0.0072,-0.0061,-0.0002) r=0.0094 r2=0.0093 blend=0.0016 side=r
-  bar  arm on upperarm from=0.508 to=0.508 offset=(-0.0342,0.0787,0.1428) tip=(-0.0064,-0.0065,0.0007) r=0.0093 r2=0.0092 blend=0.0016 side=r
-  bar  arm on upperarm from=0.526 to=0.526 offset=(-0.0348,0.0787,0.1413) tip=(-0.0053,-0.0072,0.0014) r=0.0092 r2=0.0091 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5441 to=0.5441 offset=(-0.0342,0.078,0.1405) tip=(-0.0044,-0.0078,0.0023) r=0.0091 r2=0.0089 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5621 to=0.5621 offset=(-0.0328,0.0767,0.1406) tip=(-0.0044,-0.0076,0.0024) r=0.0089 r2=0.0087 blend=0.0016 side=r
-  bar  arm on upperarm from=0.58 to=0.58 offset=(-0.0314,0.0755,0.1408) tip=(-0.0029,-0.0087,0.0033) r=0.0087 r2=0.0085 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5979 to=0.5979 offset=(-0.0284,0.0732,0.142) tip=(-0.0024,-0.0091,0.0035) r=0.0085 r2=0.0083 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6158 to=0.6158 offset=(-0.025,0.0706,0.1433) tip=(-0.0031,-0.0086,0.003) r=0.0083 r2=0.0081 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6337 to=0.6337 offset=(-0.0223,0.0684,0.1441) tip=(-0.0039,-0.0081,0.0025) r=0.0081 r2=0.0078 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6516 to=0.6516 offset=(-0.0204,0.0668,0.1445) tip=(-0.0041,-0.0079,0.0024) r=0.0078 r2=0.0076 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6695 to=0.6695 offset=(-0.0187,0.0654,0.1447) tip=(-0.0051,-0.0072,0.0019) r=0.0076 r2=0.0073 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6873 to=0.6873 offset=(-0.018,0.0647,0.1445) tip=(-0.0058,-0.0067,0.0016) r=0.0073 r2=0.007 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7052 to=0.7052 offset=(-0.0179,0.0644,0.144) tip=(-0.0064,-0.0062,0.0013) r=0.007 r2=0.0067 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7231 to=0.7231 offset=(-0.0185,0.0647,0.1432) tip=(-0.0071,-0.0057,0.001) r=0.0067 r2=0.0064 blend=0.0016 side=r
-  bar  arm on upperarm from=0.741 to=0.741 offset=(-0.0198,0.0655,0.142) tip=(-0.0081,-0.0049,0.0005) r=0.0064 r2=0.0061 blend=0.0016 side=r
-  bar  arm on upperarm from=0.759 to=0.759 offset=(-0.0221,0.067,0.1404) tip=(-0.0082,-0.0049,0.0007) r=0.0061 r2=0.0058 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7769 to=0.7769 offset=(-0.0245,0.0686,0.139) tip=(-0.0099,-0.0036,0) r=0.0058 r2=0.0055 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7949 to=0.7949 offset=(-0.0285,0.0715,0.1367) tip=(-0.01,-0.0035,0) r=0.0055 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8129 to=0.8129 offset=(-0.0327,0.0746,0.1346) tip=(-0.0094,-0.0038,0.0005) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8309 to=0.8309 offset=(-0.0362,0.0772,0.1329) tip=(-0.0095,-0.0037,0.0005) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8488 to=0.8488 offset=(-0.0399,0.08,0.1312) tip=(-0.0091,-0.004,0.0008) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8667 to=0.8667 offset=(-0.0432,0.0825,0.1298) tip=(-0.0084,-0.0044,0.0013) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8846 to=0.8846 offset=(-0.0458,0.0845,0.1289) tip=(-0.0076,-0.0049,0.0018) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  bar  arm on upperarm from=0.9024 to=0.9024 offset=(-0.0476,0.086,0.1285) tip=(-0.0066,-0.0056,0.0026) r=0.0053 r2=0.0053 blend=0.0016 side=r
-  blob arm on upperarm at=0.4345 offset=(-0.0235,0.0728,0.1537) r=0.0145 blend=0.002 side=r
-  blob arm on upperarm at=0.4512 offset=(-0.0272,0.0737,0.1469) r=0.0174 blend=0.002 side=r
-  blob arm on upperarm at=0.4688 offset=(-0.0298,0.0745,0.142) r=0.0188 blend=0.002 side=r
-  blob arm on upperarm at=0.5618 offset=(-0.0323,0.0757,0.1388) r=0.0135 blend=0.002 side=r
-  blob arm on upperarm at=0.7228 offset=(-0.0183,0.0639,0.1414) r=0.0124 blend=0.002 side=r
-  blob arm on upperarm at=0.777 offset=(-0.0246,0.0691,0.14) r=0.009 blend=0.002 side=r
-  blob arm on upperarm at=0.8485 offset=(-0.0403,0.0808,0.1325) r=0.0083 blend=0.002 side=r
-  blob arm on upperarm at=0.8848 offset=(-0.0455,0.084,0.1281) r=0.0108 blend=0.002 side=r
-  bar  arm on upperarm from=0.3656 to=0.3656 offset=(-0.0064,0.0649,0.1761) tip=(0.0017,-0.0137,0.0017) r=0.0039 r2=0.0047 blend=0.0016 side=r
-  bar  arm on upperarm from=0.384 to=0.384 offset=(0.0012,0.0578,0.1756) tip=(0.0005,-0.013,0.0009) r=0.0047 r2=0.0054 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4025 to=0.4025 offset=(0.0077,0.0515,0.1742) tip=(0.0008,-0.0134,0.0007) r=0.0054 r2=0.0059 blend=0.0016 side=r
-  bar  arm on upperarm from=0.421 to=0.421 offset=(0.0146,0.0448,0.1727) tip=(0.0016,-0.0142,0.0004) r=0.0059 r2=0.0062 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4396 to=0.4396 offset=(0.0222,0.0373,0.1708) tip=(0.0024,-0.0151,0) r=0.0062 r2=0.0062 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4583 to=0.4583 offset=(0.0307,0.0289,0.1686) tip=(0.0032,-0.0161,-0.0007) r=0.0062 r2=0.0059 blend=0.0016 side=r
-  bar  arm on upperarm from=0.477 to=0.477 offset=(0.04,0.0196,0.1657) tip=(0.0037,-0.0168,-0.0015) r=0.0059 r2=0.0054 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4957 to=0.4957 offset=(0.0498,0.0095,0.1619) tip=(0.0038,-0.0172,-0.0025) r=0.0054 r2=0.0047 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5144 to=0.5144 offset=(0.0597,-0.001,0.1571) tip=(0.0038,-0.0175,-0.0033) r=0.0047 r2=0.0039 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5331 to=0.5331 offset=(0.0696,-0.0118,0.1516) tip=(0.0037,-0.0179,-0.0048) r=0.0039 r2=0.0034 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5518 to=0.5518 offset=(0.0793,-0.0229,0.1445) tip=(0.0039,-0.0186,-0.0067) r=0.0034 r2=0.0034 blend=0.0016 side=r
-  blob arm on upperarm at=0.4562 offset=(0.03,0.0282,0.1647) r=0.0118 blend=0.002 side=r
-  bar  arm on upperarm from=0.1199 to=0.1199 offset=(-0.0794,-0.0001,-0.2134) tip=(-0.0009,-0.0114,0.0007) r=0.0056 r2=0.0059 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1379 to=0.1379 offset=(-0.0745,-0.005,-0.2148) tip=(-0.0022,-0.01,0.0017) r=0.0059 r2=0.0062 blend=0.0016 side=r
-  bar  arm on upperarm from=0.1559 to=0.1559 offset=(-0.0708,-0.0085,-0.2153) tip=(-0.0035,-0.0086,0.0023) r=0.0062 r2=0.0065 blend=0.0016 side=r
-  bar  arm on upperarm from=0.174 to=0.174 offset=(-0.0685,-0.0105,-0.2151) tip=(-0.0047,-0.0074,0.0028) r=0.0065 r2=0.0068 blend=0.0016 side=r
-  bar  arm on upperarm from=0.192 to=0.192 offset=(-0.0673,-0.0114,-0.2145) tip=(-0.0057,-0.0063,0.0032) r=0.0068 r2=0.0071 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2101 to=0.2101 offset=(-0.0671,-0.0112,-0.2135) tip=(-0.0083,-0.0037,0.0039) r=0.0071 r2=0.0074 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2282 to=0.2282 offset=(-0.0696,-0.0084,-0.2118) tip=(-0.0087,-0.0033,0.0041) r=0.0074 r2=0.0077 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2462 to=0.2462 offset=(-0.0724,-0.0052,-0.2099) tip=(-0.0094,-0.0025,0.0045) r=0.0077 r2=0.0079 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2643 to=0.2643 offset=(-0.076,-0.0012,-0.2076) tip=(-0.0089,-0.003,0.0045) r=0.0079 r2=0.0081 blend=0.0016 side=r
-  bar  arm on upperarm from=0.2824 to=0.2824 offset=(-0.079,0.0023,-0.2054) tip=(-0.0099,-0.0019,0.0049) r=0.0081 r2=0.0083 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3004 to=0.3004 offset=(-0.0831,0.0069,-0.2027) tip=(-0.0089,-0.0028,0.0049) r=0.0083 r2=0.0085 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3184 to=0.3184 offset=(-0.0862,0.0105,-0.1999) tip=(-0.0081,-0.0036,0.0048) r=0.0085 r2=0.0086 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3364 to=0.3364 offset=(-0.0885,0.0135,-0.1973) tip=(-0.0064,-0.0054,0.004) r=0.0086 r2=0.0088 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3545 to=0.3545 offset=(-0.089,0.0146,-0.1954) tip=(-0.0053,-0.0065,0.0035) r=0.0088 r2=0.0089 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3725 to=0.3725 offset=(-0.0885,0.0146,-0.194) tip=(-0.0035,-0.0085,0.0025) r=0.0089 r2=0.0089 blend=0.0016 side=r
-  bar  arm on upperarm from=0.3905 to=0.3905 offset=(-0.0861,0.0125,-0.1937) tip=(-0.0022,-0.01,0.0019) r=0.0089 r2=0.009 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4086 to=0.4086 offset=(-0.0824,0.0091,-0.194) tip=(-0.0005,-0.0117,0.0011) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4267 to=0.4267 offset=(-0.0771,0.0039,-0.1951) tip=(-0.0005,-0.0116,0.0013) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4447 to=0.4447 offset=(-0.0717,-0.0012,-0.196) tip=(0.0018,-0.0141,0.0003) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4628 to=0.4628 offset=(-0.064,-0.0088,-0.1979) tip=(0.0006,-0.0127,0.0012) r=0.009 r2=0.0089 blend=0.0016 side=r
-  bar  arm on upperarm from=0.4809 to=0.4809 offset=(-0.0575,-0.015,-0.1989) tip=(0.0007,-0.0127,0.0014) r=0.0089 r2=0.0088 blend=0.0016 side=r
-  bar  arm on upperarm from=0.499 to=0.499 offset=(-0.0509,-0.0212,-0.1997) tip=(0.0003,-0.0122,0.0018) r=0.0088 r2=0.0087 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5171 to=0.5171 offset=(-0.0448,-0.0268,-0.2001) tip=(-0.0006,-0.0113,0.0022) r=0.0087 r2=0.0085 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5352 to=0.5352 offset=(-0.0395,-0.0316,-0.2001) tip=(-0.0027,-0.009,0.0031) r=0.0085 r2=0.0084 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5532 to=0.5532 offset=(-0.0363,-0.0341,-0.1992) tip=(-0.0041,-0.0076,0.0037) r=0.0084 r2=0.0082 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5713 to=0.5713 offset=(-0.0345,-0.0353,-0.1977) tip=(-0.0055,-0.0061,0.0043) r=0.0082 r2=0.008 blend=0.0016 side=r
-  bar  arm on upperarm from=0.5893 to=0.5893 offset=(-0.0342,-0.0349,-0.1956) tip=(-0.0075,-0.004,0.0054) r=0.008 r2=0.0077 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6074 to=0.6074 offset=(-0.0358,-0.0323,-0.1924) tip=(-0.008,-0.0034,0.0057) r=0.0077 r2=0.0075 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6255 to=0.6255 offset=(-0.0379,-0.0292,-0.189) tip=(-0.0091,-0.0022,0.0065) r=0.0075 r2=0.0072 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6435 to=0.6435 offset=(-0.0412,-0.0249,-0.1847) tip=(-0.009,-0.0022,0.0068) r=0.0072 r2=0.0069 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6616 to=0.6616 offset=(-0.0443,-0.0205,-0.18) tip=(-0.0094,-0.0017,0.0073) r=0.0069 r2=0.0067 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6798 to=0.6798 offset=(-0.0478,-0.0157,-0.1749) tip=(-0.008,-0.0031,0.0067) r=0.0067 r2=0.0063 blend=0.0016 side=r
-  bar  arm on upperarm from=0.698 to=0.698 offset=(-0.0499,-0.0123,-0.1704) tip=(-0.0075,-0.0037,0.0064) r=0.0063 r2=0.006 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7162 to=0.7162 offset=(-0.0514,-0.0095,-0.1662) tip=(-0.0058,-0.0056,0.0054) r=0.006 r2=0.0057 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7344 to=0.7344 offset=(-0.0513,-0.0085,-0.163) tip=(-0.0045,-0.0071,0.0045) r=0.0057 r2=0.0054 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7525 to=0.7525 offset=(-0.0499,-0.009,-0.1607) tip=(-0.0032,-0.0085,0.0038) r=0.0054 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7707 to=0.7707 offset=(-0.0471,-0.0109,-0.1591) tip=(-0.0022,-0.0096,0.0032) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.789 to=0.789 offset=(-0.0434,-0.014,-0.1581) tip=(-0.0021,-0.0098,0.0029) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8072 to=0.8072 offset=(-0.0395,-0.0172,-0.1574) tip=(-0.0008,-0.0112,0.0022) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8254 to=0.8254 offset=(-0.0344,-0.0219,-0.1575) tip=(-0.0007,-0.0114,0.0019) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8437 to=0.8437 offset=(-0.0292,-0.0267,-0.1578) tip=(0.0002,-0.0122,0.0018) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8618 to=0.8618 offset=(-0.0231,-0.0323,-0.1581) tip=(-0.0001,-0.0118,0.0021) r=0.005 r2=0.005 blend=0.0016 side=r
-  blob arm on upperarm at=0.1558 offset=(-0.0705,-0.0085,-0.2143) r=0.0109 blend=0.002 side=r
-  blob arm on upperarm at=0.21 offset=(-0.067,-0.0112,-0.213) r=0.0107 blend=0.002 side=r
-  blob arm on upperarm at=0.2456 offset=(-0.0715,-0.0051,-0.2071) r=0.0134 blend=0.002 side=r
-  blob arm on upperarm at=0.3529 offset=(-0.0868,0.0142,-0.1907) r=0.0161 blend=0.002 side=r
-  blob arm on upperarm at=0.4422 offset=(-0.0689,-0.0016,-0.1897) r=0.0179 blend=0.002 side=r
-  blob arm on upperarm at=0.4782 offset=(-0.0548,-0.0151,-0.192) r=0.0184 blend=0.002 side=r
-  blob arm on upperarm at=0.5518 offset=(-0.0353,-0.0341,-0.1961) r=0.014 blend=0.002 side=r
-  blob arm on upperarm at=0.7347 offset=(-0.0516,-0.0084,-0.1635) r=0.0091 blend=0.002 side=r
-  blob arm on upperarm at=0.7897 offset=(-0.044,-0.0139,-0.1596) r=0.0077 blend=0.002 side=r
-  blob arm on upperarm at=0.8259 offset=(-0.0349,-0.022,-0.1592) r=0.0076 blend=0.002 side=r
-  bar  arm on upperarm from=0.6445 to=0.6445 offset=(-0.0347,-0.0322,-0.189) tip=(-0.0014,-0.0104,0.0039) r=0.0036 r2=0.0044 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6631 to=0.6631 offset=(-0.03,-0.0358,-0.1874) tip=(-0.0007,-0.011,0.0039) r=0.0044 r2=0.0051 blend=0.0016 side=r
-  bar  arm on upperarm from=0.6818 to=0.6818 offset=(-0.0247,-0.0401,-0.1857) tip=(-0.0025,-0.0091,0.0048) r=0.0051 r2=0.0056 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7004 to=0.7004 offset=(-0.0212,-0.0424,-0.1832) tip=(-0.0018,-0.0097,0.005) r=0.0056 r2=0.0058 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7192 to=0.7192 offset=(-0.0169,-0.0453,-0.1805) tip=(0.0002,-0.0117,0.0045) r=0.0058 r2=0.0058 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7379 to=0.7379 offset=(-0.0107,-0.0502,-0.1783) tip=(0.0006,-0.012,0.0048) r=0.0058 r2=0.0056 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7568 to=0.7568 offset=(-0.0039,-0.0554,-0.1758) tip=(0.0016,-0.0127,0.0054) r=0.0056 r2=0.0051 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7756 to=0.7756 offset=(0.0038,-0.0613,-0.1727) tip=(0.0026,-0.0135,0.0057) r=0.0051 r2=0.0044 blend=0.0016 side=r
-  bar  arm on upperarm from=0.7946 to=0.7946 offset=(0.0125,-0.068,-0.1692) tip=(0.0038,-0.0142,0.0068) r=0.0044 r2=0.0036 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8135 to=0.8135 offset=(0.0224,-0.0754,-0.1647) tip=(0.0046,-0.0146,0.008) r=0.0036 r2=0.0032 blend=0.0016 side=r
-  bar  arm on upperarm from=0.8324 to=0.8324 offset=(0.0332,-0.0832,-0.159) tip=(0.0053,-0.0145,0.0099) r=0.0032 r2=0.0032 blend=0.0016 side=r
-  blob arm on upperarm at=0.8127 offset=(0.0225,-0.0753,-0.1639) r=0.0075 blend=0.002 side=r
-  bar  leg on thigh from=0.0999 to=0.0999 offset=(-0.103,0.0072,0.2109) tip=(-0.005,-0.0087,-0.0033) r=0.0061 r2=0.0066 blend=0.0016 side=r
-  bar  leg on thigh from=0.1225 to=0.1225 offset=(-0.1073,0.0075,0.2077) tip=(-0.0036,-0.0088,-0.0029) r=0.0066 r2=0.007 blend=0.0016 side=r
-  bar  leg on thigh from=0.145 to=0.145 offset=(-0.1103,0.0077,0.2047) tip=(-0.001,-0.009,-0.0016) r=0.007 r2=0.0075 blend=0.0016 side=r
-  bar  leg on thigh from=0.1676 to=0.1676 offset=(-0.1107,0.0077,0.2032) tip=(0.0006,-0.0091,-0.0008) r=0.0075 r2=0.0079 blend=0.0016 side=r
-  bar  leg on thigh from=0.1901 to=0.1901 offset=(-0.1094,0.0076,0.2024) tip=(0.0012,-0.0091,-0.0007) r=0.0079 r2=0.0082 blend=0.0016 side=r
-  bar  leg on thigh from=0.2127 to=0.2127 offset=(-0.1076,0.0075,0.2017) tip=(0.004,-0.0093,0.0008) r=0.0082 r2=0.0086 blend=0.0016 side=r
-  bar  leg on thigh from=0.2352 to=0.2352 offset=(-0.103,0.0072,0.2025) tip=(0.0056,-0.0094,0.0014) r=0.0086 r2=0.0089 blend=0.0016 side=r
-  bar  leg on thigh from=0.2577 to=0.2577 offset=(-0.0967,0.0068,0.2039) tip=(0.0041,-0.0093,0.0001) r=0.0089 r2=0.0092 blend=0.0016 side=r
-  bar  leg on thigh from=0.2802 to=0.2802 offset=(-0.092,0.0064,0.2041) tip=(0.0037,-0.0093,-0.0004) r=0.0092 r2=0.0094 blend=0.0016 side=r
-  bar  leg on thigh from=0.3027 to=0.3027 offset=(-0.0877,0.0061,0.2037) tip=(0.0033,-0.0093,-0.0011) r=0.0094 r2=0.0096 blend=0.0016 side=r
-  bar  leg on thigh from=0.3253 to=0.3253 offset=(-0.0838,0.0059,0.2025) tip=(0.0017,-0.0092,-0.0019) r=0.0096 r2=0.0097 blend=0.0016 side=r
-  bar  leg on thigh from=0.3478 to=0.3478 offset=(-0.0815,0.0057,0.2006) tip=(0.0003,-0.0091,-0.0027) r=0.0097 r2=0.0098 blend=0.0016 side=r
-  bar  leg on thigh from=0.3704 to=0.3704 offset=(-0.0806,0.0056,0.1979) tip=(-0.0023,-0.0089,-0.0042) r=0.0098 r2=0.0099 blend=0.0016 side=r
-  bar  leg on thigh from=0.393 to=0.393 offset=(-0.0822,0.0058,0.1937) tip=(-0.0039,-0.0088,-0.0053) r=0.0099 r2=0.0099 blend=0.0016 side=r
-  bar  leg on thigh from=0.4157 to=0.4157 offset=(-0.0855,0.006,0.1884) tip=(-0.0044,-0.0088,-0.0058) r=0.0099 r2=0.0098 blend=0.0016 side=r
-  bar  leg on thigh from=0.4384 to=0.4384 offset=(-0.0893,0.0062,0.1826) tip=(-0.0061,-0.0087,-0.0072) r=0.0098 r2=0.0097 blend=0.0016 side=r
-  bar  leg on thigh from=0.4611 to=0.4611 offset=(-0.0947,0.0066,0.1755) tip=(-0.006,-0.0087,-0.0076) r=0.0097 r2=0.0096 blend=0.0016 side=r
-  bar  leg on thigh from=0.4839 to=0.4839 offset=(-0.1001,0.007,0.1679) tip=(-0.0064,-0.0087,-0.0084) r=0.0096 r2=0.0094 blend=0.0016 side=r
-  bar  leg on thigh from=0.5068 to=0.5068 offset=(-0.1058,0.0074,0.1595) tip=(-0.0056,-0.0088,-0.0083) r=0.0094 r2=0.0092 blend=0.0016 side=r
-  bar  leg on thigh from=0.5296 to=0.5296 offset=(-0.1108,0.0077,0.1513) tip=(-0.0057,-0.0088,-0.0088) r=0.0092 r2=0.0089 blend=0.0016 side=r
-  bar  leg on thigh from=0.5525 to=0.5525 offset=(-0.1159,0.0081,0.1425) tip=(-0.0032,-0.009,-0.0066) r=0.0089 r2=0.0086 blend=0.0016 side=r
-  bar  leg on thigh from=0.5754 to=0.5754 offset=(-0.1184,0.0083,0.1359) tip=(-0.0025,-0.0091,-0.0055) r=0.0086 r2=0.0082 blend=0.0016 side=r
-  bar  leg on thigh from=0.5987 to=0.5987 offset=(-0.1202,0.0084,0.1304) tip=(-0.0025,-0.0092,-0.0045) r=0.0082 r2=0.0079 blend=0.0016 side=r
-  bar  leg on thigh from=0.622 to=0.622 offset=(-0.1221,0.0085,0.1259) tip=(-0.0015,-0.0092,-0.0021) r=0.0079 r2=0.0075 blend=0.0016 side=r
-  bar  leg on thigh from=0.6452 to=0.6452 offset=(-0.1229,0.0086,0.1237) tip=(-0.0007,-0.0092,-0.0001) r=0.0075 r2=0.007 blend=0.0016 side=r
-  bar  leg on thigh from=0.6683 to=0.6683 offset=(-0.123,0.0086,0.1236) tip=(-0.0003,-0.0092,0.0013) r=0.007 r2=0.0066 blend=0.0016 side=r
-  bar  leg on thigh from=0.6912 to=0.6912 offset=(-0.1227,0.0086,0.1249) tip=(0.0008,-0.0092,0.0034) r=0.0066 r2=0.0061 blend=0.0016 side=r
-  bar  leg on thigh from=0.7141 to=0.7141 offset=(-0.1213,0.0085,0.1284) tip=(-0.0002,-0.0091,0.0027) r=0.0061 r2=0.0057 blend=0.0016 side=r
-  bar  leg on thigh from=0.7369 to=0.7369 offset=(-0.1208,0.0084,0.1311) tip=(0.0015,-0.0092,0.0046) r=0.0057 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.7596 to=0.7596 offset=(-0.1187,0.0083,0.1357) tip=(0.001,-0.0092,0.0043) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.7824 to=0.7824 offset=(-0.1171,0.0082,0.14) tip=(0.0013,-0.0092,0.0042) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.8051 to=0.8051 offset=(-0.1151,0.008,0.1441) tip=(-0.0005,-0.0091,0.0021) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.8278 to=0.8278 offset=(-0.115,0.008,0.1462) tip=(-0.0017,-0.009,0.0009) r=0.0054 r2=0.0054 blend=0.0016 side=r
-  blob leg on thigh at=0.3213 offset=(-0.0814,0.0057,0.1976) r=0.0176 blend=0.002 side=r
-  blob leg on thigh at=0.3656 offset=(-0.078,0.0055,0.1926) r=0.0181 blend=0.002 side=r
-  blob leg on thigh at=0.3889 offset=(-0.08,0.0056,0.1894) r=0.0171 blend=0.002 side=r
-  blob leg on thigh at=0.5728 offset=(-0.1159,0.0081,0.1335) r=0.0151 blend=0.002 side=r
-  blob leg on thigh at=0.6213 offset=(-0.1207,0.0084,0.1247) r=0.013 blend=0.002 side=r
-  blob leg on thigh at=0.6912 offset=(-0.1229,0.0086,0.1251) r=0.0104 blend=0.002 side=r
-  bar  leg on thigh from=0.168 to=0.168 offset=(-0.1291,0.009,0.1916) tip=(-0.013,-0.0079,-0.0126) r=0.004 r2=0.0048 blend=0.0016 side=r
-  bar  leg on thigh from=0.1901 to=0.1901 offset=(-0.1415,0.0099,0.179) tip=(-0.0107,-0.0081,-0.0124) r=0.0048 r2=0.0055 blend=0.0016 side=r
-  bar  leg on thigh from=0.2121 to=0.2121 offset=(-0.1516,0.0106,0.1665) tip=(-0.0088,-0.0082,-0.0121) r=0.0055 r2=0.006 blend=0.0016 side=r
-  bar  leg on thigh from=0.2341 to=0.2341 offset=(-0.1598,0.0112,0.1544) tip=(-0.0067,-0.0084,-0.0109) r=0.006 r2=0.0063 blend=0.0016 side=r
-  bar  leg on thigh from=0.2562 to=0.2562 offset=(-0.1658,0.0116,0.1435) tip=(-0.0053,-0.0085,-0.0104) r=0.0063 r2=0.0064 blend=0.0016 side=r
-  bar  leg on thigh from=0.2783 to=0.2783 offset=(-0.1706,0.0119,0.1331) tip=(-0.005,-0.0085,-0.0112) r=0.0064 r2=0.0063 blend=0.0016 side=r
-  bar  leg on thigh from=0.3004 to=0.3004 offset=(-0.175,0.0122,0.1219) tip=(-0.003,-0.0087,-0.0089) r=0.0063 r2=0.0059 blend=0.0016 side=r
-  bar  leg on thigh from=0.3225 to=0.3225 offset=(-0.1774,0.0124,0.1129) tip=(-0.0033,-0.0087,-0.0107) r=0.0059 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.3448 to=0.3448 offset=(-0.1801,0.0126,0.1022) tip=(-0.0028,-0.0087,-0.011) r=0.0054 r2=0.0046 blend=0.0016 side=r
-  bar  leg on thigh from=0.367 to=0.367 offset=(-0.1823,0.0127,0.0912) tip=(-0.0026,-0.0088,-0.0122) r=0.0046 r2=0.0038 blend=0.0016 side=r
-  bar  leg on thigh from=0.3894 to=0.3894 offset=(-0.1842,0.0129,0.079) tip=(-0.0021,-0.0088,-0.0138) r=0.0038 r2=0.0035 blend=0.0016 side=r
-  bar  leg on thigh from=0.4116 to=0.4116 offset=(-0.1857,0.013,0.0652) tip=(-0.0014,-0.0088,-0.0151) r=0.0035 r2=0.0035 blend=0.0016 side=r
-  blob leg on thigh at=0.2754 offset=(-0.1664,0.0116,0.1303) r=0.0131 blend=0.002 side=r
-  bar  leg on thigh from=0.1496 to=0.1496 offset=(-0.0464,0.0032,-0.2325) tip=(-0.0042,-0.0088,0.0021) r=0.0056 r2=0.006 blend=0.0016 side=r
-  bar  leg on thigh from=0.1722 to=0.1722 offset=(-0.05,0.0035,-0.2304) tip=(-0.0029,-0.0089,0.002) r=0.006 r2=0.0064 blend=0.0016 side=r
-  bar  leg on thigh from=0.1948 to=0.1948 offset=(-0.0522,0.0037,-0.2284) tip=(-0.0011,-0.009,0.0018) r=0.0064 r2=0.0068 blend=0.0016 side=r
-  bar  leg on thigh from=0.2174 to=0.2174 offset=(-0.0527,0.0037,-0.2266) tip=(0,-0.009,0.0017) r=0.0068 r2=0.0072 blend=0.0016 side=r
-  bar  leg on thigh from=0.2399 to=0.2399 offset=(-0.052,0.0036,-0.2249) tip=(0.0018,-0.0092,0.0014) r=0.0072 r2=0.0075 blend=0.0016 side=r
-  bar  leg on thigh from=0.2625 to=0.2625 offset=(-0.0496,0.0035,-0.2234) tip=(0.0038,-0.0093,0.0012) r=0.0075 r2=0.0078 blend=0.0016 side=r
-  bar  leg on thigh from=0.285 to=0.285 offset=(-0.0451,0.0032,-0.2222) tip=(0.0056,-0.0094,0.0013) r=0.0078 r2=0.0081 blend=0.0016 side=r
-  bar  leg on thigh from=0.3075 to=0.3075 offset=(-0.0389,0.0027,-0.2209) tip=(0.005,-0.0094,0.0016) r=0.0081 r2=0.0083 blend=0.0016 side=r
-  bar  leg on thigh from=0.3301 to=0.3301 offset=(-0.0333,0.0023,-0.2193) tip=(0.0061,-0.0095,0.0017) r=0.0083 r2=0.0086 blend=0.0016 side=r
-  bar  leg on thigh from=0.3526 to=0.3526 offset=(-0.0266,0.0019,-0.2176) tip=(0.0066,-0.0095,0.0021) r=0.0086 r2=0.0087 blend=0.0016 side=r
-  bar  leg on thigh from=0.3752 to=0.3752 offset=(-0.0194,0.0014,-0.2155) tip=(0.0072,-0.0096,0.0024) r=0.0087 r2=0.0089 blend=0.0016 side=r
-  bar  leg on thigh from=0.3978 to=0.3978 offset=(-0.0115,0.0008,-0.2131) tip=(0.0048,-0.0094,0.0029) r=0.0089 r2=0.009 blend=0.0016 side=r
-  bar  leg on thigh from=0.4205 to=0.4205 offset=(-0.0061,0.0004,-0.2102) tip=(0.0046,-0.0094,0.0032) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  leg on thigh from=0.4432 to=0.4432 offset=(-0.0009,0.0001,-0.207) tip=(0.0036,-0.0094,0.0033) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  leg on thigh from=0.4659 to=0.4659 offset=(0.0033,-0.0002,-0.2037) tip=(0.0021,-0.0093,0.0034) r=0.009 r2=0.009 blend=0.0016 side=r
-  bar  leg on thigh from=0.4886 to=0.4886 offset=(0.0061,-0.0004,-0.2003) tip=(0.0003,-0.0092,0.0033) r=0.009 r2=0.0089 blend=0.0016 side=r
-  bar  leg on thigh from=0.5114 to=0.5114 offset=(0.0071,-0.0005,-0.197) tip=(-0.0017,-0.009,0.0031) r=0.0089 r2=0.0087 blend=0.0016 side=r
-  bar  leg on thigh from=0.5342 to=0.5342 offset=(0.006,-0.0004,-0.1939) tip=(-0.0029,-0.009,0.0029) r=0.0087 r2=0.0086 blend=0.0016 side=r
-  bar  leg on thigh from=0.5571 to=0.5571 offset=(0.0038,-0.0003,-0.191) tip=(-0.0039,-0.0089,0.0028) r=0.0086 r2=0.0083 blend=0.0016 side=r
-  bar  leg on thigh from=0.58 to=0.58 offset=(0.0005,0,-0.1882) tip=(-0.0046,-0.0089,0.0027) r=0.0083 r2=0.0081 blend=0.0016 side=r
-  bar  leg on thigh from=0.6029 to=0.6029 offset=(-0.0035,0.0002,-0.1855) tip=(-0.0034,-0.009,0.0025) r=0.0081 r2=0.0078 blend=0.0016 side=r
-  bar  leg on thigh from=0.6259 to=0.6259 offset=(-0.0063,0.0004,-0.183) tip=(-0.0028,-0.009,0.0022) r=0.0078 r2=0.0075 blend=0.0016 side=r
-  bar  leg on thigh from=0.6488 to=0.6488 offset=(-0.0084,0.0006,-0.1808) tip=(-0.0023,-0.009,0.0019) r=0.0075 r2=0.0072 blend=0.0016 side=r
-  bar  leg on thigh from=0.6718 to=0.6718 offset=(-0.01,0.0007,-0.1789) tip=(-0.0018,-0.0091,0.0016) r=0.0072 r2=0.0068 blend=0.0016 side=r
-  bar  leg on thigh from=0.6947 to=0.6947 offset=(-0.0112,0.0008,-0.1773) tip=(-0.0002,-0.0091,0.0013) r=0.0068 r2=0.0064 blend=0.0016 side=r
-  bar  leg on thigh from=0.7175 to=0.7175 offset=(-0.0107,0.0008,-0.176) tip=(0.0006,-0.0092,0.0012) r=0.0064 r2=0.006 blend=0.0016 side=r
-  bar  leg on thigh from=0.7403 to=0.7403 offset=(-0.0095,0.0007,-0.1749) tip=(0.0017,-0.0093,0.0011) r=0.006 r2=0.0056 blend=0.0016 side=r
-  bar  leg on thigh from=0.7632 to=0.7632 offset=(-0.0071,0.0005,-0.1738) tip=(0.0025,-0.0094,0.0007) r=0.0056 r2=0.0052 blend=0.0016 side=r
-  bar  leg on thigh from=0.7861 to=0.7861 offset=(-0.004,0.0003,-0.1731) tip=(0.0032,-0.0094,0.0005) r=0.0052 r2=0.005 blend=0.0016 side=r
-  bar  leg on thigh from=0.809 to=0.809 offset=(-0.0002,0,-0.1726) tip=(0.0049,-0.0095,0.0004) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  leg on thigh from=0.8318 to=0.8318 offset=(0.0053,-0.0004,-0.1722) tip=(0.0047,-0.0095,0.0004) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  leg on thigh from=0.8545 to=0.8545 offset=(0.0107,-0.0007,-0.1718) tip=(0.0043,-0.0094,0.0003) r=0.005 r2=0.005 blend=0.0016 side=r
-  bar  leg on thigh from=0.8773 to=0.8773 offset=(0.0157,-0.0011,-0.1715) tip=(0.005,-0.0095,0.0007) r=0.005 r2=0.005 blend=0.0016 side=r
-  blob leg on thigh at=0.2156 offset=(-0.0516,0.0036,-0.2226) r=0.0142 blend=0.002 side=r
-  blob leg on thigh at=0.2831 offset=(-0.0444,0.0031,-0.2193) r=0.0135 blend=0.002 side=r
-  blob leg on thigh at=0.3271 offset=(-0.0326,0.0023,-0.2154) r=0.0148 blend=0.002 side=r
-  blob leg on thigh at=0.4601 offset=(0.0032,-0.0002,-0.1974) r=0.0176 blend=0.002 side=r
-  blob leg on thigh at=0.5779 offset=(0.0005,0,-0.1855) r=0.0134 blend=0.002 side=r
-  blob leg on thigh at=0.6223 offset=(-0.006,0.0004,-0.1775) r=0.0162 blend=0.002 side=r
-  blob leg on thigh at=0.8545 offset=(0.0107,-0.0008,-0.1724) r=0.0087 blend=0.002 side=r
-  bar  leg on thigh from=0.627 to=0.627 offset=(-0.0078,0.0005,-0.1847) tip=(-0.0041,-0.0087,0.0026) r=0.0036 r2=0.0043 blend=0.0016 side=r
-  bar  leg on thigh from=0.6495 to=0.6495 offset=(-0.0113,0.0008,-0.1821) tip=(-0.0037,-0.0088,0.0024) r=0.0043 r2=0.0049 blend=0.0016 side=r
-  bar  leg on thigh from=0.672 to=0.672 offset=(-0.0144,0.001,-0.1797) tip=(-0.0049,-0.0087,0.0023) r=0.0049 r2=0.0054 blend=0.0016 side=r
-  bar  leg on thigh from=0.6946 to=0.6946 offset=(-0.0186,0.0013,-0.1774) tip=(-0.0055,-0.0087,0.0022) r=0.0054 r2=0.0057 blend=0.0016 side=r
-  bar  leg on thigh from=0.7171 to=0.7171 offset=(-0.0234,0.0016,-0.1752) tip=(-0.0067,-0.0086,0.0026) r=0.0057 r2=0.0058 blend=0.0016 side=r
-  bar  leg on thigh from=0.7396 to=0.7396 offset=(-0.0296,0.0021,-0.1726) tip=(-0.0074,-0.0086,0.003) r=0.0058 r2=0.0058 blend=0.0016 side=r
-  bar  leg on thigh from=0.7623 to=0.7623 offset=(-0.0364,0.0025,-0.1696) tip=(-0.0082,-0.0085,0.003) r=0.0058 r2=0.0056 blend=0.0016 side=r
-  bar  leg on thigh from=0.785 to=0.785 offset=(-0.044,0.0031,-0.1666) tip=(-0.0092,-0.0085,0.0033) r=0.0056 r2=0.0052 blend=0.0016 side=r
-  bar  leg on thigh from=0.8077 to=0.8077 offset=(-0.0525,0.0037,-0.1633) tip=(-0.0109,-0.0083,0.0042) r=0.0052 r2=0.0047 blend=0.0016 side=r
-  bar  leg on thigh from=0.8303 to=0.8303 offset=(-0.0628,0.0044,-0.1591) tip=(-0.0108,-0.0083,0.0044) r=0.0047 r2=0.0041 blend=0.0016 side=r
-  bar  leg on thigh from=0.8529 to=0.8529 offset=(-0.073,0.0051,-0.1547) tip=(-0.0113,-0.0083,0.0056) r=0.0041 r2=0.0034 blend=0.0016 side=r
-  bar  leg on thigh from=0.8755 to=0.8755 offset=(-0.0836,0.0058,-0.1491) tip=(-0.0106,-0.0083,0.0062) r=0.0034 r2=0.0032 blend=0.0016 side=r
-  bar  leg on thigh from=0.898 to=0.898 offset=(-0.0937,0.0065,-0.1429) tip=(-0.0104,-0.0083,0.0071) r=0.0032 r2=0.0032 blend=0.0016 side=r
-  blob leg on thigh at=0.7617 offset=(-0.0359,0.0025,-0.1677) r=0.0092 blend=0.002 side=r
-  blob leg on thigh at=0.8754 offset=(-0.0842,0.0059,-0.15) r=0.0055 blend=0.002 side=r
-  blob leg on thigh at=0.1584 offset=(-0.1877,0.0131,-0.0969) r=0.0132 blend=0.006 side=r
-  blob leg on thigh at=0.3627 offset=(-0.1078,0.0075,-0.1751) r=0.0111 blend=0.006 side=r
-  blob leg on thigh at=0.2451 offset=(-0.1613,0.0113,-0.1412) r=0.0092 blend=0.006 side=r
-  blob leg on thigh at=0.5181 offset=(-0.0311,0.0022,-0.1842) r=0.0131 blend=0.006 side=r
-  blob leg on thigh at=0.2635 offset=(-0.1674,0.0117,-0.121) r=0.0136 blend=0.006 side=r
-  blob leg on thigh at=0.6546 offset=(-0.0665,0.0047,-0.1563) r=0.0117 blend=0.006 side=r
-  blob leg on thigh at=0.6725 offset=(-0.1569,0.011,-0.0108) r=0.0102 blend=0.006 side=r
-  blob leg on thigh at=0.6693 offset=(-0.086,0.006,-0.1452) r=0.0096 blend=0.006 side=r
-  blob leg on thigh at=0.6227 offset=(0.0215,-0.0015,-0.1736) r=0.0125 blend=0.006 side=r
-  blob leg on thigh at=0.5207 offset=(0.1013,-0.0071,-0.1525) r=0.0112 blend=0.006 side=r
-  blob leg on thigh at=0.4096 offset=(-0.1855,0.013,-0.0122) r=0.0116 blend=0.006 side=r
-  blob leg on thigh at=0.6541 offset=(-0.1413,0.0099,0.0729) r=0.0139 blend=0.006 side=r
-  blob leg on thigh at=0.6314 offset=(-0.1533,0.0107,0.0481) r=0.0108 blend=0.006 side=r
-  blob leg on thigh at=0.3176 offset=(-0.0325,0.0023,-0.2161) r=0.0093 blend=0.006 side=r
-  blob leg on thigh at=0.6829 offset=(-0.1546,0.0108,0.0214) r=0.0125 blend=0.006 side=r
-  blob leg on thigh at=0.2872 offset=(-0.1987,0.0139,0.0369) r=0.0104 blend=0.006 side=r
-  blob leg on thigh at=0.4735 offset=(-0.1584,0.0111,-0.0825) r=0.0132 blend=0.006 side=r
-  blob leg on thigh at=0.6007 offset=(0.1052,-0.0074,-0.1361) r=0.0109 blend=0.006 side=r
-  blob leg on thigh at=0.2021 offset=(-0.1639,0.0115,-0.136) r=0.0131 blend=0.006 side=r
-  blob leg on thigh at=0.1981 offset=(-0.1999,0.014,0.0496) r=0.0138 blend=0.006 side=r
-  blob leg on thigh at=0.3207 offset=(-0.1289,0.009,-0.1617) r=0.0128 blend=0.006 side=r
-  blob leg on thigh at=0.2026 offset=(-0.188,0.0131,-0.0902) r=0.0133 blend=0.006 side=r
-  blob leg on thigh at=0.4943 offset=(-0.0144,0.001,-0.1916) r=0.0118 blend=0.006 side=r
-  blob leg on thigh at=0.1425 offset=(0.1234,-0.0086,-0.1834) r=0.0139 blend=0.006 side=r
-  blob leg on thigh at=0.3868 offset=(-0.1892,0.0132,-0.0215) r=0.0103 blend=0.006 side=r
-  blob leg on thigh at=0.5015 offset=(-0.1602,0.0112,0.0742) r=0.0109 blend=0.006 side=r
-  blob leg on thigh at=0.0912 offset=(-0.2104,0.0147,0.0145) r=0.0117 blend=0.006 side=r
-  blob leg on thigh at=0.0989 offset=(-0.2067,0.0145,0.0575) r=0.0092 blend=0.006 side=r
-  blob leg on thigh at=0.4473 offset=(-0.1804,0.0126,0.0238) r=0.0107 blend=0.006 side=r
-  blob leg on thigh at=0.1774 offset=(-0.1893,0.0132,0.0978) r=0.0105 blend=0.006 side=r
-  blob leg on thigh at=0.3635 offset=(0.0917,-0.0064,-0.1875) r=0.0097 blend=0.006 side=r
-  blob leg on thigh at=0.3333 offset=(0.0649,-0.0045,-0.2016) r=0.0125 blend=0.006 side=r
-  blob leg on thigh at=0.4476 offset=(-0.074,0.0052,-0.1801) r=0.013 blend=0.006 side=r
-  blob leg on thigh at=0.5085 offset=(-0.1294,0.009,-0.1285) r=0.0098 blend=0.006 side=r
-  blob leg on thigh at=0.2355 offset=(-0.1668,0.0117,-0.1348) r=0.0091 blend=0.006 side=r
-  blob leg on thigh at=0.1156 offset=(-0.1902,0.0133,0.1019) r=0.0104 blend=0.006 side=r
-  blob leg on thigh at=0.6054 offset=(0.0924,-0.0065,-0.1441) r=0.0127 blend=0.006 side=r
-  blob leg on thigh at=0.6555 offset=(-0.1559,0.0109,0.004) r=0.0124 blend=0.006 side=r
-  blob leg on thigh at=0.4348 offset=(-0.1832,0.0128,0.0292) r=0.0091 blend=0.006 side=r
-  blob leg on thigh at=0.3779 offset=(-0.0578,0.004,-0.2001) r=0.0107 blend=0.006 side=r
-  blob leg on thigh at=0.5633 offset=(0.1005,-0.007,-0.1441) r=0.0125 blend=0.006 side=r
-  blob leg on thigh at=0.4675 offset=(0.0718,-0.005,-0.1804) r=0.011 blend=0.006 side=r
-  blob leg on thigh at=0.5687 offset=(-0.1342,0.0094,-0.1094) r=0.0093 blend=0.006 side=r
-  blob leg on thigh at=0.4343 offset=(-0.1709,0.0119,-0.0646) r=0.0134 blend=0.006 side=r
-  blob leg on thigh at=0.4823 offset=(-0.036,0.0025,-0.1892) r=0.0124 blend=0.006 side=r
-  blob leg on thigh at=0.3593 offset=(-0.071,0.005,-0.1992) r=0.0092 blend=0.006 side=r
-  blob leg on thigh at=0.4642 offset=(-0.0454,0.0032,-0.191) r=0.011 blend=0.006 side=r
-  blob leg on thigh at=0.3103 offset=(-0.1937,0.0135,-0.0332) r=0.0134 blend=0.006 side=r
-  blob leg on thigh at=0.1123 offset=(-0.1322,0.0092,-0.1797) r=0.0118 blend=0.006 side=r
-  blob leg on thigh at=0.5987 offset=(-0.1575,0.011,-0.0297) r=0.0128 blend=0.006 side=r
-  blob leg on thigh at=0.6939 offset=(0.0698,-0.0049,-0.1503) r=0.0126 blend=0.006 side=r
-  blob leg on thigh at=0.6015 offset=(-0.0513,0.0036,-0.169) r=0.0116 blend=0.006 side=r
-  blob leg on thigh at=0.357 offset=(-0.1658,0.0116,-0.1092) r=0.011 blend=0.006 side=r
-  blob leg on thigh at=0.5359 offset=(-0.1265,0.0088,-0.1259) r=0.01 blend=0.006 side=r
-  blob leg on thigh at=0.3844 offset=(-0.1852,0.0129,-0.0409) r=0.0119 blend=0.006 side=r
-  blob leg on thigh at=0.6512 offset=(-0.1017,0.0071,-0.1335) r=0.01 blend=0.006 side=r
-  blob leg on thigh at=0.4984 offset=(-0.1009,0.0071,-0.1568) r=0.011 blend=0.006 side=r
-  blob leg on thigh at=0.2034 offset=(0.1354,-0.0095,-0.1744) r=0.0097 blend=0.006 side=r
-  blob leg on thigh at=0.525 offset=(-0.1703,0.0119,-0.0196) r=0.0103 blend=0.006 side=r
-  blob leg on thigh at=0.2127 offset=(0.0893,-0.0062,-0.2069) r=0.0093 blend=0.006 side=r
-  blob leg on thigh at=0.2175 offset=(0.0899,-0.0063,-0.2063) r=0.0092 blend=0.006 side=r
-  blob leg on thigh at=0.3181 offset=(-0.1924,0.0135,-0.0384) r=0.0131 blend=0.006 side=r
-  blob leg on thigh at=0.0528 offset=(-0.2061,0.0144,0.0335) r=0.0137 blend=0.006 side=r
-  blob leg on thigh at=0.3303 offset=(-0.192,0.0134,-0.0397) r=0.012 blend=0.006 side=r
-  blob leg on thigh at=0.268 offset=(0.0895,-0.0063,-0.2005) r=0.0104 blend=0.006 side=r
-  blob leg on thigh at=0.2183 offset=(0.0501,-0.0035,-0.2206) r=0.0104 blend=0.006 side=r
-  blob leg on thigh at=0.661 offset=(0.0969,-0.0068,-0.1355) r=0.0111 blend=0.006 side=r
-  blob leg on thigh at=0.6878 offset=(-0.1559,0.0109,-0.0186) r=0.01 blend=0.006 side=r
-  blob leg on thigh at=0.1783 offset=(0.0333,-0.0023,-0.2267) r=0.0106 blend=0.006 side=r
-  blob leg on thigh at=0.1178 offset=(-0.1888,0.0132,-0.1012) r=0.0118 blend=0.006 side=r
-  blob leg on thigh at=0.3103 offset=(-0.0418,0.0029,-0.2134) r=0.0107 blend=0.006 side=r
-  blob leg on thigh at=0.6952 offset=(-0.144,0.0101,0.0724) r=0.0117 blend=0.006 side=r
-  blob leg on thigh at=0.6068 offset=(-0.1395,0.0098,-0.0901) r=0.0102 blend=0.006 side=r
-  blob leg on thigh at=0.2529 offset=(-0.1204,0.0084,-0.1808) r=0.0109 blend=0.006 side=r
-  blob leg on thigh at=0.2587 offset=(0.0795,-0.0056,-0.2027) r=0.0137 blend=0.006 side=r
-  blob leg on thigh at=0.2334 offset=(-0.1406,0.0098,-0.1656) r=0.0102 blend=0.006 side=r
-  blob leg on thigh at=0.492 offset=(-0.1531,0.0107,0.089) r=0.0129 blend=0.006 side=r
-  blob leg on thigh at=0.1137 offset=(-0.1083,0.0076,-0.1966) r=0.013 blend=0.006 side=r
-  blob leg on thigh at=0.5062 offset=(0.0386,-0.0027,-0.1868) r=0.0109 blend=0.006 side=r
-  blob leg on thigh at=0.0699 offset=(-0.2068,0.0145,0.0324) r=0.0134 blend=0.006 side=r
-  blob leg on thigh at=0.2206 offset=(0.1256,-0.0088,-0.1803) r=0.0107 blend=0.006 side=r
-  blob leg on thigh at=0.1297 offset=(0.0415,-0.0029,-0.2258) r=0.012 blend=0.006 side=r
-  blob leg on thigh at=0.1433 offset=(-0.1396,0.0098,-0.1749) r=0.0094 blend=0.006 side=r
-  blob leg on thigh at=0.5016 offset=(-0.0027,0.0002,-0.1905) r=0.0125 blend=0.006 side=r
-  blob leg on thigh at=0.5597 offset=(-0.1578,0.011,0.0556) r=0.0114 blend=0.006 side=r
-  blob leg on thigh at=0.4927 offset=(-0.0659,0.0046,-0.1806) r=0.0096 blend=0.006 side=r
-  blob leg on thigh at=0.5337 offset=(-0.1694,0.0118,0.0188) r=0.0101 blend=0.006 side=r
-  blob leg on thigh at=0.5371 offset=(-0.0478,0.0033,-0.1804) r=0.0101 blend=0.006 side=r
-  blob leg on thigh at=0.6607 offset=(-0.1426,0.01,0.0815) r=0.0093 blend=0.006 side=r
-  blob leg on thigh at=0.6013 offset=(-0.1478,0.0103,0.0688) r=0.0121 blend=0.006 side=r
+  bar  leg on thigh from=0.0999 to=0.0999 offset=(0.0733,0.0051,0.2256) tip=(0.0131,-0.008,-0.0059) r=0.0061 r2=0.0067 blend=0.0016 side=l
+  bar  leg on thigh from=0.1297 to=0.1297 offset=(0.0857,0.006,0.2196) tip=(0.0111,-0.0082,-0.0063) r=0.0067 r2=0.0073 blend=0.0016 side=l
+  bar  leg on thigh from=0.1593 to=0.1593 offset=(0.0962,0.0067,0.2133) tip=(0.0093,-0.0083,-0.0064) r=0.0073 r2=0.0079 blend=0.0016 side=l
+  bar  leg on thigh from=0.189 to=0.189 offset=(0.1048,0.0073,0.2069) tip=(0.0081,-0.0084,-0.0067) r=0.0079 r2=0.0083 blend=0.0016 side=l
+  bar  leg on thigh from=0.2187 to=0.2187 offset=(0.1123,0.0079,0.2002) tip=(0.006,-0.0085,-0.006) r=0.0083 r2=0.0088 blend=0.0016 side=l
+  bar  leg on thigh from=0.2484 to=0.2484 offset=(0.1177,0.0082,0.1942) tip=(0.0038,-0.0087,-0.0048) r=0.0088 r2=0.0092 blend=0.0016 side=l
+  bar  leg on thigh from=0.2781 to=0.2781 offset=(0.1208,0.0085,0.1894) tip=(0.0019,-0.0088,-0.0037) r=0.0092 r2=0.0095 blend=0.0016 side=l
+  bar  leg on thigh from=0.3078 to=0.3078 offset=(0.1221,0.0085,0.1857) tip=(0.0003,-0.0089,-0.0027) r=0.0095 r2=0.0097 blend=0.0016 side=l
+  bar  leg on thigh from=0.3375 to=0.3375 offset=(0.1217,0.0085,0.183) tip=(-0.0006,-0.009,-0.0023) r=0.0097 r2=0.0098 blend=0.0016 side=l
+  bar  leg on thigh from=0.3672 to=0.3672 offset=(0.1205,0.0084,0.1807) tip=(-0.0013,-0.009,-0.002) r=0.0098 r2=0.0099 blend=0.0016 side=l
+  bar  leg on thigh from=0.397 to=0.397 offset=(0.1186,0.0083,0.1787) tip=(-0.0026,-0.0091,-0.0014) r=0.0099 r2=0.0099 blend=0.0016 side=l
+  bar  leg on thigh from=0.4268 to=0.4268 offset=(0.1154,0.0081,0.1773) tip=(-0.0042,-0.0093,-0.0002) r=0.0099 r2=0.0098 blend=0.0016 side=l
+  bar  leg on thigh from=0.4567 to=0.4567 offset=(0.1105,0.0077,0.1771) tip=(-0.003,-0.0092,-0.0013) r=0.0098 r2=0.0096 blend=0.0016 side=l
+  bar  leg on thigh from=0.4866 to=0.4866 offset=(0.1069,0.0075,0.1758) tip=(-0.0038,-0.0093,-0.001) r=0.0096 r2=0.0093 blend=0.0016 side=l
+  bar  leg on thigh from=0.5166 to=0.5166 offset=(0.1025,0.0072,0.1749) tip=(-0.003,-0.0094,-0.0013) r=0.0093 r2=0.009 blend=0.0016 side=l
+  bar  leg on thigh from=0.5472 to=0.5472 offset=(0.0989,0.0069,0.1736) tip=(-0.0004,-0.0092,-0.0024) r=0.009 r2=0.0086 blend=0.0016 side=l
+  bar  leg on thigh from=0.5779 to=0.5779 offset=(0.0978,0.0068,0.1712) tip=(0.0013,-0.0091,-0.0028) r=0.0086 r2=0.0081 blend=0.0016 side=l
+  bar  leg on thigh from=0.6085 to=0.6085 offset=(0.0985,0.0069,0.1684) tip=(0.0026,-0.009,-0.0031) r=0.0081 r2=0.0076 blend=0.0016 side=l
+  bar  leg on thigh from=0.639 to=0.639 offset=(0.1005,0.007,0.1653) tip=(0.0046,-0.0088,-0.004) r=0.0076 r2=0.007 blend=0.0016 side=l
+  bar  leg on thigh from=0.6695 to=0.6695 offset=(0.1044,0.0073,0.1613) tip=(0.0063,-0.0087,-0.0051) r=0.007 r2=0.0064 blend=0.0016 side=l
+  bar  leg on thigh from=0.6998 to=0.6998 offset=(0.1101,0.0077,0.1562) tip=(0.0064,-0.0086,-0.0052) r=0.0064 r2=0.0058 blend=0.0016 side=l
+  bar  leg on thigh from=0.73 to=0.73 offset=(0.1158,0.0081,0.151) tip=(0.0078,-0.0085,-0.007) r=0.0058 r2=0.0054 blend=0.0016 side=l
+  bar  leg on thigh from=0.7601 to=0.7601 offset=(0.123,0.0086,0.144) tip=(0.0079,-0.0085,-0.0077) r=0.0054 r2=0.0054 blend=0.0016 side=l
+  bar  leg on thigh from=0.7901 to=0.7901 offset=(0.1303,0.0091,0.1363) tip=(0.007,-0.0085,-0.0076) r=0.0054 r2=0.0054 blend=0.0016 side=l
+  bar  leg on thigh from=0.8202 to=0.8202 offset=(0.1367,0.0096,0.1287) tip=(0.0063,-0.0086,-0.0075) r=0.0054 r2=0.0054 blend=0.0016 side=l
+  blob leg on thigh at=0.2737 offset=(0.1172,0.0082,0.1846) r=0.0179 blend=0.002 side=l
+  blob leg on thigh at=0.4472 offset=(0.1058,0.0074,0.1708) r=0.0203 blend=0.002 side=l
+  blob leg on thigh at=0.637 offset=(0.098,0.0069,0.1619) r=0.0154 blend=0.002 side=l
+  blob leg on thigh at=0.73 offset=(0.1159,0.0081,0.151) r=0.0103 blend=0.002 side=l
+  bar  leg on thigh from=0.76 to=0.76 offset=(0.1346,0.0094,0.1316) tip=(-0.0086,-0.0078,0.0105) r=0.004 r2=0.0051 blend=0.0016 side=l
+  bar  leg on thigh from=0.7838 to=0.7838 offset=(0.1255,0.0088,0.1421) tip=(-0.0106,-0.0079,0.0114) r=0.0051 r2=0.006 blend=0.0016 side=l
+  bar  leg on thigh from=0.8076 to=0.8076 offset=(0.1144,0.008,0.1535) tip=(-0.013,-0.0081,0.0113) r=0.006 r2=0.0064 blend=0.0016 side=l
+  bar  leg on thigh from=0.8314 to=0.8314 offset=(0.1009,0.0071,0.1648) tip=(-0.0151,-0.0082,0.0106) r=0.0064 r2=0.0063 blend=0.0016 side=l
+  bar  leg on thigh from=0.8551 to=0.8551 offset=(0.0853,0.006,0.1755) tip=(-0.0177,-0.0084,0.0097) r=0.0063 r2=0.0057 blend=0.0016 side=l
+  bar  leg on thigh from=0.8788 to=0.8788 offset=(0.0671,0.0047,0.1851) tip=(-0.0197,-0.0085,0.0076) r=0.0057 r2=0.0046 blend=0.0016 side=l
+  bar  leg on thigh from=0.9025 to=0.9025 offset=(0.0469,0.0033,0.1928) tip=(-0.0217,-0.0087,0.0051) r=0.0046 r2=0.0035 blend=0.0016 side=l
+  bar  leg on thigh from=0.9262 to=0.9262 offset=(0.0247,0.0017,0.1979) tip=(-0.0199,-0.0085,0.0015) r=0.0035 r2=0.0035 blend=0.0016 side=l
+  bar  leg on thigh from=0.1496 to=0.1496 offset=(0.0524,0.0037,-0.2318) tip=(-0.0075,-0.0095,-0.0008) r=0.0056 r2=0.0061 blend=0.0016 side=l
+  bar  leg on thigh from=0.1793 to=0.1793 offset=(0.0443,0.0031,-0.2326) tip=(-0.0073,-0.0094,-0.0001) r=0.0061 r2=0.0067 blend=0.0016 side=l
+  bar  leg on thigh from=0.209 to=0.209 offset=(0.0363,0.0025,-0.2327) tip=(-0.0074,-0.0095,0.0005) r=0.0067 r2=0.0071 blend=0.0016 side=l
+  bar  leg on thigh from=0.2388 to=0.2388 offset=(0.0283,0.002,-0.2322) tip=(-0.0069,-0.0094,0.001) r=0.0071 r2=0.0076 blend=0.0016 side=l
+  bar  leg on thigh from=0.2685 to=0.2685 offset=(0.0208,0.0015,-0.2312) tip=(-0.0052,-0.0093,0.0017) r=0.0076 r2=0.008 blend=0.0016 side=l
+  bar  leg on thigh from=0.2982 to=0.2982 offset=(0.015,0.0011,-0.2295) tip=(-0.005,-0.0093,0.002) r=0.008 r2=0.0083 blend=0.0016 side=l
+  bar  leg on thigh from=0.3279 to=0.3279 offset=(0.0094,0.0007,-0.2275) tip=(-0.0035,-0.0092,0.0026) r=0.0083 r2=0.0086 blend=0.0016 side=l
+  bar  leg on thigh from=0.3576 to=0.3576 offset=(0.0053,0.0004,-0.2249) tip=(-0.0022,-0.0091,0.0027) r=0.0086 r2=0.0088 blend=0.0016 side=l
+  bar  leg on thigh from=0.3874 to=0.3874 offset=(0.0025,0.0002,-0.2221) tip=(-0.0008,-0.009,0.003) r=0.0088 r2=0.0089 blend=0.0016 side=l
+  bar  leg on thigh from=0.4171 to=0.4171 offset=(0.0011,0.0001,-0.2192) tip=(0.0003,-0.0089,0.0031) r=0.0089 r2=0.009 blend=0.0016 side=l
+  bar  leg on thigh from=0.4469 to=0.4469 offset=(0.0007,0.0001,-0.2161) tip=(0.0014,-0.0089,0.0033) r=0.009 r2=0.009 blend=0.0016 side=l
+  bar  leg on thigh from=0.4768 to=0.4768 offset=(0.0015,0.0001,-0.2128) tip=(0.0015,-0.0089,0.0034) r=0.009 r2=0.0089 blend=0.0016 side=l
+  bar  leg on thigh from=0.5067 to=0.5067 offset=(0.0024,0.0002,-0.2093) tip=(0.0033,-0.0088,0.0036) r=0.0089 r2=0.0087 blend=0.0016 side=l
+  bar  leg on thigh from=0.5367 to=0.5367 offset=(0.0051,0.0004,-0.2057) tip=(0.0027,-0.0089,0.0037) r=0.0087 r2=0.0085 blend=0.0016 side=l
+  bar  leg on thigh from=0.5668 to=0.5668 offset=(0.0072,0.0005,-0.202) tip=(0.0028,-0.0089,0.0038) r=0.0085 r2=0.0082 blend=0.0016 side=l
+  bar  leg on thigh from=0.5969 to=0.5969 offset=(0.0094,0.0007,-0.1982) tip=(0.0027,-0.0089,0.0038) r=0.0082 r2=0.0078 blend=0.0016 side=l
+  bar  leg on thigh from=0.6271 to=0.6271 offset=(0.0114,0.0008,-0.1944) tip=(0.0018,-0.009,0.0037) r=0.0078 r2=0.0074 blend=0.0016 side=l
+  bar  leg on thigh from=0.6573 to=0.6573 offset=(0.0126,0.0009,-0.1907) tip=(0.0001,-0.0091,0.0037) r=0.0074 r2=0.0069 blend=0.0016 side=l
+  bar  leg on thigh from=0.6876 to=0.6876 offset=(0.0121,0.0008,-0.1869) tip=(-0.0015,-0.0092,0.0033) r=0.0069 r2=0.0064 blend=0.0016 side=l
+  bar  leg on thigh from=0.7179 to=0.7179 offset=(0.0099,0.0007,-0.1836) tip=(-0.0025,-0.0094,0.0028) r=0.0064 r2=0.0058 blend=0.0016 side=l
+  bar  leg on thigh from=0.7484 to=0.7484 offset=(0.0067,0.0005,-0.1808) tip=(-0.0032,-0.0094,0.0023) r=0.0058 r2=0.0053 blend=0.0016 side=l
+  bar  leg on thigh from=0.779 to=0.779 offset=(0.0029,0.0002,-0.1785) tip=(-0.0038,-0.0094,0.0017) r=0.0053 r2=0.005 blend=0.0016 side=l
+  bar  leg on thigh from=0.8094 to=0.8094 offset=(-0.0016,-0.0001,-0.1769) tip=(-0.004,-0.0094,0.0014) r=0.005 r2=0.005 blend=0.0016 side=l
+  bar  leg on thigh from=0.8395 to=0.8395 offset=(-0.0062,-0.0004,-0.1754) tip=(-0.0049,-0.0094,0.0013) r=0.005 r2=0.005 blend=0.0016 side=l
+  bar  leg on thigh from=0.8697 to=0.8697 offset=(-0.0118,-0.0008,-0.1742) tip=(-0.0043,-0.0093,0.0012) r=0.005 r2=0.005 blend=0.0016 side=l
+  blob leg on thigh at=0.2069 offset=(0.0356,0.0025,-0.2289) r=0.014 blend=0.002 side=l
+  blob leg on thigh at=0.3841 offset=(0.0025,0.0002,-0.219) r=0.0141 blend=0.002 side=l
+  blob leg on thigh at=0.4696 offset=(0.0015,0.0001,-0.2071) r=0.0169 blend=0.002 side=l
+  blob leg on thigh at=0.5628 offset=(0.0071,0.0005,-0.1991) r=0.0138 blend=0.002 side=l
+  blob leg on thigh at=0.747 offset=(0.0067,0.0005,-0.1795) r=0.011 blend=0.002 side=l
+  blob leg on thigh at=0.809 offset=(-0.0015,-0.0001,-0.1762) r=0.0101 blend=0.002 side=l
+  bar  leg on thigh from=0.7495 to=0.7495 offset=(-0.007,-0.0005,-0.1817) tip=(0.0165,-0.0063,0.0026) r=0.0036 r2=0.0047 blend=0.0016 side=l
+  bar  leg on thigh from=0.7744 to=0.7744 offset=(0.0089,0.0006,-0.1791) tip=(0.0174,-0.0063,0.0038) r=0.0047 r2=0.0055 blend=0.0016 side=l
+  bar  leg on thigh from=0.7994 to=0.7994 offset=(0.0258,0.0018,-0.1754) tip=(0.0175,-0.0063,0.0052) r=0.0055 r2=0.0058 blend=0.0016 side=l
+  bar  leg on thigh from=0.8245 to=0.8245 offset=(0.0428,0.003,-0.1702) tip=(0.0186,-0.0063,0.0072) r=0.0058 r2=0.0057 blend=0.0016 side=l
+  bar  leg on thigh from=0.8497 to=0.8497 offset=(0.061,0.0043,-0.163) tip=(0.0184,-0.0063,0.0091) r=0.0057 r2=0.0052 blend=0.0016 side=l
+  bar  leg on thigh from=0.8748 to=0.8748 offset=(0.0789,0.0055,-0.1538) tip=(0.0178,-0.0063,0.0109) r=0.0052 r2=0.0042 blend=0.0016 side=l
+  bar  leg on thigh from=0.8999 to=0.8999 offset=(0.0961,0.0067,-0.1429) tip=(0.0159,-0.0064,0.0123) r=0.0042 r2=0.0032 blend=0.0016 side=l
+  bar  leg on thigh from=0.925 to=0.925 offset=(0.1114,0.0078,-0.1306) tip=(0.0141,-0.0065,0.0139) r=0.0032 r2=0.0032 blend=0.0016 side=l
+  blob leg on thigh at=0.8742 offset=(0.0774,0.0054,-0.1513) r=0.01 blend=0.002 side=l
+  blob leg on thigh at=0.3736 offset=(0.0233,0.0016,-0.2144) r=0.012 blend=0.006 side=l
+  blob leg on thigh at=0.1599 offset=(0.2094,0.0146,-0.0402) r=0.009 blend=0.006 side=l
+  blob leg on thigh at=0.3374 offset=(-0.0112,-0.0008,-0.2205) r=0.0104 blend=0.006 side=l
+  blob leg on thigh at=0.4226 offset=(-0.0456,-0.0032,-0.2052) r=0.0119 blend=0.006 side=l
+  blob leg on thigh at=0.2341 offset=(0.2087,0.0146,-0.0128) r=0.0093 blend=0.006 side=l
+  blob leg on thigh at=0.3338 offset=(0.1249,0.0087,-0.1725) r=0.0113 blend=0.006 side=l
+  blob leg on thigh at=0.1351 offset=(-0.1201,-0.0084,-0.1889) r=0.0124 blend=0.006 side=l
+  blob leg on thigh at=0.1704 offset=(0.0983,0.0069,-0.2051) r=0.01 blend=0.006 side=l
+  blob leg on thigh at=0.521 offset=(0.1815,0.0127,0.0088) r=0.0118 blend=0.006 side=l
+  blob leg on thigh at=0.1141 offset=(0.1937,0.0135,-0.0916) r=0.0114 blend=0.006 side=l
+  blob leg on thigh at=0.1393 offset=(0.0918,0.0064,-0.2069) r=0.0125 blend=0.006 side=l
+  blob leg on thigh at=0.551 offset=(0.1669,0.0117,-0.0717) r=0.0107 blend=0.006 side=l
+  blob leg on thigh at=0.494 offset=(-0.0969,-0.0068,-0.173) r=0.0119 blend=0.006 side=l
+  blob leg on thigh at=0.2699 offset=(-0.079,-0.0055,-0.2101) r=0.0093 blend=0.006 side=l
+  blob leg on thigh at=0.5229 offset=(0.0091,0.0006,-0.2001) r=0.0114 blend=0.006 side=l
+  blob leg on thigh at=0.6131 offset=(0.1523,0.0106,-0.0902) r=0.0097 blend=0.006 side=l
+  blob leg on thigh at=0.6911 offset=(0.1578,0.011,-0.0593) r=0.0091 blend=0.006 side=l
+  blob leg on thigh at=0.4478 offset=(-0.0374,-0.0026,-0.2057) r=0.0108 blend=0.006 side=l
+  blob leg on thigh at=0.0596 offset=(-0.1159,-0.0081,-0.1965) r=0.0091 blend=0.006 side=l
+  blob leg on thigh at=0.2227 offset=(0.2048,0.0143,0.0149) r=0.0136 blend=0.006 side=l
+  blob leg on thigh at=0.0573 offset=(0.1413,0.0099,-0.172) r=0.0114 blend=0.006 side=l
+  blob leg on thigh at=0.4084 offset=(0.1804,0.0126,0.0736) r=0.0129 blend=0.006 side=l
+  blob leg on thigh at=0.0565 offset=(-0.0449,-0.0031,-0.2259) r=0.0118 blend=0.006 side=l
+  blob leg on thigh at=0.5455 offset=(0.1705,0.0119,0.0621) r=0.011 blend=0.006 side=l
+  blob leg on thigh at=0.4439 offset=(-0.0444,-0.0031,-0.2021) r=0.0129 blend=0.006 side=l
+  blob leg on thigh at=0.3511 offset=(0.0146,0.001,-0.2168) r=0.0126 blend=0.006 side=l
+  blob leg on thigh at=0.1477 offset=(0.2105,0.0147,-0.0057) r=0.0114 blend=0.006 side=l
+  blob leg on thigh at=0.6781 offset=(0.1372,0.0096,-0.0975) r=0.0124 blend=0.006 side=l
+  blob leg on thigh at=0.4862 offset=(0.1813,0.0127,0.045) r=0.0115 blend=0.006 side=l
+  blob leg on thigh at=0.1307 offset=(0.0274,0.0019,-0.2299) r=0.011 blend=0.006 side=l
+  blob leg on thigh at=0.1168 offset=(-0.055,-0.0038,-0.2252) r=0.0099 blend=0.006 side=l
+  blob leg on thigh at=0.5937 offset=(-0.0044,-0.0003,-0.1905) r=0.0123 blend=0.006 side=l
+  blob leg on thigh at=0.2038 offset=(-0.0613,-0.0043,-0.2194) r=0.0108 blend=0.006 side=l
+  blob leg on thigh at=0.6505 offset=(-0.0885,-0.0062,-0.1584) r=0.0098 blend=0.006 side=l
+  blob leg on thigh at=0.6108 offset=(0.1488,0.0104,-0.093) r=0.0117 blend=0.006 side=l
+  blob leg on thigh at=0.3287 offset=(-0.0248,-0.0017,-0.2196) r=0.0109 blend=0.006 side=l
+  blob leg on thigh at=0.4011 offset=(0.1278,0.0089,-0.1642) r=0.0095 blend=0.006 side=l
+  blob leg on thigh at=0.0586 offset=(-0.0004,0,-0.2296) r=0.0135 blend=0.006 side=l
+  blob leg on thigh at=0.1524 offset=(-0.0594,-0.0042,-0.2228) r=0.0102 blend=0.006 side=l
+  blob leg on thigh at=0.0965 offset=(0.2134,0.0149,-0.0017) r=0.0092 blend=0.006 side=l
+  blob leg on thigh at=0.5438 offset=(0.0657,0.0046,-0.1848) r=0.0107 blend=0.006 side=l
+  blob leg on thigh at=0.5599 offset=(0.1662,0.0116,0.0726) r=0.0106 blend=0.006 side=l
+  blob leg on thigh at=0.5823 offset=(0.1218,0.0085,-0.1372) r=0.0121 blend=0.006 side=l
+  blob leg on thigh at=0.4402 offset=(0.1767,0.0124,-0.0827) r=0.0103 blend=0.006 side=l
+  blob leg on thigh at=0.6623 offset=(0.1362,0.0095,-0.0991) r=0.0138 blend=0.006 side=l
+  blob leg on thigh at=0.397 offset=(0.0881,0.0062,-0.1908) r=0.0116 blend=0.006 side=l
+  blob leg on thigh at=0.6759 offset=(0.1676,0.0117,-0.0123) r=0.0108 blend=0.006 side=l
+  blob leg on thigh at=0.2717 offset=(-0.0861,-0.006,-0.2061) r=0.0097 blend=0.006 side=l
+  blob leg on thigh at=0.5214 offset=(0.1787,0.0125,0.0421) r=0.0108 blend=0.006 side=l
+  blob leg on thigh at=0.4085 offset=(-0.0528,-0.0037,-0.2045) r=0.012 blend=0.006 side=l
+  blob leg on thigh at=0.6075 offset=(-0.0132,-0.0009,-0.1909) r=0.0099 blend=0.006 side=l
+  blob leg on thigh at=0.0821 offset=(0.1874,0.0131,0.1064) r=0.0115 blend=0.006 side=l
+  blob leg on thigh at=0.5449 offset=(0.1717,0.012,0.0639) r=0.0096 blend=0.006 side=l
+  blob leg on thigh at=0.1215 offset=(-0.033,-0.0023,-0.2303) r=0.0098 blend=0.006 side=l
+  blob leg on thigh at=0.4569 offset=(0.0878,0.0061,-0.1831) r=0.0123 blend=0.006 side=l
+  blob leg on thigh at=0.0969 offset=(0.1699,0.0119,-0.1404) r=0.0098 blend=0.006 side=l
+  blob leg on thigh at=0.4191 offset=(0.1607,0.0112,-0.1172) r=0.0115 blend=0.006 side=l
+  blob leg on thigh at=0.4065 offset=(0.1928,0.0135,-0.0095) r=0.0126 blend=0.006 side=l
+  blob leg on thigh at=0.397 offset=(-0.0424,-0.003,-0.2104) r=0.0104 blend=0.006 side=l
+  blob leg on thigh at=0.4746 offset=(-0.0666,-0.0047,-0.1934) r=0.0107 blend=0.006 side=l
+  blob leg on thigh at=0.3299 offset=(0.0153,0.0011,-0.2221) r=0.0093 blend=0.006 side=l
+  blob leg on thigh at=0.07 offset=(0.1967,0.0138,0.0813) r=0.0122 blend=0.006 side=l
+  blob leg on thigh at=0.4007 offset=(0.1853,0.013,-0.0672) r=0.0111 blend=0.006 side=l
+  blob leg on thigh at=0.2277 offset=(0.088,0.0062,-0.2085) r=0.0092 blend=0.006 side=l
+  blob leg on thigh at=0.6295 offset=(0.1713,0.012,-0.0029) r=0.0109 blend=0.006 side=l
+  blob leg on thigh at=0.6569 offset=(0.1604,0.0112,-0.0501) r=0.0119 blend=0.006 side=l
+  blob leg on thigh at=0.1611 offset=(-0.0284,-0.002,-0.2262) r=0.0137 blend=0.006 side=l
+  blob leg on thigh at=0.4989 offset=(0.0811,0.0057,-0.1803) r=0.0132 blend=0.006 side=l
+  blob leg on thigh at=0.2479 offset=(0.2047,0.0143,-0.0117) r=0.0126 blend=0.006 side=l
+  blob leg on thigh at=0.0849 offset=(-0.1338,-0.0094,-0.1823) r=0.0092 blend=0.006 side=l
+  blob leg on thigh at=0.5183 offset=(0.173,0.0121,0.0556) r=0.0135 blend=0.006 side=l
+  blob leg on thigh at=0.2532 offset=(-0.1384,-0.0097,-0.1688) r=0.0105 blend=0.006 side=l
+  blob leg on thigh at=0.0886 offset=(0.2071,0.0145,0.0459) r=0.0114 blend=0.006 side=l
+  blob leg on thigh at=0.5315 offset=(0.1778,0.0124,0.0384) r=0.0111 blend=0.006 side=l
+  blob leg on thigh at=0.5772 offset=(-0.0203,-0.0014,-0.1946) r=0.0093 blend=0.006 side=l
+  blob leg on thigh at=0.1026 offset=(0.2104,0.0147,0.0356) r=0.0096 blend=0.006 side=l
+  blob leg on thigh at=0.6194 offset=(0.0867,0.0061,-0.1588) r=0.0138 blend=0.006 side=l
+  blob leg on thigh at=0.1109 offset=(0.2037,0.0142,0.0593) r=0.0118 blend=0.006 side=l
+  blob leg on thigh at=0.5346 offset=(-0.1159,-0.0081,-0.1557) r=0.0092 blend=0.006 side=l
+  blob leg on thigh at=0.1853 offset=(0.2087,0.0146,0.0237) r=0.0107 blend=0.006 side=l
+  blob leg on thigh at=0.0852 offset=(0.194,0.0136,-0.0876) r=0.0127 blend=0.006 side=l
+  blob leg on thigh at=0.4784 offset=(0.0735,0.0051,-0.1897) r=0.0107 blend=0.006 side=l
+  blob leg on thigh at=0.1337 offset=(0.2104,0.0147,-0.0296) r=0.0101 blend=0.006 side=l
+  blob leg on thigh at=0.6478 offset=(0.1569,0.011,0.0761) r=0.012 blend=0.006 side=l
+  blob leg on thigh at=0.1757 offset=(-0.0209,-0.0015,-0.2281) r=0.0123 blend=0.006 side=l
+  blob leg on thigh at=0.4035 offset=(0.1767,0.0124,0.0884) r=0.0118 blend=0.006 side=l
+  blob leg on thigh at=0.2832 offset=(-0.1313,-0.0092,-0.1692) r=0.0132 blend=0.006 side=l
+  blob leg on thigh at=0.1248 offset=(0.2036,0.0142,0.0679) r=0.0096 blend=0.006 side=l
+  blob leg on thigh at=0.2646 offset=(0.2018,0.0141,0.0371) r=0.0119 blend=0.006 side=l
+  blob leg on thigh at=0.3871 offset=(0.1971,0.0138,0.0044) r=0.0103 blend=0.006 side=l
+  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.0341,0.1,0.1044) tip=(-0.0011,0.0083,-0.0051) r=0.0061 r2=0.0068 blend=0.0016 side=r
+  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.0319,0.1018,0.1058) tip=(-0.0012,0.0082,-0.0051) r=0.0068 r2=0.0074 blend=0.0016 side=r
+  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.0295,0.1037,0.1072) tip=(-0.0008,0.008,-0.0052) r=0.0074 r2=0.008 blend=0.0016 side=r
+  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.0276,0.1053,0.1085) tip=(-0.0023,0.0082,-0.0053) r=0.008 r2=0.0085 blend=0.0016 side=r
+  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.0242,0.1071,0.1097) tip=(-0.0032,0.0082,-0.0054) r=0.0085 r2=0.009 blend=0.0016 side=r
+  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.0198,0.1089,0.1107) tip=(-0.0011,0.0076,-0.0056) r=0.009 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.434 to=0.434 offset=(0.0176,0.1102,0.1116) tip=(-0.0004,0.0071,-0.0058) r=0.0093 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.0161,0.111,0.1121) tip=(0.0015,0.0065,-0.0061) r=0.0096 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.0165,0.1113,0.1124) tip=(0.0036,0.0059,-0.0064) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3723 to=0.3723 offset=(0.019,0.1108,0.1124) tip=(0.0052,0.0053,-0.0067) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3517 to=0.3517 offset=(0.0231,0.1098,0.1121) tip=(0.0075,0.0045,-0.0071) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.331 to=0.331 offset=(0.0295,0.1079,0.1114) tip=(0.007,0.0043,-0.0075) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.3103 to=0.3103 offset=(0.0354,0.1059,0.1104) tip=(0.0072,0.0039,-0.0078) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.2894 to=0.2894 offset=(0.0415,0.1034,0.1091) tip=(0.0092,0.0031,-0.0084) r=0.0093 r2=0.0089 blend=0.0016 side=r
+  bar  arm on forearm from=0.2685 to=0.2685 offset=(0.0495,0.1001,0.1072) tip=(0.0093,0.0029,-0.0087) r=0.0089 r2=0.0084 blend=0.0016 side=r
+  bar  arm on forearm from=0.2475 to=0.2475 offset=(0.0577,0.0966,0.1051) tip=(0.0071,0.0037,-0.0083) r=0.0084 r2=0.0079 blend=0.0016 side=r
+  bar  arm on forearm from=0.2262 to=0.2262 offset=(0.0637,0.0938,0.1034) tip=(0.0066,0.0045,-0.0076) r=0.0079 r2=0.0073 blend=0.0016 side=r
+  bar  arm on forearm from=0.2049 to=0.2049 offset=(0.0691,0.0918,0.1024) tip=(0.0055,0.0058,-0.0066) r=0.0073 r2=0.0067 blend=0.0016 side=r
+  bar  arm on forearm from=0.1836 to=0.1836 offset=(0.0735,0.091,0.1024) tip=(0.0054,0.0067,-0.0056) r=0.0067 r2=0.006 blend=0.0016 side=r
+  bar  arm on forearm from=0.1624 to=0.1624 offset=(0.0778,0.0913,0.1034) tip=(0.004,0.0077,-0.0047) r=0.006 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1416 to=0.1416 offset=(0.0806,0.0926,0.1052) tip=(0.0028,0.0084,-0.0043) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1207 to=0.1207 offset=(0.0823,0.0945,0.1074) tip=(0.0015,0.0092,-0.0037) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.0997 to=0.0997 offset=(0.0827,0.0973,0.1102) tip=(-0.0008,0.0102,-0.0031) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob arm on forearm at=0.4125 offset=(0.0155,0.1076,0.1086) r=0.0168 blend=0.002 side=r
+  blob arm on forearm at=0.1618 offset=(0.0773,0.0907,0.1028) r=0.0114 blend=0.002 side=r
+  bar  arm on forearm from=0.5592 to=0.5592 offset=(-0.1256,0.0663,0.0434) tip=(-0.0025,0.0049,-0.0087) r=0.0061 r2=0.0068 blend=0.0016 side=r
+  bar  arm on forearm from=0.5382 to=0.5382 offset=(-0.1292,0.0647,0.0413) tip=(-0.0029,0.0041,-0.0095) r=0.0068 r2=0.0074 blend=0.0016 side=r
+  bar  arm on forearm from=0.5173 to=0.5173 offset=(-0.1333,0.0624,0.0383) tip=(-0.0024,0.0045,-0.009) r=0.0074 r2=0.008 blend=0.0016 side=r
+  bar  arm on forearm from=0.4963 to=0.4963 offset=(-0.1368,0.0605,0.0358) tip=(-0.0025,0.0041,-0.0094) r=0.008 r2=0.0085 blend=0.0016 side=r
+  bar  arm on forearm from=0.4754 to=0.4754 offset=(-0.1405,0.0582,0.0329) tip=(-0.0015,0.0054,-0.008) r=0.0085 r2=0.009 blend=0.0016 side=r
+  bar  arm on forearm from=0.4544 to=0.4544 offset=(-0.1431,0.0572,0.0314) tip=(-0.0017,0.0049,-0.0085) r=0.009 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.4336 to=0.4336 offset=(-0.1459,0.0556,0.0294) tip=(-0.0006,0.0061,-0.007) r=0.0093 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.413 to=0.413 offset=(-0.1477,0.0554,0.0289) tip=(0.0002,0.0069,-0.0061) r=0.0096 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3923 to=0.3923 offset=(-0.1486,0.0559,0.0292) tip=(0.001,0.0079,-0.005) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3716 to=0.3716 offset=(-0.1487,0.0574,0.0307) tip=(0.0014,0.0084,-0.0044) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3508 to=0.3508 offset=(-0.1484,0.0594,0.0328) tip=(0.0021,0.0096,-0.0032) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3299 to=0.3299 offset=(-0.1474,0.0626,0.036) tip=(0.0022,0.0101,-0.0027) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.3089 to=0.3089 offset=(-0.1464,0.0663,0.0398) tip=(0.0029,0.0113,-0.0014) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.288 to=0.288 offset=(-0.1446,0.0712,0.045) tip=(0.0029,0.011,-0.0016) r=0.0093 r2=0.0089 blend=0.0016 side=r
+  bar  arm on forearm from=0.2671 to=0.2671 offset=(-0.1429,0.0758,0.0498) tip=(0.0022,0.0098,-0.0029) r=0.0089 r2=0.0084 blend=0.0016 side=r
+  bar  arm on forearm from=0.2463 to=0.2463 offset=(-0.1418,0.0792,0.0534) tip=(0.0021,0.0092,-0.0034) r=0.0084 r2=0.0079 blend=0.0016 side=r
+  bar  arm on forearm from=0.2257 to=0.2257 offset=(-0.1408,0.0821,0.0564) tip=(0.0026,0.0089,-0.0036) r=0.0079 r2=0.0073 blend=0.0016 side=r
+  bar  arm on forearm from=0.2051 to=0.2051 offset=(-0.1393,0.0847,0.0592) tip=(0.002,0.0075,-0.0051) r=0.0073 r2=0.0067 blend=0.0016 side=r
+  bar  arm on forearm from=0.1845 to=0.1845 offset=(-0.1384,0.0859,0.0605) tip=(0.0017,0.0066,-0.0061) r=0.0067 r2=0.006 blend=0.0016 side=r
+  bar  arm on forearm from=0.1637 to=0.1637 offset=(-0.1379,0.0862,0.0609) tip=(0.0014,0.0059,-0.0069) r=0.006 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1429 to=0.1429 offset=(-0.1376,0.0857,0.0605) tip=(0.0005,0.0043,-0.0086) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1221 to=0.1221 offset=(-0.1382,0.0836,0.0584) tip=(0.0006,0.0042,-0.0087) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1013 to=0.1013 offset=(-0.1387,0.0815,0.0561) tip=(0.0002,0.0036,-0.0094) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob arm on forearm at=0.3287 offset=(-0.1414,0.0604,0.035) r=0.0184 blend=0.002 side=r
+  blob arm on forearm at=0.3072 offset=(-0.1392,0.0636,0.0385) r=0.0196 blend=0.002 side=r
+  bar  arm on forearm from=0.5592 to=0.5592 offset=(-0.1187,-0.0524,-0.0722) tip=(-0.0018,0.0074,-0.0061) r=0.0061 r2=0.0068 blend=0.0016 side=r
+  bar  arm on forearm from=0.5382 to=0.5382 offset=(-0.1216,-0.0514,-0.0718) tip=(-0.0008,0.0064,-0.0068) r=0.0068 r2=0.0074 blend=0.0016 side=r
+  bar  arm on forearm from=0.5173 to=0.5173 offset=(-0.1236,-0.0514,-0.0721) tip=(0.0003,0.0053,-0.0077) r=0.0074 r2=0.008 blend=0.0016 side=r
+  bar  arm on forearm from=0.4964 to=0.4964 offset=(-0.1244,-0.0525,-0.0733) tip=(0.0011,0.0046,-0.0083) r=0.008 r2=0.0085 blend=0.0016 side=r
+  bar  arm on forearm from=0.4755 to=0.4755 offset=(-0.1245,-0.0543,-0.0751) tip=(0.0024,0.0034,-0.0092) r=0.0085 r2=0.009 blend=0.0016 side=r
+  bar  arm on forearm from=0.4547 to=0.4547 offset=(-0.1233,-0.0572,-0.0778) tip=(0.003,0.0031,-0.0093) r=0.009 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.4339 to=0.4339 offset=(-0.1214,-0.0605,-0.0806) tip=(0.0026,0.0039,-0.0084) r=0.0093 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.4134 to=0.4134 offset=(-0.1199,-0.0628,-0.0827) tip=(0.0037,0.0035,-0.0087) r=0.0096 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3929 to=0.3929 offset=(-0.1172,-0.0656,-0.085) tip=(0.0025,0.0051,-0.0073) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3724 to=0.3724 offset=(-0.1158,-0.0667,-0.0858) tip=(0.0025,0.0056,-0.0069) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3518 to=0.3518 offset=(-0.1144,-0.0674,-0.0863) tip=(0.0018,0.0065,-0.0061) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3312 to=0.3312 offset=(-0.1137,-0.0672,-0.086) tip=(0.0014,0.0072,-0.0056) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.3104 to=0.3104 offset=(-0.1135,-0.0664,-0.0851) tip=(0.0006,0.0081,-0.0049) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.2896 to=0.2896 offset=(-0.114,-0.0647,-0.0835) tip=(-0.0002,0.0089,-0.0043) r=0.0093 r2=0.0089 blend=0.0016 side=r
+  bar  arm on forearm from=0.2687 to=0.2687 offset=(-0.1153,-0.0623,-0.0813) tip=(-0.0016,0.0102,-0.0033) r=0.0089 r2=0.0084 blend=0.0016 side=r
+  bar  arm on forearm from=0.2477 to=0.2477 offset=(-0.1181,-0.0585,-0.0781) tip=(-0.0014,0.0099,-0.0036) r=0.0084 r2=0.0079 blend=0.0016 side=r
+  bar  arm on forearm from=0.2265 to=0.2265 offset=(-0.1206,-0.055,-0.0751) tip=(-0.002,0.0102,-0.0035) r=0.0079 r2=0.0073 blend=0.0016 side=r
+  bar  arm on forearm from=0.2053 to=0.2053 offset=(-0.1237,-0.0513,-0.072) tip=(-0.0031,0.0109,-0.003) r=0.0073 r2=0.0067 blend=0.0016 side=r
+  bar  arm on forearm from=0.1841 to=0.1841 offset=(-0.1279,-0.0469,-0.0684) tip=(-0.0034,0.0106,-0.0033) r=0.0067 r2=0.006 blend=0.0016 side=r
+  bar  arm on forearm from=0.163 to=0.163 offset=(-0.1324,-0.0428,-0.0651) tip=(-0.0036,0.0104,-0.0033) r=0.006 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1421 to=0.1421 offset=(-0.1371,-0.0387,-0.0619) tip=(-0.0023,0.0092,-0.0043) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1213 to=0.1213 offset=(-0.1406,-0.0359,-0.0598) tip=(-0.002,0.0091,-0.0044) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1004 to=0.1004 offset=(-0.1436,-0.0333,-0.0577) tip=(-0.001,0.0079,-0.0054) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob arm on forearm at=0.4947 offset=(-0.1213,-0.0512,-0.0715) r=0.0152 blend=0.002 side=r
+  blob arm on forearm at=0.2267 offset=(-0.1198,-0.0547,-0.0746) r=0.0122 blend=0.002 side=r
+  blob arm on forearm at=0.2054 offset=(-0.1224,-0.0508,-0.0713) r=0.0126 blend=0.002 side=r
+  blob arm on forearm at=0.142 offset=(-0.1369,-0.0386,-0.0618) r=0.0106 blend=0.002 side=r
+  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.0667,-0.1001,-0.087) tip=(0.0052,0.0062,-0.0061) r=0.0061 r2=0.0068 blend=0.0016 side=r
+  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.0708,-0.1004,-0.0866) tip=(0.0041,0.0059,-0.0065) r=0.0068 r2=0.0074 blend=0.0016 side=r
+  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.0738,-0.1009,-0.0866) tip=(0.0032,0.0057,-0.0068) r=0.0074 r2=0.008 blend=0.0016 side=r
+  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.0758,-0.1016,-0.0869) tip=(0.0022,0.0055,-0.0072) r=0.008 r2=0.0085 blend=0.0016 side=r
+  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.0769,-0.1025,-0.0876) tip=(0.0012,0.0053,-0.0076) r=0.0085 r2=0.009 blend=0.0016 side=r
+  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.0769,-0.1036,-0.0887) tip=(0.0005,0.0052,-0.0077) r=0.009 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.4339 to=0.4339 offset=(0.0763,-0.1048,-0.09) tip=(-0.0006,0.0051,-0.0078) r=0.0093 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.0746,-0.106,-0.0914) tip=(-0.0009,0.0054,-0.0076) r=0.0096 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.0726,-0.1069,-0.0926) tip=(-0.0017,0.0056,-0.0076) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3724 to=0.3724 offset=(0.0698,-0.1076,-0.0938) tip=(-0.001,0.0061,-0.007) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3518 to=0.3518 offset=(0.0676,-0.1078,-0.0944) tip=(-0.0001,0.0066,-0.0063) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3311 to=0.3311 offset=(0.0664,-0.1075,-0.0943) tip=(-0.0002,0.0068,-0.0063) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.3104 to=0.3104 offset=(0.0651,-0.1071,-0.0941) tip=(0.0012,0.0073,-0.0056) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.2896 to=0.2896 offset=(0.0652,-0.1062,-0.0932) tip=(0.0026,0.0077,-0.005) r=0.0093 r2=0.0089 blend=0.0016 side=r
+  bar  arm on forearm from=0.2686 to=0.2686 offset=(0.0667,-0.1049,-0.0918) tip=(0.0038,0.008,-0.0045) r=0.0089 r2=0.0084 blend=0.0016 side=r
+  bar  arm on forearm from=0.2476 to=0.2476 offset=(0.0693,-0.1033,-0.0897) tip=(0.0052,0.0081,-0.0043) r=0.0084 r2=0.0079 blend=0.0016 side=r
+  bar  arm on forearm from=0.2264 to=0.2264 offset=(0.0734,-0.1017,-0.0874) tip=(0.0052,0.0078,-0.0046) r=0.0079 r2=0.0073 blend=0.0016 side=r
+  bar  arm on forearm from=0.2052 to=0.2052 offset=(0.0774,-0.1004,-0.0854) tip=(0.0054,0.0073,-0.005) r=0.0073 r2=0.0067 blend=0.0016 side=r
+  bar  arm on forearm from=0.1839 to=0.1839 offset=(0.0817,-0.0996,-0.0839) tip=(0.0065,0.007,-0.0051) r=0.0067 r2=0.006 blend=0.0016 side=r
+  bar  arm on forearm from=0.1628 to=0.1628 offset=(0.0871,-0.099,-0.0824) tip=(0.0076,0.0072,-0.0046) r=0.006 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.142 to=0.142 offset=(0.0935,-0.0982,-0.0805) tip=(0.0063,0.0067,-0.0053) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1211 to=0.1211 offset=(0.0986,-0.0979,-0.0793) tip=(0.0062,0.0068,-0.0052) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1002 to=0.1002 offset=(0.1037,-0.0975,-0.078) tip=(0.0047,0.0064,-0.0059) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob arm on forearm at=0.5171 offset=(0.0736,-0.1007,-0.0864) r=0.0114 blend=0.002 side=r
+  blob arm on forearm at=0.3122 offset=(0.0625,-0.1028,-0.0904) r=0.0181 blend=0.002 side=r
+  blob arm on forearm at=0.1836 offset=(0.0808,-0.0984,-0.0829) r=0.0125 blend=0.002 side=r
+  bar  arm on forearm from=0.5592 to=0.5592 offset=(0.139,0.0232,0.047) tip=(0.0031,0.006,-0.0066) r=0.0061 r2=0.0068 blend=0.0016 side=r
+  bar  arm on forearm from=0.5382 to=0.5382 offset=(0.141,0.0228,0.0469) tip=(0.0033,0.0055,-0.007) r=0.0068 r2=0.0074 blend=0.0016 side=r
+  bar  arm on forearm from=0.5173 to=0.5173 offset=(0.1431,0.0218,0.0464) tip=(0.0035,0.0047,-0.0077) r=0.0074 r2=0.008 blend=0.0016 side=r
+  bar  arm on forearm from=0.4964 to=0.4964 offset=(0.1455,0.0202,0.0451) tip=(0.0033,0.0048,-0.0077) r=0.008 r2=0.0085 blend=0.0016 side=r
+  bar  arm on forearm from=0.4755 to=0.4755 offset=(0.1477,0.0186,0.0439) tip=(0.0035,0.0038,-0.0086) r=0.0085 r2=0.009 blend=0.0016 side=r
+  bar  arm on forearm from=0.4547 to=0.4547 offset=(0.15,0.016,0.0418) tip=(0.0031,0.0043,-0.0082) r=0.009 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.434 to=0.434 offset=(0.152,0.0139,0.0401) tip=(0.0025,0.0045,-0.0079) r=0.0093 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.4134 to=0.4134 offset=(0.1534,0.0121,0.0386) tip=(0.0019,0.0047,-0.0078) r=0.0096 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3929 to=0.3929 offset=(0.1542,0.0105,0.0372) tip=(0.0012,0.0057,-0.0069) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3724 to=0.3724 offset=(0.1542,0.01,0.0366) tip=(0.0006,0.0064,-0.0064) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  arm on forearm from=0.3518 to=0.3518 offset=(0.1538,0.0101,0.0366) tip=(0.0002,0.0073,-0.0057) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  arm on forearm from=0.3311 to=0.3311 offset=(0.1528,0.011,0.0374) tip=(-0.0003,0.0082,-0.0049) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  arm on forearm from=0.3103 to=0.3103 offset=(0.1513,0.0129,0.0389) tip=(-0.001,0.0098,-0.0035) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  arm on forearm from=0.2895 to=0.2895 offset=(0.1492,0.0162,0.0419) tip=(-0.0011,0.0097,-0.0036) r=0.0093 r2=0.0089 blend=0.0016 side=r
+  bar  arm on forearm from=0.2685 to=0.2685 offset=(0.147,0.0196,0.0448) tip=(-0.0018,0.0112,-0.0024) r=0.0089 r2=0.0084 blend=0.0016 side=r
+  bar  arm on forearm from=0.2474 to=0.2474 offset=(0.144,0.0243,0.0489) tip=(-0.0011,0.0108,-0.0028) r=0.0084 r2=0.0079 blend=0.0016 side=r
+  bar  arm on forearm from=0.2261 to=0.2261 offset=(0.1418,0.0286,0.0528) tip=(-0.001,0.0117,-0.0019) r=0.0079 r2=0.0073 blend=0.0016 side=r
+  bar  arm on forearm from=0.2047 to=0.2047 offset=(0.1397,0.0338,0.0575) tip=(-0.0001,0.0118,-0.0017) r=0.0073 r2=0.0067 blend=0.0016 side=r
+  bar  arm on forearm from=0.1833 to=0.1833 offset=(0.1384,0.039,0.0625) tip=(0.0018,0.0108,-0.0022) r=0.0067 r2=0.006 blend=0.0016 side=r
+  bar  arm on forearm from=0.1622 to=0.1622 offset=(0.139,0.0433,0.0668) tip=(0.0023,0.0104,-0.0023) r=0.006 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1414 to=0.1414 offset=(0.1402,0.0474,0.071) tip=(0.0031,0.0101,-0.0026) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.1204 to=0.1204 offset=(0.1421,0.051,0.0749) tip=(0.0044,0.0093,-0.0031) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  arm on forearm from=0.0994 to=0.0994 offset=(0.1454,0.0539,0.0783) tip=(0.0058,0.0087,-0.0035) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob arm on forearm at=0.4948 offset=(0.1421,0.0197,0.0441) r=0.015 blend=0.002 side=r
+  blob arm on forearm at=0.1818 offset=(0.1362,0.0384,0.0615) r=0.0133 blend=0.002 side=r
+  blob arm on forearm at=0.1214 offset=(0.1428,0.0513,0.0753) r=0.0093 blend=0.002 side=r
+  bar  arm on upperarm from=0.08 to=0.08 offset=(-0.0233,0.0858,0.1932) tip=(-0.0039,-0.0078,0.0031) r=0.006 r2=0.0063 blend=0.0016 side=r
+  bar  arm on upperarm from=0.0978 to=0.0978 offset=(-0.0214,0.0844,0.1941) tip=(-0.003,-0.0085,0.0033) r=0.0063 r2=0.0066 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1156 to=0.1156 offset=(-0.0186,0.0823,0.1952) tip=(-0.0028,-0.0088,0.0031) r=0.0066 r2=0.0069 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1333 to=0.1333 offset=(-0.0156,0.0799,0.1962) tip=(-0.002,-0.0094,0.0032) r=0.0069 r2=0.0072 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1511 to=0.1511 offset=(-0.0119,0.0769,0.1972) tip=(-0.0017,-0.0099,0.0028) r=0.0072 r2=0.0074 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1688 to=0.1688 offset=(-0.0078,0.0734,0.1978) tip=(-0.0015,-0.0101,0.0026) r=0.0074 r2=0.0077 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1865 to=0.1865 offset=(-0.0035,0.0697,0.1983) tip=(-0.0037,-0.0085,0.0014) r=0.0077 r2=0.008 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2042 to=0.2042 offset=(-0.0014,0.0676,0.1975) tip=(-0.0033,-0.0089,0.0012) r=0.008 r2=0.0082 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2219 to=0.2219 offset=(0.001,0.0651,0.1966) tip=(-0.0052,-0.0075,0.0003) r=0.0082 r2=0.0084 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2396 to=0.2396 offset=(0.0015,0.064,0.1948) tip=(-0.0066,-0.0065,-0.0004) r=0.0084 r2=0.0086 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2574 to=0.2574 offset=(0.0007,0.0639,0.1923) tip=(-0.0077,-0.0057,-0.0009) r=0.0086 r2=0.0088 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2751 to=0.2751 offset=(-0.0013,0.0646,0.1892) tip=(-0.0088,-0.0049,-0.0015) r=0.0088 r2=0.009 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2929 to=0.2929 offset=(-0.0043,0.0661,0.1856) tip=(-0.0106,-0.0036,-0.0024) r=0.009 r2=0.0092 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3107 to=0.3107 offset=(-0.0092,0.069,0.1811) tip=(-0.0097,-0.0044,-0.0022) r=0.0092 r2=0.0093 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3285 to=0.3285 offset=(-0.0131,0.0711,0.1767) tip=(-0.0112,-0.0033,-0.003) r=0.0093 r2=0.0094 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3464 to=0.3464 offset=(-0.0185,0.0742,0.1716) tip=(-0.0108,-0.0037,-0.003) r=0.0094 r2=0.0095 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3643 to=0.3643 offset=(-0.0235,0.077,0.1664) tip=(-0.0097,-0.0045,-0.0025) r=0.0095 r2=0.0095 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3822 to=0.3822 offset=(-0.0274,0.0789,0.1617) tip=(-0.0098,-0.0045,-0.0026) r=0.0095 r2=0.0096 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4001 to=0.4001 offset=(-0.0313,0.0809,0.157) tip=(-0.0081,-0.0057,-0.0016) r=0.0096 r2=0.0096 blend=0.0016 side=r
+  bar  arm on upperarm from=0.418 to=0.418 offset=(-0.0336,0.0817,0.1533) tip=(-0.0071,-0.0064,-0.0009) r=0.0096 r2=0.0096 blend=0.0016 side=r
+  bar  arm on upperarm from=0.436 to=0.436 offset=(-0.0348,0.0818,0.1502) tip=(-0.0061,-0.0071,-0.0002) r=0.0096 r2=0.0096 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4539 to=0.4539 offset=(-0.0351,0.0812,0.1478) tip=(-0.0053,-0.0075,0.0004) r=0.0096 r2=0.0095 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4719 to=0.4719 offset=(-0.0346,0.0802,0.1461) tip=(-0.0046,-0.008,0.0011) r=0.0095 r2=0.0094 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4899 to=0.4899 offset=(-0.0333,0.0787,0.145) tip=(-0.0039,-0.0084,0.0017) r=0.0094 r2=0.0093 blend=0.0016 side=r
+  bar  arm on upperarm from=0.508 to=0.508 offset=(-0.0314,0.0768,0.1445) tip=(-0.003,-0.0089,0.0027) r=0.0093 r2=0.0092 blend=0.0016 side=r
+  bar  arm on upperarm from=0.526 to=0.526 offset=(-0.0285,0.0743,0.145) tip=(-0.0027,-0.0092,0.0029) r=0.0092 r2=0.0091 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5441 to=0.5441 offset=(-0.0253,0.0717,0.1457) tip=(-0.0028,-0.009,0.003) r=0.0091 r2=0.0089 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5621 to=0.5621 offset=(-0.0223,0.0692,0.1464) tip=(-0.0026,-0.009,0.0031) r=0.0089 r2=0.0087 blend=0.0016 side=r
+  bar  arm on upperarm from=0.58 to=0.58 offset=(-0.0191,0.0666,0.1474) tip=(-0.0035,-0.0084,0.0026) r=0.0087 r2=0.0085 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5979 to=0.5979 offset=(-0.0168,0.0647,0.1479) tip=(-0.0041,-0.0079,0.0023) r=0.0085 r2=0.0083 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6158 to=0.6158 offset=(-0.0151,0.0632,0.148) tip=(-0.0049,-0.0073,0.002) r=0.0083 r2=0.0081 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6337 to=0.6337 offset=(-0.0142,0.0624,0.1478) tip=(-0.006,-0.0065,0.0015) r=0.0081 r2=0.0078 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6516 to=0.6516 offset=(-0.0144,0.0623,0.1472) tip=(-0.0074,-0.0055,0.0009) r=0.0078 r2=0.0076 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6695 to=0.6695 offset=(-0.016,0.0633,0.146) tip=(-0.0087,-0.0045,0.0003) r=0.0076 r2=0.0073 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6873 to=0.6873 offset=(-0.0189,0.0653,0.1441) tip=(-0.0086,-0.0046,0.0003) r=0.0073 r2=0.007 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7052 to=0.7052 offset=(-0.0216,0.0672,0.1422) tip=(-0.01,-0.0036,-0.0006) r=0.007 r2=0.0067 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7231 to=0.7231 offset=(-0.0259,0.0701,0.1395) tip=(-0.01,-0.0036,-0.0008) r=0.0067 r2=0.0064 blend=0.0016 side=r
+  bar  arm on upperarm from=0.741 to=0.741 offset=(-0.0301,0.0729,0.1365) tip=(-0.0104,-0.0034,-0.0012) r=0.0064 r2=0.0061 blend=0.0016 side=r
+  bar  arm on upperarm from=0.759 to=0.759 offset=(-0.0347,0.0759,0.1331) tip=(-0.0092,-0.0043,-0.0003) r=0.0061 r2=0.0058 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7769 to=0.7769 offset=(-0.038,0.0781,0.1307) tip=(-0.0094,-0.0041,-0.0003) r=0.0058 r2=0.0055 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7949 to=0.7949 offset=(-0.0416,0.0804,0.1282) tip=(-0.0085,-0.0046,0.0005) r=0.0055 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8129 to=0.8129 offset=(-0.0442,0.0823,0.1265) tip=(-0.0071,-0.0054,0.0018) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8309 to=0.8309 offset=(-0.0455,0.0833,0.1261) tip=(-0.0059,-0.0061,0.003) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8488 to=0.8488 offset=(-0.0457,0.0837,0.1269) tip=(-0.0054,-0.0064,0.0035) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8667 to=0.8667 offset=(-0.0453,0.0838,0.1282) tip=(-0.0046,-0.0069,0.0041) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8846 to=0.8846 offset=(-0.0441,0.0834,0.1302) tip=(-0.0031,-0.0078,0.0053) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.9025 to=0.9025 offset=(-0.0414,0.082,0.1333) tip=(-0.0032,-0.0078,0.0052) r=0.0053 r2=0.0053 blend=0.0016 side=r
+  blob arm on upperarm at=0.1677 offset=(-0.0074,0.0717,0.194) r=0.0149 blend=0.002 side=r
+  blob arm on upperarm at=0.1853 offset=(-0.0032,0.0683,0.1949) r=0.0146 blend=0.002 side=r
+  blob arm on upperarm at=0.274 offset=(-0.0012,0.0639,0.1873) r=0.0134 blend=0.002 side=r
+  blob arm on upperarm at=0.29 offset=(-0.004,0.0643,0.181) r=0.0164 blend=0.002 side=r
+  blob arm on upperarm at=0.3797 offset=(-0.0267,0.0771,0.158) r=0.0159 blend=0.002 side=r
+  blob arm on upperarm at=0.4503 offset=(-0.0336,0.0776,0.1413) r=0.0194 blend=0.002 side=r
+  blob arm on upperarm at=0.5614 offset=(-0.0217,0.0674,0.1425) r=0.0157 blend=0.002 side=r
+  blob arm on upperarm at=0.5793 offset=(-0.0185,0.0646,0.1428) r=0.0164 blend=0.002 side=r
+  blob arm on upperarm at=0.597 offset=(-0.0161,0.0622,0.142) r=0.0176 blend=0.002 side=r
+  bar  arm on upperarm from=0.3477 to=0.3477 offset=(-0.028,0.0818,0.1688) tip=(-0.008,-0.0055,-0.0019) r=0.0039 r2=0.0045 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3652 to=0.3652 offset=(-0.0303,0.0826,0.1647) tip=(-0.0086,-0.0051,-0.0023) r=0.0045 r2=0.0051 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3826 to=0.3826 offset=(-0.0333,0.0838,0.1604) tip=(-0.0074,-0.0059,-0.0015) r=0.0051 r2=0.0055 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4 to=0.4 offset=(-0.035,0.0841,0.1568) tip=(-0.0078,-0.0057,-0.0017) r=0.0055 r2=0.0059 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4175 to=0.4175 offset=(-0.0372,0.0848,0.153) tip=(-0.009,-0.0048,-0.0024) r=0.0059 r2=0.0061 blend=0.0016 side=r
+  bar  arm on upperarm from=0.435 to=0.435 offset=(-0.0405,0.0863,0.1485) tip=(-0.0093,-0.0046,-0.0026) r=0.0061 r2=0.0062 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4525 to=0.4525 offset=(-0.0441,0.088,0.1438) tip=(-0.0097,-0.0044,-0.0028) r=0.0062 r2=0.0062 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4701 to=0.4701 offset=(-0.0481,0.0899,0.1389) tip=(-0.01,-0.0042,-0.0031) r=0.0062 r2=0.006 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4876 to=0.4876 offset=(-0.0524,0.092,0.1337) tip=(-0.0107,-0.0038,-0.0038) r=0.006 r2=0.0057 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5052 to=0.5052 offset=(-0.0574,0.0946,0.1278) tip=(-0.0116,-0.0033,-0.0046) r=0.0057 r2=0.0052 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5228 to=0.5228 offset=(-0.0634,0.0977,0.1211) tip=(-0.0125,-0.003,-0.006) r=0.0052 r2=0.0047 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5404 to=0.5404 offset=(-0.0701,0.101,0.1129) tip=(-0.013,-0.0029,-0.0072) r=0.0047 r2=0.004 blend=0.0016 side=r
+  bar  arm on upperarm from=0.558 to=0.558 offset=(-0.0774,0.1045,0.1036) tip=(-0.0127,-0.0034,-0.0078) r=0.004 r2=0.0034 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5755 to=0.5755 offset=(-0.0844,0.1074,0.0937) tip=(-0.0124,-0.0039,-0.0089) r=0.0034 r2=0.0034 blend=0.0016 side=r
+  bar  arm on upperarm from=0.593 to=0.593 offset=(-0.0911,0.1098,0.0827) tip=(-0.0109,-0.0049,-0.0078) r=0.0034 r2=0.0034 blend=0.0016 side=r
+  blob arm on upperarm at=0.5221 offset=(-0.0626,0.0964,0.1195) r=0.0096 blend=0.002 side=r
+  blob arm on upperarm at=0.5759 offset=(-0.0852,0.1084,0.0946) r=0.0053 blend=0.002 side=r
+  bar  arm on upperarm from=0.1199 to=0.1199 offset=(-0.0741,-0.0056,-0.2156) tip=(-0.0057,-0.0064,0.0028) r=0.0056 r2=0.0059 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1379 to=0.1379 offset=(-0.074,-0.0055,-0.215) tip=(-0.0064,-0.0057,0.0032) r=0.0059 r2=0.0062 blend=0.0016 side=r
+  bar  arm on upperarm from=0.156 to=0.156 offset=(-0.0746,-0.0046,-0.214) tip=(-0.0073,-0.0048,0.0036) r=0.0062 r2=0.0065 blend=0.0016 side=r
+  bar  arm on upperarm from=0.174 to=0.174 offset=(-0.076,-0.0029,-0.2126) tip=(-0.0095,-0.0025,0.0045) r=0.0065 r2=0.0068 blend=0.0016 side=r
+  bar  arm on upperarm from=0.1921 to=0.1921 offset=(-0.0797,0.0012,-0.2103) tip=(-0.0084,-0.0036,0.0041) r=0.0068 r2=0.0071 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2101 to=0.2101 offset=(-0.0822,0.0041,-0.2084) tip=(-0.0105,-0.0013,0.0053) r=0.0071 r2=0.0074 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2282 to=0.2282 offset=(-0.0869,0.0093,-0.2053) tip=(-0.0087,-0.0031,0.0046) r=0.0074 r2=0.0077 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2462 to=0.2462 offset=(-0.0897,0.0127,-0.2028) tip=(-0.0078,-0.0041,0.0043) r=0.0077 r2=0.0079 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2643 to=0.2643 offset=(-0.0916,0.0152,-0.2007) tip=(-0.0069,-0.005,0.004) r=0.0079 r2=0.0081 blend=0.0016 side=r
+  bar  arm on upperarm from=0.2823 to=0.2823 offset=(-0.0926,0.0167,-0.1989) tip=(-0.0068,-0.0051,0.0038) r=0.0081 r2=0.0083 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3004 to=0.3004 offset=(-0.0936,0.0181,-0.1972) tip=(-0.005,-0.007,0.0031) r=0.0083 r2=0.0085 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3184 to=0.3184 offset=(-0.0927,0.0176,-0.1963) tip=(-0.0033,-0.0088,0.0022) r=0.0085 r2=0.0086 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3364 to=0.3364 offset=(-0.0901,0.0153,-0.1963) tip=(-0.0024,-0.0098,0.0018) r=0.0086 r2=0.0088 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3545 to=0.3545 offset=(-0.0866,0.012,-0.1967) tip=(-0.0006,-0.0117,0.001) r=0.0088 r2=0.0089 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3726 to=0.3726 offset=(-0.0813,0.0068,-0.198) tip=(0.0006,-0.0128,0.0006) r=0.0089 r2=0.0089 blend=0.0016 side=r
+  bar  arm on upperarm from=0.3906 to=0.3906 offset=(-0.0749,0.0005,-0.1995) tip=(0.001,-0.0132,0.0007) r=0.0089 r2=0.009 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4087 to=0.4087 offset=(-0.0681,-0.0062,-0.201) tip=(0.0011,-0.0132,0.0009) r=0.009 r2=0.009 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4268 to=0.4268 offset=(-0.0611,-0.0129,-0.2023) tip=(0.0001,-0.0121,0.0015) r=0.009 r2=0.009 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4449 to=0.4449 offset=(-0.0551,-0.0184,-0.2029) tip=(-0.0006,-0.0114,0.0019) r=0.009 r2=0.009 blend=0.0016 side=r
+  bar  arm on upperarm from=0.463 to=0.463 offset=(-0.0498,-0.0233,-0.2032) tip=(-0.0018,-0.0101,0.0024) r=0.009 r2=0.0089 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4811 to=0.4811 offset=(-0.0458,-0.0269,-0.2031) tip=(-0.0027,-0.0092,0.0027) r=0.0089 r2=0.0088 blend=0.0016 side=r
+  bar  arm on upperarm from=0.4991 to=0.4991 offset=(-0.0426,-0.0296,-0.2025) tip=(-0.0035,-0.0083,0.0031) r=0.0088 r2=0.0087 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5172 to=0.5172 offset=(-0.0402,-0.0314,-0.2016) tip=(-0.0047,-0.0071,0.0036) r=0.0087 r2=0.0085 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5352 to=0.5352 offset=(-0.039,-0.032,-0.2002) tip=(-0.0065,-0.0052,0.0043) r=0.0085 r2=0.0084 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5532 to=0.5532 offset=(-0.0397,-0.0307,-0.1981) tip=(-0.0077,-0.0038,0.0051) r=0.0084 r2=0.0082 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5712 to=0.5712 offset=(-0.0415,-0.0281,-0.1952) tip=(-0.0081,-0.0034,0.0055) r=0.0082 r2=0.008 blend=0.0016 side=r
+  bar  arm on upperarm from=0.5893 to=0.5893 offset=(-0.0437,-0.025,-0.1919) tip=(-0.0091,-0.0022,0.0065) r=0.008 r2=0.0077 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6074 to=0.6074 offset=(-0.047,-0.0206,-0.1876) tip=(-0.0079,-0.0034,0.006) r=0.0077 r2=0.0075 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6254 to=0.6254 offset=(-0.049,-0.0175,-0.1837) tip=(-0.0087,-0.0025,0.0068) r=0.0075 r2=0.0072 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6435 to=0.6435 offset=(-0.0518,-0.0135,-0.1791) tip=(-0.0074,-0.0038,0.0063) r=0.0072 r2=0.0069 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6617 to=0.6617 offset=(-0.0533,-0.0107,-0.175) tip=(-0.0072,-0.004,0.0063) r=0.0069 r2=0.0067 blend=0.0016 side=r
+  bar  arm on upperarm from=0.6798 to=0.6798 offset=(-0.0546,-0.0082,-0.1709) tip=(-0.0054,-0.006,0.0052) r=0.0067 r2=0.0063 blend=0.0016 side=r
+  bar  arm on upperarm from=0.698 to=0.698 offset=(-0.0541,-0.0076,-0.1679) tip=(-0.0044,-0.0071,0.0046) r=0.0063 r2=0.006 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7162 to=0.7162 offset=(-0.0526,-0.0082,-0.1655) tip=(-0.0035,-0.0081,0.004) r=0.006 r2=0.0057 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7343 to=0.7343 offset=(-0.0502,-0.0097,-0.1636) tip=(-0.0019,-0.0098,0.0032) r=0.0057 r2=0.0054 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7525 to=0.7525 offset=(-0.0461,-0.013,-0.1626) tip=(-0.0014,-0.0103,0.0031) r=0.0054 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7707 to=0.7707 offset=(-0.0416,-0.0167,-0.1617) tip=(-0.001,-0.0106,0.0032) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7889 to=0.7889 offset=(-0.0367,-0.0208,-0.1607) tip=(-0.001,-0.0107,0.003) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8071 to=0.8071 offset=(-0.0318,-0.025,-0.1599) tip=(-0.0015,-0.0103,0.003) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8254 to=0.8254 offset=(-0.0273,-0.0288,-0.1591) tip=(-0.0015,-0.0104,0.0026) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8436 to=0.8436 offset=(-0.0229,-0.0326,-0.1587) tip=(-0.0004,-0.0114,0.0024) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8618 to=0.8618 offset=(-0.0174,-0.0375,-0.1585) tip=(-0.0022,-0.0098,0.0025) r=0.005 r2=0.005 blend=0.0016 side=r
+  blob arm on upperarm at=0.4433 offset=(-0.0532,-0.0183,-0.1976) r=0.0166 blend=0.002 side=r
+  blob arm on upperarm at=0.6599 offset=(-0.0522,-0.011,-0.1727) r=0.0129 blend=0.002 side=r
+  blob arm on upperarm at=0.7526 offset=(-0.0462,-0.013,-0.1627) r=0.0094 blend=0.002 side=r
+  blob arm on upperarm at=0.8079 offset=(-0.0324,-0.0251,-0.1617) r=0.0074 blend=0.002 side=r
+  blob arm on upperarm at=0.8437 offset=(-0.0231,-0.0327,-0.1594) r=0.0086 blend=0.002 side=r
+  bar  arm on upperarm from=0.6987 to=0.6987 offset=(-0.045,-0.0179,-0.1743) tip=(-0.0103,-0.0003,0.0082) r=0.0036 r2=0.0043 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7165 to=0.7165 offset=(-0.0496,-0.0118,-0.1682) tip=(-0.0107,0.0002,0.0086) r=0.0043 r2=0.0048 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7344 to=0.7344 offset=(-0.0545,-0.0052,-0.1618) tip=(-0.0111,0.0006,0.0088) r=0.0048 r2=0.0053 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7523 to=0.7523 offset=(-0.0598,0.0018,-0.1552) tip=(-0.0114,0.0008,0.009) r=0.0053 r2=0.0056 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7703 to=0.7703 offset=(-0.0654,0.0091,-0.1484) tip=(-0.0116,0.0008,0.0086) r=0.0056 r2=0.0058 blend=0.0016 side=r
+  bar  arm on upperarm from=0.7884 to=0.7884 offset=(-0.0711,0.0164,-0.142) tip=(-0.0116,0.0004,0.0077) r=0.0058 r2=0.0058 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8065 to=0.8065 offset=(-0.0768,0.0234,-0.1365) tip=(-0.0125,0.0014,0.0081) r=0.0058 r2=0.0057 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8246 to=0.8246 offset=(-0.0835,0.0314,-0.1306) tip=(-0.0121,0.001,0.0077) r=0.0057 r2=0.0054 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8426 to=0.8426 offset=(-0.0897,0.0389,-0.125) tip=(-0.0114,0.0003,0.0073) r=0.0054 r2=0.005 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8606 to=0.8606 offset=(-0.0953,0.0456,-0.1199) tip=(-0.0112,0.0004,0.008) r=0.005 r2=0.0045 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8785 to=0.8785 offset=(-0.1007,0.0524,-0.1141) tip=(-0.0102,-0.0007,0.0074) r=0.0045 r2=0.0039 blend=0.0016 side=r
+  bar  arm on upperarm from=0.8964 to=0.8964 offset=(-0.1052,0.0582,-0.1089) tip=(-0.0095,-0.0015,0.007) r=0.0039 r2=0.0033 blend=0.0016 side=r
+  bar  arm on upperarm from=0.9142 to=0.9142 offset=(-0.1088,0.0631,-0.104) tip=(-0.0087,-0.0023,0.0067) r=0.0033 r2=0.0032 blend=0.0016 side=r
+  bar  arm on upperarm from=0.9321 to=0.9321 offset=(-0.1117,0.0672,-0.0995) tip=(-0.0082,-0.0028,0.0066) r=0.0032 r2=0.0032 blend=0.0016 side=r
+  blob arm on upperarm at=0.8962 offset=(-0.1055,0.0583,-0.1092) r=0.0062 blend=0.002 side=r
+  bar  leg on thigh from=0.0999 to=0.0999 offset=(-0.0978,0.0068,0.2141) tip=(-0.0037,-0.0087,-0.0024) r=0.0061 r2=0.0067 blend=0.0016 side=r
+  bar  leg on thigh from=0.1297 to=0.1297 offset=(-0.1008,0.0071,0.2118) tip=(-0.0025,-0.0088,-0.0022) r=0.0067 r2=0.0073 blend=0.0016 side=r
+  bar  leg on thigh from=0.1593 to=0.1593 offset=(-0.1027,0.0072,0.2096) tip=(-0.0017,-0.0088,-0.0021) r=0.0073 r2=0.0079 blend=0.0016 side=r
+  bar  leg on thigh from=0.189 to=0.189 offset=(-0.1038,0.0073,0.2075) tip=(-0.0008,-0.0089,-0.002) r=0.0079 r2=0.0083 blend=0.0016 side=r
+  bar  leg on thigh from=0.2187 to=0.2187 offset=(-0.104,0.0073,0.2055) tip=(0.0012,-0.009,-0.001) r=0.0083 r2=0.0088 blend=0.0016 side=r
+  bar  leg on thigh from=0.2484 to=0.2484 offset=(-0.1021,0.0071,0.2045) tip=(0.0018,-0.0091,-0.0009) r=0.0088 r2=0.0092 blend=0.0016 side=r
+  bar  leg on thigh from=0.278 to=0.278 offset=(-0.0997,0.007,0.2037) tip=(0.0008,-0.009,-0.0017) r=0.0092 r2=0.0095 blend=0.0016 side=r
+  bar  leg on thigh from=0.3077 to=0.3077 offset=(-0.0983,0.0069,0.2019) tip=(0.0019,-0.0091,-0.0013) r=0.0095 r2=0.0097 blend=0.0016 side=r
+  bar  leg on thigh from=0.3374 to=0.3374 offset=(-0.0958,0.0067,0.2006) tip=(0.0004,-0.009,-0.0024) r=0.0097 r2=0.0098 blend=0.0016 side=r
+  bar  leg on thigh from=0.3672 to=0.3672 offset=(-0.0948,0.0066,0.1982) tip=(-0.0002,-0.0089,-0.0032) r=0.0098 r2=0.0099 blend=0.0016 side=r
+  bar  leg on thigh from=0.397 to=0.397 offset=(-0.0943,0.0066,0.1951) tip=(-0.0011,-0.0089,-0.0037) r=0.0099 r2=0.0099 blend=0.0016 side=r
+  bar  leg on thigh from=0.4268 to=0.4268 offset=(-0.0947,0.0066,0.1914) tip=(-0.0023,-0.0088,-0.0046) r=0.0099 r2=0.0098 blend=0.0016 side=r
+  bar  leg on thigh from=0.4566 to=0.4566 offset=(-0.0964,0.0067,0.1868) tip=(-0.0029,-0.0088,-0.0053) r=0.0098 r2=0.0096 blend=0.0016 side=r
+  bar  leg on thigh from=0.4866 to=0.4866 offset=(-0.0987,0.0069,0.1815) tip=(-0.0043,-0.0087,-0.0066) r=0.0096 r2=0.0093 blend=0.0016 side=r
+  bar  leg on thigh from=0.5166 to=0.5166 offset=(-0.1024,0.0072,0.1749) tip=(-0.0053,-0.0088,-0.0073) r=0.0093 r2=0.009 blend=0.0016 side=r
+  bar  leg on thigh from=0.5473 to=0.5473 offset=(-0.107,0.0075,0.1676) tip=(-0.0046,-0.0089,-0.0064) r=0.009 r2=0.0086 blend=0.0016 side=r
+  bar  leg on thigh from=0.5779 to=0.5779 offset=(-0.111,0.0078,0.1612) tip=(-0.0052,-0.0088,-0.0065) r=0.0086 r2=0.0081 blend=0.0016 side=r
+  bar  leg on thigh from=0.6085 to=0.6085 offset=(-0.1155,0.0081,0.1547) tip=(-0.0048,-0.0088,-0.0057) r=0.0081 r2=0.0076 blend=0.0016 side=r
+  bar  leg on thigh from=0.639 to=0.639 offset=(-0.1197,0.0084,0.1489) tip=(-0.0058,-0.0087,-0.0065) r=0.0076 r2=0.007 blend=0.0016 side=r
+  bar  leg on thigh from=0.6694 to=0.6694 offset=(-0.1248,0.0087,0.1424) tip=(-0.0048,-0.0088,-0.0053) r=0.007 r2=0.0064 blend=0.0016 side=r
+  bar  leg on thigh from=0.6997 to=0.6997 offset=(-0.129,0.009,0.1371) tip=(-0.0042,-0.0088,-0.0044) r=0.0064 r2=0.0058 blend=0.0016 side=r
+  bar  leg on thigh from=0.7299 to=0.7299 offset=(-0.1326,0.0093,0.1327) tip=(-0.0036,-0.0088,-0.0037) r=0.0058 r2=0.0054 blend=0.0016 side=r
+  bar  leg on thigh from=0.7601 to=0.7601 offset=(-0.1356,0.0095,0.1291) tip=(-0.0029,-0.0088,-0.0025) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  leg on thigh from=0.7901 to=0.7901 offset=(-0.1379,0.0096,0.1265) tip=(-0.002,-0.0089,-0.0015) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  bar  leg on thigh from=0.8202 to=0.8202 offset=(-0.1393,0.0097,0.1251) tip=(-0.0014,-0.0089,-0.0006) r=0.0054 r2=0.0054 blend=0.0016 side=r
+  blob leg on thigh at=0.2728 offset=(-0.0961,0.0067,0.1975) r=0.019 blend=0.002 side=r
+  blob leg on thigh at=0.3614 offset=(-0.0919,0.0064,0.1932) r=0.018 blend=0.002 side=r
+  blob leg on thigh at=0.4488 offset=(-0.093,0.0065,0.1813) r=0.0188 blend=0.002 side=r
+  blob leg on thigh at=0.7299 offset=(-0.1325,0.0093,0.1326) r=0.0106 blend=0.002 side=r
+  bar  leg on thigh from=0.4294 to=0.4294 offset=(-0.0794,0.0056,0.2022) tip=(0.0046,-0.0089,-0.0012) r=0.004 r2=0.0049 blend=0.0016 side=r
+  bar  leg on thigh from=0.458 to=0.458 offset=(-0.0742,0.0052,0.201) tip=(0.0042,-0.0089,-0.0017) r=0.0049 r2=0.0056 blend=0.0016 side=r
+  bar  leg on thigh from=0.4867 to=0.4867 offset=(-0.0695,0.0049,0.1993) tip=(0.0023,-0.0088,-0.0026) r=0.0056 r2=0.0061 blend=0.0016 side=r
+  bar  leg on thigh from=0.5155 to=0.5155 offset=(-0.0665,0.0047,0.1967) tip=(0.0047,-0.0091,-0.0014) r=0.0061 r2=0.0064 blend=0.0016 side=r
+  bar  leg on thigh from=0.5445 to=0.5445 offset=(-0.0612,0.0043,0.1953) tip=(0.003,-0.009,-0.0016) r=0.0064 r2=0.0064 blend=0.0016 side=r
+  bar  leg on thigh from=0.5737 to=0.5737 offset=(-0.0576,0.004,0.1937) tip=(0.0044,-0.0091,-0.0005) r=0.0064 r2=0.0061 blend=0.0016 side=r
+  bar  leg on thigh from=0.603 to=0.603 offset=(-0.0526,0.0037,0.1933) tip=(0.0056,-0.0092,0.0004) r=0.0061 r2=0.0056 blend=0.0016 side=r
+  bar  leg on thigh from=0.6322 to=0.6322 offset=(-0.0464,0.0032,0.1937) tip=(0.0081,-0.0094,0.0013) r=0.0056 r2=0.0049 blend=0.0016 side=r
+  bar  leg on thigh from=0.6614 to=0.6614 offset=(-0.0377,0.0026,0.195) tip=(0.0097,-0.0094,0.0016) r=0.0049 r2=0.004 blend=0.0016 side=r
+  bar  leg on thigh from=0.6906 to=0.6906 offset=(-0.0274,0.0019,0.1966) tip=(0.012,-0.0096,0.0014) r=0.004 r2=0.0035 blend=0.0016 side=r
+  bar  leg on thigh from=0.7196 to=0.7196 offset=(-0.0148,0.001,0.198) tip=(0.0129,-0.0096,0.0006) r=0.0035 r2=0.0035 blend=0.0016 side=r
+  blob leg on thigh at=0.661 offset=(-0.0373,0.0026,0.1937) r=0.0089 blend=0.002 side=r
+  bar  leg on thigh from=0.1496 to=0.1496 offset=(-0.0369,0.0026,-0.2354) tip=(0.0074,-0.0095,-0.0001) r=0.0056 r2=0.0061 blend=0.0016 side=r
+  bar  leg on thigh from=0.1793 to=0.1793 offset=(-0.0289,0.002,-0.2355) tip=(0.008,-0.0095,0.0005) r=0.0061 r2=0.0067 blend=0.0016 side=r
+  bar  leg on thigh from=0.209 to=0.209 offset=(-0.0203,0.0014,-0.235) tip=(0.0071,-0.0094,0.0011) r=0.0067 r2=0.0071 blend=0.0016 side=r
+  bar  leg on thigh from=0.2388 to=0.2388 offset=(-0.0127,0.0009,-0.2339) tip=(0.0049,-0.0093,0.0017) r=0.0071 r2=0.0076 blend=0.0016 side=r
+  bar  leg on thigh from=0.2685 to=0.2685 offset=(-0.0071,0.0005,-0.2322) tip=(0.0033,-0.0092,0.0021) r=0.0076 r2=0.008 blend=0.0016 side=r
+  bar  leg on thigh from=0.2982 to=0.2982 offset=(-0.0032,0.0002,-0.2301) tip=(0.0004,-0.009,0.0024) r=0.008 r2=0.0083 blend=0.0016 side=r
+  bar  leg on thigh from=0.3279 to=0.3279 offset=(-0.0021,0.0001,-0.2277) tip=(-0.0021,-0.0088,0.0028) r=0.0083 r2=0.0086 blend=0.0016 side=r
+  bar  leg on thigh from=0.3576 to=0.3576 offset=(-0.0037,0.0003,-0.2249) tip=(-0.0029,-0.0087,0.0028) r=0.0086 r2=0.0088 blend=0.0016 side=r
+  bar  leg on thigh from=0.3874 to=0.3874 offset=(-0.006,0.0004,-0.2221) tip=(-0.0045,-0.0086,0.0031) r=0.0088 r2=0.0089 blend=0.0016 side=r
+  bar  leg on thigh from=0.4171 to=0.4171 offset=(-0.0098,0.0007,-0.2189) tip=(-0.0033,-0.0087,0.0033) r=0.0089 r2=0.009 blend=0.0016 side=r
+  bar  leg on thigh from=0.4469 to=0.4469 offset=(-0.0125,0.0009,-0.2156) tip=(-0.0046,-0.0087,0.0036) r=0.009 r2=0.009 blend=0.0016 side=r
+  bar  leg on thigh from=0.4768 to=0.4768 offset=(-0.0164,0.0011,-0.212) tip=(-0.0047,-0.0087,0.0039) r=0.009 r2=0.0089 blend=0.0016 side=r
+  bar  leg on thigh from=0.5067 to=0.5067 offset=(-0.0205,0.0014,-0.2081) tip=(-0.0026,-0.0088,0.0038) r=0.0089 r2=0.0087 blend=0.0016 side=r
+  bar  leg on thigh from=0.5367 to=0.5367 offset=(-0.0224,0.0016,-0.2043) tip=(-0.0018,-0.0089,0.0038) r=0.0087 r2=0.0085 blend=0.0016 side=r
+  bar  leg on thigh from=0.5668 to=0.5668 offset=(-0.0236,0.0016,-0.2005) tip=(-0.0007,-0.009,0.0037) r=0.0085 r2=0.0082 blend=0.0016 side=r
+  bar  leg on thigh from=0.5969 to=0.5969 offset=(-0.0236,0.0017,-0.1968) tip=(0.0008,-0.0091,0.0035) r=0.0082 r2=0.0078 blend=0.0016 side=r
+  bar  leg on thigh from=0.6271 to=0.6271 offset=(-0.0223,0.0016,-0.1932) tip=(0.0021,-0.0092,0.0033) r=0.0078 r2=0.0074 blend=0.0016 side=r
+  bar  leg on thigh from=0.6573 to=0.6573 offset=(-0.0195,0.0014,-0.1899) tip=(0.0031,-0.0093,0.0034) r=0.0074 r2=0.0069 blend=0.0016 side=r
+  bar  leg on thigh from=0.6876 to=0.6876 offset=(-0.0158,0.0011,-0.1866) tip=(0.0055,-0.0095,0.0029) r=0.0069 r2=0.0064 blend=0.0016 side=r
+  bar  leg on thigh from=0.7179 to=0.7179 offset=(-0.0097,0.0007,-0.1836) tip=(0.0057,-0.0096,0.0027) r=0.0064 r2=0.0058 blend=0.0016 side=r
+  bar  leg on thigh from=0.7484 to=0.7484 offset=(-0.0033,0.0002,-0.1809) tip=(0.0067,-0.0097,0.0024) r=0.0058 r2=0.0053 blend=0.0016 side=r
+  bar  leg on thigh from=0.779 to=0.779 offset=(0.004,-0.0003,-0.1785) tip=(0.0079,-0.0097,0.0022) r=0.0053 r2=0.005 blend=0.0016 side=r
+  bar  leg on thigh from=0.8094 to=0.8094 offset=(0.0125,-0.0009,-0.1764) tip=(0.007,-0.0096,0.0021) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  leg on thigh from=0.8395 to=0.8395 offset=(0.0202,-0.0014,-0.1743) tip=(0.0046,-0.0094,0.0017) r=0.005 r2=0.005 blend=0.0016 side=r
+  bar  leg on thigh from=0.8697 to=0.8697 offset=(0.0254,-0.0018,-0.1725) tip=(0.0047,-0.0094,0.0017) r=0.005 r2=0.005 blend=0.0016 side=r
+  blob leg on thigh at=0.2953 offset=(-0.0031,0.0002,-0.2266) r=0.0141 blend=0.002 side=r
+  blob leg on thigh at=0.4087 offset=(-0.0094,0.0007,-0.2115) r=0.0187 blend=0.002 side=r
+  blob leg on thigh at=0.7141 offset=(-0.0095,0.0007,-0.1808) r=0.013 blend=0.002 side=r
+  bar  leg on thigh from=0.6594 to=0.6594 offset=(-0.0283,0.002,-0.1901) tip=(-0.0205,-0.0072,0.009) r=0.0036 r2=0.0046 blend=0.0016 side=r
+  bar  leg on thigh from=0.6881 to=0.6881 offset=(-0.0481,0.0034,-0.1811) tip=(-0.0182,-0.0074,0.0109) r=0.0046 r2=0.0053 blend=0.0016 side=r
+  bar  leg on thigh from=0.7169 to=0.7169 offset=(-0.0657,0.0046,-0.1702) tip=(-0.0151,-0.0077,0.0112) r=0.0053 r2=0.0058 blend=0.0016 side=r
+  bar  leg on thigh from=0.7462 to=0.7462 offset=(-0.0802,0.0056,-0.159) tip=(-0.0129,-0.0079,0.0103) r=0.0058 r2=0.0058 blend=0.0016 side=r
+  bar  leg on thigh from=0.7756 to=0.7756 offset=(-0.0925,0.0065,-0.1488) tip=(-0.0117,-0.008,0.0099) r=0.0058 r2=0.0055 blend=0.0016 side=r
+  bar  leg on thigh from=0.805 to=0.805 offset=(-0.1035,0.0072,-0.1389) tip=(-0.0104,-0.0081,0.0093) r=0.0055 r2=0.0049 blend=0.0016 side=r
+  bar  leg on thigh from=0.8342 to=0.8342 offset=(-0.1133,0.0079,-0.1296) tip=(-0.0094,-0.0081,0.0086) r=0.0049 r2=0.004 blend=0.0016 side=r
+  bar  leg on thigh from=0.8634 to=0.8634 offset=(-0.122,0.0085,-0.121) tip=(-0.0078,-0.0082,0.008) r=0.004 r2=0.0032 blend=0.0016 side=r
+  bar  leg on thigh from=0.8925 to=0.8925 offset=(-0.1292,0.009,-0.1129) tip=(-0.0079,-0.0082,0.0095) r=0.0032 r2=0.0032 blend=0.0016 side=r
+  blob leg on thigh at=0.6321 offset=(-0.1488,0.0104,-0.0905) r=0.0104 blend=0.006 side=r
+  blob leg on thigh at=0.2591 offset=(-0.003,0.0002,-0.2275) r=0.0096 blend=0.006 side=r
+  blob leg on thigh at=0.2083 offset=(-0.1822,0.0127,-0.1137) r=0.01 blend=0.006 side=r
+  blob leg on thigh at=0.1859 offset=(0.0324,-0.0023,-0.2273) r=0.0111 blend=0.006 side=r
+  blob leg on thigh at=0.1601 offset=(-0.072,0.005,-0.2185) r=0.0097 blend=0.006 side=r
+  blob leg on thigh at=0.2809 offset=(-0.1829,0.0128,0.093) r=0.014 blend=0.006 side=r
+  blob leg on thigh at=0.3278 offset=(0.0913,-0.0064,-0.1986) r=0.0098 blend=0.006 side=r
+  blob leg on thigh at=0.2922 offset=(-0.0667,0.0047,-0.2131) r=0.0096 blend=0.006 side=r
+  blob leg on thigh at=0.345 offset=(-0.1959,0.0137,-0.0499) r=0.0099 blend=0.006 side=r
+  blob leg on thigh at=0.5049 offset=(-0.1226,0.0086,-0.1509) r=0.0113 blend=0.006 side=r
+  blob leg on thigh at=0.1239 offset=(0.0053,-0.0004,-0.2303) r=0.0126 blend=0.006 side=r
+  blob leg on thigh at=0.3203 offset=(0.0334,-0.0023,-0.2166) r=0.0131 blend=0.006 side=r
+  blob leg on thigh at=0.1091 offset=(-0.2106,0.0147,0.0021) r=0.012 blend=0.006 side=r
+  blob leg on thigh at=0.1453 offset=(0.1144,-0.008,-0.1911) r=0.0138 blend=0.006 side=r
+  blob leg on thigh at=0.2667 offset=(-0.2041,0.0143,-0.0211) r=0.0115 blend=0.006 side=r
+  blob leg on thigh at=0.6575 offset=(0.0422,-0.003,-0.1751) r=0.0135 blend=0.006 side=r
+  blob leg on thigh at=0.3667 offset=(-0.1688,0.0118,-0.117) r=0.0097 blend=0.006 side=r
+  blob leg on thigh at=0.3219 offset=(-0.0481,0.0034,-0.2133) r=0.0128 blend=0.006 side=r
+  blob leg on thigh at=0.3547 offset=(-0.1962,0.0137,0.0008) r=0.0139 blend=0.006 side=r
+  blob leg on thigh at=0.3323 offset=(-0.1908,0.0133,-0.0668) r=0.0117 blend=0.006 side=r
+  blob leg on thigh at=0.2386 offset=(-0.1737,0.0121,-0.1273) r=0.0092 blend=0.006 side=r
+  blob leg on thigh at=0.0671 offset=(-0.2088,0.0146,0.0418) r=0.0103 blend=0.006 side=r
+  blob leg on thigh at=0.575 offset=(-0.1762,0.0123,0.014) r=0.0106 blend=0.006 side=r
+  blob leg on thigh at=0.0844 offset=(-0.2085,0.0146,0.0373) r=0.0114 blend=0.006 side=r
+  blob leg on thigh at=0.5183 offset=(-0.0573,0.004,-0.1907) r=0.0114 blend=0.006 side=r
+  blob leg on thigh at=0.5544 offset=(-0.1782,0.0125,0.027) r=0.0098 blend=0.006 side=r
+  blob leg on thigh at=0.5391 offset=(-0.1282,0.009,-0.1355) r=0.0136 blend=0.006 side=r
+  blob leg on thigh at=0.5348 offset=(-0.1669,0.0117,0.0798) r=0.01 blend=0.006 side=r
+  blob leg on thigh at=0.1577 offset=(-0.1885,0.0132,-0.0973) r=0.0132 blend=0.006 side=r
+  blob leg on thigh at=0.3611 offset=(-0.1113,0.0078,-0.1807) r=0.0111 blend=0.006 side=r
+  blob leg on thigh at=0.2442 offset=(-0.163,0.0114,-0.1427) r=0.0092 blend=0.006 side=r
+  blob leg on thigh at=0.5135 offset=(-0.0331,0.0023,-0.1962) r=0.0131 blend=0.006 side=r
+  blob leg on thigh at=0.2621 offset=(-0.1697,0.0119,-0.1227) r=0.0136 blend=0.006 side=r
+  blob leg on thigh at=0.6474 offset=(-0.0711,0.005,-0.1666) r=0.0117 blend=0.006 side=r
+  blob leg on thigh at=0.6687 offset=(-0.1687,0.0118,-0.0116) r=0.0102 blend=0.006 side=r
+  blob leg on thigh at=0.6634 offset=(-0.0915,0.0064,-0.1544) r=0.0096 blend=0.006 side=r
+  blob leg on thigh at=0.6157 offset=(0.023,-0.0016,-0.1858) r=0.0125 blend=0.006 side=r
+  blob leg on thigh at=0.517 offset=(0.108,-0.0076,-0.1625) r=0.0112 blend=0.006 side=r
+  blob leg on thigh at=0.4076 offset=(-0.1936,0.0135,-0.0128) r=0.0116 blend=0.006 side=r
+  blob leg on thigh at=0.65 offset=(-0.1536,0.0107,0.0792) r=0.0139 blend=0.006 side=r
+  blob leg on thigh at=0.6286 offset=(-0.1664,0.0116,0.0522) r=0.0108 blend=0.006 side=r
+  blob leg on thigh at=0.3165 offset=(-0.0332,0.0023,-0.2209) r=0.0093 blend=0.006 side=r
+  blob leg on thigh at=0.6783 offset=(-0.1664,0.0116,0.0231) r=0.0125 blend=0.006 side=r
+  blob leg on thigh at=0.2861 offset=(-0.202,0.0141,0.0376) r=0.0104 blend=0.006 side=r
+  blob leg on thigh at=0.4701 offset=(-0.168,0.0117,-0.0874) r=0.0132 blend=0.006 side=r
+  blob leg on thigh at=0.5954 offset=(0.113,-0.0079,-0.1459) r=0.0109 blend=0.006 side=r
+  blob leg on thigh at=0.2008 offset=(-0.1651,0.0115,-0.1369) r=0.0131 blend=0.006 side=r
+  blob leg on thigh at=0.1968 offset=(-0.2012,0.0141,0.0499) r=0.0138 blend=0.006 side=r
+  blob leg on thigh at=0.3192 offset=(-0.1319,0.0092,-0.1654) r=0.0128 blend=0.006 side=r
+  blob leg on thigh at=0.2013 offset=(-0.1893,0.0132,-0.0909) r=0.0133 blend=0.006 side=r
+  blob leg on thigh at=0.4908 offset=(-0.0153,0.0011,-0.2031) r=0.0118 blend=0.006 side=r
+  blob leg on thigh at=0.1423 offset=(0.1238,-0.0087,-0.1839) r=0.0139 blend=0.006 side=r
+  blob leg on thigh at=0.3853 offset=(-0.1963,0.0137,-0.0223) r=0.0103 blend=0.006 side=r
+  blob leg on thigh at=0.4983 offset=(-0.1707,0.0119,0.079) r=0.0109 blend=0.006 side=r
+  blob leg on thigh at=0.0912 offset=(-0.2106,0.0147,0.0146) r=0.0117 blend=0.006 side=r
+  blob leg on thigh at=0.0989 offset=(-0.2069,0.0145,0.0575) r=0.0092 blend=0.006 side=r
+  blob leg on thigh at=0.4451 offset=(-0.1898,0.0133,0.0251) r=0.0107 blend=0.006 side=r
+  blob leg on thigh at=0.1767 offset=(-0.1903,0.0133,0.0983) r=0.0105 blend=0.006 side=r
+  blob leg on thigh at=0.3622 offset=(0.0946,-0.0066,-0.1935) r=0.0097 blend=0.006 side=r
+  blob leg on thigh at=0.3317 offset=(0.0666,-0.0047,-0.2068) r=0.0125 blend=0.006 side=r
+  blob leg on thigh at=0.4445 offset=(-0.0778,0.0054,-0.1892) r=0.013 blend=0.006 side=r
+  blob leg on thigh at=0.5056 offset=(-0.1376,0.0096,-0.1366) r=0.0098 blend=0.006 side=r
+  blob leg on thigh at=0.2347 offset=(-0.1684,0.0118,-0.1361) r=0.0091 blend=0.006 side=r
+  blob leg on thigh at=0.1155 offset=(-0.1904,0.0133,0.102) r=0.0104 blend=0.006 side=r
+  blob leg on thigh at=0.5988 offset=(0.0993,-0.0069,-0.1545) r=0.0127 blend=0.006 side=r
+  blob leg on thigh at=0.6511 offset=(-0.1684,0.0118,0.0045) r=0.0124 blend=0.006 side=r
+  blob leg on thigh at=0.4331 offset=(-0.192,0.0134,0.0306) r=0.0091 blend=0.006 side=r
+  blob leg on thigh at=0.3763 offset=(-0.0597,0.0042,-0.2068) r=0.0107 blend=0.006 side=r
+  blob leg on thigh at=0.558 offset=(0.1078,-0.0075,-0.1544) r=0.0125 blend=0.006 side=r
+  blob leg on thigh at=0.4647 offset=(0.0757,-0.0053,-0.1902) r=0.011 blend=0.006 side=r
+  blob leg on thigh at=0.565 offset=(-0.144,0.0101,-0.1172) r=0.0093 blend=0.006 side=r
+  blob leg on thigh at=0.4315 offset=(-0.1794,0.0125,-0.0677) r=0.0134 blend=0.006 side=r
+  blob leg on thigh at=0.4787 offset=(-0.0382,0.0027,-0.2001) r=0.0124 blend=0.006 side=r
+  blob leg on thigh at=0.3581 offset=(-0.0731,0.0051,-0.2051) r=0.0092 blend=0.006 side=r
+  blob leg on thigh at=0.4614 offset=(-0.0478,0.0033,-0.2012) r=0.011 blend=0.006 side=r
+  blob leg on thigh at=0.3088 offset=(-0.1979,0.0138,-0.0339) r=0.0134 blend=0.006 side=r
+  blob leg on thigh at=0.1123 offset=(-0.1323,0.0093,-0.1799) r=0.0118 blend=0.006 side=r
+  blob leg on thigh at=0.5938 offset=(-0.1695,0.0119,-0.0318) r=0.0128 blend=0.006 side=r
+  blob leg on thigh at=0.6851 offset=(0.074,-0.0052,-0.159) r=0.0126 blend=0.006 side=r
+  blob leg on thigh at=0.5956 offset=(-0.055,0.0038,-0.181) r=0.0116 blend=0.006 side=r
+  blob leg on thigh at=0.3555 offset=(-0.1709,0.0119,-0.1124) r=0.011 blend=0.006 side=r
+  blob leg on thigh at=0.5325 offset=(-0.1352,0.0095,-0.1344) r=0.01 blend=0.006 side=r
+  blob leg on thigh at=0.3826 offset=(-0.1921,0.0134,-0.0425) r=0.0119 blend=0.006 side=r
+  blob leg on thigh at=0.6455 offset=(-0.1087,0.0076,-0.1425) r=0.01 blend=0.006 side=r
+  blob leg on thigh at=0.4952 offset=(-0.1072,0.0075,-0.1664) r=0.011 blend=0.006 side=r
+  blob leg on thigh at=0.2025 offset=(0.1364,-0.0095,-0.1756) r=0.0097 blend=0.006 side=r
+  blob leg on thigh at=0.5217 offset=(-0.1822,0.0127,-0.0209) r=0.0103 blend=0.006 side=r
+  blob leg on thigh at=0.2118 offset=(0.09,-0.0063,-0.2085) r=0.0093 blend=0.006 side=r
+  blob leg on thigh at=0.2166 offset=(0.0906,-0.0063,-0.2079) r=0.0092 blend=0.006 side=r
+  blob leg on thigh at=0.3166 offset=(-0.1968,0.0138,-0.0393) r=0.0131 blend=0.006 side=r

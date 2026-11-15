@@ -66,25 +66,30 @@ describe('tallow.blob', () => {
     expect(b.prims.length + b.bonePrims.length).toBeLessThanOrEqual(128);
   });
 
-  // BEAT 1 — THE MASS, on the torso's own field: the gut (y 0.95) is at least 15 cm wider a side than the chest
-  // (y 1.45), stands at least 55 cm in front of the spine, and its apron is still flesh 10 cm below the crotch
-  // (y 0.74) in front of the legs.
-  it('is corpulent: a gut past the chest, an apron below the crotch', () => {
-    const t = only(built(), ['torso']);
-    const gut = reach(t, [0, 0.95, 0], [1, 0, 0]);
-    const chest = reach(t, [0, 1.45, 0], [1, 0, 0]);
+  // BEAT 1 — THE MASS, on the torso's own field, at heights read off the skeleton (the legs have been cut once
+  // already): the gut (7 cm over the hip line) is at least 15 cm wider a side than the chest (the chest bone's top),
+  // stands at least 55 cm in front of the spine, and its apron is still flesh 25 cm below the crotch in front of the
+  // legs: it hangs to the knees (owner, fifth look: "doesnt quite read as corpulent").
+  it('is corpulent: a gut past the chest, an apron hanging to the knees', () => {
+    const b = built(), t = only(b, ['torso']);
+    const hip = b.bones.get('pelvis')!.tail[1], chestTop = b.bones.get('chest')!.tail[1];
+    const gut = reach(t, [0, hip + 0.07, 0], [1, 0, 0]);
+    const chest = reach(t, [0, chestTop, 0], [1, 0, 0]);
     expect(gut).toBeGreaterThan(0.58);
     expect(gut - chest).toBeGreaterThan(0.15);
-    expect(reach(t, [0, 0.95, 0], [0, 0, 1])).toBeGreaterThan(0.55);
-    expect(sdBody([0, 0.64, 0.30], t)).toBeLessThan(0);
+    expect(reach(t, [0, hip + 0.07, 0], [0, 0, 1])).toBeGreaterThan(0.55);
+    const crotch = b.bones.get('thigh.l')!.head[1];
+    expect(sdBody([0, crotch - 0.25, 0.30], t)).toBeLessThan(0);
   });
 
-  // Short legs under a long trunk: the hip line under 45% of his height.
-  it('stands on short legs', () => {
+  // STUMPS under a long trunk: the hip line under a third of his height (it was 43% before the owner asked for
+  // shorter legs), and the ankle low enough to sit inside the iron boot's cuff (make_boots.py: cuff top y 0.285).
+  it('stands on stumps, the ankles inside the boots', () => {
     const b = built();
     const hip = b.bones.get('thigh.l')!.head[1];
-    expect(hip / 2.05).toBeLessThan(0.45);
-    expect(b.bones.get('shin.l')!.tail[1]).toBeLessThan(0.16);
+    const crown = b.bones.get('skull')!.tail[1];
+    expect(hip / crown).toBeLessThan(0.40);
+    expect(b.bones.get('shin.l')!.tail[1]).toBeLessThan(0.20);
   });
 
   // BEAT 2 — THE ARMS (the Cronenberg pass): each forearm is a sleeve of meat the cannon (kit, make_cannons.py) grows
@@ -127,7 +132,7 @@ describe('tallow.blob', () => {
     const size = (p: typeof heads[number]) => p.radius * Math.max(...(p.scale ?? [1, 1, 1]));
     const top = heads.reduce((m, p) => (size(p) > size(m) ? p : m));
     expect(top.bone).toBe('skull');
-    expect(top.a[1]).toBeGreaterThan(1.85);
+    expect(top.a[1] - sk.head[1], 'the cranium, high on the skull bone').toBeGreaterThan(0.15);
   });
 
   it('wears his own mouth decal, not the zombie face', () => {

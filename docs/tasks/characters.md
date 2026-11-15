@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## The tallow: a corpulent walking rendering vat (2026-11-14, fourth pass, awaiting owner look)
+## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass, awaiting owner look)
 
 - [x] **Body** `characters/tallow.blob`: a 2.05 m, 1.3 m wide fat man on short legs (the venus's bone names): gut,
   apron, flank rolls, rear, a yoke of fat, forearm sleeves that swallow the cannons' breech blocks, a swollen rim of
@@ -17,6 +17,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   two hoses into chest ports (`make_mask.py`). Boiler exhausts are pipes, not horns.
 - [x] **Gorilla arms** (owner: "longer, more ape gorilla like"): upper arm 0.50 m, forearm 0.44, hanging low and
   ahead (the muzzles at y ~0.74), a deeper hunch (chest pitch 12).
+- [x] **More corpulent** (owner, fifth look: "doesnt quite read as corpulent ... legs shorter or footwear"): stumps
+  (thigh 0.30, shin 0.24; legs 29% of his height, crown 1.89), the apron hanging below the knees, heavy iron boots
+  with the ankle fat squeezed up over the cuffs (`make_boots.py`), and a waddle (`TALLOW_STOMP`: short steps, a wide
+  rock). Every kit and skin height follows the drop through one `LOWER` (0.16) in `scripts/tallow-surface.ts`.
 - [x] **Flesh detail** `characters/tallow.detail` from `scripts/tallow-detail-gen.ts`, baked into `tallow-body-n.png`
   (1024 wide, `--torso-r0 0.95`; command in `bake-args.json`): fat rolls, the creases under the breasts and the apron,
   a navel, cellulite, stretch marks, and veins (scaled 1.5x the recipe) radiating from the boiler and the cannon
@@ -25,10 +29,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   fireballs right, left, right, left (`fireball.ts TALLOW_VOLLEY`, `enemy-mind.ts makeTallowMind`; `MindOutput.fireSide`
   and `MotionProfile.spitL` pick the muzzle). He walks `gait.ts TALLOW_STOMP` (STOMP with reach arms: STOMP's carry
   arms ignored every attack). Pinned by `fireball.test.ts` and `webgpu/game-actor-tallow.test.ts`.
-- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 135k triangles,
+- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 154k triangles,
   no kit normal atlas yet.
 - [x] **Wiring**: `TALLOW_PROFILE` (TALLOW_STOMP, cruise 0.7, turn 1.6, `throws: 'volley'`).
-- [ ] **Owner look at the fourth pass** (frames in `docs/dev-notes/2026-11-14-tallow/`, local only: dev-notes PNGs are
+- [ ] **Owner look at the fifth pass** (frames in `docs/dev-notes/2026-11-14-tallow/`, local only: dev-notes PNGs are
   gitignored).
 - [ ] **The volley in the arena** (`npm run dev:arena`, `?spawn=tallow`): seen only in the lab sweep and the game-actor
   test, not played.

@@ -47,6 +47,9 @@ const f = (n: number) => (Math.abs(n) < 5e-5 ? '0' : n.toFixed(4).replace(/0+$/,
 const fv = (v: V) => `(${v.map(f).join(',')})`;
 // The probe axis sits forward of the spine: the gut (front z 0.64) outweighs the back (z -0.40).
 const AXIS_Z = 0.08;
+// The legs were cut by LOWER (scripts/tallow-surface.ts): every y in the tables below is the height the detail was
+// DESIGNED at; `skin` probes LOWER below it and returns the real point. One number, not every height retyped.
+const LOWER = 0.16;
 const TORSO_MIN_Y = 0.62;
 
 /** The skin at height y, angle th (deg; 0 faces +z, +90 is the body's left, +x), and its outward normal; null when
@@ -54,7 +57,7 @@ const TORSO_MIN_Y = 0.62;
 function skin(y: number, thDeg: number): { p: V; n: V } | null {
   const th = thDeg * Math.PI / 180;
   const dir: V = [Math.sin(th), 0, Math.cos(th)];
-  const axis: V = [0, y, AXIS_Z];
+  const axis: V = [0, y - LOWER, AXIS_Z];
   let t = 1.0, p = add(axis, mul(dir, t)), hit = false;
   for (let i = 0; i < 500; i++) {
     const d = sdBody(p, body);
@@ -68,15 +71,18 @@ function skin(y: number, thDeg: number): { p: V; n: V } | null {
   const n = norm([sdBody(add(p, [e, 0, 0]), body) - d0, sdBody(add(p, [0, e, 0]), body) - d0, sdBody(add(p, [0, 0, e]), body) - d0]);
   return { p, n };
 }
-// tallow.blob's spine: pelvis 0.78-0.88, spine1 to 1.158, chest to 1.456, spine2 above.
-function boneFor(y: number) { return y < 0.88 ? 'pelvis' : y < 1.158 ? 'spine1' : y < 1.456 ? 'chest' : 'spine2'; }
+// The spine bone a REAL height belongs to, read off the compiled skeleton (pelvis, spine1, chest, spine2).
+function boneFor(y: number) {
+  const top = (b: string) => bones.get(b)!.tail[1];
+  return y < top('pelvis') ? 'pelvis' : y < top('spine1') ? 'spine1' : y < top('chest') ? 'chest' : 'spine2';
+}
 function boneAt(b: string, p: V): { t: number; at: V } {
   const { head, tail } = bones.get(b)!;
   const d = sub(tail, head);
   const t = Math.min(1, Math.max(0, dotv(sub(p, head), d) / (len(d) ** 2)));
   return { t, at: add(head, mul(d, t)) };
 }
-const radAt = (y: number, th: number) => { const s = skin(y, th); return s ? Math.max(0.12, len(sub(s.p, [0, y, AXIS_Z]))) : 0.35; };
+const radAt = (y: number, th: number) => { const s = skin(y, th); return s ? Math.max(0.12, len(sub(s.p, [0, y - LOWER, AXIS_Z]))) : 0.35; };
 
 const out: string[] = [];
 const section = (s: string) => out.push('', `  # ---- ${s} ----`);
@@ -91,7 +97,7 @@ function ridge(pts: [number, number][], r: number, proud: number, blend: number,
     const A = S[i], B = S[i + 1];
     if (!A || !B || len(sub(B, A)) > 0.06) continue;
     const mid = mul(add(A, B), 0.5);
-    const sm = skin(mid[1], Math.atan2(mid[0], mid[2] - AXIS_Z) * 180 / Math.PI);
+    const sm = skin(mid[1] + LOWER, Math.atan2(mid[0], mid[2] - AXIS_Z) * 180 / Math.PI);
     let bend: V = sm ? mul(sub(add(sm.p, mul(sm.n, proud - r)), mid), 2) : [0, 0, 0];
     if (len(bend) > 0.008) bend = mul(bend, 0.008 / len(bend));
     const b = boneFor((A[1] + B[1]) / 2), { t, at } = boneAt(b, A);
@@ -103,7 +109,7 @@ function lump(y: number, th: number, r: number, proud: number, blend: number, sc
   if (y < TORSO_MIN_Y) return;
   const s = skin(y, th); if (!s) return;
   const c = add(s.p, mul(s.n, proud - depth));
-  const b = boneFor(y), { t, at } = boneAt(b, c);
+  const b = boneFor(c[1]), { t, at } = boneAt(b, c);
   out.push(`  blob torso on ${b} at=${f(t)} offset=${fv(sub(c, at))} r=${f(r)}${scale} blend=${f(blend)}`);
 }
 const arc = (y: number, th0: number, th1: number, sag: number, n = 12): [number, number][] =>

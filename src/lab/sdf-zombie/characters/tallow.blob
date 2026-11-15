@@ -38,17 +38,24 @@
 #      eyes in slanted sockets, a hooked nose, and a heavy breathing mask
 #      strapped into the flesh over his mouth, hoses down into his chest.
 model tallow
-  # Crown at ~2.05: a head taller than the venus (1.79).
+  # Crown at ~1.89 since the legs were cut down (owner, fifth look: "doesnt
+  # quite read as corpulent ... maybe his legs should be shorter"): barely
+  # taller than the venus (1.79) and a third wider than he is deep.
   # His size is WIDTH; a 2.3 m body would need the legs lengthened and he
   # would stop reading as a waddler.
-  height 2.05
+  height 1.89
   stance humanoid
 
 skeleton
-  # Hip line 0.88 (root 0.78 + 0.10). Legs 0.40 + 0.34 below it land the
-  # ankle at ~0.14: legs 39% of his height against a man's 50%. Short legs
-  # under a long heavy trunk is the waddle.
-  root pelvis at 0.78 len=0.10
+  # Hip line 0.72 (root 0.62 + 0.10). STUMPS: legs 0.30 + 0.24 below it land
+  # the ankle at 0.18, inside an iron boot (kit, make_boots.py) whose sole is
+  # the floor. Legs 29% of his height (they were 39%, and a man's are 50%): at
+  # 39% he stood like a big man, not a mass of fat on stumps (owner).
+  #
+  # EVERY ABSOLUTE HEIGHT IN THE COMMENTS BELOW the hips (y 1.36, 1.875, ...)
+  # was measured before this cut: subtract 0.16 (LOWER in
+  # scripts/tallow-surface.ts, which the kit and the skin generator read).
+  root pelvis at 0.62 len=0.10
 
   # The venus's heavy posture, more of it: the lumbar sways BACK (pitch -6)
   # to counterweight the gut, the chest comes forward over it and the head
@@ -87,8 +94,8 @@ skeleton
     # Legs set WIDE (side 0.23) and splayed a little (tilt 4): thighs 0.40 m
     # thick cannot stand under the hips, and the wide base rocks side to
     # side as he walks.
-    bone thigh    parent=pelvis dir=down tilt=4 side=0.23  len=0.40
-    bone shin     parent=thigh  dir=down tilt=-2           len=0.34
+    bone thigh    parent=pelvis dir=down tilt=4 side=0.23  len=0.30
+    bone shin     parent=thigh  dir=down tilt=-2           len=0.24
     bone foot     parent=shin   dir=fwd                    len=0.22
   end
 
@@ -107,10 +114,11 @@ body
   # (z 0.20), half-width 0.63, front reach z ~0.64. tall 0.92 keeps it a
   # sagging mass rather than a ball.
   blob torso on spine1 at=0.35 offset=(0,-0.030,0.200) r=0.440 wide=1.44 tall=0.92 deep=1.00 blend=0.060
-  # THE APRON — the gut's lower lip, hanging forward of and between the
-  # thighs to y ~0.60 (below the crotch at 0.74). This overhang is what says
-  # "fat" rather than "big": the venus's apron, doubled.
-  blob torso on pelvis at=0.00 offset=(0,-0.060,0.330) r=0.250 wide=1.80 tall=0.72 deep=0.95 blend=0.055
+  # THE APRON — the gut's lower lip, hanging forward of the thighs to y ~0.32,
+  # below the knees (0.42): from the front you see belly over two short
+  # pillars of shin and boot. This overhang is what says "fat" rather than
+  # "big": the venus's apron, more than doubled.
+  blob torso on pelvis at=0.00 offset=(0,-0.100,0.330) r=0.260 wide=1.80 tall=0.78 deep=0.95 blend=0.055
   # FLANK ROLLS — love handles standing off the waist over the hip, so the
   # front outline steps out and in instead of running as one smooth barrel.
   blob torso on spine1 at=0.05 offset=(0.470,0.000,-0.020) r=0.200 tall=0.62 deep=1.25 blend=0.045 both
@@ -184,9 +192,10 @@ body
   bar  arm on hand     from=0.00 to=0.10 r=0.045 blend=0.006 mirror color=2a2c30 metal gloss=0.5
 
   # ============================================================
-  # LEGS — two short pillars. Thighs 0.40 m thick tapering to a knee as
-  # thick as a man's thigh, elephant shins that barely taper, broad flat
-  # feet.
+  # LEGS — two short pillars: thighs 0.40 m thick (and mostly under the
+  # apron) tapering to a knee as thick as a man's thigh, elephant shins, and
+  # the feet crammed into iron boots (kit) with the ankle fat spilling over
+  # the cuffs.
   # ============================================================
   # Root ball seated a little down the thigh (the venus's rule: at the hip
   # joint it reaches up and fills in the crotch).
@@ -195,10 +204,12 @@ body
   # Knee: a fold of fat hanging over it at the front.
   blob leg on shin  at=0.00 offset=(0,0.010,0.030) r=0.165 blend=0.030 mirror
   bar  leg on shin  from=0.00 to=0.95 r=0.150 r2=0.135 blend=0.025 mirror
-  # Ankle roll: the shin's fat settling over the foot.
-  blob leg on shin  at=0.92 r=0.150 tall=0.60 blend=0.025 mirror
-  # Foot: broad and flat, heel behind the ankle, sole at ~0.
-  blob leg on foot at=0.00 r=0.110 r2=0.090 tip=(0.020,-0.015,0.260) wide=1.40 tall=0.72 blend=0.025 offset=(0,-0.062,-0.070) mirror
+  # THE FAT OVER THE BOOT: a roll squeezed up out of the cuff (make_boots.py:
+  # cuff top y 0.28, radius 0.175 round the ankle), bulging past it to r ~0.19
+  # at y ~0.30. Fat crammed into gear is the corpulence read.
+  blob leg on shin  at=0.55 r=0.190 tall=0.55 blend=0.030 mirror
+  # Foot: a CORE inside the boot (it shows nowhere), heel to toe.
+  blob leg on foot at=0.00 r=0.070 r2=0.060 tip=(0.010,0,0.200) wide=1.30 tall=0.80 blend=0.020 offset=(0,-0.080,-0.050) mirror
 
   # ============================================================
   # HEAD — HIS OWN (owner, 2026-11-14: "a new face rather than reuse the

@@ -27,6 +27,9 @@ if 'mech' not in bpy.data.collections:
     bpy.context.scene.collection.children.link(bpy.data.collections.new('mech'))
 
 _T = SURF['torso']
+# The legs were cut by LOWER (scripts/tallow-surface.ts): the table and every y passed to tp/tn are the heights the kit
+# was designed at; the points come back where the body really is, LOWER below.
+LOWER = _T.get('lower', 0.0)
 
 
 def _rad(y, ang):
@@ -39,7 +42,7 @@ def _rad(y, ang):
 
 def _tb(y, ang, off=0.0):
     a = math.radians(ang); r = _rad(y, ang) + off
-    return Vector((math.sin(a) * r, y, _T['zc'] + math.cos(a) * r))   # BLOB coords
+    return Vector((math.sin(a) * r, y - LOWER, _T['zc'] + math.cos(a) * r))   # BLOB coords, real height
 
 
 def tn(y, ang):

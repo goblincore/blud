@@ -34,7 +34,7 @@ SIDE = UP.cross(SD).normalized(); VERT = SD.cross(SIDE).normalized()   # SIDE is
 
 def mtint(co):
     """Dark gunmetal, blood toward the plate's lower edge and the snout's underside (blender z is blob y)."""
-    w = 1 - sm((co.z - 1.668) / 0.045)
+    w = 1 - sm((co.z - (1.668 - LOWER)) / 0.045)
     mot = 0.5 + 0.5 * math.sin(co.x * 71.0 + co.y * 59.0 + math.sin(co.z * 53.0) * 2.4)
     return mix3((0.58, 0.57, 0.56), BLOOD_ON_METAL, min(1.0, w * (0.5 + 0.5 * mot)))
 

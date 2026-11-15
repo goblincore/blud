@@ -985,3 +985,17 @@ grown into cannons. Three owner looks in one day; what they taught:
 - **Veins on a big body need scaling.** The recipe's 6 mm trunks baked as thin dark cracks on a 1.3 m wide torso; 1.5x
   (9 mm, 6.5 mm proud) reads as raised veins. A crease arc with a 2 cm sag reads as one straight seam across the
   chest: curve it up under each breast. The bake took 9-11 s on the GPU at 1024 wide (2,000 detail prims).
+
+### The tallow's fifth pass: corpulence is proportion
+
+- **Width alone reads as "big", not "fat".** At 1.3 m wide on legs 39% of his height he still read "a bit generic ...
+  doesnt quite read as corpulent" (owner). What changed it: legs cut to 29% of his height (stumps), the apron hanging
+  BELOW the knees so the front view is belly over two short pillars, and FAT FORCED INTO GEAR (the ankle rolls
+  squeezed up over iron boot cuffs, `make_boots.py`). Bound fat is the corpulence cue.
+- **Cut the legs with one number.** The legs dropped 0.16 m; the kit's skin table keeps its DESIGN heights and probes
+  `LOWER` below them (`scripts/tallow-surface.ts`, read by `tallow_common.py` `tp`; the same constant in
+  `scripts/tallow-detail-gen.ts`), so no make_*.py height had to be retyped. Bone-relative parts (cannons, boots) need
+  nothing. Pins that test heights should read them off the skeleton, not as numbers.
+- **A new character with `glow=` prims needs a `GLOW_PRIMS` entry** in `pack.test.ts` (each glow author at its exact
+  count). `npm run test:changed` does not run that file for a new `.blob` (nothing beside it changed); CI's full suite
+  caught the tallow's two eyes.

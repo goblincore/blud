@@ -9,6 +9,11 @@
 //           is outside the flesh
 // tallow_common.py's `tp(y, ang, off)` reads it. Re-run whenever the torso or head masses move, then rebuild the kit.
 //
+// LOWER (owner, fifth look: shorter legs): the legs were cut by 0.16 m, so everything above the hips dropped by that.
+// The table keeps the heights the kit was DESIGNED at (`ys`, and every y a make_*.py passes to tp) and probes each
+// 0.16 m lower; tp returns the real point. One number, not every height retyped (the imp's LOWER lesson). The same
+// constant is in scripts/tallow-detail-gen.ts.
+//
 //   npx tsx scripts/tallow-surface.ts
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
@@ -25,17 +30,19 @@ const field = { ...body, prims: body.prims.filter(p => keep.has(p.limb)) } as ty
 const r4 = (x: number) => Math.round(x * 10000) / 10000;
 
 const ZC = 0.0;
+export const LOWER = 0.16;
 const ys: number[] = []; for (let y = 0.80; y <= 2.0601; y += 0.02) ys.push(r4(y));
 const angs: number[] = []; for (let a = 0; a < 360; a += 5) angs.push(a);
 const R = ys.map(y => angs.map(a => {
-  if (sdBody([0, y, ZC], field) > 0) return 0;
+  const yr = y - LOWER;
+  if (sdBody([0, yr, ZC], field) > 0) return 0;
   const d: Vec3 = [Math.sin(a * Math.PI / 180), 0, Math.cos(a * Math.PI / 180)];
   let t = 0;
-  for (; t < 1.0; t += 0.002) if (sdBody([d[0] * t, y, ZC + d[2] * t], field) > 0) break;
+  for (; t < 1.0; t += 0.002) if (sdBody([d[0] * t, yr, ZC + d[2] * t], field) > 0) break;
   return r4(t);
 }));
 const bones = Object.fromEntries([...body.bones].map(([n, b]) => [n, { head: b.head.map(r4), tail: b.tail.map(r4) }]));
-writeFileSync('assets-source/tallow-kit/surface.json', JSON.stringify({ bones, torso: { zc: ZC, ys, angs, R } }));
+writeFileSync('assets-source/tallow-kit/surface.json', JSON.stringify({ bones, torso: { zc: ZC, lower: LOWER, ys, angs, R } }));
 console.log('wrote assets-source/tallow-kit/surface.json', ys.length, 'x', angs.length);
 for (const y of [0.9, 1.1, 1.3, 1.5, 1.7, 1.86, 2.0]) {
   const j = ys.findIndex(v => Math.abs(v - y) < 0.011);
