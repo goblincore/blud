@@ -277,7 +277,13 @@ export const MESH_SOCKET_VESSEL_WGSL = /* wgsl */ `fn meshSocketVessels(q: vec3<
  * posed segment. feature.xyz is the normalized local frame above, feature.w
  * is 1 for the rigid head source and 0 for every other segment. */
 export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec3<f32>, pLocal: vec3<f32>, feature: vec4<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32) -> vec4<f32> {
-  let headFlag = min(feature.w, 1.0);
+  // feature.w: 0 a bone segment's extracted mesh, 1 a head, 2 a soldier's head, 0.5 a skeleton-kit piece
+  // (skeleton-kit.ts). A kit piece is a whole clean bone seen bare, beside the skull: it wears the skull's ivory
+  // with tissue left in patches (boneFlag), where an extracted bone is meat with ivory showing through. The skull's
+  // own marks (cavities, vessels, teeth) stay the head's alone.
+  let headFlag = step(0.75, feature.w);
+  let kitFlag = step(0.25, feature.w) * (1.0 - headFlag);
+  let boneFlag = max(headFlag, kitFlag * 0.85);
   let soldierHead = step(1.5, feature.w);
   var expo = 0.0;
   for (var i = 0; i < 64; i = i + 1) {
@@ -298,13 +304,14 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let blood = smoothstep(0.50, 0.60, patchT);
   let connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1.0 - blood * 0.85);
   let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5)
-    * (1.0 - blood * 0.85) * (1.0 - headFlag) + headFlag * (0.72 + 0.28 * grain) * (1.0 - blood * 0.85);
+    * (1.0 - blood * 0.85) * (1.0 - boneFlag) + boneFlag * (0.72 + 0.28 * grain) * (1.0 - blood * 0.85);
   let bloodCol = mix(vec3<f32>(0.055, 0.004, 0.008), deepColor * 0.55, 0.35);
   let connectCol = vec3<f32>(0.62, 0.19, 0.19);
   let ivoryCol = boneColor * vec3<f32>(0.86, 0.74, 0.62);
-  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneColor * vec3<f32>(0.92, 0.86, 0.66), headFlag);
-  albedo = mix(albedo, connectCol, connect * (1.0 - headFlag * 0.70));
-  albedo = mix(albedo, bloodCol, blood);
+  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneColor * vec3<f32>(0.92, 0.86, 0.66), boneFlag);
+  albedo = mix(albedo, connectCol, connect * (1.0 - boneFlag * 0.70));
+  // A kit bone keeps half its blood patches: enough to read as fresh, not enough to hide the bone.
+  albedo = mix(albedo, bloodCol, blood * (1.0 - kitFlag * 0.5));
   albedo = mix(albedo, ivoryCol, ivory * 0.8);
 
   // LOCALIZED skull cavity: a dark blood recess, not a lit convex patch.
@@ -351,7 +358,7 @@ export const MESH_BONE_WET_WGSL = /* wgsl */ `fn meshBoneWet(pLocal: vec3<f32>, 
   let soldierHead = step(1.5, feature.w);
   wet = mix(wet, 0.98, clamp(expo, 0.0, 1.0) * soldierHead * 0.75);
   var gloss = mix(0.05, 1.0, wet);
-  let headFlag = min(feature.w, 1.0);
+  let headFlag = step(0.75, feature.w);   // 0.5 is a skeleton-kit piece: not a head
   let cav = meshSkullCavity(feature.xyz, headFlag);
   gloss = gloss * (1.0 - 0.97 * cav);
   // Socket vessels stay wet inside the matte recess, but only where the

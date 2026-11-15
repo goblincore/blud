@@ -266,24 +266,30 @@ export function createSkeletonSources(
       poseOf: () => {
         const origin = pts()[bind.a.point]!.pos;
         // Arm endpoints rotate with their bone's frame (armFrame); every
-        // other limb bone's offsets are unrotated in applyRig — identity.
+        // other limb bone turns its offsets by the body yaw (below).
         if (bind.armFrame) {
           const dir = normalize(sub(pts()[bind.armFrame.tail]!.pos, pts()[bind.armFrame.head]!.pos));
           return { origin, quat: segmentQuat(bind.armFrame.restDir, dir, yawNow()) };
         }
+        // Every other limb bone's offsets turn with the body's yaw, as applyRig's do (posePrimitive's yawRotation).
+        const yaw = yawNow();
+        const qYaw: Quat = [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)];
         // A two-anchor leg must follow BOTH live endpoints. Keeping identity
         // here translated the whole baked shin by the knee while leaving its
         // ankle at the bind direction, exposing long rods in a squat.
-        // Rotate the actual primitive axis (including world-axis offsets),
+        // Rotate the actual primitive axis (including its yawed offsets),
         // then compensate the origin so endpoint A still matches poseEnds.
+        // The rotation is yaw-first (segmentQuat): a bone that is not a solid of revolution (a kit femur,
+        // skeleton-kit.ts) faces the way the body faces. Without the yaw its neck pointed at world +x for ever.
         const restAxis = sub(p.b, p.a);
         if (len(restAxis) > 1e-9 && bind.a.point !== bind.b.point) {
-          const a = add(origin, bind.a.offset);
-          const b = add(pts()[bind.b.point]!.pos, bind.b.offset);
-          const quat = segmentQuat(normalize(restAxis), normalize(sub(b, a)), 0);
+          const a = add(origin, qRotate(qYaw, bind.a.offset));
+          const b = add(pts()[bind.b.point]!.pos, qRotate(qYaw, bind.b.offset));
+          const quat = segmentQuat(normalize(restAxis), normalize(sub(b, a)), yaw);
           return { origin: sub(a, qRotate(quat, bind.a.offset)), quat };
         }
-        return { origin, quat: [0, 0, 0, 1] };
+        // A bone on one rig point (the shoulder ball, the ankle ball) turns with the body.
+        return { origin, quat: qYaw };
       },
     })).members.push(i);
     defs.get(key)!.local.push({ a: bind.a.offset, b: localB });
@@ -376,8 +382,9 @@ export function createSkeletonSources(
             pa = add(origin, qRotate(quat as Quat, frame.restA));
             pb = add(origin, qRotate(quat as Quat, frame.restB));
           } else {
-            // poseEnds verbatim: per-endpoint anchor + (armFrame-rotated) offset.
-            const rot = (v: Vec3) => bind.armFrame ? qRotate(quat as Quat, v) : v;
+            // poseEnds verbatim: per-endpoint anchor + offset, turned by the arm's frame or by the body's yaw.
+            const y = yawNow(), qy: Quat = [0, Math.sin(y / 2), 0, Math.cos(y / 2)];
+            const rot = (v: Vec3) => qRotate(bind.armFrame ? quat as Quat : qy, v);
             pa = add(pts()[bind.a.point]!.pos, rot(bind.a.offset));
             pb = add(pts()[bind.b.point]!.pos, rot(bind.b.offset));
           }

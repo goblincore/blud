@@ -2,6 +2,31 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The zombie's skeleton kit (a believable bare skeleton) — built 2026-11-15
+
+Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the shoulder and hip.
+[Notes, numbers and sheets](../dev-notes/2026-11-15-skeleton-anatomy/NOTES.md).
+
+- [x] **Kit** `public/assets/lab/skeleton-kit.glb`, built headless in Blender by `scripts/skeleton-kit/build.sh`
+  (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
+  Vertebrae on a disc column, ten flat ribs a side, sternum, sacrum, two hip bones with sockets at the rig's hip
+  joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
+  fibula, talus, a foot. 7,342 vertices and 13,732 triangles a body where the extraction was 15,110 and 30,284; the
+  same 19 meshes and batches.
+- [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
+  cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
+  pinned in `skeleton-kit.test.ts`). A body draws the kit whole or not at all; `?bonekit=0` is the old skeleton.
+- [x] **Joints hold when posed** (measured in the game, walk into attack): hip 2 mm typical and 9 worst (was 37 and
+  63), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
+  bones follow the hip joints and the shoulder girdle the rig's clavicle (`KitFrame`); leg segments turn with the
+  body's yaw (`contract.ts`).
+- [x] **Colour** matches the skull: both bone paints wear a kit piece as the skull's ivory with tissue in patches.
+- [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
+  `kitJointGaps` measure joint separation.
+- [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);
+  corpses, ragdolls and severed bodies looked at; chunk bones (still SDF capsules); the kit fitted to the other
+  humanoids; a skeleton for non-humanoids (owner: a different session).
+
 ## Cerebrax (boss: a brain in a harness on four spider legs, a chaingun under its face) — first pass 2026-11-08
 
 - [x] **Body** `characters/cerebrax.blob` at `scale 1.60`: a brain of 24 SDF prims (mass, hemispheres, frontal,

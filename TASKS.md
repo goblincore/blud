@@ -33,6 +33,8 @@
 
 - [~] **Imp built 2026-10-24, second pass 2026-11-02 (proportions, claw feet, demon skull when shot); owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
 
+- [~] **Zombie skeleton kit built 2026-11-15; owner look pending.** The bare mesh skeleton is now 19 Blender-built bone pieces (vertebrae, flat ribs, hip bones with sockets, clavicle and scapula, radius and ulna, femur with head and neck, a foot) in place of surface-nets capsules, at half the vertices; joints hold through the walk. Zombie only. [characters](docs/tasks/characters.md#the-zombies-skeleton-kit-a-believable-bare-skeleton--built-2026-11-15)
+
 - [~] **Cerebrax built 2026-11-08 (boss); owner look pending.** A Spider-Mastermind-style boss: a huge pulsing brain (24 SDF prims; gyri, fissures and veins a baked random-wave normal map) turning in a bone-metal harness on four spider legs (knees poled high, `GaitProfile.kneePole`), a chaingun under its face (`gunner` + `spit`, the juggernaut's sweeping bursts). `?spawn=cerebrax`. Smaller drone variants not started. [Characters](docs/tasks/characters.md).
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)

@@ -164,7 +164,7 @@ export const SCULPT_CLING = { cover: 0.62, byExpo: 0.12, byCavity: 0.22, soft: 0
 /** The share of the point that is torn flesh stuck to the bone (0..1): the patches' mask. `expo` the wound exposure
  *  there (after its smoothstep). */
 export function sculptCling(L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: number, expo: number): number {
-  const headFlag = Math.min(w, 1), soldierHead = w >= 1.5 ? 1 : 0;
+  const headFlag = w >= 0.75 ? 1 : 0, soldierHead = w >= 1.5 ? 1 : 0;   // 0.5 is a skeleton-kit piece: not a head
   const n = boneNoise3([pLocal[0] * 22 + 8.3, pLocal[1] * 22 + 2.9, pLocal[2] * 22 + 14.1]) * 0.66
     + boneNoise3([pLocal[0] * 61 + 3.3, pLocal[1] * 61 + 19.7, pLocal[2] * 61 + 6.1]) * 0.34;
   const cav = sculptCavity(L, q, headFlag);
@@ -235,22 +235,23 @@ export interface SculptPaintSurface {
 export function sculptPaintSurface(
   L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: number, boneColor: Vec3, deepColor: Vec3, expo: number, foot = 0,
 ): SculptPaintSurface {
-  const headFlag = Math.min(w, 1), soldierHead = w >= 1.5 ? 1 : 0;
+  const headFlag = w >= 0.75 ? 1 : 0, soldierHead = w >= 1.5 ? 1 : 0;   // 0.5 is a skeleton-kit piece: not a head
   const noise = (s: number, o: Vec3) => boneNoise3([pLocal[0] * s + o[0], pLocal[1] * s + o[1], pLocal[2] * s + o[2]]);
   const blotch = noise(20, [4.2, 17.7, 2.9]), warp = noise(6, [11.5, 1.7, 23.3]);
   const weave = noise(44, [7.1, 3.3, 9.7]), grain = noise(110, [2, 5, 1]);
   const blood = smoothstep(0.50, 0.60, blotch * 0.72 + warp * 0.28);
   const connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1 - blood * 0.85);
-  const ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1 - blood * 0.85) * (1 - headFlag);
+  const boneFlag = Math.max(headFlag, ((w >= 0.25 ? 1 : 0) - headFlag) * 0.85);   // a skeleton-kit piece wears the skull's bone
+  const ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1 - blood * 0.85) * (1 - boneFlag);
   const bloodCol = mix3([0.055, 0.004, 0.008], [deepColor[0] * 0.55, deepColor[1] * 0.55, deepColor[2] * 0.55], 0.35);
   const mul = (a: Vec3, b: Vec3): Vec3 => [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
   const boneBase = mul(boneColor, [0.84, 0.76, 0.56]);
-  let albedo = mix3([0.30, 0.085, 0.075], boneBase, headFlag);
-  albedo = mix3(albedo, [0.62, 0.19, 0.19], connect * (1 - headFlag));
-  albedo = mix3(albedo, bloodCol, blood * mix(1, 0.40, headFlag));
+  let albedo = mix3([0.30, 0.085, 0.075], boneBase, boneFlag);
+  albedo = mix3(albedo, [0.62, 0.19, 0.19], connect * (1 - boneFlag));
+  albedo = mix3(albedo, bloodCol, blood * mix(1, 0.40, boneFlag));
   albedo = mix3(albedo, mul(boneColor, [0.86, 0.74, 0.62]), ivory * 0.8);
   // Old bone: broad brown mottling, no fine speckle.
-  albedo = mix3(albedo, mul(boneColor, [0.52, 0.40, 0.26]), headFlag * smoothstep(0.42, 0.70, warp) * 0.45);
+  albedo = mix3(albedo, mul(boneColor, [0.52, 0.40, 0.26]), boneFlag * smoothstep(0.42, 0.70, warp) * 0.45);
 
   const cav = sculptCavity(L, q, headFlag);
   const rel = sculptRelief(q);
@@ -294,7 +295,7 @@ export function sculptPaintSurface(
 
 /** The gloss multiplier: wet in patches as the first paint has it, none in a cavity, and enamel shines. */
 export function sculptPaintWet(L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: number, expo: number): number {
-  const headFlag = Math.min(w, 1), soldierHead = w >= 1.5 ? 1 : 0;
+  const headFlag = w >= 0.75 ? 1 : 0, soldierHead = w >= 1.5 ? 1 : 0;   // 0.5 is a skeleton-kit piece: not a head
   const w1 = boneNoise3([pLocal[0] * 26 + 3.7, pLocal[1] * 26 + 11.2, pLocal[2] * 26 + 5.9]);
   const w2 = boneNoise3([pLocal[0] * 70 + 19.3, pLocal[1] * 70 + 2.1, pLocal[2] * 70 + 27.4]);
   let wet = mix(smoothstep(0.30, 0.68, w1 * 0.62 + w2 * 0.38), 0.9, clamp01(expo) * 0.45);
@@ -449,7 +450,7 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let sigmaY = dpdy(p);
   let dqdx = dpdx(feature.xyz);
   let dqdy = dpdy(feature.xyz);
-  let headFlag = min(feature.w, 1.0);
+  let headFlag = step(0.75, feature.w);   // 0.5 is a skeleton-kit piece: not a head
   let foot = max(length(sigmaX), length(sigmaY));
   let fade = (1.0 - smoothstep(${f(U.fadeFrom)}, ${f(U.fadeTo)}, foot)) * ${f(U.gain)} * headFlag;
   var out = n;
@@ -468,7 +469,7 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   return vec4<f32>(out, foot);
 }`;
   const surface = /* wgsl */ `fn sculptPaintSurface(pWorld: vec3<f32>, pLocal: vec3<f32>, feature: vec4<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, foot: f32, woundTex: texture_2d<f32>, woundCount: f32) -> vec4<f32> {
-  let headFlag = min(feature.w, 1.0);
+  let headFlag = step(0.75, feature.w);   // 0.5 is a skeleton-kit piece: not a head
   let soldierHead = step(1.5, feature.w);
   let q = feature.xyz;
   var expo = 0.0;
@@ -486,14 +487,17 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let grain = boneNoise(pLocal * 110.0 + vec3<f32>(2.0, 5.0, 1.0));
   let blood = smoothstep(0.50, 0.60, blotch * 0.72 + warp * 0.28);
   let connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1.0 - blood * 0.85);
-  let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1.0 - blood * 0.85) * (1.0 - headFlag);
+  // A skeleton-kit piece (feature.w 0.5, skeleton-kit.ts) is a whole bone seen bare beside the skull: it wears the
+  // skull's bone base, with tissue left in patches (boneFlag). The skull's own marks stay the head's alone.
+  let boneFlag = max(headFlag, (step(0.25, feature.w) - headFlag) * 0.85);
+  let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5) * (1.0 - blood * 0.85) * (1.0 - boneFlag);
   let bloodCol = mix(vec3<f32>(0.055, 0.004, 0.008), deepColor * 0.55, 0.35);
   let boneBase = boneColor * vec3<f32>(0.84, 0.76, 0.56);
-  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneBase, headFlag);
-  albedo = mix(albedo, vec3<f32>(0.62, 0.19, 0.19), connect * (1.0 - headFlag));
-  albedo = mix(albedo, bloodCol, blood * mix(1.0, 0.40, headFlag));
+  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneBase, boneFlag);
+  albedo = mix(albedo, vec3<f32>(0.62, 0.19, 0.19), connect * (1.0 - boneFlag));
+  albedo = mix(albedo, bloodCol, blood * mix(1.0, 0.40, boneFlag));
   albedo = mix(albedo, boneColor * vec3<f32>(0.86, 0.74, 0.62), ivory * 0.8);
-  albedo = mix(albedo, boneColor * vec3<f32>(0.52, 0.40, 0.26), headFlag * smoothstep(0.42, 0.70, warp) * 0.45);
+  albedo = mix(albedo, boneColor * vec3<f32>(0.52, 0.40, 0.26), boneFlag * smoothstep(0.42, 0.70, warp) * 0.45);
 
   let cav = sculptCavity(q, headFlag);
   let rel = sculptRelief(q);
@@ -533,7 +537,7 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   return vec4<f32>(albedo, expo);
 }`;
   const wet = /* wgsl */ `fn sculptPaintWet(pLocal: vec3<f32>, feature: vec4<f32>, expo: f32) -> f32 {
-  let headFlag = min(feature.w, 1.0);
+  let headFlag = step(0.75, feature.w);   // 0.5 is a skeleton-kit piece: not a head
   let soldierHead = step(1.5, feature.w);
   let w1 = boneNoise(pLocal * 26.0 + vec3<f32>(3.7, 11.2, 5.9));
   let w2 = boneNoise(pLocal * 70.0 + vec3<f32>(19.3, 2.1, 27.4));

@@ -26,6 +26,8 @@ export function nearestCrowdBody(ctx: GameContext, t: unknown): [number, number,
 export function boneExposedActors(ctx: GameContext, c: typeof ctx): Set<unknown> {
   const out = new Set<unknown>();
   for (const a of c.render.visualActors) {
+    // The bare-skeleton debug view (__sdfGame.bareSkeleton): every body's bones show.
+    if (c.render.bareSkeleton) { out.add(a); continue; }
     if ((c.render.skeletonSources.get(a) as { severed?: boolean } | undefined)?.severed || a.visualWounds().some(w => !w.decal)) out.add(a);
   }
   return out;

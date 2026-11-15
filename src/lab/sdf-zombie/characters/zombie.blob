@@ -124,6 +124,16 @@ bones
   # are the whole reason it reads as a mandible rather than a chin bulge.
   blob head on skull at=0.30 offset=(0,-0.050,0.045) r=0.070 wide=0.88 tall=0.78 deep=1.00
 
+  # FEMUR AND TIBIA — authored, so each runs from its joint to the next (2026-11-15, the skeleton kit).
+  #
+  # The derived leg bones copied the flesh bars' spans (thigh from=0.18 to=0.95, shin from=0.05 to=0.92), so each
+  # began and ended short of its joints. A leg segment turns about its bone's first end and aims at its second, and
+  # both carry that shortfall as an offset that does not turn with the leg: measured in the game over a walk and an
+  # attack, the kit's femoral head left its socket by up to 6 cm and the knee and ankle opened by up to 3. Joint to
+  # joint, the bones turn about the joints. Radii are the derived ones (flesh radius at ratio 0.38).
+  bar leg on thigh from=0.0 to=1.0 r=0.031 r2=0.027 mirror
+  bar leg on shin from=0.0 to=1.0 r=0.024 mirror
+
   # TORSO SKELETON — ribcage, spine, clavicles, pelvis (re-authored 2026-09-03).
   #
   # Every line from here to GUT COIL is EMITTED by scripts/zombie-skeleton-gen.ts
