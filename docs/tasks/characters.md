@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass, awaiting owner look)
+## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass; boots approved 2026-11-15)
 
 - [x] **Body** `characters/tallow.blob`: a 2.05 m, 1.3 m wide fat man on short legs (the venus's bone names): gut,
   apron, flank rolls, rear, a yoke of fat, forearm sleeves that swallow the cannons' breech blocks, a swollen rim of
@@ -29,14 +29,15 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   fireballs right, left, right, left (`fireball.ts TALLOW_VOLLEY`, `enemy-mind.ts makeTallowMind`; `MindOutput.fireSide`
   and `MotionProfile.spitL` pick the muzzle). He walks `gait.ts TALLOW_STOMP` (STOMP with reach arms: STOMP's carry
   arms ignored every attack). Pinned by `fireball.test.ts` and `webgpu/game-actor-tallow.test.ts`.
-- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 154k triangles,
-  no kit normal atlas yet.
+- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 70k triangles
+  after the 2026-11-15 optimisation pass (was 154k; no visible change at 1.3 m). Rounded egg-shaped hoof soles on the
+  boots (owner: no rectangle soles). No kit normal atlas.
 - [x] **Wiring**: `TALLOW_PROFILE` (TALLOW_STOMP, cruise 0.7, turn 1.6, `throws: 'volley'`).
-- [ ] **Owner look at the fifth pass** (frames in `docs/dev-notes/2026-11-14-tallow/`, local only: dev-notes PNGs are
-  gitignored).
+- [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
 - [ ] **The volley in the arena** (`npm run dev:arena`, `?spawn=tallow`): seen only in the lab sweep and the game-actor
   test, not played.
-- [ ] Kit triangle budget (136k is too many for a crowd) and normal atlas.
+- [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).
+- [ ] Kit normal atlas (optional: only if a later cut needs it).
 
 ## Cerebrax (boss: a brain in a harness on four spider legs, a chaingun under its face) — first pass 2026-11-08
 

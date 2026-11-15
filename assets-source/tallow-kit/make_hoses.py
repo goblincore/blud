@@ -39,9 +39,9 @@ if 'feed' in PARTS:
     # up over the fat of the yoke and down onto the shoulder port.
     a = tp(1.44, 150, 0.14); b = tp(1.56, 138, 0.06); c = tp(1.62, 120, 0.05)
     hose_run('feed', [tp(1.40, 158, 0.16), a, b, c, SH + SH_D * 0.05 + Vector((-0.06, 0.02, 0.03)), SH + SH_D * 0.012], HR)
-    finish('feed', 'clavicle.l|feed', 4500, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
+    finish('feed', 'clavicle.l|feed', 3000, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
     port('shp', SH, SH_D, 0.050)
-    finish('shport', 'clavicle.l|port', 1800, material='skullmetal', voxel=0.0028, smooth=(0.5, 2), noise=0.0018, noise_scale=0.04)
+    finish('shport', 'clavicle.l|port', 800, material='skullmetal', voxel=0.0028, smooth=(0.5, 2), noise=0.0018, noise_scale=0.04)
 
 if 'arm' in PARTS:
     drop(['upperarm.l|feed', 'upperarm.r|feed', 'upperarm.l|port', 'upperarm.r|port']); clear_work()
@@ -49,9 +49,9 @@ if 'arm' in PARTS:
     # The middle of the run dives UNDER the skin (off -0.012): half grown in.
     ctrl = [SH - SH_D * 0.03 + (UA1 - UA0).normalized() * 0.03, ua(0.22, PH, 0.010), ua(0.45, PH, -0.012), ua(0.70, PH, -0.012), ua(0.92, D(-160), 0.010), EL + EL_D * 0.02]
     hose_run('armfeed', ctrl, HR)
-    finish('armfeed', 'upperarm.l|feed', 3500, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
+    finish('armfeed', 'upperarm.l|feed', 2400, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
     port('elp', EL, EL_D, 0.046)
-    finish('elport', 'upperarm.l|port', 1800, material='skullmetal', voxel=0.0028, smooth=(0.5, 2), noise=0.0018, noise_scale=0.04)
+    finish('elport', 'upperarm.l|port', 800, material='skullmetal', voxel=0.0028, smooth=(0.5, 2), noise=0.0018, noise_scale=0.04)
 
 if 'fore' in PARTS:
     drop(['forearm.l|feed', 'forearm.r|feed']); clear_work()
@@ -59,16 +59,16 @@ if 'fore' in PARTS:
     # r ~0.142 there). The bladder (make_cannons.py) comes out of the meat at t ~0.80: the hose runs on inside him.
     fa = lambda t, off: FF.at(t, D(180), 0.142 + off, 0.142 + off)
     hose_run('forefeed', [EL + EL_D * 0.03, EL + EL_D * 0.05 + FF.u * 0.04 - FF.f * 0.04, fa(0.10, 0.035), fa(0.17, 0.010), fa(0.24, -0.030)], HR * 0.9)
-    finish('forefeed', 'forearm.l|feed', 2500, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
+    finish('forefeed', 'forearm.l|feed', 1700, material='hose', ao=(1.3, 1.4), voxel=0.0035, smooth=(0.4, 2), noise=0.0015, noise_scale=0.03)
 
 if 'gore' in PARTS:
     drop(['clavicle.l|gore', 'clavicle.r|gore']); clear_work()
     gore_ring('sg', SH - SH_D * 0.006, SH_D, 0.074, 11, 0.012, 0.022, drips=2, seed=21)
-    finish_gore('sgore', 'clavicle.l|gore', 1800)
+    finish_gore('sgore', 'clavicle.l|gore', 900)
     drop(['upperarm.l|gore', 'upperarm.r|gore']); clear_work()
     gore_ring('eg', EL - EL_D * 0.006, EL_D, 0.068, 10, 0.011, 0.020, drips=2, seed=22)
-    finish_gore('egore', 'upperarm.l|gore', 1800)
+    finish_gore('egore', 'upperarm.l|gore', 900)
     drop(['forearm.l|hgore', 'forearm.r|hgore']); clear_work()
     fa = lambda t, off: FF.at(t, D(180), 0.142 + off, 0.142 + off)
     gore_ring('fg', fa(0.19, 0.0), fa(0.24, -0.03) - fa(0.17, 0.01), 0.030, 8, 0.009, 0.016, drips=1, seed=23)
-    finish_gore('fgore', 'forearm.l|hgore', 1200)
+    finish_gore('fgore', 'forearm.l|hgore', 600)

@@ -77,7 +77,7 @@ if 'boiler' in PARTS:
             e1, e2, _ = basis(sd); a = k * math.pi / 2 + math.pi / 4
             bolt(f'sbt{sgn}{k}', base + sd * 0.03 + (e1 * math.cos(a) + e2 * math.sin(a)) * 0.045, sd, r=0.007, h=0.008)
     sut = [zigzag(lambda s, sg=sg: sac(60 - 110 * s, sg * 48), 0.007, 8, lambda s: UP) for sg in (-1, 1)]
-    finish('boiler', 'chest|boiler', 14000, mirror=False, material='impmetal', lines=sut, glow=(LIGHT, 0.085, 2.0, 0.3),
+    finish('boiler', 'chest|boiler', 5500, mirror=False, material='impmetal', lines=sut, glow=(LIGHT, 0.085, 2.0, 0.3),
            voxel=0.0042, smooth=(0.5, 3), noise=0.0045, noise_scale=0.07)
 
 if 'fire' in PARTS:
@@ -105,4 +105,4 @@ if 'gore' in PARTS:
         d = SIDE * (math.cos(ph) * qq) + UP * (math.sin(ph) * qq) + NB * q
         p = C + SIDE * (AX * d.dot(SIDE)) + NB * (AN * d.dot(NB)) + UP * (AZ * d.dot(UP))
         drip(f'bd{j}', p, rng.uniform(0.05, 0.11), rng.uniform(0.006, 0.008))
-    finish_gore('bgore', 'chest|gore', 3500, mirror=False)
+    finish_gore('bgore', 'chest|gore', 1600, mirror=False)

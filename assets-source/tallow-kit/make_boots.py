@@ -105,11 +105,11 @@ if 'boot' in PARTS:
         a = 2 * math.pi * (k + 0.5) / 14
         p = sole_pt(a, 0.995) + UP * 0.030
         bolt(f'sb{k}', p, (p - SC - UP * 0.030).normalized(), r=0.008, h=0.008)
-    finish('boot', 'foot.l|boot', 6000, material='impmetal', tint=btint,
+    finish('boot', 'foot.l|boot', 2600, material='impmetal', tint=btint,
            voxel=0.0030, smooth=(0.4, 2), noise=0.0012, noise_scale=0.05)
 
 if 'bgore' in PARTS:
     drop(['foot.l|bgore', 'foot.r|bgore']); clear_work()
     # Where the fat comes out over the cuff: torn meat lying on the rim, blood running down the shaft's outside.
     gore_ring('bc', G + UP * (Z_CUFF + 0.006), UP, R_CUFF - 0.004, 16, 0.014, 0.028, drips=3, dlen=(0.04, 0.09), out=UP, seed=31)
-    finish_gore('bgore', 'foot.l|bgore', 2200)
+    finish_gore('bgore', 'foot.l|bgore', 1000)

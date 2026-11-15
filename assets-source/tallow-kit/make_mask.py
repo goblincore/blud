@@ -69,7 +69,7 @@ if 'mask' in PARTS:
     # The strap: round the back of his head from the plate's edges, biting in (its centre 2 mm under the skin).
     pts = [tp(1.732 + 0.010 * math.sin(math.radians(a - 60) * 1.5), a, -0.002) for a in range(44, 317, 5)]
     tube('strap', pts, [0.011] * len(pts), segs=8)
-    finish('mask', 'skull|mask', 6000, mirror=False, material='impmetal', tint=mtint,
+    finish('mask', 'skull|mask', 3000, mirror=False, material='impmetal', tint=mtint,
            voxel=0.0024, smooth=(0.4, 2), noise=0.0010, noise_scale=0.04)
     clear_work()
     o = ball('snoutv', Vector(), 1.0, 0.050, 0.050, 0.020)
@@ -95,7 +95,7 @@ if 'mgore' in PARTS:
         if rng.random() < 0.4: continue
         y = 1.732 + 0.010 * math.sin(math.radians(a - 60) * 1.5) + (0.014 if k % 2 else -0.014)
         lump(f'se{k}', tp(y, a, 0.002), tn(y, a), rng.uniform(0.007, 0.012), flat=0.5, stretch=1.6)
-    finish_gore('mgore', 'skull|mgore', 3000, mirror=False)
+    finish_gore('mgore', 'skull|mgore', 1500, mirror=False)
 
 CP_Y, CP_A = 1.50, 20
 CP = tp(CP_Y, CP_A, 0.012); CN = tn(CP_Y, CP_A)
@@ -105,11 +105,11 @@ if 'hoses' in PARTS:
     S0h = M + SD * 0.055 - VERT * 0.050 + SIDE * 0.030
     hose_run('mh', [S0h, S0h - UP * 0.06 + SD * 0.02 + SIDE * 0.02, CP + CN * 0.13 + UP * 0.08, CP + CN * 0.06 + UP * 0.01, CP + CN * 0.022], 0.022, rib_every=0.022)
     ball('mhc', CP + CN * 0.022, 0.029)
-    finish('mhose', 'skull|mhoseL', 3000, material='hose', ao=(1.3, 1.4), voxel=0.0028, smooth=(0.4, 2), noise=0.0012, noise_scale=0.03)
+    finish('mhose', 'skull|mhoseL', 2000, material='hose', ao=(1.3, 1.4), voxel=0.0028, smooth=(0.4, 2), noise=0.0012, noise_scale=0.03)
 
 if 'ports' in PARTS:
     drop(['spine2|mportL', 'spine2|mportR', 'spine2|mgoreL', 'spine2|mgoreR']); clear_work()
     port('mp', CP, CN, 0.036)
-    finish('mport', 'spine2|mportL', 1600, material='skullmetal', voxel=0.0026, smooth=(0.5, 2), noise=0.0015, noise_scale=0.04)
+    finish('mport', 'spine2|mportL', 800, material='skullmetal', voxel=0.0026, smooth=(0.5, 2), noise=0.0015, noise_scale=0.04)
     gore_ring('mg', CP - CN * 0.008, CN, 0.060, 10, 0.010, 0.020, drips=2, dlen=(0.03, 0.07), seed=5)
-    finish_gore('mgore', 'spine2|mgoreL', 1800)
+    finish_gore('mgore', 'spine2|mgoreL', 900)

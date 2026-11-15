@@ -103,7 +103,7 @@ if 'barrel' in PARTS:
     for j, t in enumerate((1.02, 1.15)):
         prism(f'clamp{j}', at(t) + dn * 0.112, at(t) + dn * 0.152, 0.014, 4, math.pi / 4)
     tube('feedpipe', [K0 - F.u * 0.01, K0 - F.u * 0.04 + F.f * 0.02, at(0.88) + dn * 0.17, at(0.86) + dn * 0.135], [0.016] * 4, segs=10)
-    finish('barrel', 'forearm.l|barrel', 9000, material='impmetal', tint=smear, glow=(LIGHT, 0.05, 2.4, 0.15),   # the bore only: at reach 0.12 the outside went bronze
+    finish('barrel', 'forearm.l|barrel', 4200, material='impmetal', tint=smear, glow=(LIGHT, 0.05, 2.4, 0.15),   # the bore only: at reach 0.12 the outside went bronze
           
            voxel=0.0030, smooth=(0.4, 2), noise=0.0012, noise_scale=0.05)
 
@@ -113,7 +113,7 @@ if 'gore' in PARTS:
     # against the flesh, blood hanging off the low side, and clots smeared up onto the block's first flats.
     gore_ring('gc', at(T_BLOCK0 - 0.005), F.u, 0.146, 18, 0.016, 0.032, drips=4, dlen=(0.04, 0.10), out=-F.u, seed=3)
     gore_ring('gs', at(T_BLOCK0 + 0.05), F.u, R_BLOCK * math.cos(math.pi / 8) + 0.002, 9, 0.008, 0.016, out=None, seed=8)
-    finish_gore('gore', 'forearm.l|gore', 3000)
+    finish_gore('gore', 'forearm.l|gore', 1400)
 
 
 def disc(name, centre, r, flatk):
