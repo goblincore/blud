@@ -1,0 +1,339 @@
+# TALLOW — a man the machine keeps fat, and burns.
+# Owner brief (2026-11-14): "a corpulent mass of waddling flesh inspired by
+# Cronenberg, Eraserhead, Giger, Garage: Bad Dream Adventure", with two
+# reference images of a fat arm-cannon demon as the point of departure (the
+# imp's lesson: a reference is where the design starts, not what it copies).
+#
+# THE IDEA. A rendering vat that walks. He was a man; the machine renders his
+# own fat in a boiler sunk into his back and pumps it down to the cannons his
+# forearms have GROWN into. He fires burning tallow. He is the fuel tank.
+#
+# THE DIRECTION (owner, 2026-11-14, second pass): Cronenberg fusion. The
+# machinery is not bolted on; the meat has swallowed it (the Videodrome
+# gun-hand). The forearm flesh runs on over each cannon's breech, the boiler
+# is sunk in a swollen rim of back fat, the hoses dive under the skin. The
+# first pass's burners and belly siphons read as "silly" and are gone; the
+# face is his own, not the zombie's. Third pass: the cannons heavy and
+# industrial (the second pass's were "too floral"), blood at every place the
+# metal goes into him, and the breathing mask back on his face.
+#
+# AUTHORED FROM THE BRIEF. No reference mesh or plate, so blob:measure and
+# blob:rings exit 2; every number is a design decision with its reason beside
+# it, checked on the CPU field (scripts/tmp/venus-sections.ts tallow).
+#
+# THE SPLIT (biomech-style.md): flesh is prims, few and LARGE; fat rolls,
+# stretch marks, cellulite and veins are the baked body normal map
+# (tallow.detail, not baked yet); the cannons, the boiler and the hoses are
+# sculpted kit mesh (assets-source/tallow-kit/).
+#
+# THE THREE BEATS, in order of distance:
+#   1. THE MASS. Wider than a doorway is tall-ish: 1.3 m across the gut on a
+#      1.9 m body, the belly an apron hanging to the knees, legs two short
+#      pillars under it. No yaw shows a waist.
+#   2. THE ARMS. Held out and forward by the fat under them, each forearm a
+#      sleeve of meat that a bone-metal cannon (kit) grows out of. Two big
+#      dark bores with fire in them, pointed at the player.
+#   3. THE HEAD. Broad and bald, sunk between the shoulder mounds in a
+#      collar of jowl, with a mean face low on it: a V brow over red ember
+#      eyes in slanted sockets, a hooked nose, and a heavy breathing mask
+#      strapped into the flesh over his mouth, hoses down into his chest.
+model tallow
+  # Crown at ~2.05: a head taller than the venus (1.79).
+  # His size is WIDTH; a 2.3 m body would need the legs lengthened and he
+  # would stop reading as a waddler.
+  height 2.05
+  stance humanoid
+
+skeleton
+  # Hip line 0.88 (root 0.78 + 0.10). Legs 0.40 + 0.34 below it land the
+  # ankle at ~0.14: legs 39% of his height against a man's 50%. Short legs
+  # under a long heavy trunk is the waddle.
+  root pelvis at 0.78 len=0.10
+
+  # The venus's heavy posture, more of it: the lumbar sways BACK (pitch -6)
+  # to counterweight the gut, the chest comes forward over it and the head
+  # hangs forward of the shoulders. Positive pitch is forward (+z).
+  bone spine1 parent=pelvis dir=up pitch=-6 len=0.28
+  # 12, not 8 (owner, 2026-11-14: arms "more ape gorilla like"): the shoulders
+  # roll forward over the gut, a gorilla's hunch.
+  bone chest  parent=spine1 dir=up pitch=12 len=0.30
+  bone spine2 parent=chest  dir=up pitch=6  len=0.12
+  # A short neck (0.10) buried in the jowl collar: the head sits IN the
+  # shoulders, but the whole face clears them (at 0.04 the collar covered it
+  # to the nose on the CPU silhouette).
+  bone neck   parent=spine2 dir=up pitch=16 len=0.12
+  # 0.30: the face block centres the head 0.55 along it (y ~1.86).
+  bone skull  parent=neck   dir=up pitch=6  len=0.30
+
+  mirror
+    # Sockets at x ~0.46: the shoulders are as wide as the gut's flanks, so
+    # the arms start outside the chest mass (0.42 half-width up there).
+    bone clavicle parent=spine2  side=0.040 dir=side len=0.42
+    # GORILLA ARMS (owner, 2026-11-14: "his arms should be longer, more ape
+    # gorilla like"): the upper arm 0.50 (was 0.36) and the forearm 0.44 (was
+    # 0.40), and they hang LOW and AHEAD of him (upper arm pitch 14, forearm
+    # 45; at 6 / 62 the muzzles hung at hip height, y 0.90): the muzzles at
+    # y ~0.70, a hand's breadth over the knees. Pushed OUT by the mass (tilt
+    # 42: the elbow at x ~0.80 clears a gut 0.63 in half-width). They point
+    # down and forward at rest; the brace (attack.ts) raises them level to
+    # fire. The venus's rule (arms on a wide body cannot hang) taken to its
+    # end.
+    bone upperarm parent=clavicle dir=down tilt=42 pitch=14  len=0.50
+    bone forearm  parent=upperarm dir=down tilt=10 pitch=45  len=0.44
+    # 0.246: the barrel's last length; the tail (handTip) is the muzzle, forearm
+    # t 1.56 along the cannon (make_cannons.py T_MUZZLE x 0.44 = 0.686 m from
+    # the elbow, and 0.44 + 0.246 = 0.686).
+    bone hand     parent=forearm  dir=down tilt=10 pitch=48  len=0.246
+    # Legs set WIDE (side 0.23) and splayed a little (tilt 4): thighs 0.40 m
+    # thick cannot stand under the hips, and the wide base rocks side to
+    # side as he walks.
+    bone thigh    parent=pelvis dir=down tilt=4 side=0.23  len=0.40
+    bone shin     parent=thigh  dir=down tilt=-2           len=0.34
+    bone foot     parent=shin   dir=fwd                    len=0.22
+  end
+
+body
+  # ============================================================
+  # TORSO — the mass. Big prims, wide blends (0.05-0.06: a blend that suits
+  # a man's torso is a crease on a body this size).
+  # ============================================================
+  # PELVIS / HIPS — the base the gut hangs from, half-width 0.50.
+  blob torso on pelvis at=0.60 r=0.300 wide=1.66 tall=0.80 deep=1.05 blend=0.060 core
+  # THE REAR — two heavy mounds low behind the hips, so the profile has a
+  # shelf at the back to answer the gut at the front (without it the side
+  # view is an egg on legs).
+  blob torso on pelvis at=0.10 offset=(0.170,-0.020,-0.200) r=0.240 tall=0.95 blend=0.050 both
+  # THE GUT — the biggest thing on him. Centre y ~1.02, forward of the spine
+  # (z 0.20), half-width 0.63, front reach z ~0.64. tall 0.92 keeps it a
+  # sagging mass rather than a ball.
+  blob torso on spine1 at=0.35 offset=(0,-0.030,0.200) r=0.440 wide=1.44 tall=0.92 deep=1.00 blend=0.060
+  # THE APRON — the gut's lower lip, hanging forward of and between the
+  # thighs to y ~0.60 (below the crotch at 0.74). This overhang is what says
+  # "fat" rather than "big": the venus's apron, doubled.
+  blob torso on pelvis at=0.00 offset=(0,-0.060,0.330) r=0.250 wide=1.80 tall=0.72 deep=0.95 blend=0.055
+  # FLANK ROLLS — love handles standing off the waist over the hip, so the
+  # front outline steps out and in instead of running as one smooth barrel.
+  blob torso on spine1 at=0.05 offset=(0.470,0.000,-0.020) r=0.200 tall=0.62 deep=1.25 blend=0.045 both
+  # RIBCAGE / BACK — narrower than the gut (half-width 0.44): the body is a
+  # pear, widest at the belly. A broad slab of back fat behind it.
+  bar  torso on chest  from=0.05 to=0.95 r=0.300 r2=0.280 wide=1.46 deep=0.98 blend=0.060
+  blob torso on chest  at=0.55 offset=(0,0,-0.150) r=0.260 wide=1.55 tall=1.05 deep=0.75 blend=0.055
+  # BREASTS — heavy, sagging onto the top of the gut (tip= hangs down and
+  # forward), wide-set so a cleft runs down the sternum into the belly.
+  blob torso on chest  at=0.55 offset=(0.200,0.000,0.250) tip=(0.030,-0.130,0.060) r=0.190 r2=0.160 wide=1.10 deep=0.90 blend=0.040 both
+  # THE YOKE — a hump of fat across the shoulders and the back of the neck,
+  # HIGHER than the chin: the head sits in a nest, never on a column.
+  # r 0.165: at 0.25 its top (y 1.83) buried the whole head (first render).
+  bar  torso on spine2 from=0.00 to=0.80 r=0.165 r2=0.140 wide=2.30 deep=1.25 offset=(0,-0.020,-0.040) blend=0.055
+  blob torso on spine2 at=1.00 offset=(0,0.020,-0.170) r=0.170 wide=1.60 tall=0.80 blend=0.050
+  # JOWL COLLAR — a roll of fat round the front of the neck, under the chin
+  # (the head's own prims blend down into it).
+  blob torso on spine2 at=1.00 offset=(0,-0.030,0.100) r=0.120 wide=1.60 tall=0.65 deep=0.90 blend=0.040
+  # THE BOILER'S RIM (Cronenberg: the meat has grown round the metal). The
+  # boiler (kit, make_back.py) is sunk into his back at y 1.36 with its
+  # centre only 4.5 cm off the skin; this swollen roll of fat rises round its
+  # edge (half-width 0.235, half-height 0.215), seated on the PROBED back
+  # skin (surface.json: z -0.32 to -0.35 round it) about a centimetre out,
+  # so the sac reads as sunk into a wound rather than strapped on. All from
+  # the chest at y 1.36 (at=0.678). Unpainted: painted raw they read as red
+  # stripes down his back (first look).
+  blob torso on chest at=0.678 offset=(0.225,0.000,-0.335) r=0.070 tall=2.40 deep=0.80 blend=0.035 both
+  blob torso on chest at=0.678 offset=(0.150,0.170,-0.326) r=0.064 wide=1.40 deep=0.80 blend=0.035 both
+  blob torso on chest at=0.678 offset=(0.000,0.215,-0.342) r=0.070 wide=2.00 deep=0.80 blend=0.035
+  blob torso on chest at=0.678 offset=(0.150,-0.170,-0.348) r=0.064 wide=1.40 deep=0.80 blend=0.035 both
+  blob torso on chest at=0.678 offset=(0.000,-0.210,-0.356) r=0.070 wide=2.00 deep=0.80 blend=0.035
+
+  # ============================================================
+  # ARMS — shoulder mounds, upper arms like hams, and a forearm SLEEVE: the
+  # flesh runs on down the forearm and swallows the cannon's breech (kit,
+  # make_cannons.py); its breech block goes into a fat lip at t 0.62, torn
+  # and bloody where the metal meets the meat (kit gore). The hand bone
+  # is the barrel's last length, and its tail is the muzzle.
+  # ============================================================
+  # Shoulder mound, blended wide (the zombie's shoulder lesson: one mound in
+  # every pose, never a ball on a stick).
+  # Gorilla-heavy: a bigger shoulder mound and a thicker, longer upper arm.
+  blob arm on clavicle at=1.00 offset=(0,-0.040,0) r=0.225 tall=0.85 blend=0.050 mirror core
+  bar  arm on upperarm from=0.05 to=0.98 r=0.185 r2=0.150 blend=0.040 mirror
+  # The hanging mass under and behind the upper arm.
+  blob arm on upperarm at=0.42 offset=(0,-0.020,-0.055) r=0.150 tall=1.80 blend=0.040 mirror
+  # Elbow, and the sleeve SWELLING toward the breech (0.140 -> 0.150): the
+  # meat bulges where the metal is inside it. A bar's rounded END CAP reaches
+  # its radius past `to=` (0.150 is 0.34 of the 0.44 m forearm), so a sleeve
+  # authored to 0.56 really ran on to t ~0.93 and hid the cannon's chamber:
+  # it stops at 0.40 and its cap ends the meat at t ~0.78.
+  blob arm on forearm  at=0.00 r=0.142 blend=0.030 mirror
+  bar  arm on forearm  from=0.00 to=0.40 r=0.140 r2=0.150 blend=0.025 mirror
+  # A tumorous swelling on the top-outer side of the sleeve: the growth is
+  # uneven, never a clean tube.
+  blob arm on forearm  at=0.30 offset=(0.055,0.070,0.010) r=0.085 blend=0.030 mirror
+  # THE LIP the cannon's breech block goes into (make_cannons.py: an
+  # octagon of r 0.152 from forearm t 0.62): fat, r 0.160 -> 0.150, so at the
+  # block's back face the flesh is r ~0.145 and rolls right up against it;
+  # its end cap (to t ~0.90) is hidden inside the block. Unpainted: the blood
+  # where metal meets meat is kit (`gore`, torn lumps and drips), because a
+  # painted band read as a red sweatband (second look).
+  bar  arm on forearm  from=0.38 to=0.52 r=0.160 r2=0.150 blend=0.012 mirror
+  # (No tendons along the barrel: on the industrial cannon they read as pink
+  # sausages stuck on the machine. The meat stops at the breech block; the
+  # blood there is kit.)
+  # CORE inside the cannon (kit): the forearm rod and a stub of hand, all
+  # behind the throat plug (make_cannons.py: t 1.38 of the forearm), so
+  # none of it shows down the bore.
+  bar  arm on forearm  from=0.35 to=1.00 r=0.050 blend=0.006 mirror color=2a2c30 metal gloss=0.5
+  bar  arm on hand     from=0.00 to=0.10 r=0.045 blend=0.006 mirror color=2a2c30 metal gloss=0.5
+
+  # ============================================================
+  # LEGS — two short pillars. Thighs 0.40 m thick tapering to a knee as
+  # thick as a man's thigh, elephant shins that barely taper, broad flat
+  # feet.
+  # ============================================================
+  # Root ball seated a little down the thigh (the venus's rule: at the hip
+  # joint it reaches up and fills in the crotch).
+  blob leg on thigh at=0.12 r=0.205 deep=1.08 blend=0.045 mirror core
+  bar  leg on thigh from=0.05 to=1.00 r=0.205 r2=0.150 wide=0.96 deep=1.06 blend=0.040 mirror
+  # Knee: a fold of fat hanging over it at the front.
+  blob leg on shin  at=0.00 offset=(0,0.010,0.030) r=0.165 blend=0.030 mirror
+  bar  leg on shin  from=0.00 to=0.95 r=0.150 r2=0.135 blend=0.025 mirror
+  # Ankle roll: the shin's fat settling over the foot.
+  blob leg on shin  at=0.92 r=0.150 tall=0.60 blend=0.025 mirror
+  # Foot: broad and flat, heel behind the ankle, sole at ~0.
+  blob leg on foot at=0.00 r=0.110 r2=0.090 tip=(0.020,-0.015,0.260) wide=1.40 tall=0.72 blend=0.025 offset=(0,-0.062,-0.070) mirror
+
+  # ============================================================
+  # HEAD — HIS OWN (owner, 2026-11-14: "a new face rather than reuse the
+  # zombie one ... evil and ugly", the ogre as a reference for the nose and
+  # ears). The ogre's road: every feature is a prim, the face block is a nub
+  # and a generated decal draws only the mouth's cavity and teeth
+  # (scripts/make-tallow-face.py). Skull bone: (0, 1.690, 0.058) ->
+  # (0, 1.989, 0.090), len 0.30, nearly upright, so skull t = (y - 1.690) /
+  # 0.298 and the axis sits at z ~0.06-0.08.
+  # ============================================================
+  # Neck: r 0.13, under the cranium's 0.155 so the cranium stays the
+  # FATTEST head prim (the decal's head-space frame).
+  bar  head on neck from=0.00 to=1.00 r=0.130 wide=1.30 blend=0.030
+  # CRANIUM — bald, broad and LOW: wider than tall. Centre y 1.875, z 0.079;
+  # semi-axes 0.174 x 0.167 x 0.167, front at z ~0.245. A tall dome (tall
+  # 1.22) read as a goofy baby head (owner: "too goofy ... more evil and
+  # mean"); a low brutal crown sits the scowl under it. It must stay the head
+  # prim with the biggest r x max scale (0.174), because the mouth decal
+  # projects from that prim (lab-main.ts headShape): on an earlier look the
+  # jaw beat it and the teeth landed under the lower lip.
+  blob head on skull at=0.62 r=0.155 wide=1.12 tall=1.08 deep=1.08 blend=0.014
+  # JAW MASS — wider than the cranium and slung low and forward: the face
+  # sits LOW on the head, the mancubus's read. Centre y 1.745, z 0.126,
+  # front z ~0.26; half-width 0.165 (r x max scale 0.165, under the cranium's).
+  blob head on skull at=0.25 offset=(0,-0.020,0.060) r=0.125 wide=1.32 tall=0.88 deep=1.08 blend=0.014
+  # Jowls hanging past the jaw line into the collar.
+  blob head on skull at=0.30 offset=(0.120,-0.030,0.050) r=0.105 tall=1.30 blend=0.030 both
+  # Double chin.
+  blob head on skull at=0.20 offset=(0,-0.040,0.100) r=0.105 wide=1.60 tall=0.72 blend=0.030
+  # Nape roll: the back of the skull runs into the yoke.
+  blob head on skull at=0.35 offset=(0,-0.010,-0.130) r=0.125 wide=1.35 tall=0.80 blend=0.035
+  # THE SCOWL (owner, 2026-11-14: "more evil and mean and have red eyes").
+  # The first face read as goofy: a straight brow over sleepy slits with
+  # bags, a round bulb nose and a soft mouth. Mean is ANGLES: a V brow, eyes
+  # slanting up and out in sunken sockets, heavy cheekbones, a hooked nose,
+  # tusks, and a mouth whose corners turn down. Cranium surface for placing:
+  # z = 0.079 + 0.167 sqrt(1 - (x/0.174)^2 - ((y - 1.875)/0.167)^2); skull t
+  # = (y - 1.690) / 0.298, and the bone's own z at t is 0.058 + 0.031 t.
+  #
+  # BROWS — two bars in a V, the inner ends LOW and knotted together over the
+  # nose (y 1.881, z 0.256), the outer ends high (y 1.907) and overhanging
+  # the temples by ~3 cm. Chamfered, so the underside is a crease the
+  # sockets sit in. (Brows that meet as one level bar read as a hat brim:
+  # the imp's lesson; this one breaks at the knot.)
+  bar  head on skull from=0.66 to=0.66 r=0.030 tall=0.80 blend=0.006 chamfer offset=(0.012,-0.006,0.178) tip=(0.093,0.026,-0.016) both
+  # The knot between them: a frowning bulge over the bridge of the nose.
+  blob head on skull at=0.61 offset=(0,0,0.168) r=0.022 wide=0.90 tall=1.40 blend=0.008
+  # SOCKETS — slanted dark pits under the brows, inner end low, outer end
+  # high, sunk ~4 mm under the skin. Painted near-black so the red reads.
+  bar  head on skull from=0.57 to=0.57 r=0.014 blend=0.004 offset=(0.024,-0.004,0.162) tip=(0.050,0.012,-0.014) both color=2a0e0c gloss=0.3
+  # EYES — small hot RED embers in the sockets (the ogre's 0.9 glow: the one
+  # lit thing on his face under the brow's shadow).
+  blob head on skull at=0.577 offset=(0.048,-0.002,0.163) r=0.010 blend=0.002 both color=ff1a0a gloss=0.8 glow=0.9
+  # CHEEKBONES — heavy ridges raking up and out under the eyes: the sneer.
+  bar  head on skull from=0.48 to=0.48 r=0.020 blend=0.008 offset=(0.030,-0.004,0.158) tip=(0.070,0.018,-0.026) both
+  # NOSE — broad and hooked, not a bulb (the bulb read as a clown's): a bridge
+  # out of the brow knot down to a squashed tip with flared wings.
+  bar  head on skull from=0.56 to=0.56 r=0.022 blend=0.008 offset=(0,0,0.165) tip=(0,-0.045,0.040)
+  blob head on skull at=0.40 offset=(0,0.000,0.185) r=0.030 wide=1.50 tall=0.80 deep=0.85 blend=0.008
+  blob head on skull at=0.40 offset=(0.032,-0.004,0.170) r=0.018 tall=0.85 blend=0.006 both
+  # EARS — small, low, backswept points (the ogre's, scaled up), crumpled by
+  # a lump at the root.
+  blob head on skull at=0.55 r=0.036 r2=0.005 wide=0.55 blend=0.005 chamfer offset=(0.150,-0.010,-0.010) tip=(0.040,0.050,-0.065) both
+  blob head on skull at=0.52 offset=(0.152,-0.020,-0.005) r=0.026 blend=0.008 both
+  # LIPS — thick, parted, unpainted (painted glossy red they read as clown
+  # lips): one BENT bar each, corner to corner, ~5 mm proud of the jaw. Both
+  # bow UP in the middle, so the corners turn DOWN: a grimace, not a smile.
+  # The gap between them is where the decal's dark cavity and teeth show.
+  bar  head on skull from=0.22 to=0.22 r=0.016 tall=0.95 blend=0.005 offset=(-0.080,0.000,0.190) tip=(0.160,0,0) bend=(0,0.018,0.050)
+  bar  head on skull from=0.02 to=0.02 r=0.020 tall=0.90 blend=0.005 offset=(-0.078,0.000,0.186) tip=(0.156,0,0) bend=(0,0.012,0.050)
+  # (No tusks: the breathing mask's plate covers the mouth, and they came
+  # out through it. The lips and the mouth decal stay under it for when the
+  # mask is shot off.)
+
+# THE FACE ROAD (the ogre's): no mesh, so no bake. All structure is prims
+# above; headRadius ~0 turns off the generated ellipsoid so it cannot fight
+# the authored cranium.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.008
+
+# A generated MOUTH decal at MULTIPLY (scripts/make-tallow-face.py): a wide
+# drooping grimace, a dark wet cavity and ragged teeth. The eyes are prims, so
+# the sheet's own glow is gated off.
+#
+# hs is relative to the cranium (centre y 1.875, semi 0.174 x 0.167). The
+# mouth sits between the lips at y ~1.727: hs.y = -0.148 / 0.167 = -0.886.
+# Scale 0.388: the drawing's half-width (0.19 of the sheet) is then
+# 0.19 x 0.174 / 0.388 = 0.085 m, the lips' half-width. Drawing centred at
+# uv 0.5, so centre = 0.5 + 0.886 x 0.388 = 0.844.
+sheet
+  image       tallow-face.png
+  decal       0
+  projScaleX  0.388
+  projScaleY  0.388
+  projCentreX 0.50
+  projCentreY 0.844
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+
+# Interior bones for wound reveals: the limb bones auto-derive. A low ratio
+# (0.22): the bones of a man inside a body three times his girth.
+bones
+  ratio 0.22
+  blob head on skull at=0.62 r=0.120 wide=0.98 tall=1.10 deep=1.06
+
+# ============================================================
+# PALETTE — tallow: pale, waxy, sweating candle fat with a jaundiced cast
+# and bruise-purple mottle; wetter and glossier than the zombie. Eyeballed;
+# the frames judge it.
+# ============================================================
+palette
+  baseColor     0.60 0.47 0.38
+  deepColor     0.50 0.08 0.07
+  charColor     0.14 0.09 0.08
+  specIntensity 0.60
+  specRoughness 0.34
+  fresnelBoost  0.80
+  translucency  0.34
+  wetness       0.60
+  surfaceNoiseAmp    0.05
+  silhouetteNoiseAmp 0.012
+  mottleAmp     0.32
+  mottleScale   1.4
+  mottleColor   0.34 0.22 0.30
+  grain         0.12

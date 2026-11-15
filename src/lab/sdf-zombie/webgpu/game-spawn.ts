@@ -30,7 +30,7 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeTallowMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
 import { spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
@@ -434,6 +434,16 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     // (MotionProfile.spit) at the player's chest (fireball.ts), enemy-mind.ts makeImpMind.
     ...(characterEntry(name).profile.throws === 'fireball' ? {
       mind: makeImpMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A VOLLEY (the tallow): clubs up close and, at range, braces both arm-cannons and fires fireballs right and
+    // left in turn from each muzzle (MotionProfile.spit / spitL) at the player's chest, enemy-mind.ts makeTallowMind.
+    ...(characterEntry(name).profile.throws === 'volley' ? {
+      mind: makeTallowMind(),
       onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;

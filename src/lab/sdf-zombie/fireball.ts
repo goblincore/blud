@@ -49,6 +49,25 @@ export const IMP_TUNING = {
   first: 0.8,
 } as const;
 
+/** THE TALLOW'S VOLLEY (enemy-mind.ts makeTallowMind): both arm-cannons braced level (attack.ts 'brace', on
+ *  BRACE_TUNING's beats) and four fireballs, alternating right and left, through the hold. Slower and longer than the
+ *  imp's throw, with a longer telegraph (the raise), from further away. */
+export const TALLOW_VOLLEY = {
+  /** The whole brace, s: a 0.84 s raise (the telegraph), the hold, the lowering. */
+  braceSec: 2.8,
+  /** The phases the shots leave at, and from which cannon: right, left, right, left through the hold (0.34-0.85). */
+  shots: [{ at: 0.40, side: 'R' }, { at: 0.52, side: 'L' }, { at: 0.64, side: 'R' }, { at: 0.76, side: 'L' }] as const,
+  /** It fires at a player between these distances (m) it can see; inside `min` it closes and clubs instead. */
+  band: { min: 3.0, max: 18 },
+  cooldown: 2.6,
+  first: 1.2,
+} as const;
+
+/** The volley's shot that leaves this frame (prevPhase -> phase crosses its `at`), or null. */
+export function volleyShot(prevPhase: number, phase: number): (typeof TALLOW_VOLLEY.shots)[number] | null {
+  return TALLOW_VOLLEY.shots.find(s => prevPhase < s.at && phase >= s.at) ?? null;
+}
+
 /** The ball leaves this frame (prevPhase -> phase crosses IMP_TUNING.fireAt). */
 export function throwFires(prevPhase: number, phase: number): boolean {
   const at = IMP_TUNING.fireAt;

@@ -80,6 +80,8 @@ export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 
   | 'bite' | 'pounce' | 'stab' | 'squirt'
   // The imp's overhand fireball throw (fireball.ts): the right arm only, never a contact.
   | 'throw'
+  // The tallow's two-cannon volley (fireball.ts TALLOW_VOLLEY): BOTH arms raised level and held, never a contact.
+  | 'brace'
   // The gutcrawler's rear-and-slam (hound-attack.ts 'slam').
   | 'slam';
 
@@ -134,6 +136,10 @@ export const SWING_ARCS: Record<SwingVariant, {
   // through"): the arm carries on down and across the body to below the shoulder's reach (followPitch/Yaw), on
   // THROW_TUNING's beats.
   throw: { windupPitch: 2.4, strikePitch: 0.45, windupYaw: -0.35, strikeYaw: 0.18, followPitch: -0.35, followYaw: 0.70 },
+  // THE BRACE (the tallow): both arm-cannons swing up from hanging (45 deg below level at rest, tallow.blob) to LEVEL,
+  // 0.80 rad, and a touch across so the two bores converge ahead of him; held through the volley (the follow is the
+  // same pose), then lowered. attackPose drives BOTH arms with it.
+  brace: { windupPitch: 0.80, strikePitch: 0.80, windupYaw: 0.10, strikeYaw: 0.10, followPitch: 0.80, followYaw: 0.10 },
   slam: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
@@ -157,9 +163,26 @@ export const THROW_TUNING: AttackTuning = {
   handDrop: 0.04,
 };
 
-/** The beats a variant swings on: the throw's own, every other the melee swing's. */
+/** THE BRACE'S BEATS (the tallow's volley, fireball.ts TALLOW_VOLLEY): a slow raise (the telegraph, 30%), a long
+ *  hold while the cannons fire (to 85%), a slow lowering. The body BRACES rather than lunging: it leans back into the
+ *  recoil and plants, no shoulder twist. */
+export const BRACE_TUNING: AttackTuning = {
+  ...ATTACK_TUNING,
+  windupEnd: 0.30,
+  strikeEnd: 0.34,
+  holdEnd: 0.85,
+  lunge: 0.0,
+  windback: 0.07,
+  chestDrive: 0.0,
+  chestRear: 0.06,
+  shoulderDrive: 0.0,
+  offGuardPitch: 0.0,
+  handDrop: 0.0,
+};
+
+/** The beats a variant swings on: the throw's and the brace's own, every other the melee swing's. */
 export function tuningOf(variant: SwingVariant): AttackTuning {
-  return variant === 'throw' ? THROW_TUNING : ATTACK_TUNING;
+  return variant === 'throw' ? THROW_TUNING : variant === 'brace' ? BRACE_TUNING : ATTACK_TUNING;
 }
 
 export interface AttackPose {
@@ -285,6 +308,16 @@ export function attackPose(
   }
   const sgn = side === 'R' ? 1 : -1;
   const fwd = d >= 0;
+  if (variant === 'brace') {
+    // BOTH arms take the arc (the two cannons), mirrored in yaw; the body leans back and plants (BRACE_TUNING).
+    const z = fwd ? d * T.lunge : d * T.windback, cz = fwd ? d * T.chestDrive : d * T.chestRear;
+    return {
+      offsets: { chest: [0, 0, cz], neck: [0, 0, cz * T.headShare], head: [0, 0, cz * T.headShare],
+        shoulderL: ZERO, shoulderR: ZERO, handL: ZERO, handR: ZERO },
+      rootOffset: [0, 0, z],
+      reach: { pitchL: arc.pitch, pitchR: arc.pitch, yawL: -arc.yaw, yawR: arc.yaw },
+    };
+  }
 
   const pitchSwing = arc.pitch;
   const yawSwing = sgn * arc.yaw;

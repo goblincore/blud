@@ -2,8 +2,8 @@
 //
 // The imp's fireball (fireball.ts) and its throwing mind (enemy-mind.ts makeImpMind).
 import { describe, it, expect } from 'vitest';
-import { FIREBALL, IMP_TUNING, burstPlayerDamage, fireballVelocity, spawnFireball, stepFireballs, throwFires, type Fireball } from './fireball';
-import { makeImpMind, type MindInput } from './webgpu/enemy-mind';
+import { FIREBALL, IMP_TUNING, TALLOW_VOLLEY, burstPlayerDamage, fireballVelocity, spawnFireball, stepFireballs, throwFires, volleyShot, type Fireball } from './fireball';
+import { makeImpMind, makeTallowMind, type MindInput } from './webgpu/enemy-mind';
 import { THROW_TUNING, armArc } from './attack';
 import { IMP_PROWL, makeGaitState, stepGait } from './gait';
 import type { Vec3 } from './types';
@@ -119,5 +119,47 @@ describe('makeImpMind', () => {
       for (let i = 0; i < 6 * 60; i++) { const out = mind.step(input(dist, over)); if (out.fire) fired++; expect(out.attack?.variant).not.toBe('throw'); }
       expect(fired).toBe(0);
     }
+  });
+});
+
+describe('makeTallowMind', () => {
+  // The tallow's volley: both cannons braced (attack.ts 'brace'), four rounds through the hold, right and left in turn.
+  it('braces at a player out of reach and fires four rounds, alternating cannons, then cools down', () => {
+    const mind = makeTallowMind();
+    const sides: string[] = [];
+    let braces = 0, was = false;
+    const secs = TALLOW_VOLLEY.first + TALLOW_VOLLEY.braceSec + 0.2;
+    for (let i = 0; i < secs * 60; i++) {
+      const out = mind.step(input(9));
+      const bracing = out.attack?.variant === 'brace';
+      if (bracing) { expect(out.halt).toBe(true); expect(out.faceHeading).toBeCloseTo(0, 6); }
+      if (bracing && !was) braces++;
+      was = bracing;
+      if (out.fire) sides.push(out.fireSide ?? 'R');
+    }
+    expect(braces).toBe(1);
+    expect(sides).toEqual(['R', 'L', 'R', 'L']);
+  });
+
+  it('fires only from the cannon it still has, and never inside the club band or with both arms gone', () => {
+    const lostL = { missing: { armL: true, armR: false, legL: false, legR: false } };
+    const mind = makeTallowMind();
+    const sides: string[] = [];
+    for (let i = 0; i < (TALLOW_VOLLEY.first + TALLOW_VOLLEY.braceSec + 0.2) * 60; i++) {
+      const out = mind.step(input(9, lostL)); if (out.fire) sides.push(out.fireSide ?? 'R');
+    }
+    expect(sides).toEqual(['R', 'R']);
+    for (const [dist, over] of [[9, { missing: { armL: true, armR: true, legL: false, legR: false } }], [1.5, {}]] as const) {
+      const m = makeTallowMind();
+      let fired = 0;
+      for (let i = 0; i < 6 * 60; i++) { const out = m.step(input(dist, over)); if (out.fire) fired++; expect(out.attack?.variant).not.toBe('brace'); }
+      expect(fired).toBe(0);
+    }
+  });
+
+  it('crosses each shot exactly once', () => {
+    let n = 0;
+    for (let i = 1; i <= 200; i++) if (volleyShot((i - 1) / 200, i / 200)) n++;
+    expect(n).toBe(TALLOW_VOLLEY.shots.length);
   });
 });

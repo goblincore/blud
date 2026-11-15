@@ -921,3 +921,67 @@ offset inside the brain, or a mind that never fires, which no turntable shows.
   - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
 - A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
 - With a baked normal atlas ("Kit normal maps" under Budget) the ribbing survives too: the cerebrax went 94k -> 74k triangles (tendrils 9000 -> 5000, harness 9000 -> 6500, struts, knees and collars down a third). Its 20 tiles fill a 2048 atlas at 56% of their baked size; the big parts (harness, frame, tendrils) come out at about 500 px per metre.
+
+## A corpulent body with fused cannons: the tallow (2026-11-14)
+
+The tallow (`characters/tallow.blob`, kit `assets-source/tallow-kit/`) is a 1.3 m wide fat man whose forearms have
+grown into cannons. Three owner looks in one day; what they taught:
+
+- **Bolted-on reads as silly; fused reads as horror.** The first kit (burners on stumps, belly siphons wrapping the
+  waist, a feeding muzzle) was "rather silly ... the way the tubes are oriented". The owner picked Cronenberg fusion
+  (the Videodrome gun-hand): the forearm FLESH runs on over each cannon's breech and the barrel leaves the meat through a
+  swollen lip; the boiler is sunk two thirds into his back inside a rim of fat prims; one hose a side, diving under the
+  skin mid-run. Fewer parts, each one coming out of the meat.
+- **A bar's end cap carries the meat past `to=`.** A capsule ends in a hemisphere of its end radius: a forearm sleeve
+  of r 0.150 authored `to=0.56` on a 0.40 m bone really ran to t ~0.93 and hid the cannon's chamber. Subtract
+  `r2 / length` from where you want the flesh to stop.
+- **Scale the face to the body.** A man-sized face-block head (r 0.088) was a nub on a 1.3 m body; 0.155 with a jaw
+  mass under it reads.
+- **Goofy vs mean is angles.** A tall dome, sleepy slits with bags, a round bulb nose and soft lips read as goofy
+  (owner). Mean: a low broad crown, a V brow knotted over the nose, red embers in slanted dark sockets, cheekbones
+  raking up, a hooked nose, tusks, both lips bowed UP so the corners turn down. Painted glossy lips read as clown lips
+  again (the teratoma's lesson): leave them unpainted.
+- **The decal's frame is the biggest r x max scale**, not the biggest volume (`lab-main.ts headShape`). A wide jaw
+  (0.13 x 1.45) beat a taller cranium and the mouth decal landed under the lower lip. `tallow-blob.test.ts` pins the
+  cranium as the winner.
+- **Painted raw bands read as sweatbands and stripes.** A raw-red lip ring round the forearm and raw rim prims round
+  the boiler read as a red wristband and red stripes down his back. Unpainted swelling, with the rawness left to the
+  normal map.
+- **Boilers and back sacs:** clamping talons plus crest spines made a spiked ball strapped on; sunk with only a crest,
+  ribs, a glowing slit and two short chimney horns, it reads as part of him.
+
+### The tallow's third pass: industrial weapons, blood at the joints
+
+- **The skull style is not every weapon's style.** Crowned muzzles, chevron fins and crest spines on a cannon read as
+  "too floral" (owner). An arm cannon wanted to be plainly a heavy machine: octagonal blocks, bolted bands, a slotted
+  brake, a piston, a tank (`tallow_common.py` `prism`, `bolt`). The skull rules still suit organic plates and horns.
+- **Blood at the joint is KIT, not paint.** The owner wanted "bloody decals where the metal flesh interfaces". Painted
+  SDF bands read as sweatbands, so the blood is a `gore` kit part (white material, blood in vertex colours, the `gore`
+  look in kit-overlay.ts): torn lumps lying against the joint, drips hanging off its low side (`gore_ring`, `drip`),
+  plus a mottled smear on the metal itself, thick at the flesh and running forward underneath.
+- **Gore must be irregular and dark.** An even ring of even lumps read as red beads; skip a quarter, clump some, make
+  one in five big, wander them along the joint. Linear blood over ~0.14 renders as bright paint-red: keep it mostly
+  0.06-0.23 red.
+- **Glow baked inside a bore leaks outside.** A `glow_bake` reach of 0.12 from a fire 8 cm inside the muzzle turned
+  the whole barrel bronze; 0.05 keeps it to the bore. Put the fire near the muzzle, or it is lost down the barrel.
+- **Flesh cords on a machine read as sausages.** Tendons laid along an industrial barrel looked like pink sticks.
+- **zsh does not word-split a variable.** `E="env A=1 B=2"; $E cmd` runs a command named "env A=1 B=2" and
+  `blob:shot` writes nothing; spell the env out.
+
+### The tallow's fourth pass: gorilla arms, his skin, a two-gun volley
+
+- **STOMP's arms ignore attacks.** STOMP (the ogre's, the venus's walk) has `armStyle: 'carry'`, and motion.ts runs the
+  swing's arm pivot only for the reach style, so every arm attack on a STOMP body renders as a statue (the imp's throw
+  did on the tallow, and the lab's `BLOB_SWING_SWEEP` showed identical frames). A body that swings its arms on a heavy
+  walk needs a reach variant: `gait.ts TALLOW_STOMP` (reach, `reachPitch 0` = the authored hang, a small
+  `reachSwing`). If a swing sweep shows no motion, check the gait's arm style first.
+- **A two-gun body:** `MindOutput.fireSide` tags the round and `MotionProfile.spitL` is the left muzzle
+  (game-actor.ts picks it); `attack.ts 'brace'` drives BOTH arms with one arc. `webgpu/game-actor-tallow.test.ts`
+  checks the rounds leave each muzzle in turn, raised and in front. Read each shot's origin against where the body
+  stood WHEN it fired: after a volley the mind walks on.
+- **Gorilla arms on a fat body:** length alone left the muzzles at hip height; the arms also had to hang further
+  forward (upper arm pitch 14) and the forearms lower (45, not 62). Size anything in forearm lengths (the cannon's
+  `t`) and it grows with the arm; set the hand bone so its tail is still the muzzle.
+- **Veins on a big body need scaling.** The recipe's 6 mm trunks baked as thin dark cracks on a 1.3 m wide torso; 1.5x
+  (9 mm, 6.5 mm proud) reads as raised veins. A crease arc with a 2 cm sag reads as one straight seam across the
+  chest: curve it up under each breast. The bake took 9-11 s on the GPU at 1024 wide (2,000 detail prims).
