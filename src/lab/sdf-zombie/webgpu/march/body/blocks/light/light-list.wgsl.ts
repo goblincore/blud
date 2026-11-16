@@ -70,4 +70,9 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
     listBeam = bl.beam;
     listTorchShare = bl.lumBeam / max(bl.lumAll, 1e-4);
   }
+  // A MELT'S RED FLESH (melt.wgsl.ts meltRed; 0 everywhere else, so the factor is exactly 1) keeps only a glint of
+  // the list lights' highlight and back rim. They are white light on top of the red, and under the torch they turned
+  // the meat tan (measured 2026-11-14 in the arena).
+  listSpec = listSpec * (1.0 - 0.85 * meltRed);
+  listRim = listRim * (1.0 - 0.85 * meltRed);
   // ---- END SHARED LIGHT LIST ----------------------------------------------`;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BONE_GROUPS, groupOf, partitionBones, releaseOrder, groupCentroid,
+  BONE_GROUPS, groupOf, meltGroupOf, partitionBones, releaseOrder, groupCentroid,
   groupReleaseProgress, limbOfGroup, mulberry32,
   releaseThreshold, MELT_BONE_RELEASE_U,
 } from './melt-bones';
@@ -16,6 +16,11 @@ function bone(name: string, y: number): Primitive {
 
 describe('bone grouping', () => {
   it('maps every authored bone name to one of the 11 groups', () => {
+    // A foot is torso-default for the gib parts (the baked gib set is cut that way) and goes with its shin in the melt.
+    expect(groupOf('foot.l')).toBe('cage');
+    expect(meltGroupOf('foot.l')).toBe('shin.l');
+    expect(meltGroupOf('foot.r')).toBe('shin.r');
+    expect(meltGroupOf('spine')).toBe('cage');
     expect(groupOf('skull')).toBe('skull');
     expect(groupOf('neck')).toBe('skull');
     expect(groupOf('spine')).toBe('cage');

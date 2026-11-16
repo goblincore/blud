@@ -280,7 +280,7 @@ import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
-import { boneChunkRadius, mulberry32 } from '../melt-bones';
+import { boneChunkRadius, meltGroupOf, mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshEviction, fleshOverCap, fleshShrink } from '../flesh-bits';
 import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
@@ -312,6 +312,7 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createMelterHarness } from './game-melter';
 import { createRodHarness } from './game-rod';
 import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
@@ -1796,9 +1797,18 @@ async function main() {
       if (lead) ctx.render.segMeshRenderer.organLook.tint.value.set(lead.organColor.value.r, lead.organColor.value.g, lead.organColor.value.b, lead.organAmp.value);
       const organsMesh = ctx.render.organMode === 'mesh';
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
+        // A melting body has no segment meshes at all (skull and eyes included): they cannot follow a melt, and its
+        // own packed bone rows draw the skeleton until each group falls out as a chunk (game-actor beginMelt).
         let e = ctx.render.skeletonSources.get(a);
         if (!e) { e = buildSkeletonSources(ctx, a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); a.view.setPackOrgans(!organsMesh); }
         else if (e.body !== a.body) { e = buildSkeletonSources(ctx, a, e.name); (e as { severed?: boolean }).severed = true; ctx.render.skeletonSources.set(a, e); }
+        // A MELTING BODY SHOWS ITS MESH SKELETON (the skull, its eyes, the ribs) behind the flesh as it runs off; a
+        // group the melt has let go of (it is a falling chunk now) leaves the mesh the same frame.
+        if (a.melting()) {
+          const gone = a.meltReleased();
+          // (the organs go with the ribcage: left behind, they sat in the finished pool as one big red lump.)
+          return gone.size ? e.sources.filter(src => (src.kind === 'organ' ? !gone.has('cage') : !gone.has(meltGroupOf(src.prims?.[0]?.bone)))) : e.sources;
+        }
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx, ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
@@ -3363,6 +3373,8 @@ async function main() {
     if (ctx.weapon.flail?.onMouseDown(e.button)) return;
     // SLOT 5 (flare): left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    // SLOT 8 (the melter): left click only, deferred to the tick like the flare.
+    if (ctx.weapon.melter?.onMouseDown(e.button)) return;
     // SLOT 6 (the rod): hold + sweep; the cut lands on release.
     if (ctx.weapon.rod?.onMouseDown(e.button)) return;
     // SLOT 7 (the axe): a click starts the combo's next chop.
@@ -3418,6 +3430,10 @@ async function main() {
   // WEAPON SLOT 5 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+  });
+  // WEAPON SLOT 8 (the melt-death dev harness, game-melter.ts): its own rig on aimRig.
+  ctx.weapon.melter = createMelterHarness(ctx, {
+    traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
   // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
   ctx.weapon.rod = createRodHarness(ctx, {

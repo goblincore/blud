@@ -34,15 +34,21 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     // survives on the finished puddle. Pinning the intent — reddening driven
     // by a patch threshold that reads meltU — rather than the exact spelling,
     // which is a tuning surface.
-    expect(MARCH_BODY).toContain('albedo = mix(albedo, deepColor * 0.8, local * 0.8)');
+    expect(MARCH_BODY).toMatch(/albedo = mix\(albedo, deepColor \* vec3<f32>\([\d.]+, [\d.]+, [\d.]+\), local \* [\d.]+\)/);
+    expect(MARCH_BODY).toContain('meltRed = local;');
     expect(MARCH_BODY).toContain('let thresh = skinPatch * ');
-    expect(MARCH_BODY).toMatch(/let local = smoothstep\(thresh - [\d.]+, thresh \+ [\d.]+, meltU\)/);
+    // The ramp a point crosses on is its own prim's melt (read off the rest row's radius) plus a capped creep on the
+    // body's progress, not the body's progress alone.
+    expect(MARCH_BODY).toMatch(/let local = smoothstep\(thresh, thresh \+ [\d.]+, redU \* [\d.]+\)/);
+    expect(MARCH_BODY).toContain('var primU = meltU;');
     // `patch` is a RESERVED WORD in WGSL: naming it that compiles in TS and
     // fails the shader at runtime, rendering the body invisible. Guard it.
     expect(MARCH_BODY).not.toMatch(/\blet patch\b/);
     // Wetness ramps on flesh ONLY — bone stays matte. `bonePaleU` is
     // max(bareBoneU, meltU), so a rupturing body's exposed bones go matte too.
-    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU)');
+    // Only the point's own red (meltRed) changes the flesh's wetness, and it goes DOWN: highlights are white light on
+    // the red, and under the game's torch they turned the meat tan and white.
+    expect(MARCH_BODY).toMatch(/if \(isBone\) \{ wet = mix\(wet, 0\.45, bonePaleU\); \} else \{ wet = mix\(wet, wet \* [\d.]+, meltRed\); \}/);
   });
   it('identifies an exposed bone row — the wound gate alone cannot see one', () => {
     // The melt's skeleton emerges with NO wound (bareBones bypass) and so does

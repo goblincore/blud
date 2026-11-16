@@ -45,6 +45,7 @@ import { stepSectorLight } from './game-sector-light';
 import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
+import { stepMelts } from './game-melter';
 import { igniteExplosionLight } from './game-dynamite-throw';
 import { scaleBurstVisual } from './game-wound-vfx';
 import { stepPendingGibImpulses } from './game-gib-spawn';
@@ -583,6 +584,7 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
   ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - fireDt);
   ctx.weapon.flare?.tickCooldown(fireDt);
+  ctx.weapon.melter?.tickCooldown(fireDt);
   ctx.weapon.rod?.tick(fireDt);
   ctx.weapon.axe?.tick(fireDt);
   ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)
@@ -1348,6 +1350,9 @@ export function tick(ctx: GameContext, dt: number) {
     // in) and before the chunk step (so their impulses are released in the
     // same frame they are born).
     spawnScheduledGibs(ctx, dt);
+    // Melting bodies (game-melter.ts): their own clock, since a melting body no longer steps; bone groups let go
+    // here, before the chunk step, like the gibs above.
+    stepMelts(ctx, dt);
     // The staged release's due impulses, BEFORE the chunk step, so a piece
     // that goes this frame integrates at its launch velocity for the whole
     // frame rather than a frame late.

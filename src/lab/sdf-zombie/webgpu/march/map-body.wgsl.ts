@@ -15,6 +15,9 @@ import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BO
 import { REGION_MARGIN } from '../../head-split';
 import { SPLIT_ABL, ablWgsl } from '../split-ablate';
 import { CUT_NEAR } from '../../cut-wound';
+import { MELT_WAVE_AMP, MELT_WAVE_FREQ, MELT_WAVE_FULL_T, MELT_WAVE_STEP } from './melt';
+/** A number as a WGSL float literal. */
+const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 
 // The tail also carries mapLean (lean-walk.wgsl.ts), the walk's clean-body fast path, the way FOLD_GROUP's tail
 // carries limbLoad under `?limbs`. `?leanwalk=0` (lean-walk-flag.ts) leaves it out.
@@ -143,6 +146,15 @@ ${TR ? `    var rFirst = 0;
     // wounds, the bones and the rest anchor all live on the closed head.
     var pMoved = pIn;
     if (piece.y != 0.0) { pMoved = splitMoveBack(pIn, gInstSplitH.xyz, gInstSplitA.xyz, piece.y); }
+    // THE MELT WAVE (march/melt.ts MELT_WAVE_*): a melting instance is read at a point pushed about by three sines of
+    // its position on the ground plane (never its height: falling flesh must not swim through it). 0 on every other body: the branch is not taken and p is pMoved.
+    var meltStep = 1.0;
+    if (gInstMelt.x > 0.0) {
+      let wq = pMoved * ${f(MELT_WAVE_FREQ)};
+      pMoved = pMoved + ${f(MELT_WAVE_AMP)} * smoothstep(0.0, ${f(MELT_WAVE_FULL_T)}, gInstMelt.x)
+        * vec3<f32>(sin(wq.z * 1.3 + wq.x * 0.5), 0.6 * sin(wq.x * 0.9 + wq.z * 1.1 + 2.1), sin(wq.x * 1.3 - wq.z * 0.5 + 1.7));
+      meltStep = ${f(MELT_WAVE_STEP)};
+    }
     let p = pMoved;
     var d = 1e9;
     // Argmin tracking now lives in private globals shared with foldGroup
@@ -483,6 +495,8 @@ ${LIMBS ? `      let savedBest = gFoldBest;
     // bones and the normal's noise alike.
     var dPiece = dmgFinal;
     if (splitOpen) { dPiece = max(dmgFinal, piece.x); }
+    // The wave stretches the field: step a melting body short (MELT_WAVE_STEP).
+    if (meltStep < 1.0) { dPiece = dPiece * meltStep; }
     // UNION MIN. .w keeps the PRE-WOUND carved field value, exactly as the
     // one-slot entry returned it; POST's tissue-depth read is unchanged.
     if (dPiece < dUnion) {

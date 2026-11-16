@@ -46,9 +46,35 @@ export { HEAD_EXTERIOR_GORE_KEEP };
  * highest patches never cross at all — that is what leaves pink skin on the
  * finished puddle instead of converging to one red at t = 1.
  */
-export const MELT_SKIN_PATCH_FREQ = 5.0;
-export const MELT_SKIN_PATCH_SOFT = 0.16;
-export const MELT_SKIN_KEEP = 1.30;
+// 2026-11-14 (owner, in the game: "shimmery pixely patches"): FREQ 5 to 3.2 and SOFT 0.16 to 0.3, bigger and
+// softer-edged, and the field is stretched along the body (STREAK) so the red comes in as runs, not blotches.
+export const MELT_SKIN_PATCH_FREQ = 3.2;
+export const MELT_SKIN_PATCH_SOFT = 0.3;
+/** The patch field's frequency along the body's rest height, as a share of FREQ: below 1 stretches it into streaks. */
+export const MELT_SKIN_STREAK = 0.22;
+/** A prim's own melt progress (0..1) at which its red ramp is complete. The red starts as the part starts to sag
+ *  and is full when it is this far gone, so it spreads up the body with the melt front. */
+export const MELT_RED_FULL_U = 0.45;
+/** The most the body-wide creep contributes to a point's red ramp (0..1): the share of streaks that can open
+ *  before the part itself starts to melt. */
+export const MELT_RED_CREEP = 0.35;
+// 1.08, not 1.30 (owner, 2026-11-14, in the game: "too white and not really fleshy"). At 1.30 about a fifth of
+// the surface never crossed, and on the game's pale zombie under its brighter lights that fifth read as most of it.
+export const MELT_SKIN_KEEP = 1.08;
+/** How far a crossed patch goes to the deep red (the mix weight). 0.8 left a fifth of the skin's own pale colour
+ *  in the reddest flesh; same owner note. */
+export const MELT_SKIN_RED = 0.92;
+/**
+ * THE RED A CROSSED PATCH GOES TO: deepColor scaled by (DEPTH, PURITY, PURITY).
+ *
+ * Measured in the game (debug stop 34, 2026-11-14): the old deepColor * 0.8 albedo was right, about 80% of the body
+ * red by a third of the melt, and the lit frame was tan and white. The arena's flashlight and light list light a body
+ * around ten times over; the red channel clips and green and blue catch it up, so a mid red goes orange, tan, white
+ * (the same thing turns the zombie's salmon skin white there). A red with almost no green or blue in it has nothing
+ * to catch up with: it stays red however hard it is lit, and in dim light it is dark raw meat.
+ */
+export const MELT_RED_DEPTH = 0.75;
+export const MELT_RED_PURITY = 0.12;
 /**
  * Spread of the patch field before it becomes a threshold.
  *
@@ -62,3 +88,25 @@ export const MELT_SKIN_KEEP = 1.30;
  * had no pink left at all).
  */
 export const MELT_SKIN_CONTRAST = 2.8;
+
+/**
+ * THE MELT WAVE (owner, 2026-11-16: "some kind of sinusoidal wave distortion into the flesh so you don't get straight
+ * tubes"). A limb's flesh is one capsule and a capsule is straight however it is moved, so the straightness is taken
+ * out in the FIELD: mapBody reads a melting instance at a point pushed sideways (and a little up and down) by three
+ * sines of its position, and every capsule, drip and pool edge of that body comes out wavy.
+ *  - AMP: metres of push at full strength.
+ *  - FREQ: radians per metre (20 is a 31 cm wave: about one bend along a forearm).
+ *  - FULL_T: the body's melt progress by which the wave is at full strength (it eases in from 0, so the first frame
+ *    of a melt is the body as it was).
+ *  - STEP: the instance's distance is scaled by this while it melts. The push stretches the field by up to
+ *    1 + AMP * FREQ * ~1.5, and a march stepping the unscaled value would tunnel through thin flesh.
+ * THE PHASE READS x AND z ONLY, never y: flesh falling straight down keeps its place in the wave. On a phase that
+ * read y the flesh fell THROUGH the wave and the surface swam (owner, 2026-11-16).
+ * mapLean has no wave, so the lean walk stands down for a pixel with a melting slot (lean-walk.wgsl.ts).
+ */
+// 0.008, not 0.022 (owner, 2026-11-16: "a bit maybe too intense", and wanted less of it on the body): the limbs now
+// get their straightness taken out per prim (melt.ts curlArm / curlLeg), and this is only a light lumpiness.
+export const MELT_WAVE_AMP = 0.008;
+export const MELT_WAVE_FREQ = 20;
+export const MELT_WAVE_FULL_T = 0.3;
+export const MELT_WAVE_STEP = 0.8;

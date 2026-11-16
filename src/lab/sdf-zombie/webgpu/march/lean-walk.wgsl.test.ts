@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_CROWD_INSTANCES, REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_HEAD_WCOUNT, REC_SPLIT_N, REC_VEC4S,
+  MAX_CROWD_INSTANCES, REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_HEAD_WCOUNT, REC_MELT, REC_SPLIT_N, REC_VEC4S,
   REC_VOL_POSE0, REC_WIND_ALIVE, createCrowdRecords, type RecordSource,
 } from '../crowd-records';
 import type { SplitWarp } from '../../head-split';
@@ -72,9 +72,12 @@ describe('LEAN_TEST_BLOCK: the same conditions, read from the record layout', ()
     expect(LEAN_TEST_BLOCK).toContain(`(*inst)[lrb + ${REC_COUNTS2}]`);
     expect(LEAN_TEST_BLOCK).toContain('(lc2.y > 0.5 && lc2.x > 0.0)');
   });
-  it('reads no record lane but those five', () => {
+  it('stands down for a melting slot: mapBody reads it through the melt wave, mapLean has none', () => {
+    expect(LEAN_TEST_BLOCK).toContain(`if ((*inst)[lrb + ${REC_MELT}].x > 0.0) { leanOk = false; break; }`);
+  });
+  it('reads no record lane but those six', () => {
     const reads = [...LEAN_TEST_BLOCK.matchAll(/\(\*inst\)\[lrb \+ (\d+)\]/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
-    expect(reads).toEqual([REC_COUNTS2, REC_WIND_ALIVE, REC_HEAD_WCOUNT, REC_VOL_POSE0, REC_SPLIT_N].sort((a, b) => a - b));
+    expect(reads).toEqual([REC_COUNTS2, REC_WIND_ALIVE, REC_HEAD_WCOUNT, REC_VOL_POSE0, REC_SPLIT_N, REC_MELT].sort((a, b) => a - b));
   });
   it('is tiled pixels only, honours the runtime switch and refuses a non-empty per-ray wound list', () => {
     expect(LEAN_TEST_BLOCK).toContain('var leanOk = gTileActive > 0.5 && debugCfg.x > -0.5 && !(gWoundListOn > 0.5 && gWoundN > 0);');

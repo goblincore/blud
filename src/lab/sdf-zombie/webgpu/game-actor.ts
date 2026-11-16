@@ -27,6 +27,14 @@ import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
+import {
+  applyMelt, applyMeltOrgans, meltFrameOf, meltInitBody, progressAt, remeltClusters, stepMelt as advanceMelt, MELT_TUNING_BODY,
+  MELT_TUNING, type MeltBodyTuning, type MeltFrame, type MeltState,
+} from '../melt';
+import {
+  groupCentroid, meltGroupOf, groupReleaseProgress, limbOfGroup, meltBoneSpawnVel, mulberry32,
+  partitionBones, releaseOrder, releaseThreshold, type BoneGroup,
+} from '../melt-bones';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
 import { joystickSwell } from '../joystick';
 import { surfaceTable, type ArcDrive } from '../brain-arcs';
@@ -410,6 +418,28 @@ export interface ZombieActor {
   endTear(): void;
   /** Retune the window for this actor (the page's `?gibtear*` knobs). */
   setTearTuning(t: Partial<TearTuning>): void;
+  /**
+   * MELT (melt.ts): the body liquefies where it stands. The flesh sags into a pool, the skeleton
+   * falls out of it group by group (opts.onMeltBone) and what is left is a puddle. This IS the
+   * death: from here on the body does not step, think or take hits, `motionFrame().collapsed` is
+   * true (every "is it a corpse" reader), and `posed()` is the melted body (a shot meets the goo,
+   * not a statue of where it stood). The caller owns the clock (stepMelt), like the rupture's.
+   * False, and nothing done, when it is already melting, tearing or paused for a bake.
+   * `hitWorld`: where it was hit. The melt then also opens THERE and spreads out through the body from it, as well
+   * as rising from the feet.
+   */
+  beginMelt(hitWorld?: Vec3 | null): boolean;
+  /** Advance the melt by `dt` and re-draw the body. Once the pool has set (progress 1) this is
+   *  free: nothing is packed or uploaded again. */
+  stepMelt(dt: number): void;
+  /** True from beginMelt on, the finished puddle included. */
+  readonly melting: () => boolean;
+  /** 0..1, 0 when not melting. */
+  readonly meltProgress: () => number;
+  /** The pool has set AND stopped creeping: stepMelt has nothing left to do. */
+  readonly meltDone: () => boolean;
+  /** The bone groups (melt-bones.ts BoneGroup) this melt has let go of so far; empty when not melting. */
+  readonly meltReleased: () => ReadonlySet<string>;
   /** Current ground position + facing. */
   readonly pose: () => { pos: Vec3; yaw: number };
   /** Ground-plane shove from crowd separation (crowd.ts), bounds- and
@@ -661,6 +691,56 @@ export interface ActorBlastEffect {
   forceKnock?: boolean;
 }
 
+/** Melt progress (0..1) up to which a melting body's motion still steps (step()). 0.45: the front has taken the
+ *  shins and is into the thighs; from there the body is sinking, not standing. (0.3 at the 2 s melt: 0.6 s.) */
+export const MELT_MOTION_UNTIL = 0.3;
+const NO_GROUPS: ReadonlySet<string> = new Set();
+
+/**
+ * ONE MELT'S OWN NUMBERS (owner, 2026-11-15: "some random variance to make it more exciting repeated"). Rolled once
+ * when it starts, from a seeded rng: how fast it goes, how unevenly it sags and how far it runs, which way the body
+ * pours off, when (and now and then whether late) it slumps, and which of the early flesh gobs drop.
+ */
+export function rollMelt(rng: () => number): { rate: number; tuning: MeltBodyTuning; slumpAt: number; gobs: number[] } {
+  const span = (lo: number, hi: number) => lo + (hi - lo) * rng();
+  const dir = rng() * Math.PI * 2, lean = span(0, 0.22);
+  return {
+    rate: span(0.8, 1.25),
+    tuning: {
+      ...MELT_TUNING_BODY,
+      seed: Math.floor(rng() * 1000),
+      stagger: MELT_TUNING_BODY.stagger * span(0.6, 1.4),
+      stretch: MELT_TUNING_BODY.stretch * span(0.6, 1.5),
+      spread: MELT_TUNING_BODY.spread * span(0.8, 1.35),
+      lean: [Math.cos(dir) * lean, Math.sin(dir) * lean],
+    },
+    // Usually part-way; one melt in five it holds on, standing as a skeleton in a column of goo, and drops late.
+    slumpAt: rng() < 0.2 ? span(0.6, 0.7) : span(0.34, 0.5),
+    gobs: MELT_GOB_AT.filter(() => rng() < 0.65),
+  };
+}
+/** Counts melts on this page: with the actor's seed it seeds each melt's variation, so the same character melted
+ *  twice (a respawn keeps its seed) does not melt the same way twice. */
+let meltSerial = 0;
+/** Whether a melting body is let go to slump as a ragdoll at MELT_SLUMP_AT (setMeltSlump; __sdfGame.setMeltSlump).
+ *  Off, it holds its last pose while the bones drop out of it. A page-wide switch for A/B, not per body. */
+let meltSlump = true;
+export function setMeltSlump(on: boolean): void { meltSlump = on; }
+export function meltSlumpOn(): boolean { return meltSlump; }
+/** The set pool's afterlife: it creeps `spread` (a share of its spread) further over `sec` seconds, easing out. */
+export const MELT_AFTER = { sec: 2.5, spread: 0.3 } as const;
+/** Drips: one every `every` of progress, between `from` and `to`. */
+export const MELT_DRIP = { from: 0.1, to: 0.85, every: 0.07 } as const;
+/** false (the game): a melting body packs no SDF bone rows, and game-main shows its MESH skeleton behind the flesh
+ *  as it runs off (the skull, its eyes, the ribs), each group leaving the mesh as it is let go. The reveal is
+ *  gradual by construction, which the SDF path's bare fold never was. true keeps the old SDF path. */
+export const MELT_SDF_BONES = false;
+/** Melt progress from which the skeleton folds bare (shows through the thinning flesh). 0.3: the legs and
+ *  forearms are running by then. */
+export const MELT_BARE_AT = 0.3;
+/** Melt progress at which each early flesh gob drops (opts.onMeltGob). */
+export const MELT_GOB_AT: readonly number[] = [0.04, 0.09, 0.14, 0.2, 0.27, 0.35];
+
 export function createZombieActor(opts: {
   navigation?: EncounterNavigation;
   /** What the body stands on, on a SECTOR level (ctx.world.level.ground): the motion step eases
@@ -725,6 +805,13 @@ export function createZombieActor(opts: {
    *  and calls this with the head's world centre, the shot direction and the
    *  neck's stump wound, for the caller's burst and bleed. */
   onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
+  /** MELT: a rigid bone group (melt-bones.ts: skull, cage, pelvis, the eight long bones) has let go of the
+   *  melting body. World-space bone prims, their centroid, and the gentle outward clatter to launch them with. */
+  onMeltBone?: (piece: { group: string; limb: LimbId; origin: Vec3; bones: Primitive[] }, vel: Vec3) => void;
+  /** MELT: a gob of flesh drops off the melting body at `at` (world), about `radius` metres across. */
+  onMeltGob?: (at: Vec3, radius: number) => void;
+  /** MELT: goo runs off the melting body at `at` (world): a drip for the blood sim. */
+  onMeltDrip?: (at: Vec3) => void;
   /** A DECAPITATION ASKS FIRST. The wounds have cut the head off (the sever checks): `weapon` is what the hit that
    *  did it was ('other': a blast, a blade, anything that is not a gun round), `dir` its direction (world). Answer
    *  the seconds of swell to POP the head instead (beginHeadPop; 0 bursts at once), or null for the ordinary flying
@@ -847,6 +934,28 @@ export function createZombieActor(opts: {
   const ruptureFrameNow = (): RuptureFrame | null =>
     tear && tearPlan ? rupturePosed(posed, tearPlan, tear, tearTuning) : null;
   const drawnPose = (): BuildResult => ruptureFrameNow()?.body ?? posed;
+  /**
+   * THE MELT (beginMelt). Non-null from the moment it starts and for the rest of the body's life:
+   * the finished puddle is this state at progress 1. `frame` is where the posed body melts (its own
+   * axis and floor), `restFrame` the same for the rest body the noise anchor reads. `drawn` is the
+   * melted posed body as last uploaded; `set` is true once the progress-1 pool has been uploaded,
+   * after which stepMelt does no work at all.
+   */
+  let melt: {
+    state: MeltState; frame: MeltFrame; restFrame: MeltFrame;
+    parts: Map<BoneGroup, Primitive[]>; order: BoneGroup[]; released: Set<BoneGroup>;
+    rng: () => number; drawn: BuildResult; set: boolean;
+    /** The hit, as a point of the REST body, or null: the melt also spreads from here (hitHeight). */
+    hitRest: Vec3 | null;
+    /** hitHeight's weight of the hit (0 feet .. 1 head) and the farthest flesh from it (body heights). */
+    hitW: number; hitMax: number;
+    /** THIS melt's own numbers (rollMelt): the body tuning it melts with, when it slumps, which gobs drop. */
+    tuning: MeltBodyTuning; slumpAt: number; gobs: readonly number[];
+    /** The skeleton has been let go to slump (slumpAt). */
+    slumped: boolean;
+    /** Seconds the set pool has gone on creeping (MELT_AFTER). */
+    after: number;
+  } | null = null;
   /** setViewSync: whether step() uploads the view, and whether a skipped upload is owed. */
   let viewSync = true, viewStale = false;
   /** A body mid-rupture is DOOMED: it is already dead for gameplay (the blast
@@ -1349,9 +1458,110 @@ export function createZombieActor(opts: {
     }
   }
 
+  /** The melted posed body and the melted rest body (the noise anchor's), for this progress. Released
+   *  bone groups leave the bone rows (they are chunks now); organs melt with the flesh at half rate. */
+  function meltBodies(m: NonNullable<typeof melt>): { drawn: BuildResult; rest: BuildResult } {
+    const rows = (bps: readonly Primitive[], frame: MeltFrame): Primitive[] => bps.flatMap(p => {
+      if (p.op === 'organ') return applyMeltOrgans([p], m.state, undefined, m.tuning, frame);
+      if (p.op === 'bone') {
+        const g = meltGroupOf(p.bone);
+        if (m.released.has(g)) return [];
+        // A BONE STAYS THIN UNTIL THE FLESH ROUND IT IS GOING. The skeleton folds bare for the whole melt, and at
+        // full size the bones that lie close under the skin (the arm bones, the skull under the face) took the
+        // surface at once: the body striped and lost its face on the first frame. Thin, they sit inside the flesh
+        // and grow out through it as the melt front reaches their group.
+        const k = boneShow(m, g);
+        return k >= 1 ? [p] : [{ ...p, radius: p.radius * k, ...(p.radiusB !== undefined ? { radiusB: p.radiusB * k } : {}) }];
+      }
+      return [p];
+    });
+    // THE POOL CREEPS ON after it has set (MELT_AFTER): a little more spread, easing out.
+    const creep = m.after > 0 ? 1 - Math.pow(1 - Math.min(1, m.after / MELT_AFTER.sec), 2) : 0;
+    const tuning = creep > 0 ? { ...m.tuning, spread: m.tuning.spread * (1 + MELT_AFTER.spread * creep) } : m.tuning;
+    const pp = applyMelt(posed.prims, m.state, tuning, m.frame);
+    return {
+      // No split: the head split describes the clean pose, and that head is running down the body.
+      drawn: { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp), bonePrims: rows(posed.bonePrims, m.frame), split: null },
+      // THE REST ROWS STAY AS THEY WERE (2026-11-14). They are the surface pattern's anchor (restPoint), and melted
+      // along with the body they carried the anchor down through the noise: the pattern swam. Unmelted, a point of
+      // flesh keeps its place in the pattern all the way into the pool, and the shader reads each prim's melt off
+      // the radius its rest row still has (melt.wgsl.ts). Only the released bone rows leave, to keep the two lists
+      // row for row.
+      // Each rest row carries its prim's POSED, unmelted radius, not the authored one: the shader divides the two
+      // radii to read the melt, and the pose alone changes a radius (a stretched arm, the head's deform), which it
+      // took for melt and reddened on the first frame. (The rest radius is otherwise only tested for > 0.)
+      rest: {
+        ...current,
+        prims: current.prims.map((p, i) => (posed.prims[i] && posed.prims[i]!.radius !== p.radius ? { ...p, radius: posed.prims[i]!.radius } : p)),
+        bonePrims: current.bonePrims.filter(p => !(p.op === 'bone' && m.released.has(meltGroupOf(p.bone)))),
+      },
+    };
+  }
+
+  /** The normalised height (0..1) the melt front has to reach for a REST-space point. Never above 1, so the whole
+   *  body still finishes by progress 1. */
+  function hitHeight(m: NonNullable<typeof melt>, rest: Vec3): number {
+    const h = (rest[1] - m.state.floorY) / m.state.span;
+    if (!m.hitRest) return h;
+    const d = Math.hypot(rest[0] - m.hitRest[0], rest[1] - m.hitRest[1], rest[2] - m.hitRest[2]) / m.state.span;
+    // THE MELT STARTS WHERE IT WAS SHOT (owner, 2026-11-15: a head shot still melted feet first, and "doesn't feel
+    // as good"). The front's height for a point is a blend of its own height and its distance from the hit
+    // (normalised so the farthest flesh is 1), weighted by how high the hit is: a shot at the feet is the plain
+    // feet-up melt, a shot at the head runs from the head DOWN, a chest shot opens the chest and goes both ways.
+    // (0.15 + 0.85 x: the shot flesh itself starts a beat in. From 0 it was a third gone on the first frames, and a
+    // head shot showed a bare skull and ribs by 12%.)
+    // The distance is eased (power 0.6) because most of the body's flesh is NEAR a head or chest hit: linear, the
+    // whole trunk and both arms went in the first third and the rest of the melt was a bare skeleton.
+    return h * (1 - m.hitW) + (0.15 + 0.85 * Math.pow(d / m.hitMax, 0.6)) * m.hitW;
+  }
+
+  /** 0.3..1: how much of its radius a bone of group `g` shows (meltBodies). */
+  function boneShow(m: NonNullable<typeof melt>, g: BoneGroup): number {
+    const ps = m.parts.get(g);
+    if (!ps) return 1;
+    const u = progressAt(m.state, hitHeight(m, groupCentroid(ps)));
+    const x = Math.min(1, u / 0.3);
+    return 0.3 + 0.7 * x * x * (3 - 2 * x);
+  }
+
+  /** Let go of every bone group the melt front has passed (melt-bones.ts): out of the body's rows, into opts.onMeltBone. */
+  function releaseMeltBones(m: NonNullable<typeof melt>) {
+    for (const g of m.order) {
+      if (m.released.has(g)) continue;
+      if (progressAt(m.state, hitHeight(m, groupCentroid(m.parts.get(g)!))) <= releaseThreshold(g)) continue;
+      // Shot high, the flesh goes from the top down: the skull, ribs and pelvis are bared first but still stand on
+      // the legs. They hold until the body slumps, so a head shot shows the skull and its eyes before it falls.
+      if (m.hitW > 0.5 && (g === 'skull' || g === 'cage' || g === 'pelvis') && m.state.t < m.slumpAt + 0.12) continue;
+      m.released.add(g);
+      const bones = posed.bonePrims.filter(p => p.op === 'bone' && !p.dead && meltGroupOf(p.bone) === g);
+      if (bones.length === 0) continue;
+      const origin = groupCentroid(bones);
+      opts.onMeltBone?.({ group: g, limb: limbOfGroup(g), origin, bones }, meltBoneSpawnVel(origin, m.rng, m.frame));
+    }
+  }
+
+  /** The melt's view upload: the melted body, the wet-red ramp. Settles viewStale like uploadPose. */
+  function uploadMelt() {
+    if (!melt) return;
+    viewStale = false;
+    // While it still moves, it melts about where it NOW stands.
+    if (melt.state.t < MELT_MOTION_UNTIL) {
+      const at = meltFrameOf(posed.prims, state.floorY);
+      melt.frame = { ...at, floorY: motionFloor ? motionFloor(at.x, at.z) : state.floorY };
+    }
+    const b = meltBodies(melt);
+    melt.drawn = b.drawn;
+    view.update(b.drawn, b.rest);
+    view.setMelt(melt.state.t);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    melt.set = melt.state.t >= 1 && melt.after >= MELT_AFTER.sec;
+  }
+
   /** THE view upload of a pose change: the body pack, the head rotation, the wound rows. Every write of
    *  the view settles what setViewSync owes (viewStale). */
   function uploadPose() {
+    // A melting body is drawn melted by every path that would re-draw it.
+    if (melt) { uploadMelt(); return; }
     viewStale = false;
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
@@ -1368,6 +1578,7 @@ export function createZombieActor(opts: {
   }
 
   function beginHeadPop(dir: Vec3, swellS: number): boolean {
+    if (melt) return false;
     if (pop || !opts.onHeadPop || !current.clusters.find(c => c.limb === 'head')?.alive) return false;
     const l = Math.hypot(dir[0], dir[1], dir[2]);
     const unit: Vec3 = l > 1e-9 ? [dir[0] / l, dir[1] / l, dir[2] / l] : [0, 0, 0];
@@ -1593,7 +1804,7 @@ export function createZombieActor(opts: {
   function bodyKnock(dir: Vec3, speed: number): boolean {
     const l = Math.hypot(dir[0], dir[2]);
     if (speed < BODY_KNOCK.minSpeed || l < 1e-6 || bodyKnockCool > 0) return false;
-    if (doomed || softKilled || dyingT > 0 || state.collapse.phase !== 'standing' || lastFrame?.collapsed) return false;
+    if (melt || doomed || softKilled || dyingT > 0 || state.collapse.phase !== 'standing' || lastFrame?.collapsed) return false;
     bodyKnockCool = BODY_KNOCK.cooldown;
     const k = Math.min(1, (speed - BODY_KNOCK.minSpeed) / (BODY_KNOCK.fullSpeed - BODY_KNOCK.minSpeed));
     const gain = BODY_KNOCK.gain[0] + (BODY_KNOCK.gain[1] - BODY_KNOCK.gain[0]) * k;
@@ -1683,6 +1894,14 @@ export function createZombieActor(opts: {
   let lodRevision = 0, sinceDamage = Infinity;
   function step(dt: number) {
     if (bakePaused) return;
+    // A MELTING BODY KEEPS MOVING UNTIL ITS LEGS GO (owner, 2026-11-14: melting while the animation plays out,
+    // not a statue). It is doomed, so it keeps no agenda: it finishes the motion it was in and comes to a stand
+    // while the flesh runs off it. Past MELT_MOTION_UNTIL it holds its last pose: there is nothing left to stand on,
+    // and a rig still solving under a puddle would drag the pool around. Its clock is stepMelt's (the caller's).
+    // ...and then the skeleton SLUMPS (MELT_SLUMP_AT): the body is let go as the ragdoll it would have been, so what
+    // is left of it sags and folds as one thing for a beat before its bones drop out group by group.
+    if (melt && melt.state.t >= 1) return;
+    if (melt && !melt.slumped && melt.state.t >= melt.slumpAt) { melt.slumped = true; if (meltSlump) forceCollapseNext = true; }
     if (damageRevision !== lodRevision) { lodRevision = damageRevision; sinceDamage = 0; } else sinceDamage += Math.max(0, dt);
     // A MELEE prop falls with its sword arm (the bride): motion.ts stops the
     // carry (canHold), so drop the sword rather than leave it hanging in air.
@@ -1783,11 +2002,17 @@ export function createZombieActor(opts: {
       // The mind still ran (its own debug/timing stays coherent); its verdict is
       // overridden here, which keeps this to ONE place rather than teaching the
       // brain a new "rupturing" state.
-      if (doomed) {
+      if (doomed && !melt) {
         think = {
           ...think, target: null, halt: true,
           attack: null, fire: false, weaponUp: false, contact: false, advance: null,
         };
+      } else if (melt) {
+        // A MELTING BODY WALKS INTO ITS MELT (owner, 2026-11-14: halted, it read as paused for a second before
+        // anything happened). It keeps going where it was going, slower and slower (the cruise scale below), and
+        // only loses its verbs: no swing, no shot, no contact.
+        think = { ...think, attack: null, fire: false, weaponUp: false, contact: false };
+        if (melt.state.t >= MELT_MOTION_UNTIL) think = { ...think, target: null, halt: true, advance: null };
       }
       if (encounterOrder) {
         if (encounterOrder.moveTarget) think={...think,target:encounterOrder.moveTarget,halt:think.committed && think.halt,
@@ -1856,6 +2081,8 @@ export function createZombieActor(opts: {
       // The burn override's speed multiplier rides the same signals object
       // stepMotion consumes; 1 (absent-equivalent) when not burning.
       signals.cruiseScale = burnCruiseScale
+        // Melting: from full speed down to a quarter by the time its legs go.
+        * (melt ? 1 - 0.75 * Math.min(1, melt.state.t / MELT_MOTION_UNTIL) : 1)
         // The warbull's charge runs at its own speed (MindOutput.runSpeed).
         * (think.runSpeed !== undefined && opts.profile ? think.runSpeed / opts.profile.cruise : 1);
       brainAlerted = false;   // one-shot: the first sub-step consumes it
@@ -2392,6 +2619,7 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
+    if (melt) return null;   // goo takes no wound
     // Stamped at the live yaw `posed` was built with — see refreshWounds — and
     // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
     // and the blood below keep the world hit.
@@ -2406,6 +2634,7 @@ export function createZombieActor(opts: {
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
+    if (melt) return null;
     const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
     const wound = scaleGunCrater(woundFromSlug(posed.prims, u.hit, u.field, bodyYaw), opts.profile?.gore);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
@@ -2432,6 +2661,7 @@ export function createZombieActor(opts: {
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
+    if (melt) return;
     damageRevision++; bakePaused = false;
     // The caller must have resolved these with this actor's pose().yaw
     // (ExplosionBody.bodyYaw) so they sit in the body frame like every other
@@ -2481,6 +2711,7 @@ export function createZombieActor(opts: {
    * death and gibs outright), which also means no sever claims are wanted.
    */
   function blast(effect: ActorBlastEffect): void {
+    if (melt) return;
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
     const reaction = effect.reaction ?? 'blast';
@@ -2820,9 +3051,89 @@ export function createZombieActor(opts: {
     view,
     beginHits,
     endHits,
-    posed: () => posed,
+    posed: () => melt?.drawn ?? posed,
     rigJoints: () => ({ names: joints.names, points: bound.rig.points.map(p => [...p.pos] as Vec3) }),
-    drawnBody: () => drawnPose(),
+    drawnBody: () => melt?.drawn ?? drawnPose(),
+    beginMelt: (hitWorld?: Vec3 | null) => {
+      if (melt || tear || bakePaused) return false;
+      const roll = rollMelt(mulberry32(((opts.seed ^ 0x3e17ed) + ++meltSerial * 0x9e3779b1) >>> 0));
+      // The hit, carried to the rest body: the middle of the rest prim whose posed twin is nearest to it.
+      let hitRest: Vec3 | null = null;
+      if (hitWorld) {
+        let best = Infinity;
+        posed.prims.forEach((p, i) => {
+          const rp = current.prims[i];
+          if (p.dead || p.op === 'sub' || !rp) return;
+          const d = Math.hypot((p.a[0] + p.b[0]) / 2 - hitWorld[0], (p.a[1] + p.b[1]) / 2 - hitWorld[1], (p.a[2] + p.b[2]) / 2 - hitWorld[2]);
+          if (d < best) { best = d; hitRest = [(rp.a[0] + rp.b[0]) / 2, (rp.a[1] + rp.b[1]) / 2, (rp.a[2] + rp.b[2]) / 2]; }
+        });
+      }
+      damageRevision++;
+      // Where it melts: about the flesh's own axis (a corpse lies away from its root), onto the floor under it.
+      const at = meltFrameOf(posed.prims, state.floorY);
+      const frame: MeltFrame = { ...at, floorY: motionFloor ? motionFloor(at.x, at.z) : state.floorY };
+      const restFloor = opts.start[1] || 0;
+      const parts = partitionBones(current.bonePrims.filter(p => !p.dead));
+      melt = {
+        state: meltInitBody(current.prims, restFloor, { ...MELT_TUNING, rate: MELT_TUNING.rate * roll.rate }), frame,
+        restFrame: meltFrameOf(current.prims, restFloor),
+        parts, order: releaseOrder(parts), released: new Set(),
+        rng: mulberry32((opts.seed ^ 0x3e17ed) >>> 0), drawn: posed, set: false,
+        hitRest, slumped: false, after: 0, hitW: 0, hitMax: 1,
+        tuning: roll.tuning, slumpAt: roll.slumpAt, gobs: roll.gobs,
+      };
+      // The front's heights, with the hit's spread folded in (hitHeight): flesh near the hit goes first.
+      if (hitRest) {
+        const m = melt;
+        const hr: Vec3 = hitRest;
+        m.hitW = Math.min(1, Math.max(0, (hr[1] - m.state.floorY) / m.state.span));
+        m.hitMax = Math.max(1e-3, ...current.prims.flatMap(p => [p.a, p.b].map(e => Math.hypot(e[0] - hr[0], e[1] - hr[1], e[2] - hr[2]) / m.state.span)));
+        melt.state = { ...melt.state, heights: current.prims.flatMap(p => [hitHeight(m, p.a), hitHeight(m, p.b)]) };
+      }
+      doomed = true;
+      // The craters close: a carve sphere left where the standing body was would bite the pool.
+      woundRing.set([]);
+      refreshWounds();
+      // The skeleton shows through the thinning flesh and then falls out of it: its rows are packed into
+      // this body's field whatever the bone mode is (the segment meshes cannot follow a melt), and fold bare.
+      if (MELT_SDF_BONES) view.setPackBones(true);
+      // The skeleton folds bare from MELT_BARE_AT on (stepMelt), not from the first frame: the bare fold changes how
+      // the whole body shades at once (dark bands along the arms, the face gone to the skull under it), which was
+      // the "pixely patches before anything melts" (owner, 2026-11-14; measured: with it off the first frames are
+      // the untouched zombie). Thinning the bones (boneShow) did not remove it.
+      // Kit and prop are rigid and do not melt: the caller drops them as loose pieces (game-melter.ts).
+      uploadMelt();
+      return true;
+    },
+    stepMelt: (dt: number) => {
+      if (!melt || melt.set) return;
+      const before = melt.state.t;
+      // Set, and creeping: only the clock and the upload.
+      if (before >= 1) { melt.after = Math.min(MELT_AFTER.sec, melt.after + Math.max(0, dt)); uploadMelt(); return; }
+      melt.state = advanceMelt(melt.state, Math.max(0, dt));
+      // DRIPS: goo runs off the lowest flesh of the arms and the head while it melts.
+      if (melt.state.t > MELT_DRIP.from && melt.state.t < MELT_DRIP.to
+        && Math.floor(before / MELT_DRIP.every) !== Math.floor(melt.state.t / MELT_DRIP.every)) {
+        const hang = melt.drawn.prims.filter(p => !p.dead && p.op !== 'sub' && (p.limb === 'armL' || p.limb === 'armR' || p.limb === 'head'));
+        const p = hang[Math.floor(melt.rng() * hang.length)];
+        if (p) opts.onMeltDrip?.(p.a[1] < p.b[1] ? [...p.a] as Vec3 : [...p.b] as Vec3);
+      }
+      if (MELT_SDF_BONES && before < MELT_BARE_AT && melt.state.t >= MELT_BARE_AT) view.setBonesBare(true);
+      // CHUNKS COME OFF FIRST (owner, 2026-11-14): a few gobs of flesh drop from the arms and trunk as it starts.
+      for (const at of melt.gobs) {
+        if (before < at && melt.state.t >= at) {
+          const flesh = posed.prims.filter(p => !p.dead && p.op !== 'sub' && (p.limb === 'armL' || p.limb === 'armR' || p.limb === 'torso'));
+          const p = flesh[Math.floor(melt.rng() * flesh.length)];
+          if (p) opts.onMeltGob?.([(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2], Math.min(0.06, p.radius * 0.5));
+        }
+      }
+      releaseMeltBones(melt);
+      uploadMelt();
+    },
+    melting: () => melt !== null,
+    meltProgress: () => melt?.state.t ?? 0,
+    meltDone: () => melt?.set ?? false,
+    meltReleased: () => melt?.released ?? NO_GROUPS,
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0, refPrims: posed.prims };
       tearPlan = plan;
@@ -2876,7 +3187,9 @@ export function createZombieActor(opts: {
       view.setGoreStrength(0);
     },
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
-    motionFrame: () => lastFrame,
+    // A melting body reads as a corpse to everything that asks (doors, the encounter, the ring, crowd boxes).
+    // (once it has stopped moving: while it still walks into the melt it is a body, with no verbs.)
+    motionFrame: () => (melt && melt.state.t >= MELT_MOTION_UNTIL && lastFrame ? { ...lastFrame, collapsed: true } : lastFrame),
     sinceFire: () => state.sinceFire,
     barrelSpin: () => (indexes ? tubes.angle : barrel.angle),
     statusLights: () => {
@@ -2938,6 +3251,7 @@ export function createZombieActor(opts: {
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
     setBodyObstacles: (obstacles: readonly BodyObstacle[]) => { nearBodies = obstacles; },
     bodyObstacles: (): BodyObstacle[] => {
+      if (melt) return [];   // a thrown corpse passes over a puddle
       const pts = bound.rig.points, ix = joints.index;
       if (!lastFrame?.collapsed) {
         let lo = Infinity, hi = -Infinity;
@@ -2970,7 +3284,7 @@ export function createZombieActor(opts: {
     settled: () => !bakePaused && damageRevision === lodRevision && sinceDamage > 2
       && pendingShot === null && pendingWounds.length === 0 && pendingSevered.length === 0 && pendingPelletHits === 0
       && knockV <= 1e-4 && !doomed && !softKilled && dyingT <= 0 && burnPanic === null && !headPop && pop === null
-      && tear === null && !forceCollapseNext && forcedSwing === null && !(lastFrame?.collapsed ?? false),
+      && tear === null && melt === null && !forceCollapseNext && forcedSwing === null && !(lastFrame?.collapsed ?? false),
     setViewSync(on: boolean, catchUp = true) {
       viewSync = on;
       // A body paused for its corpse bake: the baker owns the view (the head-only partition); never
@@ -2989,7 +3303,7 @@ export function createZombieActor(opts: {
     pauseForBake: (paused: boolean) => { bakePaused = paused; viewStale = false; },
     wounds: () => woundRing.all(),
     bakedWounds: () => woundRing.baked?.() ?? [],
-    visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
+    visualWounds: () => melt ? [] : torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
     floatState: () => floater ? { altitude: floater.altitude, mode: floater.mode, dir: floater.dir, down: floaterDown } : null,

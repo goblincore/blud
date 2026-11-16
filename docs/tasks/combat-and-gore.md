@@ -2,6 +2,115 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Melt death in the game — 2026-11-14
+
+Branch `claude/melting-dying-animation-6cffdd`. The lab's zombie melt (X5.melt, 2026-09-03) checked, repaired and brought
+into the game.
+
+- [x] **Still worked only on the origin.** The melt spread from the WORLD axis and pooled at the world's y = 0.09: a body
+  that had wandered (or any body in the game) was thrown sideways. `melt.ts` now takes a `MeltFrame` (axis + floor).
+- [x] **The pool was the render proxy's outline.** The march's smin compounds across ~60 prims crushed onto one plane, so
+  the field ran out past a metre and the visible puddle was a square (the proxy box). `meltBlendK`: the fuse peaks while
+  a prim sags and relaxes to `pooledK` as it pools; `remeltClusters` pads for what bulge is left. Pool retuned thinner,
+  wider, uneven edge (`ragged`, `swell`); the skeleton now lies in it.
+- [x] **In the game:** `ZombieActor.beginMelt / stepMelt / melting / meltProgress` (game-actor.ts), `game-melter.ts`
+  (`meltActor`, `stepMelts`, bone groups as bone-only chunk pieces). A melting body is a corpse to every reader, takes no
+  hits, and a set puddle does no per-frame work. Test: `game-actor-melt.test.ts`.
+- [x] **Slot 8, the melter:** placeholder primitive prop, one verb (melt what it hits). Console: `__sdfGame.meltActor(id?)`,
+  `fireMelter()`, `melts()`. Foot bones now group with the shins (they rode in the cage, which then never fell).
+- [~] **Too white, not fleshy (owner, 2026-11-14, in the game).** Measured with a headless arena capture
+  (`.lab-tmp/melt-probe.sh`, scratch) and debug stop 34 (`?afterhit=1`): the albedo was right (80% red by a third of
+  the melt) and the lit frame was tan and white. Cause: highlights. The melt set an absolute wetness of 1.6 on all
+  flesh, and under the torch the white specular sat on top of the red. Now: wetness rides the point's own red
+  (`meltRed`) and goes DOWN on it (`wet.wgsl.ts`), the list lights' highlight drops on the same factor
+  (`light-list.wgsl.ts`), and the red is purer (`MELT_RED_DEPTH` 0.75, `MELT_RED_PURITY` 0.12) so the per-channel
+  highlight shoulder cannot drain it. `MELT_SKIN_KEEP` 1.08, `MELT_SKIN_RED` 0.92. March goldens re-recorded. Owner
+  to judge; the lab melt was not re-shot after this.
+- [~] **The red follows the melt, in streaks** (owner, 2026-11-14: the patches came all at once, "shimmery pixely",
+  before anything melted, and the pattern swam). The red ramp of a point is now its own prim's melt (read in the shader
+  off the radius the rest row still has) plus a slow capped creep (`MELT_RED_FULL_U` 0.3, `MELT_RED_CREEP` 0.5); the
+  patch field is bigger, softer and stretched along the body (`MELT_SKIN_PATCH_FREQ` 3.2, `SOFT` 0.3, `STREAK` 0.22);
+  the rest rows are uploaded UNMELTED so the pattern is pinned to the flesh. Judged on stills only: the swimming fix
+  is not confirmed in motion, and the lab was not re-shot. Open: the chest stays pale late; "more melty" flesh
+  (drips, warp) is geometry work not started.
+- [~] **Meltier shape** (owner, 2026-11-14): `MeltBodyTuning` `stagger` 0.18 (each prim runs ahead of the front by
+  its own amount), `stretch` 0.12 (a prim's lower end leads), `neck` 0.25 (cross-section thins mid-melt, on scale x/z;
+  the radius is left for the shader's melt read). Rate 0.625 to 0.5 (2 s). Arm and torso flesh now sloughs down in
+  hanging runs. Stills only. The gate's "never grows taller" now checks the top and the floor (the lowest bottom
+  wobbles by millimetres as prims pool at different moments).
+- [~] **Playtest round 2 (owner, 2026-11-14/15).** (1) Blotches too fast: the cause was the bare-bone fold, on from
+  the first frame, which re-shades the whole body at once (dark bands on the arms, the skull through the face). It now
+  starts at `MELT_BARE_AT` 0.3; the red ramp's soft edge sits above the threshold and the creep is slower
+  (`MELT_RED_CREEP` 0.35, `MELT_RED_FULL_U` 0.45). The shader's melt read uses the posed radius on the rest row (pose
+  stretch read as melt). (2) Paused before melting: the body now walks into its melt, slowing to a quarter speed, and
+  holds from `MELT_MOTION_UNTIL` 0.3; it reads as a corpse only from there; the melt frame follows it. (3) Flesh ran
+  along the arm: the outward spread starts only past 60% of a point's own melt (down first, out later); six small
+  flesh bits drop early (`MELT_GOB_AT`, `spawnMeltGob`). (4) Kit and prop: handed to `kitRemains` on a gentle launch
+  at progress 0.22 (`dropKit`) instead of retired. Stills only for all four; the kit drop was not seen (the arena
+  soldier showed no kit pieces in the capture), the gobs were not seen in a still, and the skull still pops through
+  the face at 30%. `boneShow` (thin bones until their flesh melts) is in but did not remove the bare-fold bands.
+- [~] **Four additions (owner said yes to all, 2026-11-15).** Stills only, none seen in motion.
+  (a) Melts from the hit: `beginMelt(hitWorld)`; a point's front height is the lesser of its own and
+  `MELT_HIT_LEAD` 0.15 + distance x `MELT_HIT_SPREAD` 2.5 (about 0.4 m round the hit goes early). The melter passes
+  its trace's hit. (b) Drips: `onMeltDrip` to `spawnMeltDrip`, a slowed half-count pellet gout straight down
+  (the full gout sprayed streaks all round). (c) Slump: at `MELT_SLUMP_AT` 0.42 the body is let go as its ragdoll
+  (forced collapse) and steps to progress 1, so what is left sags as one thing while its bone groups drop out.
+  (d) Pool afterlife: `MELT_AFTER`, 2.5 s of 30% more spread easing out; `meltDone()` is the new "nothing left to
+  do". No bubbling. Not checked: the slump on a sector level or against walls, and a non-zombie's authored fall.
+- [~] **Owner's recording, 2026-11-15 (three notes).** (1) Drips too big: now a short pulse of the wound bleed's
+  droplets (`spawnWoundDroplets`, tight and slow), not a gout. (2) "Weird double animation": not pinned down. Best
+  guess from the recording: the flesh pools and THEN the skeleton comes apart as a separate event (the ragdoll slump
+  plus the bone chunks' clatter). `__sdfGame.setMeltSlump(false)` turns the slump off for an A/B; the owner offered a
+  clearer capture. (3) Mesh skull and eyeballs: a melting body now shows its MESH skeleton (`MELT_SDF_BONES` false;
+  game-main keeps its segment sources, each group leaving as it is released, organs with the cage), which also ends
+  the skull popping through the face; two eyeballs (`eyeballPrims`, tag 'eye') tumble out when the skull group goes.
+  The eyeballs were not seen in a still. The lab still uses the SDF bone path.
+- [~] **Bones fall as the mesh** (owner, 2026-11-15: the skeleton started as the textured mesh and turned into the
+  SDF bones as it dropped). `SegmentMeshRenderer.dropSegments(owner, sources, vel)`: each segment of a released group
+  leaves as a loose mesh (same geometry and material, its drawn pose) on the mesh-gib physics, in the skull-plate pool
+  (cap 32; a full skeleton is most of it). `spawnMeltBone` falls back to the SDF bone chunk only with no mesh
+  skeleton. Seen in a still: ribs and long bones lie in the pool textured. Not checked: two bodies melting at once
+  against the pool cap; the support (box corners) makes long bones rest a little high.
+- [~] **Starts where it was shot, and varies** (owner, 2026-11-15). `hitHeight`: the front's height for a point
+  blends its own height with its eased distance from the hit, weighted by how high the hit is (feet: the plain
+  feet-up melt; head: from the head down; the skull, cage and pelvis then hold until the slump). `rollMelt`: each
+  melt rolls its rate (0.8 to 1.25), stagger, stretch, spread, a lean direction (up to 0.22 m), its slump time (one
+  in five slumps late) and which early gobs drop, from the actor's seed and a page-wide melt count. Head shot seen on
+  stills: skull bared first, flesh slides to the belly by 30%, a bare skeleton stands from about 45% to the slump
+  (long). The variance was not seen (each capture is a fresh page, so the same roll).
+- [~] **Flesh lets go instead of drawing into a tube** (owner, 2026-11-15, bullet time: "the arms slough off in one
+  big long tube"). `MeltBodyTuning.maxStretch` 1.5: once a prim's ends are pulled apart past 1.5 times its own length
+  (or width), the upper end follows the lower one down, so the flesh draws out a little and then drops as a lump.
+  Seen on stills (feet-up melt): the forearm flesh comes away at the wrist and the arm bones stand bare. Not seen in motion.
+- [~] **Long flesh gathers into drops** (owner, 2026-11-16, playtest shots: the arm flesh still hung off the bone as
+  straight sleeves; "avoid any long linear tube objects"). `MeltBodyTuning.gather` 0.3 by `gatherBy` 0.4: a prim
+  longer than twice its width draws its upper end down into its lower one as it melts and fattens on its
+  cross-section scale (radius untouched: the shader reads melt off it). Stills (feet and head shots): no sleeves, the
+  arm bones bare early with a lump at the wrist. Not seen in motion. Merged with main the same day (new skeleton kit).
+- [~] **The melt wave** (owner, 2026-11-16: the gathered drops were "still tubes just shorter"; asked for a sine
+  distortion). `mapBody` reads a melting instance at a point pushed about by three sines of its position
+  (`march/melt.ts` `MELT_WAVE_*`: 2.2 cm, a 31 cm wave, full by progress 0.3) and scales its distance by 0.6 so the
+  march does not tunnel. `mapLean` has no wave, so the lean walk stands down for a pixel with a melting slot. Stills:
+  every limb and the trunk come out lumpy and bent, no straight edges, no holes; the unmelted head is bent too (the
+  wave is per body, not per part). Not seen in motion; frame cost with a melting body on screen not measured.
+- [~] **Wave retuned, limbs curl instead** (owner, 2026-11-16: liked the wave but "too intense", the melt "falls
+  through" it (swimming), and wanted more on the arms, less on the body). The field wave is down to 0.8 cm and its
+  phase reads x and z only, so flesh falling straight down keeps its place in it. Limb prims get a per-prim BEND
+  (`Primitive.bend`, `curlArm` 0.9 / `curlLeg` 0.45 of the prim's length, in mid-melt only), which belongs to the
+  prim and rides it down; trunk and head get none. `gather` relaxed to 0.5. Stills: a curled rope at the wrist, calm
+  trunk. Not seen in motion.
+- [~] **Turned prims pool flat** (owner, 2026-11-16, melting a tallow: the puddle was red discs standing on edge with
+  gaps). The crush is on a prim's own y and a rig-turned prim's y points where the limb did. `meltOrient` eases a
+  prim's orientation to upright by 70% of its own melt. Still of a standing tallow: one flat pool. A tallow melted
+  mid-fall or lying down was not shot. Frame cost of a melting body is not measured (owner: later).
+- [x] **Mesh skeleton reads wrong up close** (owner, 2026-11-15; done in its own branch, merged as PR 127): with the flesh gone its parts float (no clavicles,
+  gaps at the joints). Wants a more anatomically correct mesh skeleton; proposed as its own task.
+- [x] **Keeps moving while it melts** (owner, 2026-11-14): a melting body's motion still steps until progress
+  `MELT_MOTION_UNTIL` 0.45 (doomed, so no agenda: it finishes its swing and stands), then holds its last pose.
+- [ ] Not done: kit and held prop vanish at the first frame (no melt for rigid gear); wounds close at the start; `?crowd=1`
+  path untested; the melt of an already-fallen corpse is untested; `npm run melt:shot` (pixel gate) not re-run.
+- [ ] A real weapon that melts: calls `meltActor`; slot 8 then goes.
+
 ## Bullet-time hit freakout, thrown bodies through walls — 2026-11-12
 
 Branch `claude/ragdoll-contact-fixes` (draft PR); not played in game, headless actor tests only. Owner look pending.

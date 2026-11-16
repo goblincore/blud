@@ -95,13 +95,20 @@ describe('MELT GATE — the end state must be shorter, wider and lower', () => {
   });
 
   it('never grows taller at any point in the ramp', () => {
+    // TOP and FLOOR, not top minus lowest bottom (2026-11-14). The drip stagger pools prims at different moments,
+    // so the lowest bottom wobbles by millimetres ABOVE the floor as squashed feet rise and a neighbour arrives
+    // (3 mm at t = 0.40), and "height" measured between the two read that as growth. What must hold is that the
+    // top never rises and nothing dips under the floor the body stands on.
     const body = zombie();
+    const top = (ps: readonly Primitive[]) => Math.max(...ps.flatMap(p => [p.a[1], p.b[1]].map(y => y + p.radius * p.scale[1])));
     let s = meltInitBody(body.prims, 0);
-    let prev = aabb(body.prims).height;
+    let prev = top(body.prims);
     for (let i = 0; i < 600; i++) {
       s = stepMelt(s, 1 / 60);
-      const now = aabb(applyMelt(body.prims, s)).height;
+      const melted = applyMelt(body.prims, s);
+      const now = top(melted);
       expect(now).toBeLessThanOrEqual(prev + 1e-6);
+      expect(floorY(melted)).toBeGreaterThanOrEqual(-1e-6);
       prev = now;
     }
   });

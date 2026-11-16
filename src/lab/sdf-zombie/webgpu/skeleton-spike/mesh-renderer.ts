@@ -277,6 +277,11 @@ export interface SegmentMeshRenderer {
    *  The cut is made at a mesh's first pop and kept (fragmentStats). On a split head each piece leaves from the turn
    *  of the split piece that owns its pivot. Returns the pieces released. */
   explodeSkull(owner: object, sources: readonly BoneFieldSource[], direction: Vec3): number;
+  /** LET WHOLE SEGMENTS GO (the melt): each of `sources` (bone, not organ) leaves `owner` as a loose mesh of its own,
+   *  the same geometry on the same material at the pose it is drawn in, on the gib physics (the renderer's spawn
+   *  callback) with velocity `vel`. Eyes are not carried. The caller stops passing those sources to update().
+   *  Returns the meshes released (0 with no spawn callback). */
+  dropSegments(owner: object, sources: readonly BoneFieldSource[], vel: Vec3): number;
   /** The sculpted skull's fragment cuts so far: how many head meshes have been cut, and the last cut's time (ms). */
   fragmentStats(): { meshes: number; lastMs: number };
   /** This frame's craters (world centre + radius) for the exposure gradient. */
@@ -1172,6 +1177,46 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       return { missing, pieces: cache.skullKit ? cache.skullKit.source.filter((_,i)=>missing & (1<<i)).map(p=>p.id) : [] };
     },
     fragmentStats: () => ({ ...fragmentCuts }),
+    dropSegments(owner, sources, vel) {
+      if (!spawnSkull) return 0;
+      let n = 0;
+      const M = new THREE.Matrix4(), pos = new THREE.Vector3(), quat = new THREE.Quaternion(), unit = new THREE.Vector3(1, 1, 1);
+      for (const s of sources) {
+        if (s.kind === 'organ' || !s.isLive()) continue;
+        const baked = cache.get(s);
+        prepareGeometry(baked.geometry, s);
+        const material = baked.geometry.userData.anatomicalSkull ? skullMaterialOf(baked.geometry) : boneMaterialOf(baked.geometry);
+        if (!material) continue;
+        const pose = s.pose();
+        M.compose(pos.set(pose.origin[0], pose.origin[1], pose.origin[2]), quat.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]), unit);
+        const geometry = baked.geometry.clone();
+        geometry.userData.ownedSkullDebris = true;   // the gib pool disposes it (game-mesh-gibs remove)
+        ensureLights(geometry, 1, false);
+        const row = lightRowOf(owner);
+        if (row) {
+          (geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).setXYZW(0, row.picks[0], row.picks[1], row.picks[2], row.picks[3]);
+          (geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).setX(0, row.fill);
+        }
+        const b = s.bounds;
+        const pivot = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2).applyMatrix4(M);
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.layers.set(layer);
+        mesh.matrixAutoUpdate = false;
+        mesh.matrix.copy(M).setPosition(pos.setFromMatrixPosition(M).sub(pivot));
+        const piece = new THREE.Group(); piece.name = `melt-bone:${s.segment}`; piece.add(mesh);
+        piece.layers.set(layer);
+        // Floor support: the box's eight corners, so a long bone lies down on its length.
+        const support: { c: Vec3; r: number }[] = [];
+        for (let k = 0; k < 8; k++) {
+          const c = new THREE.Vector3(k & 1 ? b.max[0] : b.min[0], k & 2 ? b.max[1] : b.min[1], k & 4 ? b.max[2] : b.min[2]).applyMatrix4(mesh.matrix);
+          support.push({ c: c.toArray() as Vec3, r: 0.004 });
+        }
+        const radius = Math.max(0.02, Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) / 2);
+        spawnSkull(piece, pivot.toArray() as Vec3, [vel[0], vel[1], vel[2]], [(n % 3) - 1, 0.6, 1 - (n % 2) * 2], radius, support);
+        n++;
+      }
+      return n;
+    },
     explodeSkull(owner,sources,direction) {
       const source = sources.find(s=>s.segment==='head' && cache.skullKitOf(s.character)?.supports(s));
       const skull = source && cache.skullKitOf(source.character)?.head(source);
