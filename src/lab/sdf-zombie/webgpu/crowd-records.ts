@@ -10,6 +10,14 @@ import { DATA_ROWS } from './march/layout';
 import type { SplitWarp } from '../head-split';
 import { SPLIT_ABLATE, splitAblate } from './split-ablate';
 
+/** counts2.y, the BARE-BONES bypass, as a body view writes it: 1 only when the body packs inside-flesh rows
+ *  (`boneCount` > 0) for the bypass to fold. A body whose skeleton is a mesh packs none, and a bare flag there
+ *  folds nothing and only drops the shading normal to the finite-difference taps (normal-gradient.wgsl.ts bails on
+ *  counts2.y): a body mid-rupture turned fuzzy grey-white for the whole pre-gib window (owner, 2026-11-16). */
+export function bareBonesFlag(bare: boolean, boneCount: number): 0 | 1 {
+  return bare && boneCount > 0 ? 1 : 0;
+}
+
 export const REC_VEC4S = 22;
 export const MAX_CROWD_INSTANCES = 64;
 
