@@ -22,7 +22,6 @@ import { sdBody } from '../validate';
 import * as soldierStagger from '../soldier-stagger';
 import * as motion from '../motion';
 import { soldierInjury } from '../soldier-damage';
-import { BURN_BEHAVIOUR } from '../burn-behaviour';
 import { MAX_WOUNDS } from '../damage';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
@@ -592,22 +591,8 @@ describe('soldier actor combat wiring', () => {
 });
 
 
-describe('burning soldier panic (Task 2)', () => {
-  it('is OFF by default: a burning soldier moves exactly like an unburnt twin', () => {
-    expect(BURN_BEHAVIOUR.soldierPanic).toBe(false);
-    const a = soldier();
-    const b = soldier();
-    for (const s of [a, b]) {
-      s.actor.setBrainInput({ x: 5, z: 0, room: 1 }, true);
-      for (let i = 0; i < 30; i++) s.actor.step(1 / 60);
-    }
-    a.actor.setBurning(true);
-    for (let i = 0; i < 150; i++) { a.actor.step(1 / 60); b.actor.step(1 / 60); }
-    expect(a.actor.pose().pos).toEqual(b.actor.pose().pos);
-    expect(a.shots.length).toBe(b.shots.length);
-    expect(a.actor.burnStumbles()).toBe(0);
-  });
-  it.skipIf(!BURN_BEHAVIOUR.soldierPanic)('setBurning flees the player and stops the gun; setBurning(false) releases', () => {
+describe('burning soldier panic and burn death', () => {
+  it('setBurning flees the player and stops the gun; setBurning(false) releases', () => {
     const { actor, shots } = soldier();
     actor.setBrainInput({ x: 5, z: 0, room: 1 }, true);
     for (let i = 0; i < 30; i++) actor.step(1 / 60);
@@ -629,6 +614,18 @@ describe('burning soldier panic (Task 2)', () => {
     actor.setBurning(false);
     for (let i = 0; i < 60; i++) actor.step(1 / 60);
     expect(actor.debug().phase).toBe('standing');
+  });
+  it('burned to death, he never fires and goes down on a burn fall (his collapse is made fatal)', () => {
+    const { actor, shots } = soldier();
+    actor.setBrainInput({ x: 2, z: 0, room: 1 }, true);
+    for (let i = 0; i < 30; i++) actor.step(1 / 60);
+    const shotsBefore = shots.length;
+    actor.setBurning(true);
+    for (let i = 0; i < 7 * 60; i++) actor.step(1 / 60);   // past the soldier tier's 2.5..4.5 s
+    expect(actor.burnPhase()).toBe('dead');
+    expect(shots.length).toBe(shotsBefore);
+    expect(actor.motionFrame()?.collapsed).toBe(true);
+    expect(['burnKneel', 'burnTopple', 'burnHeap']).toContain(actor.debug().fallKind);
   });
 });
 

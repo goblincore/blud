@@ -88,7 +88,7 @@ export function createFireSeams(ctx: GameContext) {
         speed: d.speed,
         firing: a.sinceFire() <= 1e-6,
         staggerKind: d.staggerKind,
-        stumbles: a.burnStumbles(),
+        burnPhase: a.burnPhase(),
         burning: (ctx.vfx.burning.registry.get(a)?.burn ?? 0) > 0.02,
         alerted: md.alert,
         mindState: md.state,

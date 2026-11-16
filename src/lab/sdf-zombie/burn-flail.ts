@@ -45,7 +45,7 @@ function hand(t: number, seed: number, lane: number, beat: number, a: number, f:
   const p = (k: number) => hash01(seed, lane * 8 + k) * TAU;
   const centre = mix(mix(RAISED, BEAT, beat), FOLDED, f);
   const live = 1 - 0.6 * f;
-  const full: Vec3 = [
+  const full: [number, number, number] = [
     centre[0] + SWING[0] * wave(t, 2.0, 3.2, p(0)) * live,
     centre[1] + SWING[1] * wave(t, 2.5, 3.7, p(1)) * live,
     centre[2] + SWING[2] * wave(t, 1.9, 2.9, p(2)) * live,
