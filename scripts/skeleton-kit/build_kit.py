@@ -61,6 +61,18 @@ def lerp(a, b, t):
     return a + (b - a) * t
 
 
+# A SOLID FRAME BEFORE FINE DETAIL (owner, 2026-11-16, in the game: the clavicles were "two thin bars", and "in general
+# the bones should be more beefy - its okay to lose fine detail for a more solid frame"; detail can come from a normal
+# map later). Every shaft, process and rim is modelled at its anatomical thickness and then scaled by the factor here,
+# so the proportions between bones stay written where they were. Joint ends (heads, condyles, sockets) were already
+# fat and are left alone. The toes are not scaled: they sit 4 mm under the foot's skin.
+BEEF = {
+    'clavicle': 1.9, 'scapula': 1.35, 'humerus': 1.45, 'forearm': 1.55, 'hand': 1.4,
+    'femur': 1.4, 'tibia': 1.3, 'fibula': 1.7, 'metatarsal': 1.3,
+    'process': 1.5, 'column': 1.3, 'crest': 1.45, 'ramus': 1.3,
+}
+
+
 def catmull(pts, per=4):
     """A Catmull-Rom curve through `pts`, `per` samples a span. Returns the points and each one's place 0..1 along the
     control polygon (by index), which is what radii are interpolated over."""
@@ -91,10 +103,11 @@ def radii_at(radii, u):
     return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
 
 
-def loft(path, radii, sides=8, up=(0, 0, 1), per=0, cap=0.7):
+def loft(path, radii, sides=8, up=(0, 0, 1), per=0, cap=0.7, beef=1.0):
     """A tube along `path`. `radii`: one entry per control point (a number, or (rx, ry): rx along the frame's `up`
     side, ry across it). `per` > 0 smooths the path with a Catmull-Rom curve first. Ends close on a tip pushed out
-    `cap` of the end radius, so smooth shading rounds them."""
+    `cap` of the end radius, so smooth shading rounds them. `beef` scales every radius (see BEEF)."""
+    radii = [r * beef if isinstance(r, (int, float)) else (r[0] * beef, r[1] * beef) for r in radii]
     if per > 0:
         pts, us = catmull(path, per)
     else:
@@ -221,16 +234,16 @@ def vertebra(y, h, rx, rz, spinous, drop, trans):
     s = Shells()
     s.add(*loft([c - t * (h * 0.42), c, c + t * (h * 0.42)], [(rx * 1.06, rz * 1.06), (rx * 0.9, rz * 0.9), (rx * 1.06, rz * 1.06)], sides=8, up=side, cap=0.25))
     root = c + back * (rz * 0.85)
-    s.add(*loft([root, root + back * (spinous * 0.55) - t * (drop * 0.4), root + back * spinous - t * drop], [(0.0055, 0.0045), (0.004, 0.0035), (0.0028, 0.0026)], sides=5, up=side))
+    s.add(*loft([root, root + back * (spinous * 0.55) - t * (drop * 0.4), root + back * spinous - t * drop], [(0.0055, 0.0045), (0.004, 0.0035), (0.0028, 0.0026)], sides=5, up=side, beef=BEEF['process']))
     for sg in (1, -1):
-        s.add(*loft([c + back * (rz * 0.6) + side * (sg * rx * 0.7), c + back * (rz * 0.95) + side * (sg * (rx + trans))], [0.0045, 0.0032], sides=4, up=t))
+        s.add(*loft([c + back * (rz * 0.6) + side * (sg * rx * 0.7), c + back * (rz * 0.95) + side * (sg * (rx + trans))], [0.0045, 0.0032], sides=4, up=t, beef=BEEF['process']))
     return s
 
 
 def column(y0, y1, r):
     """The discs: one thin tube through the bodies, so no vertebra hangs in the air between its neighbours."""
     ys = [lerp(y0, y1, i / 12) for i in range(13)]
-    return loft([spine_at(y)[0] for y in ys], [r] * 13, sides=6, up=(1, 0, 0), cap=0.2)
+    return loft([spine_at(y)[0] for y in ys], [r] * 13, sides=6, up=(1, 0, 0), cap=0.2, beef=BEEF['column'])
 
 
 def build_spine():
@@ -302,19 +315,19 @@ def build_pelvis():
     L = Shells()
     # Iliac wing: PSIS, along the crest to the ASIS, down the front to the socket, back along the notch to the sacrum.
     L.add(*plate([V(0.030, 1.054, -0.066), V(0.080, 1.094, -0.054), V(0.130, 1.102, -0.014), V(0.134, 1.084, 0.032), V(0.116, 1.056, 0.050),
-                  V(0.094, 1.030, 0.030), V(0.080, 1.014, -0.006), V(0.058, 1.008, -0.040), V(0.030, 1.018, -0.060)], 0.010, bulge=-0.004, smooth=2))
+                  V(0.094, 1.030, 0.030), V(0.080, 1.014, -0.006), V(0.058, 1.008, -0.040), V(0.030, 1.018, -0.060)], 0.015, bulge=-0.004, smooth=2))
     # The back of the wing, thick where it laps the sacrum: the sacrum slides behind it (build_sacrum).
     L.add(*ellipsoid(V(0.040, 1.034, -0.056), (0.020, 0.030, 0.013), segs=8, rings=5))
     # Crest: the thick rim over the wing.
     L.add(*loft([V(0.030, 1.056, -0.067), V(0.081, 1.096, -0.055), V(0.131, 1.104, -0.014), V(0.135, 1.086, 0.032), V(0.118, 1.058, 0.051)],
-                [0.0065, 0.007, 0.0075, 0.007, 0.0065], sides=6, per=3))
+                [0.0065, 0.007, 0.0075, 0.007, 0.0065], sides=6, per=3, beef=BEEF['crest']))
     # The socket: a thick collar the femoral head sits in.
     L.add(*ellipsoid(hip + V(-0.016, -0.010, 0.000), (0.024, 0.032, 0.030), segs=10, rings=6))
     # Superior pubic ramus to the symphysis; ischium down to the sit bone; the ramus that closes the ring under them.
     sym_t, sym_b, sit = V(0.006, 0.992, 0.062), V(0.008, 0.968, 0.056), V(0.052, 0.948, -0.030)
-    L.add(*loft([hip + V(-0.022, -0.024, 0.022), V(0.045, 1.012, 0.052), sym_t], [0.011, 0.009, 0.010], sides=6, per=3))
-    L.add(*loft([hip + V(-0.022, -0.030, -0.012), V(0.064, 0.985, -0.026), sit], [0.013, 0.012, 0.015], sides=6, per=3))
-    L.add(*loft([sit, V(0.036, 0.950, 0.016), sym_b], [0.011, 0.0075, 0.009], sides=6, per=3))
+    L.add(*loft([hip + V(-0.022, -0.024, 0.022), V(0.045, 1.012, 0.052), sym_t], [0.011, 0.009, 0.010], sides=6, per=3, beef=BEEF['ramus']))
+    L.add(*loft([hip + V(-0.022, -0.030, -0.012), V(0.064, 0.985, -0.026), sit], [0.013, 0.012, 0.015], sides=6, per=3, beef=BEEF['ramus']))
+    L.add(*loft([sit, V(0.036, 0.950, 0.016), sym_b], [0.011, 0.0075, 0.009], sides=6, per=3, beef=BEEF['ramus']))
     L.add(*ellipsoid(V(0, 0.980, 0.059), (0.009, 0.018, 0.008), segs=6, rings=4))   # the symphysis itself
     s.merge(L); s.merge(L.mirrored())
     return s
@@ -328,14 +341,14 @@ def build_shoulder(sternum_top):
     sh = J[5]
     # Clavicle: sternal end on the manubrium, an S to the acromion.
     s.add(*loft([V(0.020, sternum_top.y - 0.004, sternum_top.z - 0.002), V(0.066, 1.386, 0.074), V(0.126, 1.398, 0.047), V(0.184, 1.412, 0.028)],
-                [(0.0085, 0.007), (0.0065, 0.006), (0.0065, 0.006), (0.009, 0.006)], sides=7, up=(0, 0, 1), per=4))
+                [(0.0085, 0.007), (0.0065, 0.006), (0.0065, 0.006), (0.009, 0.006)], sides=7, up=(0, 0, 1), per=4, beef=BEEF['clavicle']))
     # Scapula: the blade on the back of the ribs, its spine rising to the acromion over the joint, the socket, the coracoid.
     s.add(*plate([V(0.088, 1.394, -0.032), V(0.092, 1.340, -0.050), V(0.106, 1.268, -0.058), V(0.134, 1.318, -0.040), V(0.160, 1.366, -0.012),
-                  V(0.166, 1.392, -0.002), V(0.130, 1.398, -0.016)], 0.006, bulge=0.003, smooth=2))
+                  V(0.166, 1.392, -0.002), V(0.130, 1.398, -0.016)], 0.010, bulge=0.003, smooth=2))
     s.add(*loft([V(0.094, 1.370, -0.046), V(0.140, 1.394, -0.028), V(0.178, 1.416, -0.006), V(0.194, 1.422, 0.020)],
-                [(0.004, 0.006), (0.0045, 0.007), (0.005, 0.009), (0.005, 0.010)], sides=6, up=(0, 1, 0), per=3))
+                [(0.004, 0.006), (0.0045, 0.007), (0.005, 0.009), (0.005, 0.010)], sides=6, up=(0, 1, 0), per=3, beef=BEEF['scapula']))
     s.add(*ellipsoid(sh + V(-0.027, -0.012, -0.024), (0.010, 0.018, 0.014), segs=8, rings=5))
-    s.add(*loft([V(0.164, 1.396, 0.000), V(0.168, 1.398, 0.024), V(0.176, 1.388, 0.040)], [0.006, 0.005, 0.0045], sides=5, per=2))
+    s.add(*loft([V(0.164, 1.396, 0.000), V(0.168, 1.398, 0.024), V(0.176, 1.388, 0.040)], [0.006, 0.005, 0.0045], sides=5, per=2, beef=BEEF['scapula']))
     return s
 
 
@@ -346,7 +359,7 @@ def build_humerus():
     s = Shells()
     a, b = J[5], J[7]
     P = lambda t: lerp(a, b, t)
-    s.add(*loft([P(0.045), P(0.16), P(0.5), P(0.84), P(0.955)], [(0.0165, 0.016), (0.0125, 0.0125), (0.0105, 0.0105), (0.012, 0.0105), (0.021, 0.011)], sides=8, up=(1, 0, 0), per=3))
+    s.add(*loft([P(0.045), P(0.16), P(0.5), P(0.84), P(0.955)], [(0.0165, 0.016), (0.0125, 0.0125), (0.0105, 0.0105), (0.012, 0.0105), (0.021 / BEEF['humerus'], 0.011)], sides=8, up=(1, 0, 0), per=3, beef=BEEF['humerus']))
     s.add(*ellipsoid(a + V(-0.006, -0.004, -0.003), (0.021, 0.021, 0.021), segs=10, rings=6))          # head, in the socket
     s.add(*ellipsoid(a + V(0.011, -0.014, 0.002), (0.011, 0.015, 0.012)))                              # greater tubercle
     ax = (b - a).normalized()
@@ -360,10 +373,10 @@ def build_forearm():
     a, b = J[7], J[9]
     # Ulna: the olecranon behind the elbow, thinning to the wrist.
     s.add(*loft([a + V(-0.004, 0.014, -0.012), a + V(-0.007, -0.016, -0.009), lerp(a, b, 0.5) + V(-0.010, 0, -0.006), lerp(a, b, 0.885) + V(-0.010, 0, -0.005)],
-                [0.0105, 0.0095, 0.0068, 0.0052], sides=7, per=3))
+                [0.0105, 0.0095, 0.0068, 0.0052], sides=7, per=3, beef=BEEF['forearm']))
     # Radius: a small head at the elbow, widening to the wrist.
     s.add(*loft([a + V(0.010, -0.010, 0.007), a + V(0.011, -0.034, 0.007), lerp(a, b, 0.5) + V(0.010, 0, 0.006), lerp(a, b, 0.89) + V(0.008, 0, 0.006)],
-                [0.0088, 0.0062, 0.0072, (0.013, 0.0085)], sides=7, up=(1, 0, 0), per=3))
+                [0.0088, 0.0062, 0.0072, (0.013 / BEEF['forearm'], 0.0085)], sides=7, up=(1, 0, 0), per=3, beef=BEEF['forearm']))
     return s
 
 
@@ -379,14 +392,14 @@ def build_hand():
     s.add(*ellipsoid(w - d * 0.020, (0.012, 0.012, 0.022), segs=8, rings=4, axes=(pm, d, kz)))           # carpals
     for o in (-0.018, -0.006, 0.006, 0.018):
         k0, k1 = w - d * 0.012 + kz * o, w + d * 0.018 + kz * (o * 1.2)
-        s.add(*loft([k0, k1], [0.0048, 0.0052], sides=5))                                                 # metacarpal
+        s.add(*loft([k0, k1], [0.0048, 0.0052], sides=5, beef=BEEF['hand']))                                                 # metacarpal
         p1 = k1 + d * 0.016 + pm * 0.010
-        s.add(*loft([k1, p1], [0.0046, 0.004], sides=5))                                                  # finger, two bones
-        s.add(*loft([p1, p1 + d * 0.002 + pm * 0.013], [0.0038, 0.003], sides=5))
+        s.add(*loft([k1, p1], [0.0046, 0.004], sides=5, beef=BEEF['hand']))                                                  # finger, two bones
+        s.add(*loft([p1, p1 + d * 0.002 + pm * 0.013], [0.0038, 0.003], sides=5, beef=BEEF['hand']))
     t0 = w - d * 0.016 + kz * 0.022
     t1 = t0 + d * 0.012 + kz * 0.014 + pm * 0.008
-    s.add(*loft([t0, t1], [0.005, 0.0048], sides=5))                                                      # thumb
-    s.add(*loft([t1, t1 + d * 0.012 + pm * 0.010 - kz * 0.004], [0.0044, 0.0034], sides=5))
+    s.add(*loft([t0, t1], [0.005, 0.0048], sides=5, beef=BEEF['hand']))                                                      # thumb
+    s.add(*loft([t1, t1 + d * 0.012 + pm * 0.010 - kz * 0.004], [0.0044, 0.0034], sides=5, beef=BEEF['hand']))
     return s
 
 
@@ -397,10 +410,10 @@ def build_femur():
     s = Shells()
     hip, knee = J[11], J[12]
     s.add(*ellipsoid(hip + V(-0.004, 0, 0), (0.022, 0.022, 0.022), segs=10, rings=6))                    # head, in the socket
-    s.add(*loft([hip + V(0.004, -0.004, 0), V(0.138, 1.036, -0.004)], [0.0135, 0.0125], sides=7))        # neck
+    s.add(*loft([hip + V(0.004, -0.004, 0), V(0.138, 1.036, -0.004)], [0.0135, 0.0125], sides=7, beef=1.2))        # neck
     s.add(*ellipsoid(V(0.144, 1.038, -0.006), (0.014, 0.021, 0.016)))                                    # greater trochanter
     s.add(*loft([V(0.140, 1.030, -0.004), V(0.131, 0.950, 0.002), V(0.116, 0.800, 0.006), V(0.103, 0.660, 0.002), knee + V(0, 0.026, 0)],
-                [(0.016, 0.015), 0.0135, 0.0125, (0.0145, 0.0135), (0.030, 0.019)], sides=8, up=(1, 0, 0), per=3))
+                [(0.016, 0.015), 0.0135, 0.0125, (0.0145, 0.0135), (0.030 / BEEF['femur'], 0.019)], sides=8, up=(1, 0, 0), per=3, beef=BEEF['femur']))
     for sg in (1, -1):
         s.add(*ellipsoid(knee + V(sg * 0.020, 0.012, -0.006), (0.017, 0.021, 0.025)))                    # condyles
     s.add(*ellipsoid(knee + V(0, 0.016, 0.027), (0.015, 0.017, 0.010), segs=8, rings=4))               # kneecap
@@ -412,10 +425,10 @@ def build_shin():
     knee, ankle = J[12], J[15]
     s.add(*ellipsoid(knee + V(0, -0.016, 0.000), (0.034, 0.013, 0.025), segs=10, rings=4))               # tibial plateau
     s.add(*loft([knee + V(0, -0.022, 0.002), V(0.097, 0.500, 0.009), V(0.096, 0.300, 0.015), V(0.098, 0.150, 0.022), ankle + V(0, 0.016, -0.001)],
-                [(0.021, 0.019), 0.0155, 0.0125, 0.012, (0.019, 0.015)], sides=8, up=(1, 0, 0), per=3))
+                [(0.021 / BEEF['tibia'], 0.019 / BEEF['tibia']), 0.0155, 0.0125, 0.012, (0.019, 0.015)], sides=8, up=(1, 0, 0), per=3, beef=BEEF['tibia']))
     s.add(*ellipsoid(ankle + V(-0.019, 0.004, -0.001), (0.008, 0.015, 0.011)))                           # inner ankle
     s.add(*loft([V(0.128, 0.566, -0.008), V(0.128, 0.400, -0.004), V(0.123, 0.200, 0.010), ankle + V(0.021, 0.004, -0.003)],
-                [0.009, 0.0052, 0.0048, 0.0085], sides=6, per=3))                                         # fibula, to the outer ankle
+                [0.009, 0.0052, 0.0048, 0.0085], sides=6, per=3, beef=BEEF['fibula']))                                         # fibula, to the outer ankle
     return s
 
 
@@ -434,7 +447,7 @@ def build_foot():
     for i, o in enumerate((-0.020, -0.010, 0.0, 0.010, 0.020)):
         m0, m1 = V(0.100 + o * 0.8, 0.052, 0.068), V(0.100 + o * 1.1, 0.028, 0.150)
         big = i == 0
-        s.add(*loft([m0, m1], [0.0062 if big else 0.0052, 0.0058 if big else 0.0048], sides=5))          # metatarsal
+        s.add(*loft([m0, m1], [0.0062 if big else 0.0052, 0.0058 if big else 0.0048], sides=5, beef=BEEF['metatarsal']))          # metatarsal
         s.add(*loft([m1, V(m1.x, 0.023, 0.150 + (0.040 if big else 0.034 - 0.004 * i))], [0.0052 if big else 0.0042, 0.004 if big else 0.0032], sides=5))   # toe
     return s
 

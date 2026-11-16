@@ -136,3 +136,17 @@ the way the ribs go into the sternum seamlessly", with the sacrum and spine kept
 - In the game: [through a chest wound](game-chest-wound-old-ribs-on-kit-spine.png),
   [bare, from behind](game-bare-back-old-ribs-on-kit-spine.png): the rib heads meet the vertebrae.
 - Ribs 5 and 6 end free at the front, as they always did in the old cage.
+
+## Update 2026-11-16: beefier bones
+
+Owner, in the game: the clavicles read as "two thin bars", and "in general the bones should be more beefy - its okay
+to lose fine detail for a more solid frame"; detail can be faked later with a normal or displacement map.
+
+- `build_kit.py BEEF`: one thickening factor a bone, applied to its shaft, process or rim in `loft` (clavicle 1.9,
+  fibula 1.7, forearm 1.55, vertebral processes 1.5, pelvic crest 1.45, humerus 1.45, femur 1.4, hand 1.4, scapula
+  1.35, tibia 1.3, rami 1.3, disc column 1.3, metatarsals 1.3). The hip wing plate is 15 mm thick (was 10), the
+  scapula blade 10 (was 6). Joint ends were already fat and are unchanged; the toes are unchanged (4 mm under the skin).
+- Same vertex count (7,503): only radii moved. Every piece is still at least 4 mm inside the rest flesh; the
+  shoulder girdle is the tightest scaled piece at 4.9 mm, which is what holds the scapula at 1.35.
+- In the game, bare: [chest and shoulders](game-beefy-chest.png), [whole body](game-beefy-whole.png).
+- The arms and legs have 18 to 26 mm of flesh left over the bone, so they can go thicker still if wanted.

@@ -25,6 +25,8 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
   chest wound did not feel part of the body, so the cage went back to six fat ribs and exposed bone back to meat. Second look (2026-11-16): the old ribcage was still
   preferred (flat hoops running into the sternum), so the kit's ribs and sternum are now the old cage's own extracted
   surface, on the kit's vertebrae and sacrum.
+- [x] **Beefier** (owner, 2026-11-16: clavicles "two thin bars", a solid frame over fine detail): every shaft, process
+  and rim scaled by a factor a bone (`build_kit.py BEEF`, clavicle 1.9 down to tibia 1.3); same vertex count.
 - [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
   `kitJointGaps` measure joint separation.
 - [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);
