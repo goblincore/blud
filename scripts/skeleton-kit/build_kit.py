@@ -57,6 +57,32 @@ def V(x, y, z):
     return Vector((x, y, z))
 
 
+def fuse(shells, keep, voxel=0.004, smooth=3):
+    """ONE SURFACE, NOT A PILE OF TUBES (owner, 2026-11-16: "everything is made from prims atm ... it just looks like
+    tubes everywhere"; the pelvis "would be better as a sculpted mesh"). The shells a builder laid down are the
+    armature of a sculpt: they are fused into one volume (Blender's voxel remesh), the creases where one form ran
+    into the next are smoothed away, and the surface is thinned to about `keep` vertices. Bones that do not touch
+    (radius and ulna) stay apart."""
+    me = bpy.data.meshes.new('fuse')
+    me.from_pydata([tuple(v) for v in shells.verts], [], shells.faces)
+    bm = bmesh.new(); bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new('fuse', me)
+    bpy.context.scene.collection.objects.link(ob)
+    rm = ob.modifiers.new('fuse', 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = voxel
+    sm = ob.modifiers.new('soften', 'SMOOTH'); sm.factor = 0.5; sm.iterations = smooth
+    n = len(ob.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices)
+    ob.modifiers.new('thin', 'DECIMATE').ratio = min(1.0, keep / max(n, 1))
+    ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    out = ev.to_mesh()
+    s = Shells()
+    s.add([tuple(v.co) for v in out.vertices], [tuple(p.vertices) for p in out.polygons])
+    ev.to_mesh_clear()
+    bpy.data.objects.remove(ob, do_unlink=True)
+    return s
+
+
 def lerp(a, b, t):
     return a + (b - a) * t
 
@@ -293,8 +319,13 @@ def build_ribs():
     s.add([tuple(v.co) for v in out.vertices], [tuple(p.vertices) for p in out.polygons])
     ev.to_mesh_clear()
     bpy.data.objects.remove(ob, do_unlink=True)
-    top = max((Vector(v) for v in src['verts'] if abs(v[0]) < 0.012), key=lambda v: v.y)   # the manubrium's top
-    return s, V(0, top.y, top.z)
+    top = max((Vector(v) for v in src['verts'] if abs(v[0]) < 0.012), key=lambda v: v.y)   # the sternum's top
+    top = V(0, top.y, top.z)
+    # THE MANUBRIUM: a broad block on the sternum's top, which each clavicle's inner end is sunk into (build_shoulder),
+    # so the collarbones grow out of the chest instead of ending beside it (owner, 2026-11-16: "the clavicle needs to
+    # fuse properly with the ribcage top").
+    s.add(*ellipsoid(top + V(0, -0.012, -0.004), (0.036, 0.021, 0.0125), segs=10, rings=6))
+    return s, top
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -330,7 +361,7 @@ def build_pelvis():
     L = Shells()
     # Iliac wing: PSIS, along the crest to the ASIS, down the front to the socket, back along the notch to the sacrum.
     L.add(*plate([V(0.030, 1.054, -0.066), V(0.080, 1.094, -0.054), V(0.130, 1.102, -0.014), V(0.134, 1.084, 0.032), V(0.116, 1.056, 0.050),
-                  V(0.094, 1.030, 0.030), V(0.080, 1.014, -0.006), V(0.058, 1.008, -0.040), V(0.030, 1.018, -0.060)], 0.015, bulge=-0.004, smooth=2))
+                  V(0.094, 1.030, 0.030), V(0.080, 1.014, -0.006), V(0.058, 1.008, -0.040), V(0.030, 1.018, -0.060)], 0.020, bulge=-0.004, inset=0.3, smooth=2))
     # The back of the wing, thick where it laps the sacrum: the sacrum slides behind it (build_sacrum).
     L.add(*ellipsoid(V(0.040, 1.034, -0.056), (0.020, 0.030, 0.013), segs=8, rings=5))
     # Crest: the thick rim over the wing.
@@ -359,11 +390,13 @@ def build_shoulder(sternum_top):
     s = Shells()
     sh = J[5]
     # Clavicle: sternal end on the manubrium, an S to the acromion.
-    s.add(*loft([V(0.020, sternum_top.y - 0.004, sternum_top.z - 0.002), V(0.066, 1.386, 0.074), V(0.126, 1.398, 0.047), V(0.184, 1.412, 0.028)],
+    s.add(*loft([V(0.010, sternum_top.y - 0.010, sternum_top.z - 0.004), V(0.066, 1.386, 0.074), V(0.126, 1.398, 0.047), V(0.184, 1.412, 0.028)],
                 [(0.0085, 0.007), (0.0065, 0.006), (0.0065, 0.006), (0.009, 0.006)], sides=7, up=(0, 0, 1), per=4, beef=BEEF['clavicle']))
     # Scapula: the blade on the back of the ribs, its spine rising to the acromion over the joint, the socket, the coracoid.
-    s.add(*plate([V(0.088, 1.394, -0.032), V(0.092, 1.340, -0.050), V(0.106, 1.268, -0.058), V(0.134, 1.318, -0.040), V(0.160, 1.366, -0.012),
-                  V(0.166, 1.392, -0.002), V(0.130, 1.398, -0.016)], 0.010, bulge=0.003, smooth=2))
+    # The blade: a broad rounded paddle, not a dagger (owner, 2026-11-16: "the shoulder blades look too pointy"). Its
+    # lower end is a wide curve 3 cm higher than a real inferior angle would hang.
+    s.add(*plate([V(0.088, 1.394, -0.032), V(0.081, 1.346, -0.050), V(0.083, 1.306, -0.057), V(0.096, 1.289, -0.058), V(0.120, 1.287, -0.054),
+                  V(0.138, 1.302, -0.044), V(0.152, 1.342, -0.024), V(0.166, 1.392, -0.002), V(0.130, 1.398, -0.016)], 0.011, bulge=0.003, inset=0.3, smooth=3))
     s.add(*loft([V(0.094, 1.370, -0.046), V(0.140, 1.394, -0.028), V(0.178, 1.416, -0.006), V(0.194, 1.422, 0.020)],
                 [(0.004, 0.006), (0.0045, 0.007), (0.005, 0.009), (0.005, 0.010)], sides=6, up=(0, 1, 0), per=3, beef=BEEF['scapula']))
     s.add(*ellipsoid(sh + V(-0.027, -0.012, -0.024), (0.010, 0.018, 0.014), segs=8, rings=5))
@@ -481,13 +514,13 @@ ribs, sternum_top = build_ribs()
 cage.merge(ribs)
 cage.add(*build_sacrum())
 KIT = {
-    'axial:0-1': build_pelvis(), 'axial:1-2': cage, 'axial:2-3': neck,
+    'axial:0-1': fuse(build_pelvis(), 1150), 'axial:1-2': cage, 'axial:2-3': neck,
 }
 for lkey, rkey, shells in (
-    ('limb:armL:5-5', 'limb:armR:6-6', build_shoulder(sternum_top)), ('limb:armL:5-7', 'limb:armR:6-8', build_humerus()),
-    ('limb:armL:7-9', 'limb:armR:8-10', build_forearm()), ('limb:armL:9-9', 'limb:armR:10-10', build_hand()),
-    ('limb:legL:11-12', 'limb:legR:13-14', build_femur()), ('limb:legL:12-15', 'limb:legR:14-16', build_shin()),
-    ('limb:legL:15-15', 'limb:legR:16-16', build_ankle()), ('limb:legL:15-17', 'limb:legR:16-18', build_foot()),
+    ('limb:armL:5-5', 'limb:armR:6-6', fuse(build_shoulder(sternum_top), 350)), ('limb:armL:5-7', 'limb:armR:6-8', fuse(build_humerus(), 260)),
+    ('limb:armL:7-9', 'limb:armR:8-10', fuse(build_forearm(), 200)), ('limb:armL:9-9', 'limb:armR:10-10', fuse(build_hand(), 240, voxel=0.003, smooth=2)),
+    ('limb:legL:11-12', 'limb:legR:13-14', fuse(build_femur(), 340)), ('limb:legL:12-15', 'limb:legR:14-16', fuse(build_shin(), 280)),
+    ('limb:legL:15-15', 'limb:legR:16-16', build_ankle()), ('limb:legL:15-17', 'limb:legR:16-18', fuse(build_foot(), 240, voxel=0.003, smooth=2)),
 ):
     KIT[lkey] = shells
     KIT[rkey] = shells.mirrored()

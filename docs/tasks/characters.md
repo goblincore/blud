@@ -11,7 +11,7 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
   (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
   Vertebrae on a disc column, the old extracted cage's ribs and sternum, a sacrum, two hip bones with sockets at the rig's hip
   joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
-  fibula, talus, a foot. 7,623 vertices and 14,406 triangles a body where the extraction was 15,110 and 30,284; the
+  fibula, talus, a foot. 8,681 vertices and 16,970 triangles a body where the extraction was 15,110 and 30,284; the
   same 19 meshes and batches.
 - [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
   cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
@@ -27,7 +27,10 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
   preferred (flat hoops running into the sternum), so the kit's ribs and sternum are now the old cage's own extracted
   surface, on the kit's vertebrae and sacrum.
 - [x] **Beefier** (owner, 2026-11-16: clavicles "two thin bars", a solid frame over fine detail): every shaft, process
-  and rim scaled by a factor a bone (`build_kit.py BEEF`, clavicle 1.9 down to tibia 1.3); same vertex count.
+  and rim scaled by a factor a bone (`build_kit.py BEEF`, clavicle 1.9 down to tibia 1.3).
+- [x] **One surface a bone, not a pile of tubes** (owner, 2026-11-16): `build_kit.py fuse` voxel-fuses, smooths and
+  thins each piece's shapes (pelvis, girdle, limb bones, hand, foot); a manubrium seats the clavicles; the shoulder
+  blades are rounded paddles.
 - [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
   `kitJointGaps` measure joint separation.
 - [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);

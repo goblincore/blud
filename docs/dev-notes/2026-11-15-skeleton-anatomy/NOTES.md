@@ -167,3 +167,21 @@ femoral heads on those points.
   The socket is a 3.4 cm collar, so the head stays inside it.
 - `KIT_JOINTS` hip and sacrum points moved with them. Kit: 7,623 vertices, 14,406 triangles.
 - [whole body](game-lowered-hips-whole.png), [hips close](game-lowered-hips-close.png).
+
+## Update 2026-11-16: fused bones, clavicles seated in a manubrium, rounder shoulder blades
+
+Owner: "everything is made from prims atm and sometimes that doesnt look great since it just looks like tubes
+everywhere"; the pelvis "would be better as a sculpted mesh"; "the clavicle needs to fuse properly with the ribcage
+top"; "the shoulder blades look too pointy".
+
+- `build_kit.py fuse`: the tubes, plates and ellipsoids a builder lays down are now the armature of one surface.
+  Each piece is fused into a single volume (Blender's voxel remesh, 4 mm; 3 mm for hand and foot), smoothed, and
+  thinned to a vertex target. Fused: pelvis, shoulder girdle, humerus, forearm, hand, femur, shin, foot. Not fused: the
+  spine (its vertebrae would melt together), the ribs (already an extracted surface), the talus (one tube).
+  This is a scripted sculpt, not one done by hand with brushes.
+- Pelvis: hip wings 20 mm thick, fused with the crest, sockets, rami and sit bones into one basin.
+- Manubrium: a broad block on the sternum's top, in the cage piece; each clavicle's inner end starts inside it.
+  They are still two segments (the girdle turns with the arm), so they overlap; they cannot be one mesh.
+- Shoulder blade: a rounded paddle with a wide lower edge, 3 cm shorter than the pointed blade it replaces.
+- Kit: 8,681 vertices, 16,970 triangles (the extraction: 15,110 and 30,284; the test's limits are 9,000 and 17,000).
+- [from behind](game-fused-back.png), [from the front](game-fused-front.png).
