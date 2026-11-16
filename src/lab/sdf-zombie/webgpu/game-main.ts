@@ -280,7 +280,7 @@ import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
-import { boneChunkRadius, groupOf, mulberry32 } from '../melt-bones';
+import { boneChunkRadius, meltGroupOf, mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshEviction, fleshOverCap, fleshShrink } from '../flesh-bits';
 import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
@@ -1807,7 +1807,7 @@ async function main() {
         if (a.melting()) {
           const gone = a.meltReleased();
           // (the organs go with the ribcage: left behind, they sat in the finished pool as one big red lump.)
-          return gone.size ? e.sources.filter(src => (src.kind === 'organ' ? !gone.has('cage') : !gone.has(groupOf(src.prims?.[0]?.bone)))) : e.sources;
+          return gone.size ? e.sources.filter(src => (src.kind === 'organ' ? !gone.has('cage') : !gone.has(meltGroupOf(src.prims?.[0]?.bone)))) : e.sources;
         }
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx, ctx),

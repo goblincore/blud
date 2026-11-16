@@ -17,7 +17,7 @@ import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import { spawnChunkPiece } from './game-chunk-pieces';
-import { groupOf } from '../melt-bones';
+import { meltGroupOf } from '../melt-bones';
 import { actorSpawnCentre, seatBurstSpawn } from './game-hit-trace';
 import { spawnWoundDroplets } from '../blood-sim';
 import { eyeballPrims, type GorePiece } from '../head-pop';
@@ -118,7 +118,7 @@ export function spawnMeltBone(
   // THE MESH SKELETON FALLS AS ITSELF (owner, 2026-11-15: it started as the textured mesh and turned into the SDF
   // tube bones as it dropped). Each segment of the group leaves the body as a loose mesh on the gib physics; only a
   // page with no mesh skeleton falls back to the bone-only SDF chunk.
-  const sources = ctx.render.skeletonSources.get(a)?.sources.filter(s => s.kind !== 'organ' && groupOf(s.prims?.[0]?.bone) === piece.group) ?? [];
+  const sources = ctx.render.skeletonSources.get(a)?.sources.filter(s => s.kind !== 'organ' && meltGroupOf(s.prims?.[0]?.bone) === piece.group) ?? [];
   const dropped = sources.length ? ctx.render.segMeshRenderer?.dropSegments(a, sources, vel) ?? 0 : 0;
   if (!dropped) {
     spawnChunkPiece(ctx,

@@ -90,7 +90,7 @@ import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltFrameOf, meltInitBody, remeltClusters, stepMelt, MELT_FRAME_ORIGIN, type MeltFrame, type MeltState } from '../melt';
 import {
-  boneChunkRadius, groupCentroid, groupOf, groupReleaseProgress, limbOfGroup,
+  boneChunkRadius, groupCentroid, meltGroupOf, groupReleaseProgress, limbOfGroup,
   releaseThreshold, meltBoneSpawnVel, mulberry32,
   partitionBones, releaseOrder, type BoneGroup,
 } from '../melt-bones';
@@ -1170,7 +1170,7 @@ async function main() {
       // re-adds lastRootShift to whatever origin it is handed, so
       // pre-subtract it: our prims are already world-space.
       const prims = posedBody.bonePrims.filter(
-        p => p.op === 'bone' && groupOf(p.bone) === g);
+        p => p.op === 'bone' && meltGroupOf(p.bone) === g);
       if (prims.length === 0) continue;
       const centroid = groupCentroid(prims);
       // Clatter gently OUTWARD off the body's vertical axis — gravity does
@@ -2862,7 +2862,7 @@ async function main() {
           // Released groups leave the body's bone rows (they are chunks
           // now). Bone fold is a hard min, so dropping released rows
           // cannot disturb the survivors' fold.
-          if (p.op === 'bone' && meltBones?.released.has(groupOf(p.bone))) return [];
+          if (p.op === 'bone' && meltBones?.released.has(meltGroupOf(p.bone))) return [];
           return [p];
         });
       // Clusters feed the render proxy box AND the march's culling, so they
@@ -2878,7 +2878,7 @@ async function main() {
         { ...restForNoise,
           // (the posed, unmelted radius on each rest row: see game-actor.ts meltBodies)
           prims: restForNoise.prims.map((p, i) => (posed.prims[i] && posed.prims[i]!.radius !== p.radius ? { ...p, radius: posed.prims[i]!.radius } : p)),
-          bonePrims: restForNoise.bonePrims.filter(p => !(p.op === 'bone' && meltBones?.released.has(groupOf(p.bone)))) },
+          bonePrims: restForNoise.bonePrims.filter(p => !(p.op === 'bone' && meltBones?.released.has(meltGroupOf(p.bone)))) },
       );
     } else {
       view.update(posed, restForNoise);

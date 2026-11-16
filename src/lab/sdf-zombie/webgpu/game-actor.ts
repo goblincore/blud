@@ -32,7 +32,7 @@ import {
   MELT_TUNING, type MeltBodyTuning, type MeltFrame, type MeltState,
 } from '../melt';
 import {
-  groupCentroid, groupOf, groupReleaseProgress, limbOfGroup, meltBoneSpawnVel, mulberry32,
+  groupCentroid, meltGroupOf, groupReleaseProgress, limbOfGroup, meltBoneSpawnVel, mulberry32,
   partitionBones, releaseOrder, releaseThreshold, type BoneGroup,
 } from '../melt-bones';
 import { constrainRigBends, stepRig, type RigPoint } from '../rig';
@@ -1464,7 +1464,7 @@ export function createZombieActor(opts: {
     const rows = (bps: readonly Primitive[], frame: MeltFrame): Primitive[] => bps.flatMap(p => {
       if (p.op === 'organ') return applyMeltOrgans([p], m.state, undefined, m.tuning, frame);
       if (p.op === 'bone') {
-        const g = groupOf(p.bone);
+        const g = meltGroupOf(p.bone);
         if (m.released.has(g)) return [];
         // A BONE STAYS THIN UNTIL THE FLESH ROUND IT IS GOING. The skeleton folds bare for the whole melt, and at
         // full size the bones that lie close under the skin (the arm bones, the skull under the face) took the
@@ -1493,7 +1493,7 @@ export function createZombieActor(opts: {
       rest: {
         ...current,
         prims: current.prims.map((p, i) => (posed.prims[i] && posed.prims[i]!.radius !== p.radius ? { ...p, radius: posed.prims[i]!.radius } : p)),
-        bonePrims: current.bonePrims.filter(p => !(p.op === 'bone' && m.released.has(groupOf(p.bone)))),
+        bonePrims: current.bonePrims.filter(p => !(p.op === 'bone' && m.released.has(meltGroupOf(p.bone)))),
       },
     };
   }
@@ -1533,7 +1533,7 @@ export function createZombieActor(opts: {
       // the legs. They hold until the body slumps, so a head shot shows the skull and its eyes before it falls.
       if (m.hitW > 0.5 && (g === 'skull' || g === 'cage' || g === 'pelvis') && m.state.t < m.slumpAt + 0.12) continue;
       m.released.add(g);
-      const bones = posed.bonePrims.filter(p => p.op === 'bone' && !p.dead && groupOf(p.bone) === g);
+      const bones = posed.bonePrims.filter(p => p.op === 'bone' && !p.dead && meltGroupOf(p.bone) === g);
       if (bones.length === 0) continue;
       const origin = groupCentroid(bones);
       opts.onMeltBone?.({ group: g, limb: limbOfGroup(g), origin, bones }, meltBoneSpawnVel(origin, m.rng, m.frame));

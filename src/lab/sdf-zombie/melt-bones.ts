@@ -43,11 +43,6 @@ export function groupOf(boneName: string | undefined): BoneGroup {
   if (!boneName) return 'cage';
   if (boneName === 'skull' || boneName === 'neck') return 'skull';
   if (boneName === 'pelvis') return 'pelvis';
-  // A foot goes with its shin. Left to the torso default, the foot bones rode in the CAGE group: the cage
-  // then reached from the ribs to the floor, and in the game (whose chunks rest on their own capsule ends)
-  // it came to rest the moment it was released, a ribcage hanging at chest height over the puddle.
-  if (boneName === 'foot.l') return 'shin.l';
-  if (boneName === 'foot.r') return 'shin.r';
   if ((BONE_GROUPS as readonly string[]).includes(boneName)) {
     return boneName as BoneGroup;
   }
@@ -56,7 +51,20 @@ export function groupOf(boneName: string | undefined): BoneGroup {
 }
 
 /**
- * Group the bone prims of a body. ORGANS ARE NOT BONES: op 'organ' prims
+ * groupOf FOR THE MELT: the same, but a foot goes with its shin. Left to the torso default, the foot bones rode in the
+ * CAGE group: the cage then reached from the ribs to the floor, and in the game (whose chunks rest on their own
+ * capsule ends) it came to rest the moment it was released, a ribcage hanging at chest height over the puddle.
+ * The melt only: the gib parts (gib-parts.ts, gib-carve.ts) group by groupOf, and the baked gib set is cut that way
+ * (its bone.cage piece carries the feet; a regrouping there is a 'source-mismatch' and the mesh gib falls back).
+ */
+export function meltGroupOf(boneName: string | undefined): BoneGroup {
+  if (boneName === 'foot.l') return 'shin.l';
+  if (boneName === 'foot.r') return 'shin.r';
+  return groupOf(boneName);
+}
+
+/**
+ * Group the bone prims of a body FOR THE MELT (meltGroupOf). ORGANS ARE NOT BONES: op 'organ' prims
  * live on the same bonePrims array but are soft — they melt with the flesh
  * (task 7), they do not drop as rigid chunks, so they are excluded here.
  */
@@ -66,7 +74,7 @@ export function partitionBones(
   const out = new Map<BoneGroup, Primitive[]>();
   for (const p of bonePrims) {
     if (p.op !== 'bone') continue;
-    const g = groupOf(p.bone);
+    const g = meltGroupOf(p.bone);
     const arr = out.get(g);
     if (arr) arr.push(p);
     else out.set(g, [p]);
