@@ -2,6 +2,41 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The zombie's skeleton kit (a believable bare skeleton) — built 2026-11-15
+
+Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the shoulder and hip.
+[Notes, numbers and sheets](../dev-notes/2026-11-15-skeleton-anatomy/NOTES.md).
+
+- [x] **Kit** `public/assets/lab/skeleton-kit.glb`, built headless in Blender by `scripts/skeleton-kit/build.sh`
+  (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
+  Vertebrae on a disc column, the old extracted cage's ribs and sternum, a sacrum, two hip bones with sockets at the rig's hip
+  joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
+  fibula, talus, a foot. 8,681 vertices and 16,970 triangles a body where the extraction was 15,110 and 30,284; the
+  same 19 meshes and batches.
+- [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
+  cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
+  pinned in `skeleton-kit.test.ts`). A body draws the kit whole or not at all; `?bonekit=0` is the old skeleton.
+- [x] **Joints hold when posed** (measured in the game, walk into attack): hip 3.5 mm typical and 20 worst (was 37 and
+  63; 2 and 9 before the femoral heads were lowered 8 cm to the flesh hip, 2026-11-16, off the rig's waist-high hip
+  points), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
+  bones follow the hip joints and the shoulder girdle the rig's clavicle (`KitFrame`); leg segments turn with the
+  body's yaw (`contract.ts`).
+- [x] **Colour**: a kit bone with no wound near it wears the skull's ivory with tissue in patches (the melt); one a wound
+  exposes wears the meat an extracted bone always wore. Owner's first look (2026-11-15): ten thin ivory ribs through a
+  chest wound did not feel part of the body, so the cage went back to six fat ribs and exposed bone back to meat. Second look (2026-11-16): the old ribcage was still
+  preferred (flat hoops running into the sternum), so the kit's ribs and sternum are now the old cage's own extracted
+  surface, on the kit's vertebrae and sacrum.
+- [x] **Beefier** (owner, 2026-11-16: clavicles "two thin bars", a solid frame over fine detail): every shaft, process
+  and rim scaled by a factor a bone (`build_kit.py BEEF`, clavicle 1.9 down to tibia 1.3).
+- [x] **One surface a bone, not a pile of tubes** (owner, 2026-11-16): `build_kit.py fuse` voxel-fuses, smooths and
+  thins each piece's shapes (pelvis, girdle, limb bones, hand, foot); a manubrium seats the clavicles; the shoulder
+  blades are rounded paddles.
+- [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
+  `kitJointGaps` measure joint separation.
+- [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);
+  corpses, ragdolls and severed bodies looked at; chunk bones (still SDF capsules); the kit fitted to the other
+  humanoids; a skeleton for non-humanoids (owner: a different session).
+
 ## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass; boots approved 2026-11-15)
 
 - [x] **Body** `characters/tallow.blob`: a 2.05 m, 1.3 m wide fat man on short legs (the venus's bone names): gut,

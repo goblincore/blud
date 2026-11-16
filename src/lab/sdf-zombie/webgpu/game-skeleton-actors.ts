@@ -10,6 +10,7 @@
 import type { GameContext } from './game-context';
 import { type ZombieActor } from './game-actor';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
+import { kitSources } from './skeleton-spike/skeleton-kit';
 import { boneSegmentKeyMap, buildSegmentAtlas } from './skeleton-spike/volume';
 import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spike/volume-gpu';
 
@@ -20,7 +21,7 @@ import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spik
  *  (body reference change — mid-pose re-bind is a documented prototype
  *  approximation for limb local frames, re-measured in task 4). */
 export function buildSkeletonSources(ctx: GameContext, actor: ZombieActor, name: string) {
-  const sources = createSkeletonSources(actor.body, actor.boundRig(), {
+  const made = createSkeletonSources(actor.body, actor.boundRig(), {
     character: name,
     rig: () => actor.boundRig().rig,
     bodyYaw: () => actor.pose().yaw,
@@ -28,6 +29,9 @@ export function buildSkeletonSources(ctx: GameContext, actor: ZombieActor, name:
     // flip needs no rebuild (game-render-controls.ts applyOrganMode).
     organs: true,
   });
+  // The skeleton kit's pieces that ride a frame of their own (the hip bones on the hip joints, the shoulder girdle on
+  // the clavicle bone: skeleton-kit.ts kitSources). Every other source is the contract's own.
+  const sources = kitSources(made, ctx.render.segMeshCache?.bodyKit ?? null, () => actor.boundRig().rig.points, () => actor.pose().yaw);
   // A character that draws the anatomical skull has it fitted to its head HERE, as its sources are built (at spawn;
   // again for a body a sever re-derived), and not in the frame its bone first shows: a fit to the flesh takes 30 to
   // 180 ms. It is made once per head revision (AnatomicalSkullKit.head keeps it), so every later actor of the same

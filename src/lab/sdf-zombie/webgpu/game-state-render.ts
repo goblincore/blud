@@ -106,6 +106,8 @@ export interface RenderState {
   /** Master switch for the visual-actor cull (`?visualcull=0` or
    *  `setVisualCull(false)` restores the pre-cull behaviour exactly). */
   visualCullEnabled: boolean;
+  /** DEBUG (`__sdfGame.bareSkeleton`): every body's flesh is hidden and its whole mesh skeleton drawn. */
+  bareSkeleton: boolean;
   /** Post-AA composer for the presented frame. */
   postAa: PostAa;
   /** True when the run-5b refine head is on (`?refine` / `?graphics=high`). */
@@ -193,6 +195,7 @@ export function makeRenderState(): RenderState {
     visibleActors: [],
     visualActors: new Set<ZombieActor>(),
     visualCullEnabled: true,
+    bareSkeleton: false,
     postAa: unbuilt<PostAa>(),
     refineWanted: false,
     sdfLayer: unbuilt<SdfLayer>(),

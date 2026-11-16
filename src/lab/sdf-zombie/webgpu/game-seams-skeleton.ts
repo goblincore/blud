@@ -106,6 +106,29 @@ export function createSkeletonSeams(ctx: GameContext) {
         inside: look.inside.value.toArray(), rim: [r.x, r.y, r.z], rimWidth: r.w,
       };
     },
+    /** The live pose of each of a body's skeleton segments (contract.ts SegmentPose: world = origin + quat * local),
+     *  with its mesher ('asset' = a skeleton-kit piece or the anatomical skull, 'nets' = extracted). null without
+     *  the mesh skeleton or the body. What a capture measures joint separation with (skeleton-kit.ts kitJointGaps). */
+    skeletonPoses: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const sources = a && ctx.render.skeletonSources.get(a)?.sources;
+      const cache = ctx.render.segMeshCache;
+      if (!sources || !cache) return null;
+      return sources.filter(s => s.kind === 'bone').map(s => {
+        const pose = s.pose();
+        return { segment: s.segment, live: s.isLive(), mesher: cache.get(s).mesher, origin: [...pose.origin], quat: [...pose.quat] };
+      });
+    },
+    /** THE SKELETON, BARE (debug): hide every body's flesh and draw its whole mesh skeleton, which otherwise shows
+     *  only where a wound opens the flesh. For looking at the bones posed, in the game's own light. Applies to the
+     *  bodies alive at the call (call it again after a spawn); `false` puts the flesh back. Returns the state. */
+    bareSkeleton: (on?: boolean) => {
+      if (on !== undefined) {
+        ctx.render.bareSkeleton = on;
+        for (const a of ctx.world.actors) a.view.setFleshHidden(on);
+      }
+      return ctx.render.bareSkeleton;
+    },
     /** skeleton=mesh diagnostics: draw or hide the bone meshes and the seated eyes (both drawn by default), so a
      *  capture can tell their pixels from the flesh's by a shown / hidden pair. Returns the state; null without the
      *  mesh skeleton; false (and nothing changed) for a flag that is not a boolean. */
