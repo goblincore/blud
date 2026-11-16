@@ -1085,7 +1085,10 @@ export function stepMotion(
   // is skipped entirely so the zombie's arithmetic is untouched.
   // A burning body's trunk pitches and sways with the flail (burn-flail.ts); null on every unburnt frame,
   // so torsoLean and qLean below are the old expressions exactly.
-  const burnPose = cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed
+  // A body without the humanoid arm joints takes no overlay at all, trunk and head included (the spec).
+  const burnArms = idx.shoulderL !== undefined && idx.shoulderR !== undefined && idx.elbowL !== undefined
+    && idx.elbowR !== undefined && idx.handL !== undefined && idx.handR !== undefined;
+  const burnPose = cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed && burnArms
     ? burnFlailPose(cfg.burnFlail.t, cfg.burnFlail.seed, cfg.burnFlail.amp, cfg.burnFlail.fold) : null;
   const torsoLeanBase = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
   const torsoLean = burnPose ? torsoLeanBase + burnPose.pitch : torsoLeanBase;

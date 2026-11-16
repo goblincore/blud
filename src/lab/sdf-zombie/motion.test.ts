@@ -1782,9 +1782,10 @@ describe('the burning flail overlay', () => {
   };
   const d = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-  it('absent, the frame is exactly the unburnt frame', () => {
-    const a = stepOnce(CFG_ON).frame.restPose, b = stepOnce({ ...CFG_ON }).frame.restPose;
-    expect(a).toEqual(b);
+  it('amp 0 is exactly the frame without the key (the unburnt path is untouched)', () => {
+    const a = stepOnce(CFG_ON), b = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 0, fold: 0.5 } });
+    expect(b.frame).toEqual(a.frame);
+    expect(b.state).toEqual(a.state);
   });
   it('raises both hands above the shoulders without stretching either arm', () => {
     const base = stepOnce(CFG_ON);
