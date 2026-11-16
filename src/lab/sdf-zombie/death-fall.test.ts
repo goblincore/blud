@@ -5,7 +5,7 @@ import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
 import { bindRig } from './rig-bind';
 import { makeMotionJoints } from './motion';
-import { canDeathFall, CORPSE_LOOSE_SEC, CORPSE_SLACK_M, corpseHoldStep, DEATH_FALL, DEATH_FALL_KINDS, FALLS, deathFallPose, deathFallPull, fallLength, pickDeathFall, SETTLE_SEC, type DeathFallChoice, type DeathFallKind } from './death-fall';
+import { BURN_FALL_KINDS, canDeathFall, CORPSE_LOOSE_SEC, CORPSE_SLACK_M, corpseHoldStep, DEATH_FALL, DEATH_FALL_KINDS, FALLS, deathFallPose, deathFallPull, fallLength, pickBurnFall, pickDeathFall, SETTLE_SEC, type DeathFallChoice, type DeathFallKind } from './death-fall';
 import { makeRng } from './wander';
 import type { Vec3 } from './types';
 
@@ -148,5 +148,72 @@ describe('the keys respect the joints', () => {
       for (const leg of [key.legNear, key.legFar]) expect(leg[1]).toBeGreaterThanOrEqual(leg[0]);
       for (const arm of [key.armNear, key.armFar]) expect(arm[1]).toBeLessThanOrEqual(arm[0]);
     }
+  });
+});
+
+describe('the burn falls', () => {
+  // The body faces +Z and a burn fall topples along its own forward.
+  const burnEnd = (kind: DeathFallKind) => deathFallPose({ kind, strength: 1, side: 1 }, frame([0, 0, 1]), fallLength(kind) + 0.5);
+
+  it.each(BURN_FALL_KINDS)('%s ends on the floor with nothing under it', kind => {
+    const p = burnEnd(kind);
+    for (const q of p) expect(q[1]).toBeGreaterThan(-0.02);
+    expect(at('head', p)[1]).toBeLessThan(kind === 'burnHeap' ? 0.85 : 0.35);
+  });
+  it('kneel and topple go down face first, along the body forward', () => {
+    for (const kind of ['burnKneel', 'burnTopple'] as const) {
+      const p = burnEnd(kind);
+      expect(at('chest', p)[1]).toBeLessThan(0.3);
+      expect(at('head', p)[2]).toBeGreaterThan(at('pelvis', p)[2]);
+    }
+  });
+  it('the heap stays put: it sits down into itself', () => {
+    const p = burnEnd('burnHeap');
+    expect(Math.hypot(at('pelvis', p)[0], at('pelvis', p)[2] - j.pelvis[2])).toBeLessThan(0.45);
+    expect(at('pelvis', p)[1]).toBeLessThan(0.4);
+  });
+  it('the kneel curls: the knees end drawn up toward the chest', () => {
+    const p = burnEnd('burnKneel');
+    const gap = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    expect(gap(at('kneeL', p), at('chest', p))).toBeLessThan(gap(at('kneeL', j.base), at('chest', j.base)));
+  });
+  it('no burn fall travels or leaves the floor', () => {
+    for (const kind of BURN_FALL_KINDS) { expect(FALLS[kind].travel).toBe(0); expect(FALLS[kind].air).toBe(0); }
+  });
+});
+
+describe('pickBurnFall', () => {
+  it('covers all three burn kinds and only those', () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 200; seed++) seen.add(pickBurnFall(seed, [0, 0, 1]).kind);
+    expect([...seen].sort()).toEqual([...BURN_FALL_KINDS].sort());
+  });
+  it('is deterministic and carries a unit ground-plane impact', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const c = pickBurnFall(seed, [0, 0, 1]);
+      expect(c).toEqual(pickBurnFall(seed, [0, 0, 1]));
+      expect(Math.hypot(c.impact![0], c.impact![2])).toBeCloseTo(1, 6);
+      expect(c.impact![1]).toBe(0);
+      expect(c.strength).toBe(1);
+    }
+  });
+  it('kneel and heap always fall along the forward; a topple sometimes goes to the side', () => {
+    let side = 0, topples = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const c = pickBurnFall(seed, [0, 0, 1]);
+      if (c.kind !== 'burnTopple') { expect(c.impact![2]).toBeCloseTo(1, 6); continue; }
+      topples++;
+      if (Math.abs(c.impact![0]) > 0.9) side++;
+    }
+    expect(side).toBeGreaterThan(0);
+    expect(side).toBeLessThan(topples);
+  });
+  it('an ordinary death never plays a burn fall', () => {
+    const rand = makeRng(5);
+    for (let i = 0; i < 300; i++) {
+      const c = pickDeathFall({ blown: null, struck: (['legs', 'head', 'body'] as const)[i % 3]! }, rand);
+      expect(BURN_FALL_KINDS).not.toContain(c.kind);
+    }
+    expect(DEATH_FALL_KINDS).toHaveLength(5);
   });
 });
