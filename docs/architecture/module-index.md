@@ -60,7 +60,7 @@ Each line is the first sentence of the module's header comment.
 | [SDF march renderer](#sdf-march-renderer) | 64 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
-| [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
+| [Damage, wounds and heads](#damage-wounds-and-heads) | 25 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
@@ -813,7 +813,8 @@ Rigs, poses, IK, gait, motion profiles, hands.
 Wound fields, severing, head damage and the head split, death states, melting, burning.
 
 - `bleed-registry.ts` — The game page's wound-emitter ledger (bleeding-wounds plan task 2).
-- `burn-behaviour.ts` — WHAT A BURNING BODY DOES, as a pure seeded step.
+- `burn-behaviour.ts` — WHAT A BURNING BODY DOES, as a pure seeded step (spec 2026-11-16-burn-flail-and-death-design.md).
+- `burn-flail.ts` — THE BURNING FLAIL, as a pure pose (spec 2026-11-16-burn-flail-and-death-design.md).
 - `burn-state.ts` — HOW ALIGHT A BODY IS — the whole burn model, pure and three-free so the lab, the tests and (spec 2) the game's actors all step the same numbers.
 - `cut-wound.ts` — CUT WOUNDS (spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §3-4).
 - `damage.ts` — The wound record and everything that stamps, locates and converts wounds on a body, including cloth wound handling.
