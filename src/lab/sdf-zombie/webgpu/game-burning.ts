@@ -126,6 +126,9 @@ export function createGameBurning(ctx: GameContext): GameBurning {
   const volW = new Map<ZombieActor, number>();
   const lodRank: { a: ZombieActor; d: number }[] = [];
   const inVolume = new Set<ZombieActor>();
+  /** Bodies whose burn death has had its burn-down kill. The actor's burnPhase() stays 'dead' on the corpse, so
+   *  without this a later re-light of the charred corpse was killed again on the next step: once per death. */
+  const burnDeathKilled = new Set<ZombieActor>();
   let lodLastT = -1;
   const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const _fireView = new THREE.Matrix4();
@@ -357,6 +360,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       cardLastPos.delete(a);
       fireSrc.delete(a);
       volW.delete(a);
+      burnDeathKilled.delete(a);
       // The body is leaving the world: release the panic override at once and
       // drop it from the transition sets, so a later reuse of the same actor
       // (or a stale set entry) cannot keep it fleeing.
@@ -381,8 +385,13 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       // BURNED TO DEATH (spec 2026-11-16-burn-flail-and-death-design.md): the actor's clock ran out
       // and it is falling. Start the burn-down once; the state stays registered, so the fire fades
       // and the char completes on the corpse (retire(), the gib path, is what releases a body).
+      // A body no longer 'dead' (an actor reset to play) can burn to death again.
+      for (const a of burnDeathKilled) if (a.burnPhase() !== 'dead') burnDeathKilled.delete(a);
       burning.forEachActive((a, s) => {
-        if (!s.dying && s.alight && a.burnPhase() === 'dead') burning.kill(a);
+        if (!s.dying && s.alight && a.burnPhase() === 'dead' && !burnDeathKilled.has(a)) {
+          burnDeathKilled.add(a);
+          burning.kill(a);
+        }
       });
       let any = false;
       const simDt = Math.min(dt, 1 / 30);
