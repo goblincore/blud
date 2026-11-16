@@ -62,6 +62,7 @@ import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import impBlobSrc from './characters/imp.blob?raw';
 import cerebraxBlobSrc from './characters/cerebrax.blob?raw';
+import tallowBlobSrc from './characters/tallow.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -613,6 +614,23 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('venus'),
+  },
+
+  // The walking rendering vat (tallow.blob's header): a corpulent man whose own fat, rendered in a boiler sunk in his
+  // back, feeds the cannons his forearms have grown into (the Cronenberg pass).
+  tallow: {
+    name: 'tallow', src: tallowBlobSrc,
+    // The arm cannons, the sunken back boiler and the feed hoses: Blender parts
+    // (assets-source/tallow-kit/) skinned to the .blob's bones by scripts/blender-kit.ts.
+    kit: '/assets/lab/tallow-kit.gltf',
+    kitSheds: true,
+    // Fat rolls, creases, cellulite, stretch marks, and veins radiating from the boiler and the cannon blocks
+    // (characters/tallow.detail from scripts/tallow-detail-gen.ts; baked, never marched).
+    bodyNormal: { url: '/assets/lab/tallow-body-n.png', meta: '/assets/lab/tallow-body-n.json', strength: 1 },
+    // His own face (owner: not the zombie's): every feature is a prim in tallow.blob, and this generated decal
+    // (scripts/make-tallow-face.py) draws only the mouth's cavity and teeth, at MULTIPLY.
+    face: bakedFace('tallow-face.png'),
+    profile: motionProfileFor('tallow'),
   },
 
 };

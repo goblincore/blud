@@ -22,6 +22,8 @@ import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
 import { BILE, stepBile } from '../bile';
 import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
+import { TRAIL_SMOKE, emitTrailPuff, stepMuzzleSmoke } from './muzzle-smoke';
+import { hideRocketsFrom, placeRocket } from './rocket-view';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -1249,6 +1251,8 @@ export function tick(ctx: GameContext, dt: number) {
         else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
       }
     }
+    // The tallow's muzzle smoke (muzzle-smoke.ts) drifts and faces the camera.
+    stepMuzzleSmoke(ctx, dt, ctx.boot.handle.camera);
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.
@@ -1266,17 +1270,30 @@ export function tick(ctx: GameContext, dt: number) {
       else hideTracer(ctx, v);
     }
     while (ctx.weapon.fireballViews.length < ctx.weapon.fireballs.length) {
-      const view = newTracerView(ctx);
-      // Fire: the additive tracer pushed to a hot orange.
-      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(1.0, 0.45, 0.08);
-      ctx.weapon.fireballViews.push(view);
+      ctx.weapon.fireballViews.push(newTracerView(ctx));
     }
+    let rockets = 0;
     for (let k = 0; k < ctx.weapon.fireballViews.length; k++) {
       const v = ctx.weapon.fireballViews[k]!;
       const b = ctx.weapon.fireballs[k];
-      if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
-      else hideTracer(ctx, v);
+      if (!b) { hideTracer(ctx, v); continue; }
+      // A volley ROCKET (the tallow) draws as a shell, an exhaust flame and a nozzle glow (rocket-view.ts), and
+      // drops a smoke trail: a puff each time its flight crosses a TRAIL_SMOKE.everySec mark, just behind the tail.
+      if (b.look === 'rocket') {
+        hideTracer(ctx, v);
+        placeRocket(ctx, rockets++, b.pos, b.vel, tracerEye);
+        if (Math.floor(b.ageSec / TRAIL_SMOKE.everySec) > Math.floor((b.ageSec - dt) / TRAIL_SMOKE.everySec)) {
+          const sp = Math.hypot(b.vel[0], b.vel[1], b.vel[2]) || 1, back = 0.45 / sp;
+          emitTrailPuff(ctx, [b.pos[0] - b.vel[0] * back, b.pos[1] - b.vel[1] * back, b.pos[2] - b.vel[2] * back], b.vel);
+        }
+        continue;
+      }
+      // The pool is shared with rockets, so the imp's ball sets its colour each step. Fire: the additive tracer
+      // pushed to a hot orange.
+      for (const m of [v.streak, v.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(1.0, 0.45, 0.08);
+      placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
     }
+    hideRocketsFrom(ctx, rockets);
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
       ctx.weapon.rocketViews.push(newTracerView(ctx));
     }

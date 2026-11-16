@@ -450,6 +450,17 @@ describe('spawn slots: soldiers, then juggernauts, then warbulls, then zombies',
     // No other room gained one.
     for (const r of ROOMS) if (r !== arena) { expect(r.juggernauts ?? 0).toBe(0); expect(r.warbulls ?? 0).toBe(0); }
   });
+  it('puts one tallow (slot 0) among three zombies in room 4 (owner, 2026-11-15)', () => {
+    const room4 = ROOMS.find(r => r.id === 4)!;
+    expect([0, 1, 2, 3].map(i => slotCharacter(room4, i))).toEqual(['tallow', 'zombie', 'zombie', 'zombie']);
+    for (const r of ROOMS) if (r !== room4) expect(r.tallows ?? 0).toBe(0);
+  });
+
+  it('orders tallows after warbulls and before zombies', () => {
+    const room = { ...ROOMS[0]!, zombies: 4, soldiers: 0, warbulls: 1, tallows: 1 };
+    expect([0, 1, 2, 3].map(i => slotCharacter(room, i))).toEqual(['warbull', 'tallow', 'zombie', 'zombie']);
+  });
+
   it('orders soldiers first, then juggernauts, then warbulls, then zombies', () => {
     const room = { ...ROOMS[0]!, zombies: 6, soldiers: 2, juggernauts: 1, warbulls: 1 };
     expect([0, 1, 2, 3, 4, 5].map(i => slotCharacter(room, i))).toEqual(['soldier', 'soldier', 'juggernaut', 'warbull', 'zombie', 'zombie']);

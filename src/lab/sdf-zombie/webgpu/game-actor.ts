@@ -2296,7 +2296,8 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      const spit = opts.profile?.spit;
+      // A two-gun body (the tallow) tags each round with its muzzle; the left one is profile.spitL.
+      const spit = think.fireSide === 'L' && opts.profile?.spitL ? opts.profile.spitL : opts.profile?.spit;
       const spitFrom = spit ? joints.index[spit.from] : undefined;
       if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
         // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along

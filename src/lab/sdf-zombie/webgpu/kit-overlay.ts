@@ -252,6 +252,10 @@ const LOOK: Record<string, {
   // (GLOW_FROM_ATTRIBUTE below). Same looks as skullmetal and horn.
   impmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
   impclaw: { metalness: 0.0, roughness: 0.42, envIntensity: 0.45 },
+  // The tallow's (assets-source/tallow-kit/): torn, clotted meat and blood where the metal goes into him (round the
+  // cannon breeches, the boiler, the ports and the mask). Its albedo is the vertex colours (dark clot to fresh red);
+  // wet, so a tight highlight and a little env, and no metal.
+  gore: { metalness: 0.0, roughness: 0.20, envIntensity: 0.60 },
 };
 
 /**

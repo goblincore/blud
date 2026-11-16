@@ -353,6 +353,33 @@ export const STOMP: GaitProfile = {
   torsoLean: 6,
 };
 
+/** The tallow's stomp (characters/tallow.blob): STOMP's heavy lift-and-plant with REACH arms at a zero rest pitch.
+ *  STOMP carries its arms ('carry'), and the swing's arm pivot runs only for the reach style (motion.ts), so on STOMP
+ *  the tallow's arms ignored every attack: the imp's throw and the volley's brace both rendered as a statue
+ *  (2026-11-14). Pitch 0 is the authored hang (his gorilla arms, the cannons low and ahead); each arm swings 0.16 rad
+ *  against its leg as he walks, a heavy ape's sway, and the brace (attack.ts) raises them on top. The legs WADDLE:
+ *  short steps and a wide side-to-side rock, for 0.54 m stumps. */
+export const TALLOW_STOMP: GaitProfile = {
+  ...STOMP,
+  name: 'tallow-stomp',
+  armStyle: 'reach',
+  reachPitch: 0,
+  reachElbowDrop: 0,
+  reachShoulderUp: 0,
+  reachBobAmp: 0.030,
+  reachSwayAmp: 0.030,
+  reachSwing: 0.16,
+  // THE WADDLE on stumps (owner, fifth look: shorter legs). STOMP's 0.42 m stride and 0.17 lift are for 1.0 m legs;
+  // his are 0.54. Short steps, a low lift, and the whole mass rocking from side to side onto each planted leg.
+  strideLen: 0.24,
+  footLift: 0.09,
+  kneeBend: 0.08,
+  kneeLift: 0.04,
+  swayAmp: 0.10,
+  shoulderSway: 0.85,
+  rockAmp: 0.025,
+};
+
 /** The cultist's GLIDE: the shamble with the legs hidden. Under a floor-length
  *  robe the shamble's stride pushed the knees up to 14 cm outside the skirt
  *  cone (cultist-blob.test.ts measures it) and a thigh broke the cloth in

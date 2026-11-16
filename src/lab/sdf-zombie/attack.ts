@@ -35,6 +35,7 @@
 // +y up, +x the body's right.
 import type { Vec3 } from './types';
 import type { GaitJointName } from './gait';
+import { TALLOW_VOLLEY } from './fireball';
 
 export const ATTACK_TUNING = {
   /** Beat boundaries as fractions of the swing. */
@@ -80,6 +81,8 @@ export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 
   | 'bite' | 'pounce' | 'stab' | 'squirt'
   // The imp's overhand fireball throw (fireball.ts): the right arm only, never a contact.
   | 'throw'
+  // The tallow's two-cannon volley (fireball.ts TALLOW_VOLLEY): BOTH arms raised level and held, never a contact.
+  | 'brace'
   // The gutcrawler's rear-and-slam (hound-attack.ts 'slam').
   | 'slam';
 
@@ -134,6 +137,10 @@ export const SWING_ARCS: Record<SwingVariant, {
   // through"): the arm carries on down and across the body to below the shoulder's reach (followPitch/Yaw), on
   // THROW_TUNING's beats.
   throw: { windupPitch: 2.4, strikePitch: 0.45, windupYaw: -0.35, strikeYaw: 0.18, followPitch: -0.35, followYaw: 0.70 },
+  // THE BRACE (the tallow): both arm-cannons swing up from hanging (45 deg below level at rest, tallow.blob) to LEVEL,
+  // 0.80 rad, and a touch across so the two bores converge ahead of him; held through the volley (the follow is the
+  // same pose), then lowered. attackPose drives BOTH arms with it.
+  brace: { windupPitch: 0.80, strikePitch: 0.80, windupYaw: 0.10, strikeYaw: 0.10, followPitch: 0.80, followYaw: 0.10 },
   slam: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
@@ -157,9 +164,40 @@ export const THROW_TUNING: AttackTuning = {
   handDrop: 0.04,
 };
 
-/** The beats a variant swings on: the throw's own, every other the melee swing's. */
+/** THE BRACE'S BEATS (the tallow's volley, fireball.ts TALLOW_VOLLEY): a slow raise (the telegraph, 30%), a long
+ *  hold while the cannons fire (to 85%), a slow lowering. The body BRACES rather than lunging: it leans back into the
+ *  recoil and plants, no shoulder twist. */
+export const BRACE_TUNING: AttackTuning = {
+  ...ATTACK_TUNING,
+  windupEnd: 0.30,
+  strikeEnd: 0.34,
+  holdEnd: 0.85,
+  lunge: 0.0,
+  windback: 0.07,
+  chestDrive: 0.0,
+  chestRear: 0.06,
+  shoulderDrive: 0.0,
+  offGuardPitch: 0.0,
+  handDrop: 0.0,
+};
+
+/** THE CANNON KICK (owner, 2026-11-15: "the firing animation needs to be more pronounced ... recoil"). Each volley
+ *  shot (fireball.ts TALLOW_VOLLEY.shots) snaps its cannon up and its shoulder back, then the arm settles over
+ *  `decay` of the brace's phase (0.03 x 2.8 s: about 0.08 s); the chest jolts back with every shot. 1 at the shot's
+ *  phase, 0 before it. Pure, and read off the brace's own phase, so the kick lands on the very frame the round leaves. */
+export const CANNON_KICK = { pitch: 0.22, shoulderBack: 0.07, chestBack: 0.035, decay: 0.03 } as const;
+export function cannonKick(phase: number, side: 'L' | 'R'): number {
+  let k = 0;
+  for (const s of TALLOW_VOLLEY.shots) {
+    if (s.side !== side || phase < s.at) continue;
+    k = Math.max(k, Math.exp(-(phase - s.at) / CANNON_KICK.decay));
+  }
+  return k < 1e-3 ? 0 : k;
+}
+
+/** The beats a variant swings on: the throw's and the brace's own, every other the melee swing's. */
 export function tuningOf(variant: SwingVariant): AttackTuning {
-  return variant === 'throw' ? THROW_TUNING : ATTACK_TUNING;
+  return variant === 'throw' ? THROW_TUNING : variant === 'brace' ? BRACE_TUNING : ATTACK_TUNING;
 }
 
 export interface AttackPose {
@@ -285,6 +323,21 @@ export function attackPose(
   }
   const sgn = side === 'R' ? 1 : -1;
   const fwd = d >= 0;
+  if (variant === 'brace') {
+    // BOTH arms take the arc (the two cannons), mirrored in yaw; the body leans back and plants (BRACE_TUNING).
+    // Each shot kicks its own cannon up and its shoulder back, and jolts the chest (cannonKick).
+    const kL = cannonKick(phase, 'L'), kR = cannonKick(phase, 'R');
+    const z = fwd ? d * T.lunge : d * T.windback;
+    const cz = (fwd ? d * T.chestDrive : d * T.chestRear) - Math.max(kL, kR) * CANNON_KICK.chestBack;
+    return {
+      offsets: { chest: [0, 0, cz], neck: [0, 0, cz * T.headShare], head: [0, 0, cz * T.headShare],
+        shoulderL: kL ? [0, 0, -kL * CANNON_KICK.shoulderBack] : ZERO,
+        shoulderR: kR ? [0, 0, -kR * CANNON_KICK.shoulderBack] : ZERO, handL: ZERO, handR: ZERO },
+      rootOffset: [0, 0, z],
+      reach: { pitchL: arc.pitch + kL * CANNON_KICK.pitch, pitchR: arc.pitch + kR * CANNON_KICK.pitch,
+        yawL: -arc.yaw, yawR: arc.yaw },
+    };
+  }
 
   const pitchSwing = arc.pitch;
   const yawSwing = sgn * arc.yaw;
