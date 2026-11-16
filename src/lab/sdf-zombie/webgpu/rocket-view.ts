@@ -1,21 +1,24 @@
 // ROCKET VIEW: how the tallow's volley shot draws (owner, 2026-11-15). The first rocket pass stretched the shared
 // tracer to 2.6x its calibre and a 1.15 m streak: the owner saw "a visible seam" (the tracer sprite's hard front edge,
 // blown up) and "no projectile". So a rocket gets its own view, three parts in the effects overlay:
-//   body   a dark iron shell with a nose cone and four fins, turned along the flight (the projectile you can see)
+//   body   the Blender rocket (assets-source/tallow-kit/make_rocket.py -> tallow-rocket.glb: an iron tube, a rusted
+//          warhead, welded swept fins, a sooted nozzle bell; shading baked into its vertex colours, the overlay is
+//          unlit), turned along the flight. The owner on the procedural first cut: "floating fins ... looks basic".
 //   flame  an additive exhaust card behind it, a texture that fades out at BOTH ends (no seam), rolled to the eye
 //   glow   a hot round glow at the nozzle, facing the eye, so a rocket coming straight at you still burns
 // The overlay scene does not walk matrices (the tracers set theirs by hand), so each part's matrix is set here.
 // One pool per game, grown on demand. The smoke trail is muzzle-smoke.ts TRAIL_SMOKE.
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { type GameContext } from './game-context';
 import { faceEyeBasis, tracerBasis, tracerNearFade, type TracerBasis } from './tracer-sprite';
 import type { Vec3 } from '../types';
 
 export const ROCKET_VIEW = {
-  /** The shell: radius, body length and nose length, m. */
-  radius: 0.055,
-  bodyLen: 0.30,
-  noseLen: 0.12,
+  /** The Blender rocket, nozzle mouth at its origin, nose along +Y. */
+  url: '/assets/lab/tallow-rocket.glb',
+  /** Its length, m (nozzle mouth to fuse cap): the ball's position is its middle. */
+  bodyLen: 0.50,
   /** The exhaust card: length and width, m, behind the tail. */
   flameLen: 0.85,
   flameWidth: 0.26,
@@ -24,6 +27,9 @@ export const ROCKET_VIEW = {
   /** White-hot core to orange (the flame texture blends between them across and along it). */
   core: [1.0, 0.92, 0.70] as const,
   edge: [1.0, 0.45, 0.10] as const,
+  /** HDR multipliers on the additive flame and glow (toneMapped off, like the muzzle flash's core): "brighter". */
+  flameGain: 1.8,
+  glowColour: [3.0, 1.9, 0.9] as const,
 } as const;
 
 /** The exhaust texture's alpha at (u along the card, 0 tail .. 1 nozzle; v across, 0..1). It rises to full just short
@@ -55,52 +61,49 @@ function flameTexture(): THREE.DataTexture {
   return t;
 }
 
-interface RocketMeshes { body: THREE.Group; flame: THREE.Mesh; glow: THREE.Mesh }
-interface Pool { views: RocketMeshes[]; flameTex: THREE.DataTexture }
+interface RocketMeshes { body: THREE.Group; flame: THREE.Mesh; glow: THREE.Mesh; hasModel: boolean }
+interface Pool { views: RocketMeshes[]; flameTex: THREE.DataTexture; model: THREE.Object3D | null }
 const pools = new WeakMap<GameContext, Pool>();
 
 function poolOf(ctx: GameContext): Pool {
   let pool = pools.get(ctx);
-  if (!pool) { pool = { views: [], flameTex: flameTexture() }; pools.set(ctx, pool); }
-  return pool;
+  if (pool) return pool;
+  const made: Pool = { views: [], flameTex: flameTexture(), model: null };
+  pools.set(ctx, made);
+  // The model loads once; until it arrives a rocket is its flame and glow. Unlit: its vertex colours carry the
+  // baked AO, key light and tint.
+  new GLTFLoader().loadAsync(ROCKET_VIEW.url).then(gltf => {
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    gltf.scene.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = mat; });
+    made.model = gltf.scene;
+  }).catch(err => console.warn('[sdf-game] tallow-rocket.glb failed to load; rockets draw as flame only', err));
+  return made;
+}
+
+function attachModel(v: RocketMeshes, pool: Pool): void {
+  if (v.hasModel || !pool.model) return;
+  const m = pool.model.clone(true);
+  m.traverse(o => { o.frustumCulled = false; });
+  v.body.add(m);
+  v.hasModel = true;
 }
 
 function newRocket(ctx: GameContext, pool: Pool): RocketMeshes {
-  const R = ROCKET_VIEW;
   const body = new THREE.Group();
-  const iron = new THREE.MeshBasicMaterial({ color: 0x2c2a28 });
-  const steel = new THREE.MeshBasicMaterial({ color: 0x6a6560 });
-  const rust = new THREE.MeshBasicMaterial({ color: 0x5a2a18 });
-  // +Y is the flight direction; the tail (nozzle) at y 0.
-  const shell = new THREE.Mesh(new THREE.CylinderGeometry(R.radius, R.radius * 0.9, R.bodyLen, 10), iron);
-  shell.position.y = R.bodyLen / 2;
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(R.radius, R.noseLen, 10), steel);
-  nose.position.y = R.bodyLen + R.noseLen / 2;
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(R.radius * 1.08, R.radius * 1.08, 0.035, 10), rust);
-  band.position.y = R.bodyLen * 0.72;
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(R.radius * 0.7, R.radius * 0.95, 0.05, 10), steel);
-  nozzle.position.y = -0.02;
-  body.add(shell, nose, band, nozzle);
-  for (let k = 0; k < 4; k++) {
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.11, 0.07), iron);
-    const a = k * Math.PI / 2;
-    fin.position.set(Math.cos(a) * (R.radius + 0.03), 0.06, Math.sin(a) * (R.radius + 0.03));
-    fin.rotation.y = -a;
-    body.add(fin);
-  }
   body.matrixAutoUpdate = false;
   body.frustumCulled = false;
-  body.traverse(o => { o.frustumCulled = false; });
   const additive = (map: THREE.Texture) => new THREE.MeshBasicMaterial({
-    map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
   });
   const flame = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), additive(pool.flameTex));
+  (flame.material as THREE.MeshBasicMaterial).color.setScalar(ROCKET_VIEW.flameGain);
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), additive(ctx.vfx.emberTex));
-  (glow.material as THREE.MeshBasicMaterial).color.setRGB(1.0, 0.7, 0.35);
+  (glow.material as THREE.MeshBasicMaterial).color.setRGB(...ROCKET_VIEW.glowColour);
   for (const m of [flame, glow]) { m.matrixAutoUpdate = false; m.frustumCulled = false; }
-  const scene = ctx.vfx.characterEffects.scene;
-  scene.add(body, flame, glow);
-  return { body, flame, glow };
+  ctx.vfx.characterEffects.scene.add(body, flame, glow);
+  const v: RocketMeshes = { body, flame, glow, hasModel: false };
+  attachModel(v, pool);
+  return v;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -124,6 +127,7 @@ export function placeRocket(ctx: GameContext, k: number, pos: Vec3, vel: Vec3, e
   const pool = poolOf(ctx);
   while (pool.views.length <= k) pool.views.push(newRocket(ctx, pool));
   const v = pool.views[k]!;
+  attachModel(v, pool);
   const R = ROCKET_VIEW;
   const sp = Math.hypot(vel[0], vel[1], vel[2]);
   if (!(sp > 1e-6)) { hideRocket(ctx, k); return; }
