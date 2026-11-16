@@ -502,3 +502,41 @@ describe('head region craters', () => {
     expect(ring.map(x => x.eventId)).toEqual(Array.from({ length: MAX_WOUNDS }, (_, k) => k + 3));
   });
 });
+
+describe('a wound on a POINT prim turns with the pose orient (the tallow belly swim, 2026-11-15)', () => {
+  // A blob placed with at= has a == b: no axis for the frame to follow. A falling corpse's trunk blobs get their
+  // bone's rotation as a pose orient (rig-bind.ts trunkRotation), and a wound frame that ignored it held the wound
+  // still while the belly tipped over under it: the craters swam across the gut as he fell backward.
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const idx = body.prims.findIndex(p => len(sub(p.b, p.a)) === 0 && p.op !== 'sub' && p.op !== 'groove'
+    && (p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]));
+  const rest = body.prims;
+  const c = rest[idx]!.a;
+  const hit: Vec3 = add(c, [0.05, 0.02, 0.12]);
+  const only = rest.map((p, i) => (i === idx ? p : { ...p, dead: true }));
+
+  it('a standing (unturned) prim keeps the old frame exactly', () => {
+    const w = worldHitToWound(only, hit, 0.03, 'pellet');
+    const p = woundWorldPos(only, w);
+    expect(len(sub(p, hit))).toBeLessThan(1e-9);
+  });
+
+  it('tipped back 80 degrees, the wound rides the turned surface', () => {
+    const w = worldHitToWound(only, hit, 0.03, 'pellet');
+    const q = qFromAxisAngle([1, 0, 0], -80 * Math.PI / 180);
+    const posed = only.map((p, i) => (i === idx ? { ...p, orient: q, poseOrient: true } : p));
+    const want = add(c, qRotate(q, sub(hit, c)));
+    expect(len(sub(woundWorldPos(posed, w), want))).toBeLessThan(1e-6);
+  });
+
+  it('a pure-yaw pose orient (a standing body turned) agrees with the yaw frame', () => {
+    const yaw = 0.9;
+    const q = qFromAxisAngle([0, 1, 0], yaw);
+    const turned = only.map((p, i) => (i === idx ? { ...p, orient: q, poseOrient: true } : p));
+    const w = worldHitToWound(turned, hit, 0.03, 'pellet', yaw);
+    expect(len(sub(woundWorldPos(turned, w, yaw), hit))).toBeLessThan(1e-9);
+    // and its local offset is the de-yawed one, as without the orient
+    const plain = worldHitToWound(only, hit, 0.03, 'pellet', yaw);
+    expect(len(sub(w.local, plain.local))).toBeLessThan(1e-9);
+  });
+});

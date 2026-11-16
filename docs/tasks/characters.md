@@ -39,6 +39,11 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke) and a kick (attack.ts
   `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
   The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
+- [x] **Belly wounds swam as he fell** (owner, 2026-11-15): a wound on a POINT blob (`at=`, the gut on spine1 and the
+  apron on pelvis) took its frame from a fixed up axis, so it ignored the trunk's turn as a corpse tipped over.
+  damage.ts `frame` now carries a non-spherical point prim's frame by its pose orient (pure yaw when standing, so
+  unchanged there). Shared: every character's anisotropic point blobs. Arena probe, four belly slugs then a collapse:
+  wound drift in the trunk frame 75 cm before, 22 cm after (the rest is spine1 bending against the pelvis).
 - [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).
 - [ ] Kit normal atlas (optional: only if a later cut needs it).
 
