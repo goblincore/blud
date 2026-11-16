@@ -7,6 +7,7 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { rocketLightPoolView } from './rocket-light';
 import { muzzleSmokeLive } from './muzzle-smoke';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
@@ -170,6 +171,7 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     bile: () => ctx.weapon.bile.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
     /** The imp's fireballs in flight (fireball.ts): the in-game check of its throw. */
     /** The tallow's muzzle smoke in the air (muzzle-smoke.ts). */
+    rocketLights: () => rocketLightPoolView(ctx),
     muzzleSmoke: () => muzzleSmokeLive(ctx),
     fireballs: () => ctx.weapon.fireballs.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
     /** Enemy rounds in flight (soldier pellets, cultist/pistol/chaingun rounds), the LIVE objects so an
