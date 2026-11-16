@@ -1774,3 +1774,79 @@ describe('soldier impact-driven death', () => {
     expect(state.fallImpact).toEqual([side,0,0]);
   });
 });
+
+describe('the burning flail overlay', () => {
+  const stepOnce = (cfg: MotionConfig, state = cruising(9)) => {
+    const j = realJoints();
+    return { j, ...stepMotion(state, j, cfg, NO_SIGNALS(), stubPoints(j), BOUNDS, makeRng(9)) };
+  };
+  const d = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+  it('absent, the frame is exactly the unburnt frame', () => {
+    const a = stepOnce(CFG_ON).frame.restPose, b = stepOnce({ ...CFG_ON }).frame.restPose;
+    expect(a).toEqual(b);
+  });
+  it('raises both hands above the shoulders without stretching either arm', () => {
+    const base = stepOnce(CFG_ON);
+    let above = 0, n = 0;
+    for (let t = 0; t < 4; t += 0.1) {
+      const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t, seed: 5, amp: 1, fold: 0 } });
+      for (const side of ['L', 'R'] as const) {
+        const S = frame.restPose[j.index[`shoulder${side}`]!]!, E = frame.restPose[j.index[`elbow${side}`]!]!, H = frame.restPose[j.index[`hand${side}`]!]!;
+        const bS = j.base[j.index[`shoulder${side}`]!]!, bE = j.base[j.index[`elbow${side}`]!]!, bH = j.base[j.index[`hand${side}`]!]!;
+        expect(d(S, E)).toBeCloseTo(d(bS, bE), 4);
+        expect(d(E, H)).toBeCloseTo(d(bE, bH), 4);
+        if (H[1] > S[1]) above++;
+        n++;
+      }
+    }
+    expect(above / n).toBeGreaterThan(0.6);
+    // And it actually moved the hands off the unburnt frame.
+    const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 1, fold: 0 } });
+    expect(d(frame.restPose[j.index.handL!]!, base.frame.restPose[j.index.handL!]!)).toBeGreaterThan(0.2);
+  });
+  it('amp 0 leaves the arms where the gait put them', () => {
+    const base = stepOnce(CFG_ON);
+    const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 0, fold: 0 } });
+    expect(d(frame.restPose[j.index.handL!]!, base.frame.restPose[j.index.handL!]!)).toBeLessThan(1e-6);
+  });
+  it('skips a missing arm', () => {
+    const j = realJoints();
+    const sig = { ...NO_SIGNALS(), missing: { ...NO_SIGNALS().missing, armL: true } };
+    const cfgB = { ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 1, fold: 0 } };
+    const a = stepMotion(cruising(9), j, CFG_ON, sig, stubPoints(j), BOUNDS, makeRng(9)).frame.restPose;
+    const b = stepMotion(cruising(9), j, cfgB, sig, stubPoints(j), BOUNDS, makeRng(9)).frame.restPose;
+    expect(d(a[j.index.handL!]!, b[j.index.handL!]!)).toBeLessThan(1e-6);
+    expect(d(a[j.index.handR!]!, b[j.index.handR!]!)).toBeGreaterThan(0.2);
+  });
+});
+
+describe('authoredDeath overrides a physics-death profile', () => {
+  it('a forced collapse on the zombie plays the fall deathFall returns', () => {
+    const j = realJoints();
+    let state = cruising(9), points = stubPoints(j), asked = 0;
+    const cfg: MotionConfig = {
+      ...CFG_ON, authoredDeath: true,
+      deathFall: () => { asked++; return { kind: 'burnKneel', strength: 1, side: 1, impact: [0, 0, 1] }; },
+    };
+    const sig = () => ({ ...NO_SIGNALS(), forcedCollapse: true });
+    for (let i = 0; i < 30; i++) {
+      const r = stepMotion(state, j, cfg, sig(), points, BOUNDS, makeRng(9));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [p[0], p[1], p[2]] as Vec3, prev: p, pinned: false }));
+    }
+    expect(asked).toBe(1);
+    expect(state.fallKind?.kind).toBe('burnKneel');
+  });
+  it('without it the zombie keeps the free ragdoll', () => {
+    const j = realJoints();
+    let state = cruising(9), points = stubPoints(j), asked = 0;
+    const cfg: MotionConfig = { ...CFG_ON, deathFall: () => { asked++; return { kind: 'burnKneel', strength: 1, side: 1 }; } };
+    for (let i = 0; i < 30; i++) {
+      const r = stepMotion(state, j, cfg, { ...NO_SIGNALS(), forcedCollapse: true }, points, BOUNDS, makeRng(9));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [p[0], p[1], p[2]] as Vec3, prev: p, pinned: false }));
+    }
+    expect(asked).toBe(0);
+  });
+});

@@ -46,6 +46,7 @@
 // motion pipeline — it reads the posed prims.
 //
 import { soldierFallPose } from './soldier-fall';
+import { burnFlailPose, solveElbow } from './burn-flail';
 import { canDeathFall, corpseHoldStep, DEATH_FALL, deathFallPose, deathFallPull, type CorpseHold, type DeathFallChoice } from './death-fall';
 import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
@@ -509,6 +510,14 @@ export interface MotionConfig {
   /** The authored fall met something it cannot go through (a wall, a body: game-actor.ts THE FALL GOES LIMP): every
    *  point's rest pull is dropped (MotionFrame.restRelease) and the body falls from there under its own weight. */
   releaseFall?: boolean;
+  /** THE BURNING FLAIL (burn-flail.ts): while present and the body stands, both arms are placed on the
+   *  flail's hand targets (over the carry, the reach and any attack) and the trunk pitches and sways with
+   *  it. `t` is seconds since ignite, `amp` 0..1, `fold` 0..1 across the falter. ABSENT on every unburnt
+   *  frame: the zombie path is pinned on the key being absent. */
+  burnFlail?: { t: number; seed: number; amp: number; fold: number };
+  /** This death is AUTHORED whatever the profile says: a physics-death body (the zombie) plays the fall
+   *  `deathFall` returns. Set for a burn death. Soft targets and bodies that fail canDeathFall ignore it. */
+  authoredDeath?: boolean;
   /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
    *  the wider of the two wins. Undefined or 0 changes nothing. */
   jawGape?: number;
@@ -1074,14 +1083,23 @@ export function stepMotion(
   // The whole upper body pitches forward about the hips joint: a ROTATION of
   // targets, so no segment length changes. Zero for the shamble — the branch
   // is skipped entirely so the zombie's arithmetic is untouched.
-  const torsoLean = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
+  // A burning body's trunk pitches and sways with the flail (burn-flail.ts); null on every unburnt frame,
+  // so torsoLean and qLean below are the old expressions exactly.
+  const burnPose = cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed
+    ? burnFlailPose(cfg.burnFlail.t, cfg.burnFlail.seed, cfg.burnFlail.amp, cfg.burnFlail.fold) : null;
+  const torsoLeanBase = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
+  const torsoLean = burnPose ? torsoLeanBase + burnPose.pitch : torsoLeanBase;
+  /** The flail's side sway: a roll about the body's forward axis, applied after the pitch. Shared with the
+   *  shoulder socket clamp below so its authored chest->shoulder vector follows the same rotation. */
+  const swayLean = (qPitch: ReturnType<typeof qFromAxisAngle>) => (burnPose && burnPose.sway !== 0
+    ? qMul(qFromAxisAngle(rotateYaw([0, 0, 1], bodyYaw), burnPose.sway), qPitch) : qPitch);
   if (torsoLean !== 0 && !collapsed && idx.hips !== undefined) {
     const pivotP = targets[idx.hips]!;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     // Forward lean = POSITIVE rotation about +right for the up-pointing
     // spine (right-hand rule takes +y toward +z) — the reach pivot's negated
     // convention applies to the DOWN-pointing hang, not to this chain.
-    const qLean = qFromAxisAngle(right, torsoLean);
+    const qLean = swayLean(qFromAxisAngle(right, torsoLean));
     const hipsY = joints.base[idx.hips]![1];
     joints.names.forEach((name, i) => {
       if (name === 'pelvis' || name === 'hips') return;
@@ -1107,7 +1125,7 @@ export function stepMotion(
     // vector follows it: a pivot rotation maps a relative vector by the
     // rotation alone, and both anchor points sit above the hips pivot.
     const leanRan = torsoLean !== 0 && idx.hips !== undefined;
-    const qLean = qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), torsoLean);
+    const qLean = swayLean(qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), torsoLean));
     for (const side of ['L', 'R'] as const) {
       const iS = idx[`shoulder${side}`]!;
       const relLocal = sub(joints.base[iS]!, joints.base[idx.chest]!);
@@ -1684,10 +1702,41 @@ export function stepMotion(
     }
   }
 
+  // --- the burning flail (burn-flail.ts) -------------------------------------
+  // Last word on the arms while a body burns: each hand goes to the flail's target by a two-bone solve
+  // from the FINAL shoulder target, so both segments keep their rest lengths. The hand tip rides the
+  // hand's move (the tip follow pass already ran), and so does a carried gun: it is translated with the
+  // right hand, keeping its carry orientation, so it stays in the fist (the support hand leaves it).
+  if (burnPose) {
+    const midX = joints.base[idx.pelvis!]![0];
+    for (const side of ['L', 'R'] as const) {
+      if (side === 'L' ? sig.missing.armL : sig.missing.armR) continue;
+      const iS = idx[`shoulder${side}`], iE = idx[`elbow${side}`], iH = idx[`hand${side}`];
+      if (iS === undefined || iE === undefined || iH === undefined) continue;
+      const l1 = len(sub(joints.base[iE]!, joints.base[iS]!)), l2 = len(sub(joints.base[iH]!, joints.base[iE]!));
+      const out = joints.base[iS]![0] >= midX ? 1 : -1;
+      const h = side === 'L' ? burnPose.handL : burnPose.handR;
+      const S = targets[iS]!;
+      const want = add(S, scale(rotateYaw([h[0] * out, h[1], h[2]], bodyYaw), l1 + l2));
+      // Elbows out and down, a little behind: the bend a raised human arm takes.
+      const r = solveElbow(S, want, l1, l2, rotateYaw([out, -0.6, -0.3], bodyYaw));
+      const moved = sub(r.hand, targets[iH]!);
+      targets[iE] = r.elbow;
+      targets[iH] = r.hand;
+      const iT = idx[`handTip${side}`];
+      if (iT !== undefined) targets[iT] = add(targets[iT]!, moved);
+      if (side === 'R' && gun) gun = { ...gun, root: add(gun.root, moved) };
+    }
+    if (burnPose.headToss !== 0 && idx.head !== undefined && idx.neck !== undefined) {
+      const q = qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), burnPose.headToss);
+      targets[idx.head] = add(targets[idx.neck]!, qRotate(q, sub(targets[idx.head]!, targets[idx.neck]!)));
+    }
+  }
+
   // AUTHORED DEATHS (death-fall.ts): every humanoid but a soft target or a physics-death body (the zombie) lies down along a keyed fall the
-  // rig springs toward, the way the soldier family always has.
-  const animatedDeath = !isSoldierFamily(profile) && DEATH_FALL.on && !profile.soft && !profile.physicsDeath
-    && canDeathFall(joints.names);
+  // rig springs toward, the way the soldier family always has. `cfg.authoredDeath` (a burn death) puts a physics-death body on one too.
+  const animatedDeath = !isSoldierFamily(profile) && DEATH_FALL.on && !profile.soft
+    && (!profile.physicsDeath || !!cfg.authoredDeath) && canDeathFall(joints.names);
   const structural = (isSoldierFamily(profile) || animatedDeath) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
