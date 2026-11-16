@@ -990,9 +990,12 @@ export function createZombieActor(opts: {
   let burnStuckT = 0;
   /** Can this body walk from where it stands to `p`? (The burn panic's blocked-turn probe.) */
   const burnClear = (p: Vec3): boolean => {
-    const b = opts.bounds, m = 0.3;
-    if (p[0] < Math.min(b.minX, b.maxX) + m || p[0] > Math.max(b.minX, b.maxX) - m
-      || p[2] < Math.min(b.minZ, b.maxZ) + m || p[2] > Math.max(b.minZ, b.maxZ) - m) return false;
+    // Inside the bounds by a margin, but never asked to be further from a wall than the body already
+    // is: a run ALONG the wall it is pressed against must count as clear.
+    const b = opts.bounds, m = 0.3, at = state.wander.pos;
+    const loX = Math.min(at[0], Math.min(b.minX, b.maxX) + m), hiX = Math.max(at[0], Math.max(b.minX, b.maxX) - m);
+    const loZ = Math.min(at[2], Math.min(b.minZ, b.maxZ) + m), hiZ = Math.max(at[2], Math.max(b.minZ, b.maxZ) - m);
+    if (p[0] < loX - 1e-6 || p[0] > hiX + 1e-6 || p[2] < loZ - 1e-6 || p[2] > hiZ + 1e-6) return false;
     return clearCombatMove(state.wander.pos, p, opts.furniture)
       && (!opts.navigation || opts.navigation.canTravel(state.wander.pos, p));
   };
