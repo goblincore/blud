@@ -2841,7 +2841,8 @@ export function createZombieActor(opts: {
       // A live body whose procedure skeleton is packed folds it bare while the
       // flesh pulls away (counts2.y, march.wgsl.ts) — the mesh-skeleton path
       // (`setPackBones(false)`, the forward default) draws its bones separately
-      // and needs none of this. Harmless when there are no packed bones.
+      // and needs none of this: a view that packs no inside-flesh rows writes the flag as 0
+      // (crowd-records.ts bareBonesFlag), so the body keeps its analytic shading normal through the window.
       view.setBonesBare(true);
       // The material ramp starts at 0: the recoil frames are the intact body.
       view.setGoreStrength(0);

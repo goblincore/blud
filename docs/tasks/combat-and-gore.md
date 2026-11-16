@@ -202,6 +202,12 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
     shell keeps a sliver of unwarped background beside it, up to the offset's width (about 20 px at the clamp, usually
     far less), visible as a small step where the ground ring passes behind a leg.
 
+- [x] **White flash before the gib (2026-11-16)** — a body about to gib turned fuzzy grey-white for the whole
+  pre-gib window (owner). Cause: the rupture sets the bare-bones flag (`counts2.y`), and on a mesh-skeleton body,
+  which packs no bone rows, that flag folds nothing and only drops the shading normal off the analytic gradient
+  onto the finite-difference taps (`normal-gradient.wgsl.ts`). The view now writes the flag only when the body packs
+  inside-flesh rows (`crowd-records.ts bareBonesFlag`). Checked in the arena, frame by frame; not checked on the
+  soldier or with `?skeleton=procedural`. Open: why the finite-difference normal reads white at all.
 - [x] **Blast-to-gib switch pass (2026-10-29)** — the switch side of the item above. Toggle
   `?gibswitch=beat,blood,launch,timing` (no param = all four, the new default; `none` = the old switch; `all`; any
   comma list). Code: `src/lab/sdf-zombie/gib-switch.ts` (+ `gib-switch.test.ts`). Strips, sheets and per-frame

@@ -3,12 +3,21 @@ import {
   REC_VEC4S, MAX_CROWD_INSTANCES, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND,
   REC_WIND_ALIVE, REC_MELT, REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT,
   REC_VOL_POSE0, REC_VOL_POSE1, REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN,
-  REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R, REC_NMAP_ORIGIN, createCrowdRecords, type RecordSource,
+  REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R, REC_NMAP_ORIGIN, bareBonesFlag, createCrowdRecords, type RecordSource,
 } from './crowd-records';
 import { DATA_ROWS } from './march.wgsl';
 import type { SplitWarp } from '../head-split';
 
 describe('crowd records', () => {
+  it('writes the bare-bones bypass only for a body that packs inside-flesh rows', () => {
+    // A mesh-skeleton body packs none (boneCount 0): a bare flag there folds nothing and only costs the body its
+    // analytic shading normal, which read as a white flash through the pre-gib rupture.
+    expect(bareBonesFlag(true, 0)).toBe(0);
+    expect(bareBonesFlag(true, 12)).toBe(1);
+    expect(bareBonesFlag(false, 12)).toBe(0);
+    expect(bareBonesFlag(false, 0)).toBe(0);
+  });
+
   it('gives every field a distinct vec4 inside the record', () => {
     const rows = [REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
       REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
