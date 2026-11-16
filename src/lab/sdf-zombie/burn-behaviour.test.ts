@@ -22,13 +22,13 @@ describe('stepBurnPanic', () => {
     const { outs } = run(2);
     for (const o of outs) {
       expect(o.fire).toBe(false);
-      expect(o.target[0]).toBeLessThan(0);   // the player is at +x
+      expect(o.target![0]).toBeLessThan(0);   // the player is at +x
     }
   });
   it('with no player known it runs along its own forward', () => {
     const s = createBurnPanic(3, BURN_TIER_DEFAULT);
     const o = stepBurnPanic(s, { self: [0, 0, 0], player: null, forward: [0, 0, 1] }, DT);
-    expect(o.target[2]).toBeGreaterThan(0);
+    expect(o.target![2]).toBeGreaterThan(0);
   });
   it('goes panic, then falter, then done, and dies exactly once', () => {
     const { s, outs } = run(8);
@@ -58,7 +58,7 @@ describe('stepBurnPanic', () => {
   });
   it('the heading turns smoothly: no jump between steps', () => {
     const { outs } = run(8);
-    const ang = outs.map(o => Math.atan2(o.target[2], o.target[0]));
+    const ang = outs.map(o => Math.atan2(o.target![2], o.target![0]));
     for (let i = 1; i < ang.length; i++) {
       let d = Math.abs(ang[i]! - ang[i - 1]!);
       if (d > Math.PI) d = 2 * Math.PI - d;
@@ -68,7 +68,7 @@ describe('stepBurnPanic', () => {
   it('blocked turns the flee heading by at least a quarter turn, once per cooldown', () => {
     const s = createBurnPanic(7, BURN_TIER_DEFAULT);
     const inp = { self: [0, 0, 0] as [number, number, number], player: [5, 0, 0] as [number, number, number], forward: [0, 0, 1] as [number, number, number] };
-    const ang = (o: { target: readonly number[] }) => Math.atan2(o.target[2]!, o.target[0]!);
+    const ang = (o: { target: readonly number[] | null }) => Math.atan2(o.target![2]!, o.target![0]!);
     const turn = (x: number, y: number) => { let d = Math.abs(x - y); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
     const a0 = ang(stepBurnPanic(s, inp, DT));
     const a1 = ang(stepBurnPanic(s, { ...inp, blocked: true }, DT));
@@ -90,11 +90,23 @@ describe('stepBurnPanic', () => {
       clear: (p) => { asked.push(p[2]); return p[2] > 0.5; },
     }, DT);
     expect(asked.length).toBeGreaterThan(0);
-    expect(o.target[2]).toBeGreaterThan(1);
+    expect(o.target![2]).toBeGreaterThan(1);
     // Unblocked steps never ask.
     const n = asked.length;
     stepBurnPanic(s, { self: [0, 0, 0], player: [5, 0, 0], forward: [0, 0, 1], clear: () => { asked.push(0); return true; } }, DT);
     expect(asked.length).toBe(n);
+  });
+  it('boxed in (no probe clear), it gives no heading for a moment, then flees again', () => {
+    const s = createBurnPanic(7, { ...BURN_TIER_DEFAULT, panicSec: [30, 30] });
+    const inp = { self: [0, 0, 0] as [number, number, number], player: [5, 0, 0] as [number, number, number], forward: [0, 0, 1] as [number, number, number] };
+    const o = stepBurnPanic(s, { ...inp, blocked: true, clear: () => false }, DT);
+    expect(o.target).toBeNull();
+    expect(o.cruiseScale).toBeCloseTo(BURN_TIER_DEFAULT.speed);
+    expect(o.flail).toBe(1);
+    let back = -1;
+    for (let k = 1; k < 90; k++) if (stepBurnPanic(s, inp, DT).target !== null) { back = k; break; }
+    expect(back * DT).toBeGreaterThan(BURN_BEHAVIOUR.scatterSec - 0.1);
+    expect(back * DT).toBeLessThan(BURN_BEHAVIOUR.scatterSec + 0.1);
   });
   it('however often it is blocked, it never heads back at the player', () => {
     for (let seed = 1; seed <= 20; seed++) {
@@ -102,7 +114,7 @@ describe('stepBurnPanic', () => {
       for (let k = 0; k < 400; k++) {
         const o = stepBurnPanic(s, { self: [0, 0, 0], player: [5, 0, 0], forward: [0, 0, 1], blocked: k % 20 === 0 }, DT);
         // The player is along +x: the heading stays out of the 30 degree cone toward him.
-        expect(Math.atan2(Math.abs(o.target[2]), o.target[0])).toBeGreaterThan(Math.PI / 6);
+        expect(Math.atan2(Math.abs(o.target![2]), o.target![0])).toBeGreaterThan(Math.PI / 6);
       }
     }
   });

@@ -36,6 +36,8 @@ export const BURN_BEHAVIOUR = Object.freeze({
   probeM: 1,
   /** The last-resort turn (rad) when the probe finds no sideways way out: most of the way round. */
   blockedTurnBack: 2.4,
+  /** Boxed in (no probe clear): seconds the body runs on its own wander legs instead of a flee heading. */
+  scatterSec: 1,
 });
 
 /** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep behaving as
@@ -58,6 +60,8 @@ export interface BurnPanicState {
   bias: number;
   /** Seconds until a blocked report may turn it again. */
   blockedCool: number;
+  /** Seconds left of running wherever the body's own wander takes it (boxed in: `target` is null). */
+  scatter: number;
 }
 
 function next(s: BurnPanicState): number {          // mulberry32
@@ -69,7 +73,7 @@ function next(s: BurnPanicState): number {          // mulberry32
 const smooth = (u: number) => { const k = Math.min(1, Math.max(0, u)); return k * k * (3 - 2 * k); };
 
 export function createBurnPanic(seed: number, tier: BurnTier = BURN_TIER_DEFAULT): BurnPanicState {
-  const s: BurnPanicState = { rng: seed | 0, t: 0, phase: 0, durationSec: 0, speed: tier.speed, dies: tier.dies, died: false, bias: 0, blockedCool: 0 };
+  const s: BurnPanicState = { rng: seed | 0, t: 0, phase: 0, durationSec: 0, speed: tier.speed, dies: tier.dies, died: false, bias: 0, blockedCool: 0, scatter: 0 };
   s.phase = next(s) * Math.PI * 2;
   const [lo, hi] = tier.panicSec;
   s.durationSec = Math.max(0.1, lo + (hi - lo) * next(s));
@@ -89,7 +93,9 @@ export interface BurnPanicInput {
   clear?: (point: Vec3) => boolean;
 }
 export interface BurnPanicOut {
-  target: Vec3;
+  /** Where to run. Null = boxed in: no flee heading, the body's own wander picks its legs (still at
+   *  cruiseScale, still flailing). */
+  target: Vec3 | null;
   cruiseScale: number;
   fire: false;
   phase: BurnPhase;
@@ -115,6 +121,7 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   if (len < 1e-6) { dx = 0; dz = 1; } else { dx /= len; dz /= len; }
   const turned = (a: number): [number, number] => { const c = Math.cos(a), sn = Math.sin(a); return [dx * c - dz * sn, dx * sn + dz * c]; };
   s.blockedCool = Math.max(0, s.blockedCool - Math.max(0, dt));
+  s.scatter = Math.max(0, s.scatter - Math.max(0, dt));
   if (i.blocked && s.blockedCool <= 0) {
     // Running straight from the player into a wall reads as a body stuck on the spot: turn hard to
     // one side and hold that turn, so it runs ALONG the wall until it is blocked again. The side is
@@ -134,10 +141,14 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
         ...sideways.map((c): [number, number] => [c, B.probeM * 0.5]),
         [side * B.blockedTurnBack, B.probeM], [-side * B.blockedTurnBack, B.probeM],
       ];
+      let found = false;
       for (const [cand, reach] of tries) {
         const [cx, cz] = turned(cand);
-        if (i.clear([i.self[0] + cx * reach, i.self[1], i.self[2] + cz * reach])) { pick = cand; break; }
+        if (i.clear([i.self[0] + cx * reach, i.self[1], i.self[2] + cz * reach])) { pick = cand; found = true; break; }
       }
+      // Boxed in (a corner between a wall and a crate): no heading to give. Hand the legs back to the
+      // body's own wander for a moment; its random legs and push-out are the designed unstick.
+      if (!found) s.scatter = B.scatterSec;
     }
     s.bias = pick;
     s.blockedCool = B.blockedCoolSec;
@@ -148,7 +159,7 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   const die = phase === 'done' && s.dies && !s.died;
   if (die) s.died = true;
   return {
-    target: [i.self[0] + hx * B.fleeDistM, i.self[1], i.self[2] + hz * B.fleeDistM],
+    target: s.scatter > 0 ? null : [i.self[0] + hx * B.fleeDistM, i.self[1], i.self[2] + hz * B.fleeDistM],
     cruiseScale: s.speed * (1 + (B.falterSpeed - 1) * f),
     fire: false, phase, u,
     flail: 1 + (B.falterFlail - 1) * f,
