@@ -5,7 +5,7 @@
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
 import type { FleshJiggleSpec } from './flesh-jiggle';
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, TALLOW_STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -70,6 +70,9 @@ export interface MotionProfile {
    *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
    *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
   spit?: { from: GaitJointName; offset: Vec3 };
+  /** A two-gun body's LEFT muzzle (the tallow's cannons): a shot the mind tags `fireSide: 'L'` leaves here, the rest
+   *  from `spit`. */
+  spitL?: { from: GaitJointName; offset: Vec3 };
   /** PER-CHARACTER GORE (gore-tuning.ts): bigger gun craters, a heavier impact gout and flesh bits thrown off the
    *  hit. Absent = the shared look exactly. */
   gore?: GoreTuning;
@@ -103,8 +106,10 @@ export interface MotionProfile {
    *  on the arm, so the arm's own swing carries it. */
   armWeapon?: { side: 'L' | 'R'; damage: number };
   /** A THROWER (the imp): the zombie's mind and claws up close, and at range a wind-up and an overhand throw of a
-   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). */
-  throws?: 'fireball';
+   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). 'volley' (the tallow): both
+   *  arm-cannons braced level and four fireballs, right and left in turn, from `spit` and `spitL`
+   *  (enemy-mind.ts makeTallowMind). */
+  throws?: 'fireball' | 'volley';
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -465,6 +470,27 @@ export const VENUS_PROFILE: MotionProfile = {
   turnRate: 2.0,
 };
 
+/** The tallow (characters/tallow.blob): a corpulent walking rendering vat whose forearms have grown into cannons
+ *  (assets-source/tallow-kit/). The heaviest biped: the venus's STOMP (with reach arms, TALLOW_STOMP) at a slower cruise, and the slowest
+ *  turn in the roster short of the cerebrax, so a running player can get behind him, where the boiler is. At range
+ *  he braces both cannons level and fires a VOLLEY of burning tallow, right and left in turn (enemy-mind.ts
+ *  makeTallowMind, the imp's fireball from each muzzle: the hand bones' tails). Up close the zombie mind's swing is a
+ *  club with a cannon. */
+export const TALLOW_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  physicsDeath: false,
+  name: 'tallow',
+  // The STOMP with reach arms (gait.ts TALLOW_STOMP): on STOMP's carry arms the brace never moved them.
+  gait: { walk: TALLOW_STOMP, run: TALLOW_STOMP },
+  cruise: 0.7,
+  turnRate: 1.6,
+  throws: 'volley',
+  // handTip is each muzzle's lip (make_cannons.py: the bore ends at forearm t 1.56, where the 0.246 m hand bone's tail
+  // falls); 4 cm on clears the brake.
+  spitL: { from: 'handTipL', offset: [0, 0, 0.04] },
+  spit: { from: 'handTipR', offset: [0, 0, 0.04] },
+};
+
 /** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
  *  arms are its front legs, walked by GOREHOUND's 'foreleg' style and planted
  *  like feet. Melee, unarmed: the zombie mind closes and swings, which on
@@ -752,6 +778,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   teratoma: TERATOMA_PROFILE,
   imp: IMP_PROFILE,
   cerebrax: CEREBRAX_PROFILE,
+  tallow: TALLOW_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

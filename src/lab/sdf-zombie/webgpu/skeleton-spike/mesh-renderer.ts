@@ -777,7 +777,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     }
     geometry.userData.sculptPaint = sculptPaintOf(cache.sculpt, source.character);
     const feature = new Float32Array(pos.count * 4);
-    const isHead = source.segment === 'head' ? (isSoldierHead(source.character) ? 2 : 1) : 0;
+    // 0.5: a skeleton-kit piece (mesh-appearance.ts meshBoneSurface wears it as clean bone, like the skull).
+    const isHead = source.segment === 'head' ? (isSoldierHead(source.character) ? 2 : 1) : geometry.userData.skeletonKit ? 0.5 : 0;
     for (let i = 0; i < pos.count; i++) {
       const q = meshAppearanceCoord(source.bounds, [pos.getX(i), pos.getY(i), pos.getZ(i)]);
       feature.set([q[0], q[1], q[2], isHead], i * 4);

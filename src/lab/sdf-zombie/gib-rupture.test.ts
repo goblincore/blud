@@ -36,7 +36,7 @@ function actor(view: Record<string, unknown> = {}) {
     id: 1, room: 0, body,
     view: {
       setRootShift() {}, setTime() {}, setHeadRotation() {},
-      setWounds() {}, update() {}, setBonesBare() {}, setPackBones() {}, setGoreStrength() {},
+      setWounds() {}, update() {}, setBonesBare() {}, setFleshHidden() {}, setPackBones() {}, setGoreStrength() {},
       ...view,
     } as never,
     start: [0, 0, 0], seed: 0,

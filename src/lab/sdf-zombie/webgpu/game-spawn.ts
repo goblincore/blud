@@ -30,9 +30,9 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeTallowMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
-import { spawnFireball } from '../fireball';
+import { TALLOW_VOLLEY, spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
@@ -50,6 +50,8 @@ import { applyMoonKey } from './game-outdoor';
 import { bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor } from './game-skeleton-actors';
 import { spawnPellets, spawnRound } from './game-weapon';
 import { applyWoundRamp, faceFor } from './game-wound-vfx';
+import { igniteExplosionLight } from './game-dynamite-throw';
+import { emitMuzzleSmoke } from './muzzle-smoke';
 import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import { type LevelRoom } from './level-def';
 import { VITALS } from './player-vitals';
@@ -439,6 +441,25 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
         ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A VOLLEY (the tallow): clubs up close and, at range, braces both arm-cannons and fires fireballs right and
+    // left in turn from each muzzle (MotionProfile.spit / spitL) at the player's chest, enemy-mind.ts makeTallowMind.
+    ...(characterEntry(name).profile.throws === 'volley' ? {
+      mind: makeTallowMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        const target: Vec3 = [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]];
+        ctx.weapon.fireballs.push(spawnFireball(origin, target, zombieId, TALLOW_VOLLEY.shotDamage, 'rocket'));
+        // THE MUZZLE BLAST (owner, 2026-11-15): first "a bigger muzzle flash and maybe smoke", then "less flame and
+        // just smoke". So: a flash of light and a plume of smoke (muzzle-smoke.ts), just ahead of the muzzle, and no
+        // fire billboards. The arm's kick is attack.ts cannonKick.
+        const dx = target[0] - origin[0], dy = target[1] - origin[1], dz = target[2] - origin[2];
+        const l = Math.hypot(dx, dy, dz) || 1, ahead = TALLOW_VOLLEY.blast.aheadM / l;
+        const at: Vec3 = [origin[0] + dx * ahead, origin[1] + dy * ahead, origin[2] + dz * ahead];
+        igniteExplosionLight(ctx, at);
+        emitMuzzleSmoke(ctx, at, [dx, dy, dz]);
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain

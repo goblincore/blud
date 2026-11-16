@@ -4,6 +4,7 @@
 
 import { loadSkullAsset, type AnatomicalSkullKit, type SkullFitPlan } from './anatomical-skull';
 import { SegmentMeshCache } from './mesh';
+import { loadSkeletonKit, SKELETON_KIT_URL, type SkeletonKit } from './skeleton-kit';
 import { anatomicalFitOf, ownSkullFitOf, resolveSkull, sculptRecipe, SCULPT_DEFAULT_VARIANT, type SkullChoice } from './sculpt-variant';
 import { ANATOMICAL_SKULL_ASSET, type SkullAsset } from './skull-cast';
 
@@ -74,13 +75,42 @@ export async function createBoneMeshCache(
   return new SegmentMeshCache(undefined, undefined, loaded.length > 0 ? loaded : null, recipe);
 }
 
+/** Loads the skeleton kit (skeleton-kit.ts). The game's: loadSkeletonKit. */
+export type LoadBodyKit = () => Promise<SkeletonKit>;
+
+/** `?bonekit=0`: no skeleton kit, every bone segment draws its surface-nets mesh (the skeleton as it was before the
+ *  kit, for a side-by-side). Anything else, or no word: the kit. */
+export function skeletonKitWanted(search: string): boolean {
+  return new URLSearchParams(search).get('bonekit') !== '0';
+}
+
+/** THE GAME'S CACHE: createBoneMeshCache's, with the skeleton kit (skeleton-kit.ts) loaded beside the skulls and
+ *  attached. A kit that does not load (it fails, or `waitMs` pass) leaves every bone on its surface-nets mesh, and
+ *  the page says so, once. */
+export async function createGameBoneMeshCache(
+  search: string, say: SkullSay = consoleWarn, loadBodyKit: LoadBodyKit = loadSkeletonKit, waitMs: number = SKULL_ASSET_WAIT_MS,
+  make: (search: string, say: SkullSay) => Promise<SegmentMeshCache> = createBoneMeshCache,
+): Promise<SegmentMeshCache> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const body = !skeletonKitWanted(search) ? Promise.resolve(null) : Promise.race([
+    loadBodyKit(),
+    new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${waitMs} ms`)), waitMs); }),
+  ]).catch(error => {
+    say(`the skeleton kit (${SKELETON_KIT_URL}) did not load (${error instanceof Error ? error.message : String(error)}): every bone draws its extracted mesh`, true);
+    return null;
+  }).finally(() => clearTimeout(timer));
+  const cache = await make(search, say);
+  cache.bodyKit = await body;
+  return cache;
+}
+
 /** THE BOOT'S CACHE, ASKED FOR EARLY. The plates' asset is a request and a parse the page need not stand still for:
  *  the boot starts the cache as its first act (`mayMesh`: the query does not rule the mesh skeleton out) and takes
  *  it where the skeleton is built, so the load runs beside everything between. take(false) is a boot that turned
  *  out not to draw the mesh skeleton (deferred mode): the cache that was started is disposed when it arrives, and
  *  the answer is null. take() also records how long the boot stood waiting on the kit (AnatomicalSkullKit.awaitedMs). */
 export function startBoneMeshCache(
-  search: string, mayMesh: boolean, make: (search: string) => Promise<SegmentMeshCache> = createBoneMeshCache,
+  search: string, mayMesh: boolean, make: (search: string) => Promise<SegmentMeshCache> = createGameBoneMeshCache,
 ): { take(mesh: boolean): Promise<SegmentMeshCache | null> } {
   const started = mayMesh ? make(search) : null;
   return {

@@ -2523,7 +2523,8 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      const spit = opts.profile?.spit;
+      // A two-gun body (the tallow) tags each round with its muzzle; the left one is profile.spitL.
+      const spit = think.fireSide === 'L' && opts.profile?.spitL ? opts.profile.spitL : opts.profile?.spit;
       const spitFrom = spit ? joints.index[spit.from] : undefined;
       if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
         // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along
@@ -3151,7 +3152,8 @@ export function createZombieActor(opts: {
       // A live body whose procedure skeleton is packed folds it bare while the
       // flesh pulls away (counts2.y, march.wgsl.ts) — the mesh-skeleton path
       // (`setPackBones(false)`, the forward default) draws its bones separately
-      // and needs none of this. Harmless when there are no packed bones.
+      // and needs none of this: a view that packs no inside-flesh rows writes the flag as 0
+      // (crowd-records.ts bareBonesFlag), so the body keeps its analytic shading normal through the window.
       view.setBonesBare(true);
       // The material ramp starts at 0: the recoil frames are the intact body.
       view.setGoreStrength(0);

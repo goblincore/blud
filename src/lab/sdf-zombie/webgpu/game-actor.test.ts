@@ -1212,7 +1212,7 @@ describe('setViewSync: every direct view write settles what is owed (review 2026
       ...stubView(),
       update: (b: unknown) => { rec.update++; rec.lastBody = b; },
       setHeadRotation: (q: readonly number[]) => { rec.lastHead = [...q]; },
-      setGoreStrength: () => {}, setBonesBare: () => {}, setWounds: () => {},
+      setGoreStrength: () => {}, setBonesBare: () => {}, setFleshHidden: () => {}, setWounds: () => {},
     };
     const actor = createZombieActor({
       id: 5, room: room.id, body: placed, view: view as never, start, seed: 4242,

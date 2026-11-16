@@ -49,6 +49,30 @@ export const IMP_TUNING = {
   first: 0.8,
 } as const;
 
+/** THE TALLOW'S VOLLEY (enemy-mind.ts makeTallowMind): both arm-cannons braced level (attack.ts 'brace', on
+ *  BRACE_TUNING's beats) and four fireballs, alternating right and left, through the hold. Slower and longer than the
+ *  imp's throw, with a longer telegraph (the raise), from further away. */
+export const TALLOW_VOLLEY = {
+  /** The whole brace, s: a 0.84 s raise (the telegraph), the hold, the lowering. */
+  braceSec: 2.8,
+  /** The phases the shots leave at, and from which cannon: right, left, right, left through the hold (0.34-0.85). */
+  shots: [{ at: 0.40, side: 'R' }, { at: 0.52, side: 'L' }, { at: 0.64, side: 'R' }, { at: 0.76, side: 'L' }] as const,
+  /** It fires at a player between these distances (m) it can see; inside `min` it closes and clubs instead. */
+  band: { min: 3.0, max: 18 },
+  cooldown: 2.6,
+  first: 1.2,
+  /** Each shot's direct-hit damage (owner, 2026-11-15, after the arena: four imp-strength 14s were 56 a volley, more
+   *  than a rocket's 45, and two volleys killed a player standing still). 9: a full volley is 36, its singe 3. */
+  shotDamage: 9,
+  /** Each shot's muzzle blast (game-spawn.ts): a flash of light and a smoke plume (muzzle-smoke.ts) this far ahead. */
+  blast: { aheadM: 0.18 },
+} as const;
+
+/** The volley's shot that leaves this frame (prevPhase -> phase crosses its `at`), or null. */
+export function volleyShot(prevPhase: number, phase: number): (typeof TALLOW_VOLLEY.shots)[number] | null {
+  return TALLOW_VOLLEY.shots.find(s => prevPhase < s.at && phase >= s.at) ?? null;
+}
+
 /** The ball leaves this frame (prevPhase -> phase crosses IMP_TUNING.fireAt). */
 export function throwFires(prevPhase: number, phase: number): boolean {
   const at = IMP_TUNING.fireAt;
@@ -61,6 +85,11 @@ export interface Fireball {
   ageSec: number;
   /** Actor id of the thrower. */
   owner: number;
+  /** Direct-hit damage when it is not FIREBALL.playerDamage (the tallow's volley shots); its singe scales with it. */
+  damage?: number;
+  /** How it draws (game-tick.ts): absent, the imp's small orange ball; 'rocket', the tallow's shell, exhaust flame
+   *  and smoke trail (webgpu/rocket-view.ts). Collision is the same ball either way. */
+  look?: 'rocket';
 }
 
 export interface FireballWorld {
@@ -71,7 +100,7 @@ export interface FireballWorld {
 }
 
 export type FireballCause = 'world' | 'player' | 'age';
-export interface Burst { at: Vec3; cause: FireballCause; owner: number }
+export interface Burst { at: Vec3; cause: FireballCause; owner: number; damage?: number }
 
 /** The launch velocity that carries a ball from `origin` to `target` at FIREBALL.speed under its slight droop: the
  *  straight line, lifted by the drop over the flight time. Pure. */
@@ -85,8 +114,11 @@ export function fireballVelocity(origin: Vec3, target: Vec3, speed: number = FIR
   return [v[0] * s, v[1] * s, v[2] * s];
 }
 
-export function spawnFireball(origin: Vec3, target: Vec3, owner: number): Fireball {
-  return { pos: [...origin] as Vec3, vel: fireballVelocity(origin, target), ageSec: 0, owner };
+export function spawnFireball(origin: Vec3, target: Vec3, owner: number, damage?: number, look?: 'rocket'): Fireball {
+  const b: Fireball = { pos: [...origin] as Vec3, vel: fireballVelocity(origin, target), ageSec: 0, owner };
+  if (damage !== undefined) b.damage = damage;
+  if (look) b.look = look;
+  return b;
 }
 
 /** Advance every ball one step. Returns the survivors and this step's bursts (at the last free point, so a burst is
@@ -106,7 +138,11 @@ export function stepFireballs(balls: readonly Fireball[], dt: number, world: Fir
       : world.hitsPlayer(from, to) ? 'player'
         : world.hitsWorld(from, to) ? 'world'
           : ageSec >= FIREBALL.maxAge ? 'age' : null;
-    if (cause) { bursts.push({ at: [...from] as Vec3, cause, owner: b.owner }); continue; }
+    if (cause) {
+      const burst: Burst = { at: [...from] as Vec3, cause, owner: b.owner };
+      if (b.damage !== undefined) burst.damage = b.damage;
+      bursts.push(burst); continue;
+    }
     live.push({ ...b, pos: to, vel, ageSec });
   }
   return { live, bursts };
@@ -115,7 +151,8 @@ export function stepFireballs(balls: readonly Fireball[], dt: number, world: Fir
 /** The player's share of a burst: the full hit when it struck them, a singe when it burst near (within splashRadius
  *  of `playerMid`, the middle of their capsule), else 0. */
 export function burstPlayerDamage(burst: Burst, playerMid: Vec3): number {
-  if (burst.cause === 'player') return FIREBALL.playerDamage;
+  const hit = burst.damage ?? FIREBALL.playerDamage;
+  if (burst.cause === 'player') return hit;
   const d = Math.hypot(burst.at[0] - playerMid[0], burst.at[1] - playerMid[1], burst.at[2] - playerMid[2]);
-  return d <= FIREBALL.splashRadius ? FIREBALL.splashDamage : 0;
+  return d <= FIREBALL.splashRadius ? Math.round(FIREBALL.splashDamage * hit / FIREBALL.playerDamage) : 0;
 }

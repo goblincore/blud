@@ -34,6 +34,7 @@ import type { BoneFieldSource } from './contract';
 import { sweepOrganTubes, type OrganTubeSpec } from './mesh-organ-tubes';
 import type { Vec3 } from '../../types';
 import type { AnatomicalSkullKit } from './anatomical-skull';
+import type { SkeletonKit } from './skeleton-kit';
 import { SCULPT_CLASSIC, type SculptRecipe, type SculptShape } from './sculpt-variant';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
@@ -223,6 +224,10 @@ export class SegmentMeshCache {
     this.skullKits = skulls === null ? [] : Array.isArray(skulls) ? [...new Set(skulls as readonly AnatomicalSkullKit[])] : [skulls as AnatomicalSkullKit];
   }
 
+  /** The skeleton kit (skeleton-kit.ts): authored bone meshes, drawn in place of the surface nets by every bone
+   *  segment the kit has a piece for. Null: every segment is extracted. Assignable until the first get(): the game
+   *  sets it as the cache is made (sculpt-cache.ts). */
+  bodyKit: SkeletonKit | null = null;
   /** Every skull kit of the page, one per asset that loaded (the human skull's first). */
   readonly skullKits: readonly AnatomicalSkullKit[];
   /** The page's first kit: the human skull's where it loaded. What its diagnostics and timings report. */
@@ -243,6 +248,8 @@ export class SegmentMeshCache {
   keyOf(source: BoneFieldSource): string {
     const skull = this.skullKitOf(source.character)?.head(source);
     if (skull) return skull.mesh.key;
+    const piece = this.bodyKit?.segment(source);
+    if (piece) return piece.key;
     const carved = meshBoneSource(source, this.sculpt.shape);
     return `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
   }
@@ -260,6 +267,8 @@ export class SegmentMeshCache {
   #find(source: BoneFieldSource): SegmentMesh {
     const skull = this.skullKitOf(source.character)?.head(source);
     if (skull) return skull.mesh;
+    const piece = this.bodyKit?.segment(source);
+    if (piece) return piece;
     const carved = meshBoneSource(source, this.sculpt.shape);
     const key = `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
     let m = this.#map.get(key);
@@ -292,7 +301,7 @@ export class SegmentMeshCache {
   }
 
   get size(): number {
-    return this.#map.size + this.skullKits.reduce((n, kit) => n + kit.size, 0);
+    return this.#map.size + this.skullKits.reduce((n, kit) => n + kit.size, 0) + (this.bodyKit?.size ?? 0);
   }
 
   /** Total extracted vertices/triangles across live entries (diagnostics). */
@@ -300,6 +309,7 @@ export class SegmentMeshCache {
     let verts = 0, tris = 0;
     for (const kit of this.skullKits) { verts += kit.totals.verts; tris += kit.totals.tris; }
     for (const m of this.#map.values()) { verts += m.verts; tris += m.tris; }
+    if (this.bodyKit) { verts += this.bodyKit.totals.verts; tris += this.bodyKit.totals.tris; }
     return { verts, tris };
   }
 
@@ -313,5 +323,6 @@ export class SegmentMeshCache {
     this.#map.clear();
     this.#bySource = new WeakMap();
     for (const kit of this.skullKits) kit.dispose();
+    this.bodyKit?.dispose();
   }
 }

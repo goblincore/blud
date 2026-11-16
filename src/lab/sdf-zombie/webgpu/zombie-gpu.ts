@@ -76,7 +76,7 @@ import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-priva
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { MARCH_COMPUTE, MARCH_DISCARD_READ, marchBodyForCompute } from './march/compute-flag';
 import type { MarchStage, MarchComputeNodes } from './march-compute';
-import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
+import { bareBonesFlag, createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 import { EARLYZ_BOX_EXIT_WGSL } from './earlyz/box-exit.wgsl';
@@ -232,9 +232,13 @@ export interface ZombieGpuView {
    * Lift the march's nearWound gate on the inside-flesh rows (counts2.y) —
    * the melt's skeleton must fold WITHOUT a wound, because the melt sags
    * the flesh off the bones on purpose. Default FALSE; takes effect on the
-   * NEXT update(). Only the melt sets this.
+   * NEXT update(). Set by the lab's melt and by a rupturing body (game-actor.ts beginTear). A body that packs no
+   * inside-flesh rows writes 0 whatever this says (crowd-records.ts bareBonesFlag).
    */
   setBonesBare(on: boolean): void;
+  /** DEBUG: draw no flesh (the march folds zero flesh prims), so a mesh skeleton can be looked at bare
+   *  (__sdfGame.bareSkeleton). Takes effect at once, and holds over later uploads. */
+  setFleshHidden(on: boolean): void;
   /** Rebind opt-in sampled-skeleton resources. The caller owns them. */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
@@ -2669,6 +2673,9 @@ export function createZombieGpuView(
   // the gate's "bones are contained in flesh" proof is exactly what the melt
   // violates.
   let bareBones = false;
+  let fleshHidden = false;
+  /** The flesh prim count of the last upload (what setFleshHidden(false) puts back). */
+  let fleshPrims = 0;
 
   // Wound union-reach cull (close-up wound-cull task, 2026-09-05). SHIPS ON:
   // setWounds computes the bound from the live uniforms and writes it to
@@ -2894,11 +2901,12 @@ export function createZombieGpuView(
     refreshThreatTexels();
     sink.markDirty();
     ownAtlas?.flush();
-    u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
+    fleshPrims = p.primCount;
+    u.counts.value.set(fleshHidden ? 0 : p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
     // z is the owner re-fold attribution gate (march.wgsl.ts) and w is the
     // per-ray wound list gate (counts2.w, 2026-09-07) — settings channels
     // that must survive every upload, like perfCfg.
-    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, u.counts2.value.z, u.counts2.value.w);
+    u.counts2.value.set(p.boneCount, bareBonesFlag(bareBones, p.boneCount), u.counts2.value.z, u.counts2.value.w);
     return p;
   }
 
@@ -3207,6 +3215,7 @@ export function createZombieGpuView(
       if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
     },
     setBonesBare(on) { bareBones = on; },
+    setFleshHidden(on) { fleshHidden = on; u.counts.value.x = on ? 0 : fleshPrims; syncRecord(); },
     setSkeletonVolume(atlas, meta) {
       mainSegmentVolume.segVolumeAtlas.value = atlas;
       mainSegmentVolume.segVolumeMeta.value = meta;

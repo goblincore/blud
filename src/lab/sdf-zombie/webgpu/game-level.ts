@@ -133,17 +133,22 @@ export interface RoomDef {
   /** The next N slots, after the juggernauts, use warbulls (the cyber-
    *  minotaur). Counted inside `zombies`, like the others. */
   warbulls?: number;
+  /** The next N slots, after the warbulls, use tallows (the corpulent rendering vat, his rocket volley). Counted
+   *  inside `zombies`, like the others. */
+  tallows?: number;
 }
 
 /** The spawn KIND of ring-level slot `index` in `room` (active-level.ts
- *  ringLevel): soldiers first, then juggernauts, then warbulls, then zombies.
+ *  ringLevel): soldiers first, then juggernauts, then warbulls, then tallows, then zombies.
  *  The ?spawn= playtest override swaps zombie slots later, in game-main. */
-export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'warbull' | 'zombie' {
+export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'warbull' | 'tallow' | 'zombie' {
   const soldiers = room.soldiers ?? 0;
   const juggernauts = soldiers + (room.juggernauts ?? 0);
+  const warbulls = juggernauts + (room.warbulls ?? 0);
   if (index < soldiers) return 'soldier';
   if (index < juggernauts) return 'juggernaut';
-  if (index < juggernauts + (room.warbulls ?? 0)) return 'warbull';
+  if (index < warbulls) return 'warbull';
+  if (index < warbulls + (room.tallows ?? 0)) return 'tallow';
   return 'zombie';
 }
 
@@ -243,7 +248,9 @@ export const ROOMS: RoomDef[] = [
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier along the north wall.
     accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 * RING_ACCENT_SCALE }],
-    zombies: 4 },
+    // ...and one TALLOW (owner, 2026-11-15: "one of the tallow in one of the zombie rooms"). Slot 0, the far corner
+    // at (-4.8, 4.8): his volley wants 3 m or more of standoff, and the room's 3 m ceiling clears his 1.9 m crown.
+    zombies: 4, tallows: 1 },
   // THE ARENA. Same cold stone family as the rest, a shade darker and taller
   // so it reads as somewhere else. Braziers on two walls (the palette tests
   // want 1-2 accents per room, placed off-centre and below 2 m), a shade
