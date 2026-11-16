@@ -694,6 +694,26 @@ describe('createZombieActor — burning panic and burn death', () => {
     expect(a.debug().fallKind).toBeNull();
   });
 
+  it('fleeing into a corner, it turns and keeps running instead of pressing the walls', () => {
+    // The player is diagonally opposite, so the body flees into the corner half a metre away.
+    const a = makeTestActor({
+      start: [3.5, 0, 3.5], bounds: { minX: -4, maxX: 4, minZ: -4, maxZ: 4 },
+      profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [6, 6] } },
+    });
+    a.setBrainInput({ x: -3, z: -3, room: 1 }, true);
+    a.setBurning(true);
+    burnFor(a, 1.5);
+    // Path length over the next 2 s: a body pressing the wall covers almost none.
+    let path = 0, prev = a.pose().pos;
+    for (let i = 0; i < 120; i++) {
+      a.step(1 / 60);
+      const p = a.pose().pos;
+      path += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    expect(path).toBeGreaterThan(1.2);
+  });
+
   it('a tier that does not die panics, then resumes', () => {
     const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], dies: false } } });
     a.setBurning(true);

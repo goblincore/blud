@@ -5,13 +5,13 @@
 //
 //   * a burning SOLDIER flees the player (distance grows), runs faster than
 //     its unburnt cruise, and never fires;
-//   * a burning ZOMBIE keeps chasing (distance shrinks) and runs faster;
+//   * a burning ZOMBIE no longer chases: it runs (along the wall it is spawned beside) and does not close in;
 //   * a burning ZOMBIE's samples show burnPhase 'panic' and later 'dead'.
 //
 // The harness is scripts/flare-ingame-capture.mjs's: own vite + headless
 // Chrome on an unused port pair, the real page, the real renderer, the
 // `window.__warmGate.phase === 'ready'` gate, a flat-frame luma gate and a
-// renderer-pipeline-error guard. It also saves a 4-frame contact sheet.
+// renderer-pipeline-error guard. It also saves a 5-frame contact sheet.
 //
 // Usage: node scripts/burn-behaviour-trace.mjs [vitePort] [cdpPort] [outDir]
 
@@ -286,7 +286,7 @@ const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
  *  `panicThenDead` reads the actor's burnPhase() oracle: a 'panic' sample
  *  followed later by a 'dead' one. */
 function analyse(raw, id) {
-  const speeds = [], dists = [], shots = [], kinds = [];
+  const speeds = [], dists = [], shots = [], kinds = [], panicSpeeds = [];
   let sawPanic = false, panicThenDead = false;
   let holdMax = 0, targetNullFrames = 0;
   const mindStates = {};
@@ -297,6 +297,7 @@ function analyse(raw, id) {
     const d = Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]);
     speeds.push(a.speed); dists.push(d); kinds.push(a.staggerKind);
     if (a.firing) shots.push(1);
+    if (a.burnPhase === 'panic' || a.burnPhase === 'falter') panicSpeeds.push(a.speed);
     if (a.burnPhase === 'panic') sawPanic = true;
     else if (a.burnPhase === 'dead' && sawPanic) panicThenDead = true;
     holdMax = Math.max(holdMax, a.holdSecs ?? 0);
@@ -309,6 +310,9 @@ function analyse(raw, id) {
   return {
     frames: n,
     meanSpeed: +mean(speeds).toFixed(3),
+    /** Mean speed over the panic + falter frames only (a dead body's zeros would drag meanSpeed down). */
+    panicFrames: panicSpeeds.length,
+    panicMeanSpeed: +(panicSpeeds.length ? mean(panicSpeeds) : 0).toFixed(3),
     maxSpeed: +Math.max(0, ...speeds).toFixed(3),
     meanDistHead: +mean(head).toFixed(3),
     meanDistTail: +mean(tail).toFixed(3),
@@ -392,10 +396,11 @@ try {
   console.log('igniteActor:', litS, litZ);
   if (!litS || !litZ) fail('igniteActor refused an id');
 
-  // ---- 6 s BURNING, in three 2 s chunks so the sheet frames the motion ----
+  // ---- 8 s BURNING, in four 2 s chunks so the sheet frames the motion: long
+  // enough for the longest zombie clock (6 s) to run out and the fall to start ----
   const burn = [];
   const chunkFrames = [];
-  for (let c = 0; c < 3; c++) {
+  for (let c = 0; c < 4; c++) {
     await frameOn(ids);
     const chunk = await record(60);
     burn.push(...chunk);
@@ -423,13 +428,17 @@ try {
 
   if (sAfter.shots !== 0) fail(`burning soldier fired ${sAfter.shots} frame(s)`);
   if (!(sAfter.distDelta > 0.5)) fail(`soldier did not flee the player (dist delta ${sAfter.distDelta} m)`);
-  if (!(zAfter.distDelta < -0.3)) fail(`zombie did not close on the player (dist delta ${zAfter.distDelta} m)`);
+  // The zombie is spawned about a metre from a wall, so its flee turns ALONG the wall (burn-behaviour.ts
+  // `blocked`): its distance to the player is reported, not asserted. It must keep RUNNING (below) and
+  // must not close in.
+  if (!(zAfter.distDelta > -0.3)) fail(`burning zombie closed on the player (dist delta ${zAfter.distDelta} m)`);
   if (!zAfter.panicThenDead) fail('burning zombie never went from burnPhase panic to dead');
-  if (!(sAfter.meanSpeed > 1.0)) fail(`burning soldier mean speed ${sAfter.meanSpeed} m/s <= 1.0`);
-  if (!(zAfter.meanSpeed > 0.4)) fail(`burning zombie mean speed ${zAfter.meanSpeed} m/s <= 0.4`);
+  if (!sAfter.panicThenDead) fail('burning soldier never went from burnPhase panic to dead');
+  if (!(sAfter.panicMeanSpeed > 1.0)) fail(`burning soldier panic mean speed ${sAfter.panicMeanSpeed} m/s <= 1.0`);
+  if (!(zAfter.panicMeanSpeed > 0.4)) fail(`burning zombie panic mean speed ${zAfter.panicMeanSpeed} m/s <= 0.4`);
 
   // ---- CONTACT SHEET -----------------------------------------------------
-  const tiles = [beforeShot, ...chunkFrames].map((s, i) => ({ label: ['unburnt', 'burn 2s', 'burn 4s', 'burn 6s'][i], b64: s.b64 }));
+  const tiles = [beforeShot, ...chunkFrames].map((s, i) => ({ label: ['unburnt', 'burn 2s', 'burn 4s', 'burn 6s', 'burn 8s'][i], b64: s.b64 }));
   await evaluate('window.__sheet = []');
   for (const t of tiles) await evaluate(`window.__sheet.push(${JSON.stringify(t)})`);
   const dataUrl = await evaluate(`(async () => {

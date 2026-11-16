@@ -23,6 +23,10 @@ export const BURN_BEHAVIOUR = Object.freeze({
   /** Speed (as a fraction of the tier's) and flail amplitude at the end of falter. */
   falterSpeed: 0.45,
   falterFlail: 0.35,
+  /** BLOCKED (a wall, a crate, a corner): the flee heading is turned by at least this much (rad), plus
+   *  up to as much again, to a seeded side; no second turn for blockedCoolSec. */
+  blockedTurnRad: Math.PI / 2,
+  blockedCoolSec: 0.8,
 });
 
 /** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep behaving as
@@ -41,6 +45,10 @@ export interface BurnPanicState {
   speed: number; dies: boolean;
   /** `die` has been reported. */
   died: boolean;
+  /** Standing turn of the flee heading (rad), added each time the body reports it is blocked. */
+  bias: number;
+  /** Seconds until a blocked report may turn it again. */
+  blockedCool: number;
 }
 
 function next(s: BurnPanicState): number {          // mulberry32
@@ -52,7 +60,7 @@ function next(s: BurnPanicState): number {          // mulberry32
 const smooth = (u: number) => { const k = Math.min(1, Math.max(0, u)); return k * k * (3 - 2 * k); };
 
 export function createBurnPanic(seed: number, tier: BurnTier = BURN_TIER_DEFAULT): BurnPanicState {
-  const s: BurnPanicState = { rng: seed | 0, t: 0, phase: 0, durationSec: 0, speed: tier.speed, dies: tier.dies, died: false };
+  const s: BurnPanicState = { rng: seed | 0, t: 0, phase: 0, durationSec: 0, speed: tier.speed, dies: tier.dies, died: false, bias: 0, blockedCool: 0 };
   s.phase = next(s) * Math.PI * 2;
   const [lo, hi] = tier.panicSec;
   s.durationSec = Math.max(0.1, lo + (hi - lo) * next(s));
@@ -65,6 +73,8 @@ export interface BurnPanicInput {
   player: Vec3 | null;
   /** The body's own forward (unit, ground plane): the heading when no player is known. */
   forward: Vec3;
+  /** The body is trying to run and getting nowhere (a wall): turn the flee heading. Absent = false. */
+  blocked?: boolean;
 }
 export interface BurnPanicOut {
   target: Vec3;
@@ -91,9 +101,17 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   if (i.player) { dx = i.self[0] - i.player[0]; dz = i.self[2] - i.player[2]; }
   const len = Math.hypot(dx, dz);
   if (len < 1e-6) { dx = 0; dz = 1; } else { dx /= len; dz /= len; }
+  s.blockedCool = Math.max(0, s.blockedCool - Math.max(0, dt));
+  if (i.blocked && s.blockedCool <= 0) {
+    // Running straight from the player into a wall reads as a body stuck on the spot: turn hard to
+    // one side (seeded) and keep that turn, so it runs ALONG the wall, until it is blocked again.
+    const side = next(s) < 0.5 ? -1 : 1;
+    s.bias += side * B.blockedTurnRad * (1 + next(s));
+    s.blockedCool = B.blockedCoolSec;
+  }
   const w = 2 * Math.PI * B.wobbleHz * s.t;
   const wob = (Math.sin(w + s.phase) + 0.5 * Math.sin(w * 2.3 + s.phase * 1.7)) / 1.5;
-  const a = wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f);
+  const a = s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f);
   const c = Math.cos(a), sn = Math.sin(a);
   const hx = dx * c - dz * sn, hz = dx * sn + dz * c;
   const die = phase === 'done' && s.dies && !s.died;

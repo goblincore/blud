@@ -65,6 +65,22 @@ describe('stepBurnPanic', () => {
       expect(d).toBeLessThan(0.25);   // rad per 1/30 s
     }
   });
+  it('blocked turns the flee heading by at least a quarter turn, once per cooldown', () => {
+    const s = createBurnPanic(7, BURN_TIER_DEFAULT);
+    const inp = { self: [0, 0, 0] as [number, number, number], player: [5, 0, 0] as [number, number, number], forward: [0, 0, 1] as [number, number, number] };
+    const ang = (o: { target: readonly number[] }) => Math.atan2(o.target[2]!, o.target[0]!);
+    const turn = (x: number, y: number) => { let d = Math.abs(x - y); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
+    const a0 = ang(stepBurnPanic(s, inp, DT));
+    const a1 = ang(stepBurnPanic(s, { ...inp, blocked: true }, DT));
+    expect(turn(a1, a0)).toBeGreaterThan(Math.PI / 2 - 0.3);
+    // Still blocked on the next steps: no second turn until the cooldown is out.
+    const a2 = ang(stepBurnPanic(s, { ...inp, blocked: true }, DT));
+    expect(turn(a2, a1)).toBeLessThan(0.25);
+    for (let t = 0; t < BURN_BEHAVIOUR.blockedCoolSec + 0.1; t += DT) stepBurnPanic(s, inp, DT);
+    const b0 = ang(stepBurnPanic(s, inp, DT));
+    const b1 = ang(stepBurnPanic(s, { ...inp, blocked: true }, DT));
+    expect(turn(b1, b0)).toBeGreaterThan(Math.PI / 2 - 0.3);
+  });
   it('is deterministic for a seed', () => {
     expect(run(5, 11).outs).toEqual(run(5, 11).outs);
   });

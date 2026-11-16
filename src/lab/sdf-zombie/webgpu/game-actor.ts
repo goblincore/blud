@@ -115,6 +115,9 @@ const CALM: Omit<MotionSignals, 'dt'> = {
 };
 
 /** Wound-type ids the shader expects — same mapping as lab-main's TYPE_ID. */
+/** A panicking burner moving slower than this (m/s) for this long (s) is blocked: it turns. */
+const BURN_STUCK_MPS = 0.25;
+const BURN_STUCK_SEC = 0.3;
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
 /** Hit shove along the shot direction, PER WOUND PROFILE — the defect this
@@ -979,6 +982,8 @@ export function createZombieActor(opts: {
   let burnPhaseNow: 'none' | 'panic' | 'falter' | 'resumed' | 'dead' = 'none';
   /** The body burned to death: the collapse is forced and the fall is a burn fall. */
   let burnDied = false;
+  /** Seconds the panicking body has been trying to run and getting nowhere (a wall, a corner). */
+  let burnStuckT = 0;
   const burnTier = resolveBurnTier(opts.profile);
   const burnSeed = opts.id * 7919 + 1;
   /**
@@ -2044,7 +2049,9 @@ export function createZombieActor(opts: {
         const playerNow = encounterOrder?.player ?? brainPlayer;
         // BrainPlayer has no height: the flee point is ground-plane, on this body's floor.
         if (playerNow) lastPlayerPos = [playerNow.x, state.floorY, playerNow.z];
-        const bp = stepBurnPanic(burnPanic, { self: state.wander.pos, player: lastPlayerPos, forward: burnForward() }, sdt);
+        const blocked = burnStuckT > BURN_STUCK_SEC;
+        if (blocked) burnStuckT = 0;
+        const bp = stepBurnPanic(burnPanic, { self: state.wander.pos, player: lastPlayerPos, forward: burnForward(), ...(blocked ? { blocked } : {}) }, sdt);
         if (bp.phase === 'done') {
           burnPanic = null;
           burnCruiseScale = 1;
@@ -2302,6 +2309,15 @@ export function createZombieActor(opts: {
           w = { ...w, target: null, idle: 0.2 };
         }
         state = { ...state, wander: w };
+      }
+      // A panicking burner that is not getting anywhere (it fled into a wall; measured AFTER the
+      // furniture and navigation corrections) is told so, and turns (burn-behaviour.ts `blocked`).
+      // The first half second is its turn-and-accelerate, not a wall.
+      if (burnPanic && burnPanic.t > 0.5) {
+        const moved = Math.hypot(state.wander.pos[0] - beforeMove[0], state.wander.pos[2] - beforeMove[2]);
+        burnStuckT = moved < BURN_STUCK_MPS * sdt ? burnStuckT + sdt : 0;
+      } else {
+        burnStuckT = 0;
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw, sdt);
