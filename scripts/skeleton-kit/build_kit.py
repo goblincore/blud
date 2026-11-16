@@ -300,13 +300,28 @@ def build_ribs():
 # ----------------------------------------------------------------------------------------------------------------
 # The pelvis: sacrum and coccyx, and each side an iliac wing, a socket at the rig's hip joint and the pubic ring.
 # ----------------------------------------------------------------------------------------------------------------
+# WHERE THE HIP JOINT IS DRAWN. The rig's hip points sit at the top of its pelvis bone (y 1.06), waist height, about
+# 14 cm above a person's hip joint; the flesh was moved off them on 2026-11-05 (zombie.blob: the thigh tube starts
+# 8 cm down the thigh, "the legs were too far up and on the side of the body"). The first kit put the femoral head on
+# the rig's hip point, so the pelvis sat under the ribs and the femurs flared out at the waist (owner, 2026-11-16:
+# "the pelvic bone and accompanying leg bones are a bit too high up ... and to the side"). The head is now drawn where
+# the flesh thigh begins: HIP_DROP below the rig's hip point and HIP_IN toward the middle. The thigh still turns about
+# the rig's point, so in a stride the head rides a short arc in its socket (HIP_DROP x the sine of the swing).
+HIP_DROP, HIP_IN = 0.080, 0.014
+PELVIS_DROP = 0.065      # the hip bones come down with the sockets; the crest lands at y ~1.04
+
+
+def femoral_head():
+    return J[11] + V(-HIP_IN, -HIP_DROP, 0)
+
+
 def build_sacrum():
     """Sacrum and coccyx. They are part of the CAGE's piece, rigid with the lumbar column: the rig's hips swing 3-5 cm
     against the base of its spine in a stride, so the two hip bones (the pelvis piece, which follows the hips) and
     the sacrum cannot be one rigid thing without either the femoral heads leaving their sockets or the column leaving
     the sacrum. The sacrum slides between the hip bones instead, where a pelvis has its sacro-iliac joints."""
-    return loft([V(0, 1.042, -0.050), V(0, 1.010, -0.060), V(0, 0.975, -0.064), V(0, 0.945, -0.052), V(0, 0.928, -0.040)],
-                [(0.036, 0.015), (0.031, 0.014), (0.020, 0.011), (0.010, 0.0065), (0.004, 0.0035)], sides=8, up=(1, 0, 0), per=2)
+    return loft([V(0, 1.042, -0.050), V(0, 1.010, -0.058), V(0, 0.975, -0.064), V(0, 0.940, -0.062), V(0, 0.905, -0.050), V(0, 0.885, -0.038)],
+                [(0.022, 0.015), (0.032, 0.015), (0.036, 0.014), (0.024, 0.011), (0.010, 0.0065), (0.004, 0.0035)], sides=8, up=(1, 0, 0), per=2)
 
 
 def build_pelvis():
@@ -322,13 +337,17 @@ def build_pelvis():
     L.add(*loft([V(0.030, 1.056, -0.067), V(0.081, 1.096, -0.055), V(0.131, 1.104, -0.014), V(0.135, 1.086, 0.032), V(0.118, 1.058, 0.051)],
                 [0.0065, 0.007, 0.0075, 0.007, 0.0065], sides=6, per=3, beef=BEEF['crest']))
     # The socket: a thick collar the femoral head sits in.
-    L.add(*ellipsoid(hip + V(-0.016, -0.010, 0.000), (0.024, 0.032, 0.030), segs=10, rings=6))
+    L.add(*ellipsoid(hip + V(-0.016, -0.010, 0.000), (0.026, 0.034, 0.034), segs=10, rings=6))
     # Superior pubic ramus to the symphysis; ischium down to the sit bone; the ramus that closes the ring under them.
     sym_t, sym_b, sit = V(0.006, 0.992, 0.062), V(0.008, 0.968, 0.056), V(0.052, 0.948, -0.030)
     L.add(*loft([hip + V(-0.022, -0.024, 0.022), V(0.045, 1.012, 0.052), sym_t], [0.011, 0.009, 0.010], sides=6, per=3, beef=BEEF['ramus']))
     L.add(*loft([hip + V(-0.022, -0.030, -0.012), V(0.064, 0.985, -0.026), sit], [0.013, 0.012, 0.015], sides=6, per=3, beef=BEEF['ramus']))
     L.add(*loft([sit, V(0.036, 0.950, 0.016), sym_b], [0.011, 0.0075, 0.009], sides=6, per=3, beef=BEEF['ramus']))
     L.add(*ellipsoid(V(0, 0.980, 0.059), (0.009, 0.018, 0.008), segs=6, rings=4))   # the symphysis itself
+    # Everything above was laid out round the rig's hip point; it comes down as one, and the socket goes to the head.
+    head = femoral_head()
+    L.verts = [v + V(0, -PELVIS_DROP, 0) for v in L.verts]
+    L.add(*ellipsoid(head + V(-0.010, 0.004, 0.000), (0.026, 0.034, 0.034), segs=10, rings=6))
     s.merge(L); s.merge(L.mirrored())
     return s
 
@@ -409,10 +428,12 @@ def build_hand():
 def build_femur():
     s = Shells()
     hip, knee = J[11], J[12]
-    s.add(*ellipsoid(hip + V(-0.004, 0, 0), (0.022, 0.022, 0.022), segs=10, rings=6))                    # head, in the socket
-    s.add(*loft([hip + V(0.004, -0.004, 0), V(0.138, 1.036, -0.004)], [0.0135, 0.0125], sides=7, beef=1.2))        # neck
-    s.add(*ellipsoid(V(0.144, 1.038, -0.006), (0.014, 0.021, 0.016)))                                    # greater trochanter
-    s.add(*loft([V(0.140, 1.030, -0.004), V(0.131, 0.950, 0.002), V(0.116, 0.800, 0.006), V(0.103, 0.660, 0.002), knee + V(0, 0.026, 0)],
+    head = femoral_head()
+    tro = V(head.x + 0.036, head.y - 0.014, -0.005)                                                      # greater trochanter
+    s.add(*ellipsoid(head, (0.022, 0.022, 0.022), segs=10, rings=6))                                     # head, in the socket
+    s.add(*loft([head + V(0.006, -0.003, 0), tro + V(-0.006, 0.002, 0.001)], [0.0135, 0.0125], sides=7, beef=1.2))   # neck
+    s.add(*ellipsoid(tro, (0.014, 0.021, 0.016)))
+    s.add(*loft([tro + V(-0.003, -0.008, 0.001), V(0.116, 0.880, 0.002), V(0.110, 0.780, 0.005), V(0.103, 0.660, 0.002), knee + V(0, 0.026, 0)],
                 [(0.016, 0.015), 0.0135, 0.0125, (0.0145, 0.0135), (0.030 / BEEF['femur'], 0.019)], sides=8, up=(1, 0, 0), per=3, beef=BEEF['femur']))
     for sg in (1, -1):
         s.add(*ellipsoid(knee + V(sg * 0.020, 0.012, -0.006), (0.017, 0.021, 0.025)))                    # condyles

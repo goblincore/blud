@@ -114,11 +114,13 @@ describe('SkeletonKit', () => {
     expect(mesh.mesher).toBe('asset');
     expect(kit.segment(femur)).toBe(mesh);
     expect(kit.size).toBe(1);
-    // The femoral head is at the hip joint, which is the segment's origin.
+    // The femoral head hangs under the segment's origin (the rig's hip point, at waist height), where the flesh
+    // thigh begins: its top is 5 to 7 cm down.
     mesh.geometry.computeBoundingBox();
     const box = mesh.geometry.boundingBox!;
     expect(box.min.y).toBeLessThan(-0.44);
-    expect(box.max.y).toBeGreaterThan(0.015);
+    expect(box.max.y).toBeLessThan(-0.05);
+    expect(box.max.y).toBeGreaterThan(-0.07);
     kit.dispose();
     expect(kit.size).toBe(0);
   });

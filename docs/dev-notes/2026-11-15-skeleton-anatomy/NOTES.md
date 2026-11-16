@@ -150,3 +150,20 @@ to lose fine detail for a more solid frame"; detail can be faked later with a no
   shoulder girdle is the tightest scaled piece at 4.9 mm, which is what holds the scapula at 1.35.
 - In the game, bare: [chest and shoulders](game-beefy-chest.png), [whole body](game-beefy-whole.png).
 - The arms and legs have 18 to 26 mm of flesh left over the bone, so they can go thicker still if wanted.
+
+## Update 2026-11-16: the pelvis and femoral heads come down to where the flesh hip is
+
+Owner: "the pelvic bone and accompanying leg bones are a bit too high up, the thigh bones a little too far up and to the
+side", recalling that the zombie's legs had been changed for the same fault. They had: `zombie.blob`, 2026-11-05, moved
+the flesh thigh to start 8 cm below the rig's hip points, which sit at waist height (y 1.06). The kit had put the
+femoral heads on those points.
+
+- `build_kit.py`: the femoral head is drawn `HIP_DROP` (8 cm) below the rig's hip point and `HIP_IN` (1.4 cm) toward
+  the middle, the trochanter 3.6 cm out from it (was 4.4 cm out from a point 1.4 cm wider); the hip bones come down
+  `PELVIS_DROP` (6.5 cm), so the crest is at y ~1.04 and the lumbar shows between it and the ribs; the sacrum is
+  longer and still hangs off the last lumbar vertebra.
+- The thigh still turns about the rig's hip point, so the head now rides an arc in its socket. Measured in the game
+  (300 frames, walk into attack, both hips): 3.5 mm mean, 20 mm worst. It was 2 and 9 with the head on the pivot.
+  The socket is a 3.4 cm collar, so the head stays inside it.
+- `KIT_JOINTS` hip and sacrum points moved with them. Kit: 7,623 vertices, 14,406 triangles.
+- [whole body](game-lowered-hips-whole.png), [hips close](game-lowered-hips-close.png).

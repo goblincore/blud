@@ -278,12 +278,14 @@ export const KIT_JOINTS: readonly { name: string; a: string; b: string; at: Vec3
   { name: 'skull on atlas', a: 'head', b: 'axial:2-3', at: [0, 1.545, 0.078] },
   { name: 'neck on chest (C7/T1)', a: 'axial:2-3', b: 'axial:1-2', at: [0, 1.4, 0.018] },
   // The one joint that is MEANT to move: the sacrum (the cage's piece) slides between the hip bones.
-  { name: 'sacrum between the hip bones', a: 'axial:1-2', b: 'axial:0-1', at: [0.03, 1.03, -0.058], slides: true },
+  { name: 'sacrum between the hip bones', a: 'axial:1-2', b: 'axial:0-1', at: [0.03, 0.965, -0.058], slides: true },
   { name: 'clavicle on sternum', a: 'limb:armL:5-5', b: 'axial:1-2', at: [0.02, 1.378, 0.088] },
   { name: 'shoulder (humeral head in socket)', a: 'limb:armL:5-7', b: 'limb:armL:5-5', at: [0.2, 1.3976, 0.0405] },
   { name: 'elbow', a: 'limb:armL:7-9', b: 'limb:armL:5-7', at: [0.2862, 1.1102, 0.0405] },
   { name: 'wrist', a: 'limb:armL:9-9', b: 'limb:armL:7-9', at: [0.3, 0.84, 0.068] },
-  { name: 'hip (femoral head in socket)', a: 'limb:legL:11-12', b: 'axial:0-1', at: [0.1, 1.06, 0] },
+  // The head is drawn 8 cm under the rig's hip point (build_kit.py HIP_DROP), which the thigh turns about: this one
+  // opens by that arm times the sine of the leg's swing against the pelvis.
+  { name: 'hip (femoral head in socket)', a: 'limb:legL:11-12', b: 'axial:0-1', at: [0.086, 0.98, 0] },
   { name: 'knee', a: 'limb:legL:12-15', b: 'limb:legL:11-12', at: [0.1, 0.6, 0] },
   { name: 'ankle (shin on talus)', a: 'limb:legL:15-15', b: 'limb:legL:12-15', at: [0.1, 0.1006, 0.025] },
   { name: 'foot on talus', a: 'limb:legL:15-17', b: 'limb:legL:15-15', at: [0.1, 0.0556, 0.025] },

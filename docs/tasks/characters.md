@@ -11,13 +11,14 @@ Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the
   (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
   Vertebrae on a disc column, the old extracted cage's ribs and sternum, a sacrum, two hip bones with sockets at the rig's hip
   joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
-  fibula, talus, a foot. 7,503 vertices and 14,174 triangles a body where the extraction was 15,110 and 30,284; the
+  fibula, talus, a foot. 7,623 vertices and 14,406 triangles a body where the extraction was 15,110 and 30,284; the
   same 19 meshes and batches.
 - [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
   cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
   pinned in `skeleton-kit.test.ts`). A body draws the kit whole or not at all; `?bonekit=0` is the old skeleton.
-- [x] **Joints hold when posed** (measured in the game, walk into attack): hip 2 mm typical and 9 worst (was 37 and
-  63), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
+- [x] **Joints hold when posed** (measured in the game, walk into attack): hip 3.5 mm typical and 20 worst (was 37 and
+  63; 2 and 9 before the femoral heads were lowered 8 cm to the flesh hip, 2026-11-16, off the rig's waist-high hip
+  points), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
   bones follow the hip joints and the shoulder girdle the rig's clavicle (`KitFrame`); leg segments turn with the
   body's yaw (`contract.ts`).
 - [x] **Colour**: a kit bone with no wound near it wears the skull's ivory with tissue in patches (the melt); one a wound
