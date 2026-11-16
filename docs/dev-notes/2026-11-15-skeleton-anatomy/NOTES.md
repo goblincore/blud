@@ -18,7 +18,7 @@ are the game (arena, `__sdfGame.bareSkeleton(true)`), front, side and back.
 | Segment | Bones in its piece | Melt / gib group |
 | --- | --- | --- |
 | `axial:2-3` | 7 cervical vertebrae on a disc column | skull |
-| `axial:1-2` | 12 thoracic and 5 lumbar vertebrae, 6 fat ribs a side, costal margin, sternum, sacrum and coccyx | cage |
+| `axial:1-2` | 12 thoracic and 5 lumbar vertebrae, the extracted cage's six rib hoops a side and its sternum (thinned to half the triangles), sacrum and coccyx | cage |
 | `axial:0-1` | the two hip bones: iliac wing and crest, socket, pubic ring | pelvis |
 | `limb:arm*:5-5` (shoulder ball) | clavicle, scapula (blade, spine, acromion, socket, coracoid) | cage |
 | `limb:arm*:5-7` | humerus: head, tubercle, shaft, condyles | upperArm |
@@ -38,7 +38,7 @@ because the rig's hip joints sit at the top of its pelvis bone.
 | | Vertices | Triangles | Segment meshes |
 | --- | --- | --- | --- |
 | Before (19 segments, surface nets) | 15,110 | 30,284 | 19 |
-| After (19 kit pieces) | 6,992 | 13,064 | 19 |
+| After (19 kit pieces) | 7,503 | 14,174 | 19 |
 
 Same number of meshes and instanced batches as before: a piece replaces a segment's geometry one for one. The skull
 (9,144 vertices in the default sculpt) and the organs are unchanged.
@@ -122,3 +122,17 @@ different skeleton for non-humanoids, are separate work (owner, 2026-11-15).
 
 `scripts/skeleton-kit/build.sh` (needs Blender): exports the rig, builds the GLB headless, checks every vertex is at
 least 4 mm inside the rest flesh and every piece is a live segment. Shapes are in `build_kit.py`, in game coordinates.
+
+## Update 2026-11-16: the old cage's own ribs, on the kit's spine
+
+Owner, looking at the six fat modelled ribs beside the old skeleton: "i honestly prefer the old ribcage ... a bit flat,
+the way the ribs go into the sternum seamlessly", with the sacrum and spine kept from the kit.
+
+- `export-rig.ts` now extracts the surface of the chest's rib and sternum bars alone (the 25 prims of `axial:1-2`
+  authored `tall=1.3` or `wide=2.4`; 3,736 vertices) and writes it into the rig data as `ribcage`.
+- `build_kit.py build_ribs` welds that surface, keeps half its triangles (`RIB_KEEP`) and puts it in the cage piece
+  with the kit's vertebrae, disc column and sacrum. The modelled ribs, costal margin and sternum are gone.
+- The kit is 7,503 vertices and 14,174 triangles a body (the extraction: 15,110 and 30,284).
+- In the game: [through a chest wound](game-chest-wound-old-ribs-on-kit-spine.png),
+  [bare, from behind](game-bare-back-old-ribs-on-kit-spine.png): the rib heads meet the vertebrae.
+- Ribs 5 and 6 end free at the front, as they always did in the old cage.

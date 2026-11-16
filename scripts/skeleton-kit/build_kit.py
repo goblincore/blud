@@ -252,65 +252,36 @@ def build_spine():
 
 
 # ----------------------------------------------------------------------------------------------------------------
-# The ribcage: six fat ribs a side, a sternum, the costal margin.
+# The ribcage: the extracted cage's own ribs and sternum.
 # ----------------------------------------------------------------------------------------------------------------
-# The cage's envelope by height: (y of the rib's head, half-width, half-depth to the front, drop to its sternal end).
-# The six rows below 1.40 are the table the SDF cage was fitted to the flesh with (scripts/zombie-skeleton-gen.ts).
-CAGE = [(1.400, 0.060, 0.044, 0.014), (1.375, 0.075, 0.050, 0.020), (1.333, 0.125, 0.082, 0.036), (1.291, 0.155, 0.092, 0.050),
-        (1.249, 0.150, 0.090, 0.058), (1.207, 0.133, 0.077, 0.060), (1.165, 0.110, 0.074, 0.052)]
-
-
-def cage_at(y):
-    if y >= CAGE[0][0]:
-        return CAGE[0][1:]
-    for i in range(len(CAGE) - 1):
-        a, b = CAGE[i], CAGE[i + 1]
-        if b[0] <= y <= a[0]:
-            f = (a[0] - y) / (a[0] - b[0])
-            return tuple(lerp(a[k], b[k], f) for k in (1, 2, 3))
-    return CAGE[-1][1:]
-
-
-def rib_point(yh, th, th0):
-    """A point of the rib whose head is at height yh, at angle th around the cage (0 = the spine, pi = the sternum)."""
-    A, Bf, drop = cage_at(yh)
-    cz = 0.12 * (yh - 1.06) + 0.003                 # the torso flesh's own centre line
-    back = spine_at(yh)[0].z + 0.004                # the rib's head lies on its vertebra
-    B = (cz - back) if th < math.pi / 2 else Bf
-    return V(A * math.sin(th), yh - drop * ((th - th0) / (math.pi - th0)) ** 1.3, cz - B * math.cos(th))
-
-
-RIB_HEADS = [1.375, 1.333, 1.291, 1.249, 1.207, 1.165]   # the six rows of CAGE below 1.40, 4.2 cm apart
+RIB_KEEP = 0.5   # the share of the extraction's triangles the kit keeps
 
 
 def build_ribs():
-    """SIX FAT RIBS A SIDE, not ten flat ones (owner, 2026-11-15, looking through a chest wound in the game: the ten
-    thin bands read as not part of the body, "too thin and too many", where the old cage of six thick hoops "feels
-    much more grounded"). They are the old cage's ribs: the same six heights, the same envelope, a section about as
-    fat as its tubes were (2.7 cm tall, 1.9 cm through), now on real vertebrae and a real sternum. Ribs 1-4 reach
-    the sternum; 5 and 6 hang off the costal margin."""
+    """THE OLD CAGE'S RIBS AND STERNUM, as the game extracted them (owner, 2026-11-16, after two modelled cages, ten
+    flat ribs and then six fat ones: "i honestly prefer the old ribcage ... a bit flat, the way the ribs go into the
+    sternum seamlessly", with the kit's sacrum and spine). export-rig.ts extracts the surface of the chest's rib and
+    sternum bars alone (zombie.blob: six hoops a side, each two bars meeting at the flank, and one flat sternum) and
+    it is welded here, thinned to RIB_KEEP of its triangles, and set on the kit's vertebrae: the rib heads were
+    authored 1.7 cm either side of the same spine line the column follows."""
+    src = RIG['ribcage']
+    me = bpy.data.meshes.new('ribcage-src')
+    me.from_pydata([tuple(v) for v in src['verts']], [], [tuple(t) for t in src['tris']])
+    bm = bmesh.new(); bm.from_mesh(me)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new('ribcage-src', me)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.modifiers.new('thin', 'DECIMATE').ratio = RIB_KEEP
+    ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    out = ev.to_mesh()
     s = Shells()
-    ends = []
-    for i, yh in enumerate(RIB_HEADS):
-        A = cage_at(yh)[0]
-        th0 = math.asin(min(1, 0.016 / A))
-        th1 = math.pi - math.asin(0.012 / A) if i < 4 else math.radians((150, 124)[i - 4])
-        n = 13 if i < 4 else (11, 9)[i - 4]
-        path = [rib_point(yh, lerp(th0, th1, k / (n - 1)), th0) for k in range(n)]
-        w = 0.0135 if i > 0 else 0.0115
-        left = Shells(); left.add(*loft(path, [(0.008, 0.0075)] + [(w, 0.0095)] * 4 + [(w * 0.85, 0.008)], sides=8, up=(0, 1, 0)))
-        s.merge(left); s.merge(left.mirrored())
-        ends.append(path[-1])
-    # The costal margin: ribs 5 and 6 hang off one strip of cartilage that climbs to the foot of the sternum.
-    foot = V(0.012, ends[3].y - 0.006, ends[3].z)
-    margin = Shells(); margin.add(*loft([ends[5], ends[4], lerp(ends[4], foot, 0.55), foot], [(0.010, 0.0075)] * 4, sides=6, up=(0, 1, 0), per=3))
-    s.merge(margin); s.merge(margin.mirrored())
-    # Sternum: manubrium, body, xiphoid, through the sternal ends of ribs 1-4.
-    top = V(0, ends[0].y + 0.014, ends[0].z - 0.004)
-    mid = [V(0, e.y, e.z + 0.001) for e in ends[:4]]
-    xiph = V(0, ends[3].y - 0.034, ends[3].z - 0.006)
-    s.add(*loft([top] + mid + [xiph], [(0.026, 0.008), (0.027, 0.0085), (0.019, 0.0078), (0.018, 0.0075), (0.019, 0.0075), (0.007, 0.004)], sides=8, up=(1, 0, 0)))
-    return s, top
+    s.add([tuple(v.co) for v in out.vertices], [tuple(p.vertices) for p in out.polygons])
+    ev.to_mesh_clear()
+    bpy.data.objects.remove(ob, do_unlink=True)
+    top = max((Vector(v) for v in src['verts'] if abs(v[0]) < 0.012), key=lambda v: v.y)   # the manubrium's top
+    return s, V(0, top.y, top.z)
 
 
 # ----------------------------------------------------------------------------------------------------------------

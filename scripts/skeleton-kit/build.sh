@@ -5,5 +5,6 @@ set -euo pipefail
 BLENDER="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 TMP="${TMPDIR:-/tmp}/skeleton-kit-rig.json"
 npx tsx scripts/skeleton-kit/export-rig.ts zombie "$TMP"
-"$BLENDER" -b --python scripts/skeleton-kit/build_kit.py -- "$TMP" public/assets/lab/skeleton-kit.glb | grep -E '^\{|Error|error' || true
+"$BLENDER" -b --python scripts/skeleton-kit/build_kit.py -- "$TMP" public/assets/lab/skeleton-kit.glb | tee "$TMP.log" | grep -E '^\{|Error|error' || true
+grep -q '^{' "$TMP.log" || { echo 'build_kit.py did not finish: no kit written' >&2; exit 1; }
 npx tsx scripts/skeleton-kit/check-kit.ts zombie public/assets/lab/skeleton-kit.glb
