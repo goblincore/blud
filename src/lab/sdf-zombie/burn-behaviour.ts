@@ -34,6 +34,8 @@ export const BURN_BEHAVIOUR = Object.freeze({
   blockedCoolSec: 0.5,
   /** How far along a candidate turn the `clear` probe looks (m). */
   probeM: 1,
+  /** The last-resort turn (rad) when the probe finds no sideways way out: most of the way round. */
+  blockedTurnBack: 2.4,
 });
 
 /** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep behaving as
@@ -124,9 +126,17 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
     const turn = B.blockedTurnRad * (1 + B.blockedTurnExtra * next(s));
     let pick = side * turn;
     if (i.clear) {
-      for (const cand of [side * turn, -side * turn, side * wide, -side * wide, side * B.blockedTurnRad * 0.6, -side * B.blockedTurnRad * 0.6]) {
+      // Sideways first at the full probe; then the same turns at half the probe (a nook); last, most
+      // of the way round: running past the player beats standing still against a wall.
+      const sideways = [side * turn, -side * turn, side * wide, -side * wide, side * B.blockedTurnRad * 0.6, -side * B.blockedTurnRad * 0.6];
+      const tries: [number, number][] = [
+        ...sideways.map((c): [number, number] => [c, B.probeM]),
+        ...sideways.map((c): [number, number] => [c, B.probeM * 0.5]),
+        [side * B.blockedTurnBack, B.probeM], [-side * B.blockedTurnBack, B.probeM],
+      ];
+      for (const [cand, reach] of tries) {
         const [cx, cz] = turned(cand);
-        if (i.clear([i.self[0] + cx * B.probeM, i.self[1], i.self[2] + cz * B.probeM])) { pick = cand; break; }
+        if (i.clear([i.self[0] + cx * reach, i.self[1], i.self[2] + cz * reach])) { pick = cand; break; }
       }
     }
     s.bias = pick;
