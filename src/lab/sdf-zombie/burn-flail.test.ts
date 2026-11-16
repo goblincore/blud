@@ -45,6 +45,16 @@ describe('burnFlailPose', () => {
       expect(p.pitch).toBeGreaterThan(0.3);
     }
   });
+  it('is continuous in fold: falter starting does not pop the hands', () => {
+    let worst = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      for (let t = 0; t < 6; t += 0.05) {
+        const p0 = burnFlailPose(t, seed, 1, 0), p1 = burnFlailPose(t, seed, 1, 0.01);
+        worst = Math.max(worst, dist(p0.handL, p1.handL), dist(p0.handR, p1.handR));
+      }
+    }
+    expect(worst).toBeLessThan(0.02);
+  });
   it('the two arms differ, and two seeds differ', () => {
     const a = burnFlailPose(1, 5, 1, 0), b = burnFlailPose(1, 6, 1, 0);
     expect(dist(a.handL, a.handR)).toBeGreaterThan(0.02);

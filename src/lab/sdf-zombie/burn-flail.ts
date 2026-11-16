@@ -30,6 +30,8 @@ const REACH = 0.97;
 const TAU = Math.PI * 2;
 
 const clamp01 = (v: number) => (v > 0 ? (v < 1 ? v : 1) : 0);
+/** Hermite smoothstep of a 0..1 clamp: flat at both ends. */
+const smooth01 = (v: number) => { const u = clamp01(v); return u * u * (3 - 2 * u); };
 const mix = (a: Vec3, b: Vec3, u: number): Vec3 => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
 /** A stable 0..1 from a seed and a lane. */
 function hash01(seed: number, lane: number): number {
@@ -50,7 +52,10 @@ function hand(t: number, seed: number, lane: number, beat: number, a: number, f:
     centre[1] + SWING[1] * wave(t, 2.5, 3.7, p(1)) * live,
     centre[2] + SWING[2] * wave(t, 1.9, 2.9, p(2)) * live,
   ];
-  if (f > 0) full[1] = Math.min(full[1], 0.72 - 0.62 * f);   // folded hands stay below the shoulder line
+  // Folded hands stay below the shoulder line. The cap is blended in over the first fifth of the fold so the pose
+  // is continuous in `fold`: switched on at the first non-zero fold it dropped a raised hand by up to a quarter arm.
+  const w = smooth01(f / 0.2);
+  if (w > 0) full[1] += (Math.min(full[1], 0.72 - 0.62 * f) - full[1]) * w;
   const h = mix(FLAIL_REST, full, a);
   const l = Math.hypot(h[0], h[1], h[2]);
   return l > REACH ? [h[0] * REACH / l, h[1] * REACH / l, h[2] * REACH / l] : h;
