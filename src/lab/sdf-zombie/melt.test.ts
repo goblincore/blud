@@ -113,16 +113,20 @@ describe('applyMelt', () => {
     }
   });
 
-  it('conserves r^2 * yScale within 25% — volume goes sideways, not away', () => {
+  it('swell 0.5 conserves r^2 * yScale; the default gives some up and never gains', () => {
     for (let i = 0; i <= 10; i++) {
-      const out = meltedAt(i / 10);
+      const s = { ...meltInitBody(BODY, 0), t: i / 10 };
+      const kept = applyMelt(BODY, s, { ...MELT_TUNING_BODY, swell: 0.5 });
+      const out = applyMelt(BODY, s);
       for (let p = 0; p < out.length; p++) {
         const rest = BODY[p]!;
-        const now = out[p]!;
         const v0 = rest.radius ** 2 * rest.scale[1];
-        const v1 = now.radius ** 2 * now.scale[1];
-        expect(v1 / v0).toBeGreaterThan(0.75);
-        expect(v1 / v0).toBeLessThan(1.25);
+        expect(kept[p]!.radius ** 2 * kept[p]!.scale[1] / v0).toBeCloseTo(1, 6);
+        // The body's prims overlap, so each keeping its own volume makes the
+        // fused pool far too big (MeltBodyTuning.swell): the default sheds some.
+        const v1 = out[p]!.radius ** 2 * out[p]!.scale[1];
+        expect(v1 / v0).toBeGreaterThan(0.4);
+        expect(v1 / v0).toBeLessThanOrEqual(1 + 1e-9);
       }
     }
   });
@@ -133,25 +137,37 @@ describe('applyMelt', () => {
     expect(end.radius).toBeGreaterThan(BODY[0]!.radius * 1.5);
   });
 
-  it('ramps blendK monotonically up to the fuse value', () => {
-    let prev = -1;
-    for (let i = 0; i <= 20; i++) {
-      const k = meltedAt(i / 20)[0]!.blendK;
-      expect(k).toBeGreaterThanOrEqual(prev - 1e-9);
-      prev = k;
-    }
-    expect(prev).toBeCloseTo(MELT_TUNING_BODY.fuseK, 3);
+  it('blendK rises to the fuse while the prim sags, then relaxes to pooledK', () => {
+    // One rise, one fall (meltBlendK): held at the fuse, ~60 pooled prims on
+    // one plane compound the march's smin into a slab metres wide.
+    const ks: number[] = [];
+    for (let i = 0; i <= 40; i++) ks.push(meltedAt(i / 40)[0]!.blendK);
+    const peak = ks.indexOf(Math.max(...ks));
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThan(40);
+    for (let i = 1; i <= peak; i++) expect(ks[i]!).toBeGreaterThanOrEqual(ks[i - 1]! - 1e-9);
+    for (let i = peak + 1; i <= 40; i++) expect(ks[i]!).toBeLessThanOrEqual(ks[i - 1]! + 1e-9);
+    expect(Math.max(...ks)).toBeGreaterThan(MELT_TUNING_BODY.fuseK * 0.8);
+    expect(ks[40]!).toBeCloseTo(MELT_TUNING_BODY.pooledK, 6);
   });
 
   it('stretches capsules — the head prim gets longer before it pools', () => {
-    // 0.75 is chosen, not arbitrary: the head prim spans normalised heights
-    // 0.87..1.0, and the front (t * frontLead) has to sit BETWEEN those two
-    // endpoints' softness bands for the capsule to be mid-stretch. At 0.75 the
-    // lower end is ~0.72 melted and the upper end ~0.28 — maximum draw.
+    // Somewhere in the ramp the front sits between the prim's two ends and it is drawn out. (The exact moment moved
+    // with the drip stagger, which runs each prim ahead of the front by its own amount, so this scans for it.)
     const len = (p: Primitive) => Math.abs(p.b[1] - p.a[1]);
     const rest = len(BODY[3]!);
-    const mid = len(meltedAt(0.75)[3]!);
-    expect(mid).toBeGreaterThan(rest * 2);
+    let longest = 0;
+    for (let i = 0; i <= 100; i++) longest = Math.max(longest, len(meltedAt(i / 100)[3]!));
+    expect(longest).toBeGreaterThan(rest * 1.3);
+  });
+
+  it('lets go: no prim is ever pulled out past maxStretch times its own length or width', () => {
+    // Uncapped, an arm whose hand had pooled while the shoulder still hung was one metre-long tube.
+    const most = (p: Primitive) => Math.max(Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]),
+      p.radius * Math.max(p.scale[0], p.scale[2])) * MELT_TUNING_BODY.maxStretch!;
+    for (let i = 0; i <= 100; i++) {
+      meltedAt(i / 100).forEach((m, k) => expect(Math.abs(m.a[1] - m.b[1])).toBeLessThanOrEqual(most(BODY[k]!) + 1e-6));
+    }
   });
 
   it('ends with everything within the pool height', () => {

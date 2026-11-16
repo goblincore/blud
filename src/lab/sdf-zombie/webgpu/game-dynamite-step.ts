@@ -101,7 +101,7 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: 
   // first, so the body the player is looking at is the one that gets the full
   // piece set; the rest degrade by tier inside gibActor.
   const condemned = fx.perBody
-    .filter(pb => pb.gibbed && ctx.world.actors.some(q => String(q.id) === pb.bodyId))
+    .filter(pb => pb.gibbed && ctx.world.actors.some(q => String(q.id) === pb.bodyId && !q.melting()))
     .sort((x, y) => y.falloff - x.falloff);
   // THE BLAST'S WHOLE BUDGET, not just the free slots. A gib may take views
   // that OLDER gore is holding — that is what `spawnChunkPiece`'s
@@ -127,7 +127,8 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: 
   let condemnedLeft = condemned.length;
   for (const pb of fx.perBody) {
     const a = ctx.world.actors.find(q => String(q.id) === pb.bodyId);
-    if (!a) continue;
+    // A melting body is goo: a blast neither gibs nor wounds it (game-melter.ts).
+    if (!a || a.melting()) continue;
     if (pb.gibbed) {
       const tg = performance.now();
       // SINGLE-HIT RULE: damage ≥ GIB_THRESHOLD skips death entirely. The

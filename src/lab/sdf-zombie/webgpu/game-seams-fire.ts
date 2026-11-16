@@ -8,6 +8,8 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import { setBurnBehaviourEnabled } from '../burn-behaviour';
 import type { GameContext } from './game-context';
+import { meltActor } from './game-melter';
+import { meltSlumpOn, setMeltSlump } from './game-actor';
 import { type Vec3 } from '../types';
 import type { SplitPresetId } from '../head-split';
 import { SPLIT_ABL, SPLIT_ABLATE, SPLIT_BOUND, SPLIT_FILM_OFF, splitAblate } from './split-ablate';
@@ -17,6 +19,15 @@ export function createFireSeams(ctx: GameContext) {
     // FLARE TEST HARNESS (slot 5): the weapon verb plus the crowd helpers, so a
     // full room can be set alight without aiming at each body.
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
+    // MELT (game-melter.ts): slot 8's verb; melt actor `id` (or every body when omitted), how many started;
+    // each melting body's progress.
+    fireMelter: () => ctx.weapon.melter?.fire() ?? false,
+    // `hit` (world): where it was shot; the melt starts there.
+    meltActor: (id?: number, hit?: Vec3) => ctx.world.actors.filter(a => id === undefined || a.id === id)
+      .filter(a => meltActor(ctx, a, hit)).length,
+    melts: () => ctx.world.actors.filter(a => a.melting()).map(a => ({ id: a.id, t: a.meltProgress() })),
+    /** A/B: whether a melting body slumps as a ragdoll part-way (default on). Returns the new state. */
+    setMeltSlump: (on: boolean) => { setMeltSlump(on); return meltSlumpOn(); },
     /** CUT WOUNDS (game-rod.ts): cut actor `id` along a→b (world) as seen along `view`; optional calibre overrides. */
     cut: (id: number, a: Vec3, b: Vec3, view: Vec3, calibre?: { depth?: number; kerf?: number; lip?: number }) => ctx.weapon.rod?.cut(id, a, b, view, calibre) ?? 0,
     rod: () => ctx.weapon.rod?.debug() ?? null,

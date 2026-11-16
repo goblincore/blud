@@ -30,6 +30,7 @@ export const SLOT_AIM_STYLE: Readonly<Record<WeaponSlot, AimStyle>> = {
   flare: 'free',
   rod: 'free',
   axe: 'free',
+  melter: 'free',
 };
 
 /** Whether free aim is on for `slot`: the session override when set, else the slot's own style. */

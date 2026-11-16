@@ -43,6 +43,11 @@ export function groupOf(boneName: string | undefined): BoneGroup {
   if (!boneName) return 'cage';
   if (boneName === 'skull' || boneName === 'neck') return 'skull';
   if (boneName === 'pelvis') return 'pelvis';
+  // A foot goes with its shin. Left to the torso default, the foot bones rode in the CAGE group: the cage
+  // then reached from the ribs to the floor, and in the game (whose chunks rest on their own capsule ends)
+  // it came to rest the moment it was released, a ribcage hanging at chest height over the puddle.
+  if (boneName === 'foot.l') return 'shin.l';
+  if (boneName === 'foot.r') return 'shin.r';
   if ((BONE_GROUPS as readonly string[]).includes(boneName)) {
     return boneName as BoneGroup;
   }
@@ -148,10 +153,15 @@ export function releaseThreshold(g: BoneGroup): number {
  * because the test asserts where these groups COME TO REST — a second copy
  * of the formula would let the lab drift out from under the gate.
  */
-export function meltBoneSpawnVel(centroid: Vec3, rng: () => number): Vec3 {
-  const r = Math.hypot(centroid[0], centroid[2]);
+export function meltBoneSpawnVel(
+  centroid: Vec3, rng: () => number,
+  /** The body's vertical axis (melt.ts MeltFrame); the origin when omitted. */
+  axis: { x: number; z: number } = { x: 0, z: 0 },
+): Vec3 {
+  const dx = centroid[0] - axis.x, dz = centroid[2] - axis.z;
+  const r = Math.hypot(dx, dz);
   const dir: Vec3 = r > 1e-3
-    ? [centroid[0] / r, 0, centroid[2] / r]
+    ? [dx / r, 0, dz / r]
     : [rng() - 0.5, 0, rng() - 0.5];
   const push = 0.3 + rng() * 0.4;
   return [dir[0] * push, -0.1, dir[2] * push];

@@ -263,6 +263,7 @@ export function stepWeaponSlots(ctx: GameContext, dt: number): void {
   ctx.bake.bundleRig.visible = ctx.weapon.slotState.live === 'dynamite' && ctx.weapon.heldProp !== null;
   // Slot 5: the same one-transform holster travel.
   ctx.weapon.flare?.updateRig();
+  ctx.weapon.melter?.updateRig();
   ctx.weapon.rod?.updateRig();
   ctx.weapon.axe?.updateRig();
   // Slot 1: the flail's holster travel (game-flail.ts).

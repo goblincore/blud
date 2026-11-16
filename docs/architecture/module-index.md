@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 91 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 92 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -390,6 +390,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-loop.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
 - `webgpu/game-march-accept.ts` — THE MARCH'S ACCEPT LAW AS THE GAME SHIPS IT: the numbers game-main writes into every body view's aaCfg.y/z/w and perfCfg.w, and the march's step…
 - `webgpu/game-meat-gib.ts` — TORN MEAT CHUNKS as mesh gibs (owner, 2026-10-24: the SDF flesh bits off the teratoma's gun craters "tend to form round globules rather than the more…
+- `webgpu/game-melter.ts` — THE MELT IN THE GAME (2026-11-14), and WEAPON SLOT 8: THE MELTER TEST HARNESS.
 - `webgpu/game-menu-dom.ts` — The Esc menu overlay. Esc already releases pointer lock (the browser does that); this shows a panel whenever the pointer is free after the first…
 - `webgpu/game-menu.ts` — The Esc menu's decisions, as pure functions: where New game starts, which levels the dev picker offers, the URL that starts one, and when the menu…
 - `webgpu/game-mesh-gibs.ts` — MESH GIBS (melee head damage, plan Task 11; spec §14 decision 3).

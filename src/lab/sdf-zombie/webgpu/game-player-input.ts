@@ -178,6 +178,7 @@ export function applyInputFrame(ctx: GameContext, f: DemoFrame): void {
   else if (f.fire === 2) fire(ctx, 2);
   // Prototype slot edges are consumed on the tick like every other verb.
   ctx.weapon.flare?.consumeEdge();
+  ctx.weapon.melter?.consumeEdge();
   ctx.weapon.launcher?.consumeEdge();
   // The KeyR edge above already covers a live press; this covers a recorded
   // frame whose reload was folded into the flag rather than the keys.

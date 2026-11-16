@@ -88,7 +88,7 @@ import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt, headQuatOf, morphedRest } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
-import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
+import { applyMelt, applyMeltOrgans, endpointHeights, meltFrameOf, meltInitBody, remeltClusters, stepMelt, MELT_FRAME_ORIGIN, type MeltFrame, type MeltState } from '../melt';
 import {
   boneChunkRadius, groupCentroid, groupOf, groupReleaseProgress, limbOfGroup,
   releaseThreshold, meltBoneSpawnVel, mulberry32,
@@ -1178,7 +1178,7 @@ async function main() {
       // meltBoneSpawnVel is shared with the Gate A settle test
       // (melt-bones.ts): the gate asserts where these groups COME TO REST,
       // so the spawn formula must be one copy, not two that drift.
-      const vel = meltBoneSpawnVel(centroid, meltBones.rng);
+      const vel = meltBoneSpawnVel(centroid, meltBones.rng, meltFrameOf(posedBody.prims, 0));
       const id = spawnChunk(
         limbOfGroup(g), sub(centroid, heroMotion.lastRootShift), [],
         vel,
@@ -2840,13 +2840,16 @@ async function main() {
       // Bones fall out FIRST: a group released this frame must not also be
       // uploaded in the body's bone rows, or it renders twice.
       releaseMeltBones(posed);
-      const pp = applyMelt(posed.prims, meltState);
-      const cp = applyMelt(restForNoise.prims, meltState);
+      // The POSED body melts about where it stands (the wander leaves it away
+      // from the origin; melting it about the world axis threw the goo
+      // sideways and piled it into a cone). The rest body stands on the origin.
+      const posedFrame = meltFrameOf(posed.prims, 0);
+      const pp = applyMelt(posed.prims, meltState, undefined, posedFrame);
       // Released groups leave the body's bone rows (they are chunks now).
       // Organs (op 'organ') are never released — they are soft and melt
       // with the flesh (task 7). Bone fold is a hard min, so filtering
       // cannot disturb the surviving rows' fold.
-      const meltBoneRows = (bps: Primitive[]) =>
+      const meltBoneRows = (bps: Primitive[], frame: MeltFrame) =>
         bps.flatMap(p => {
           // Organs ride the bonePrims array but are SOFT: with the flesh
           // melted away and the nearWound gate lifted, an un-melted organ
@@ -2855,7 +2858,7 @@ async function main() {
           // out of the draining torso and are briefly distinct before the
           // goo takes them. One prim at a time, in place: bonePrims order
           // is preserved.
-          if (p.op === 'organ') return applyMeltOrgans([p], meltState!);
+          if (p.op === 'organ') return applyMeltOrgans([p], meltState!, undefined, undefined, frame);
           // Released groups leave the body's bone rows (they are chunks
           // now). Bone fold is a hard min, so dropping released rows
           // cannot disturb the survivors' fold.
@@ -2867,11 +2870,15 @@ async function main() {
       // marched inside a standing-zombie box (the flat top and straight
       // sides of the first captures).
       frameBody = { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp),
-        bonePrims: meltBoneRows(posed.bonePrims) };
+        bonePrims: meltBoneRows(posed.bonePrims, posedFrame) };
       view.update(
         frameBody,
-        { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp),
-          bonePrims: meltBoneRows(current.bonePrims) },
+        // The rest rows stay UNMELTED (2026-11-14): they anchor the surface pattern, and melted they dragged it
+        // through the noise (it swam). See game-actor.ts meltBodies.
+        { ...restForNoise,
+          // (the posed, unmelted radius on each rest row: see game-actor.ts meltBodies)
+          prims: restForNoise.prims.map((p, i) => (posed.prims[i] && posed.prims[i]!.radius !== p.radius ? { ...p, radius: posed.prims[i]!.radius } : p)),
+          bonePrims: restForNoise.bonePrims.filter(p => !(p.op === 'bone' && meltBones?.released.has(groupOf(p.bone)))) },
       );
     } else {
       view.update(posed, restForNoise);

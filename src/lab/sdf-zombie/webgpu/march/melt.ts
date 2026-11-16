@@ -46,9 +46,35 @@ export { HEAD_EXTERIOR_GORE_KEEP };
  * highest patches never cross at all — that is what leaves pink skin on the
  * finished puddle instead of converging to one red at t = 1.
  */
-export const MELT_SKIN_PATCH_FREQ = 5.0;
-export const MELT_SKIN_PATCH_SOFT = 0.16;
-export const MELT_SKIN_KEEP = 1.30;
+// 2026-11-14 (owner, in the game: "shimmery pixely patches"): FREQ 5 to 3.2 and SOFT 0.16 to 0.3, bigger and
+// softer-edged, and the field is stretched along the body (STREAK) so the red comes in as runs, not blotches.
+export const MELT_SKIN_PATCH_FREQ = 3.2;
+export const MELT_SKIN_PATCH_SOFT = 0.3;
+/** The patch field's frequency along the body's rest height, as a share of FREQ: below 1 stretches it into streaks. */
+export const MELT_SKIN_STREAK = 0.22;
+/** A prim's own melt progress (0..1) at which its red ramp is complete. The red starts as the part starts to sag
+ *  and is full when it is this far gone, so it spreads up the body with the melt front. */
+export const MELT_RED_FULL_U = 0.45;
+/** The most the body-wide creep contributes to a point's red ramp (0..1): the share of streaks that can open
+ *  before the part itself starts to melt. */
+export const MELT_RED_CREEP = 0.35;
+// 1.08, not 1.30 (owner, 2026-11-14, in the game: "too white and not really fleshy"). At 1.30 about a fifth of
+// the surface never crossed, and on the game's pale zombie under its brighter lights that fifth read as most of it.
+export const MELT_SKIN_KEEP = 1.08;
+/** How far a crossed patch goes to the deep red (the mix weight). 0.8 left a fifth of the skin's own pale colour
+ *  in the reddest flesh; same owner note. */
+export const MELT_SKIN_RED = 0.92;
+/**
+ * THE RED A CROSSED PATCH GOES TO: deepColor scaled by (DEPTH, PURITY, PURITY).
+ *
+ * Measured in the game (debug stop 34, 2026-11-14): the old deepColor * 0.8 albedo was right, about 80% of the body
+ * red by a third of the melt, and the lit frame was tan and white. The arena's flashlight and light list light a body
+ * around ten times over; the red channel clips and green and blue catch it up, so a mid red goes orange, tan, white
+ * (the same thing turns the zombie's salmon skin white there). A red with almost no green or blue in it has nothing
+ * to catch up with: it stays red however hard it is lit, and in dim light it is dark raw meat.
+ */
+export const MELT_RED_DEPTH = 0.75;
+export const MELT_RED_PURITY = 0.12;
 /**
  * Spread of the patch field before it becomes a threshold.
  *

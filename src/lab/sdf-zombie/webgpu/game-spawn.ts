@@ -57,6 +57,7 @@ import { GUTCRAWLER_TUNING } from '../hound-attack';
 import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
+import { spawnMeltBone, spawnMeltDrip, spawnMeltGob } from './game-melter';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
@@ -507,6 +508,10 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     furniture: roomFurniture,
     navigation: floatSpace ? floatSpace.navigation : ctx.world.encounterNav,
     onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+    // MELT (game-melter.ts): a bone group lets go of the melting body and becomes a bone-only chunk piece.
+    onMeltBone: (piece, vel) => spawnMeltBone(ctx, actor, piece, vel),
+    onMeltGob: (at, radius) => spawnMeltGob(ctx, actor, at, radius),
+    onMeltDrip: at => spawnMeltDrip(ctx, actor, at),
     // A melee hit on the player. There is no player health, so a hit is
     // FEEDBACK only: the red flash, the camera shake and the counter
     // (player-hit-feedback.ts). Every actor gets it; the zombie mind never
