@@ -24,6 +24,7 @@ import { BILE, stepBile } from '../bile';
 import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
 import { TRAIL_SMOKE, emitTrailPuff, stepMuzzleSmoke } from './muzzle-smoke';
 import { hideRocketsFrom, placeRocket } from './rocket-view';
+import { liveRocketLights, updateRocketLightPool } from './rocket-light';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -1294,6 +1295,8 @@ export function tick(ctx: GameContext, dt: number) {
       placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
     }
     hideRocketsFrom(ctx, rockets);
+    // ...and light the level as they fly: the mesh pool goes to the rockets nearest the eye.
+    updateRocketLightPool(ctx, liveRocketLights(ctx), tracerEye);
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
       ctx.weapon.rocketViews.push(newTracerView(ctx));
     }

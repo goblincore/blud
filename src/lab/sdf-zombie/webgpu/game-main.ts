@@ -372,6 +372,7 @@ import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDir
 import { ceilingAt } from './game-hit-trace';
 import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-throw';
+import { ROCKET_LIGHT, createRocketLightPool, liveRocketLights } from './rocket-light';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-wound-vfx';
 import { CULL_DWELL_MS, syncKitVisibility, updateVisibleActors } from './game-render-controls';
@@ -890,6 +891,8 @@ async function main() {
     ctx.world.accentGroup.add(pl);
     ctx.vfx.explosionLightPool.push(pl);
   }
+  // The volley rockets' flight light (rocket-light.ts): permanent too, beside the blast pool.
+  createRocketLightPool(ctx, ctx.world.accentGroup);
   ctx.lighting.flickerLights = [];
   for (const r of ctx.world.level.rooms) {
     for (const a0 of r.accents) {
@@ -2030,6 +2033,16 @@ async function main() {
             fill: ctx.vfx.spread,
           });
         }
+        // (3b') ROCKETS IN FLIGHT (the tallow's volley, rocket-light.ts): after the blasts, before the fires and
+        // the tracers. A rocket outside the gather's room cannot reach it, as for a blast.
+        for (const r of liveRocketLights(ctx)) {
+          if (gatherLights.length >= 8) break;
+          if (!nearRoomPoint(r.pos, dynRoom)) continue;
+          gatherLights.push({
+            pos: [r.pos[0], r.pos[1], r.pos[2]], color: [...ROCKET_LIGHT.colour],
+            intensity: ROCKET_LIGHT.gatherPeak * r.level * ctx.lighting.fxLightScale,
+          });
+        }
         // (3c) BURNING BODIES feed the same list (≤2 slots; surplus burners
         // merge into the nearest slot) so a future anchor or shadow fix lights
         // the room here. NOTE: at the chest anchor the light self-shadows on
@@ -2098,6 +2111,8 @@ async function main() {
         const k = 1 - age / 0.14;
         directFlashes.push({ pos: [m[0], m[1], m[2]], intensity: 35 * k * k });
       }
+      // Rockets in flight key the bodies they pass (rocket-light.ts).
+      for (const r of liveRocketLights(ctx)) directFlashes.push({ pos: r.pos, intensity: ROCKET_LIGHT.flashPeak * r.level });
       // BURNING BODIES feed the SAME bodyFlash slot (flare test harness).
       ctx.vfx.burning.pushFlashes(directFlashes);
       // The shared light list: every light that can touch a body, one buffer, once a frame.

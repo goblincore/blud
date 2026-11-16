@@ -41,7 +41,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   `public/assets/lab/tallow-rocket.glb`, 3.4k tris: riveted iron tube, rusted warhead, welded swept fins, sooted nozzle;
   shading baked into vertex colours, the overlay is unlit), a seamless exhaust card, a nozzle glow and
   a smoke trail (`TRAIL_SMOKE`; the first pass, a stretched tracer, showed a seam and no projectile);
-  lighting the level as they fly is left for a lighting pass and a kick (attack.ts
+  they LIGHT THE LEVEL as they fly (owner, 2026-11-16; `webgpu/rocket-light.ts`: a hot orange point at the nozzle,
+  ramped off the muzzle and flickering, on two permanent mesh PointLights for the nearest rockets plus the probe
+  gather and the body flashes; `?rocketlight=0` turns it off for an A/B, `__sdfGame.rocketLights()` reads the pool),
+  and a kick (attack.ts
   `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
   The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
 - [x] **Belly wounds swam as he fell** (owner, 2026-11-15): a wound on a POINT blob (`at=`, the gut on spine1 and the
