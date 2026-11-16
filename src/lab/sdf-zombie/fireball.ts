@@ -66,6 +66,10 @@ export const TALLOW_VOLLEY = {
   shotDamage: 9,
   /** Each shot's muzzle blast (game-spawn.ts): a flash of light and a smoke plume (muzzle-smoke.ts) this far ahead. */
   blast: { aheadM: 0.18 },
+  /** How a shot DRAWS (owner, 2026-11-15: "little lights - should be more like rockets and brighter and bigger"): the
+   *  tracer at `radiusScale` times the imp ball's radius (collision is unchanged), a flame streak `streakM` long, a
+   *  white-hot colour, and a smoke trail (muzzle-smoke.ts TRAIL_SMOKE). */
+  rocket: { radiusScale: 2.6, streakM: 1.15, colour: [1.0, 0.78, 0.42] as const },
 } as const;
 
 /** The volley's shot that leaves this frame (prevPhase -> phase crosses its `at`), or null. */
@@ -87,6 +91,8 @@ export interface Fireball {
   owner: number;
   /** Direct-hit damage when it is not FIREBALL.playerDamage (the tallow's volley shots); its singe scales with it. */
   damage?: number;
+  /** How it draws (game-tick.ts): absent, the imp's small orange ball; 'rocket', the tallow's (TALLOW_VOLLEY.rocket). */
+  look?: 'rocket';
 }
 
 export interface FireballWorld {
@@ -111,9 +117,10 @@ export function fireballVelocity(origin: Vec3, target: Vec3, speed: number = FIR
   return [v[0] * s, v[1] * s, v[2] * s];
 }
 
-export function spawnFireball(origin: Vec3, target: Vec3, owner: number, damage?: number): Fireball {
+export function spawnFireball(origin: Vec3, target: Vec3, owner: number, damage?: number, look?: 'rocket'): Fireball {
   const b: Fireball = { pos: [...origin] as Vec3, vel: fireballVelocity(origin, target), ageSec: 0, owner };
   if (damage !== undefined) b.damage = damage;
+  if (look) b.look = look;
   return b;
 }
 

@@ -36,7 +36,9 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
 - [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
   now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
-  has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke) and a kick (attack.ts
+  has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke). The shots draw as
+  ROCKETS (`TALLOW_VOLLEY.rocket`): a 2.6x tracer, white-hot, a 1.15 m flame tail and a smoke trail (`TRAIL_SMOKE`);
+  lighting the level as they fly is left for a lighting pass and a kick (attack.ts
   `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
   The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
 - [x] **Belly wounds swam as he fell** (owner, 2026-11-15): a wound on a POINT blob (`at=`, the gut on spine1 and the

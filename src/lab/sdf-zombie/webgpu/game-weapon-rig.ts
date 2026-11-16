@@ -407,7 +407,7 @@ export function placeTracer(ctx: GameContext, v: TracerView, p: Projectile, eye:
   const basis = tracerBasis(p.vel, toEye);
   if (!basis || fade <= 0) { hideTracer(ctx, v); return; }
 
-  const len = tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
+  const len = p.streakLen ?? tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
   // Near the eye the width and the ember shrink with distance so a pellet
   // passing the camera stays a glow, never a screen-filling disc. See
   // tracerNearScale — the fade alone does not cover an ARRIVING shot.

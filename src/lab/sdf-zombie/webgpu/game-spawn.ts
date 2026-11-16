@@ -450,7 +450,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
         const target: Vec3 = [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]];
-        ctx.weapon.fireballs.push(spawnFireball(origin, target, zombieId, TALLOW_VOLLEY.shotDamage));
+        ctx.weapon.fireballs.push(spawnFireball(origin, target, zombieId, TALLOW_VOLLEY.shotDamage, 'rocket'));
         // THE MUZZLE BLAST (owner, 2026-11-15): first "a bigger muzzle flash and maybe smoke", then "less flame and
         // just smoke". So: a flash of light and a plume of smoke (muzzle-smoke.ts), just ahead of the muzzle, and no
         // fire billboards. The arm's kick is attack.ts cannonKick.

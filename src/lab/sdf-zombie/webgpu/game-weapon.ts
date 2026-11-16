@@ -160,6 +160,8 @@ export interface Projectile {
   radius: number;
   /** Which crater this projectile stamps on impact. */
   kind: 'pellet' | 'slug';
+  /** Drawn streak length, m, overriding the speed-derived one (a volley rocket's flame tail). */
+  streakLen?: number;
   /** Pellet drop for THIS round, m/s². Unset = GRAPESHOT.gravity (every enemy round, the slug). */
   gravity?: number;
   /** SECTOR levels, enemy rounds: where the first step's wall and player tests start (the shooter's

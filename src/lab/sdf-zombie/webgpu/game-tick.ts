@@ -21,8 +21,8 @@ import { arbitrate, type RingClaimant } from '../melee-ring';
 import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
 import { BILE, stepBile } from '../bile';
-import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
-import { stepMuzzleSmoke } from './muzzle-smoke';
+import { FIREBALL, TALLOW_VOLLEY, burstPlayerDamage, stepFireballs } from '../fireball';
+import { TRAIL_SMOKE, emitTrailPuff, stepMuzzleSmoke } from './muzzle-smoke';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -1269,16 +1269,27 @@ export function tick(ctx: GameContext, dt: number) {
       else hideTracer(ctx, v);
     }
     while (ctx.weapon.fireballViews.length < ctx.weapon.fireballs.length) {
-      const view = newTracerView(ctx);
-      // Fire: the additive tracer pushed to a hot orange.
-      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(1.0, 0.45, 0.08);
-      ctx.weapon.fireballViews.push(view);
+      ctx.weapon.fireballViews.push(newTracerView(ctx));
     }
     for (let k = 0; k < ctx.weapon.fireballViews.length; k++) {
       const v = ctx.weapon.fireballViews[k]!;
       const b = ctx.weapon.fireballs[k];
-      if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: FIREBALL.radius, kind: 'slug' }, tracerEye);
-      else hideTracer(ctx, v);
+      if (!b) { hideTracer(ctx, v); continue; }
+      // The pool is shared, so each view takes its ball's colour every step. Fire: the additive tracer pushed to a
+      // hot orange. A volley ROCKET (the tallow): bigger, white-hot, a long flame tail and a smoke trail.
+      const rocket = b.look === 'rocket' ? TALLOW_VOLLEY.rocket : null;
+      const [cr, cg, cb] = rocket ? rocket.colour : [1.0, 0.45, 0.08];
+      for (const m of [v.streak, v.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(cr, cg, cb);
+      placeTracer(ctx, v, {
+        pos: b.pos, vel: b.vel, ageSec: b.ageSec, kind: 'slug',
+        radius: FIREBALL.radius * (rocket ? rocket.radiusScale : 1),
+        ...(rocket ? { streakLen: rocket.streakM } : {}),
+      }, tracerEye);
+      // The trail: a puff each time its flight crosses a TRAIL_SMOKE.everySec mark, a little behind the head.
+      if (rocket && Math.floor(b.ageSec / TRAIL_SMOKE.everySec) > Math.floor((b.ageSec - dt) / TRAIL_SMOKE.everySec)) {
+        const sp = Math.hypot(b.vel[0], b.vel[1], b.vel[2]) || 1, back = 0.25 / sp;
+        emitTrailPuff(ctx, [b.pos[0] - b.vel[0] * back, b.pos[1] - b.vel[1] * back, b.pos[2] - b.vel[2] * back], b.vel);
+      }
     }
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
       ctx.weapon.rocketViews.push(newTracerView(ctx));
