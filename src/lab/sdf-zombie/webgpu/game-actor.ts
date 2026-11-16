@@ -984,6 +984,14 @@ export function createZombieActor(opts: {
   let burnDied = false;
   /** Seconds the panicking body has been trying to run and getting nowhere (a wall, a corner). */
   let burnStuckT = 0;
+  /** Can this body walk from where it stands to `p`? (The burn panic's blocked-turn probe.) */
+  const burnClear = (p: Vec3): boolean => {
+    const b = opts.bounds, m = 0.3;
+    if (p[0] < Math.min(b.minX, b.maxX) + m || p[0] > Math.max(b.minX, b.maxX) - m
+      || p[2] < Math.min(b.minZ, b.maxZ) + m || p[2] > Math.max(b.minZ, b.maxZ) - m) return false;
+    return clearCombatMove(state.wander.pos, p, opts.furniture)
+      && (!opts.navigation || opts.navigation.canTravel(state.wander.pos, p));
+  };
   const burnTier = resolveBurnTier(opts.profile);
   const burnSeed = opts.id * 7919 + 1;
   /**
@@ -2051,7 +2059,12 @@ export function createZombieActor(opts: {
         if (playerNow) lastPlayerPos = [playerNow.x, state.floorY, playerNow.z];
         const blocked = burnStuckT > BURN_STUCK_SEC;
         if (blocked) burnStuckT = 0;
-        const bp = stepBurnPanic(burnPanic, { self: state.wander.pos, player: lastPlayerPos, forward: burnForward(), ...(blocked ? { blocked } : {}) }, sdt);
+        const bp = stepBurnPanic(burnPanic, {
+          self: state.wander.pos, player: lastPlayerPos, forward: burnForward(),
+          // Blocked: the turn probes for a direction this body can walk (inside its bounds, clear of
+          // furniture, and a step the level's navigation allows).
+          ...(blocked ? { blocked, clear: burnClear } : {}),
+        }, sdt);
         if (bp.phase === 'done') {
           burnPanic = null;
           burnCruiseScale = 1;
@@ -2312,8 +2325,8 @@ export function createZombieActor(opts: {
       }
       // A panicking burner that is not getting anywhere (it fled into a wall; measured AFTER the
       // furniture and navigation corrections) is told so, and turns (burn-behaviour.ts `blocked`).
-      // The first half second is its turn-and-accelerate, not a wall.
-      if (burnPanic && burnPanic.t > 0.5) {
+      // The first 0.3 s is its turn-and-accelerate, not a wall.
+      if (burnPanic && burnPanic.t > 0.3) {
         const moved = Math.hypot(state.wander.pos[0] - beforeMove[0], state.wander.pos[2] - beforeMove[2]);
         burnStuckT = moved < BURN_STUCK_MPS * sdt ? burnStuckT + sdt : 0;
       } else {

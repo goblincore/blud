@@ -31,7 +31,9 @@ export const BURN_BEHAVIOUR = Object.freeze({
   blockedTurnExtra: 0.25,
   /** The wobble's scale while a blocked turn is held (the turn is already most of the way round). */
   blockedWobble: 0.4,
-  blockedCoolSec: 0.8,
+  blockedCoolSec: 0.5,
+  /** How far along a candidate turn the `clear` probe looks (m). */
+  probeM: 1,
 });
 
 /** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep behaving as
@@ -80,6 +82,9 @@ export interface BurnPanicInput {
   forward: Vec3;
   /** The body is trying to run and getting nowhere (a wall): turn the flee heading. Absent = false. */
   blocked?: boolean;
+  /** Can the body walk from `self` to this point? Asked only on a blocked step, of a point probeM along
+   *  each candidate turn; the first clear one is taken. Absent = every direction counts as clear. */
+  clear?: (point: Vec3) => boolean;
 }
 export interface BurnPanicOut {
   target: Vec3;
@@ -106,20 +111,30 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   if (i.player) { dx = i.self[0] - i.player[0]; dz = i.self[2] - i.player[2]; }
   const len = Math.hypot(dx, dz);
   if (len < 1e-6) { dx = 0; dz = 1; } else { dx /= len; dz /= len; }
+  const turned = (a: number): [number, number] => { const c = Math.cos(a), sn = Math.sin(a); return [dx * c - dz * sn, dx * sn + dz * c]; };
   s.blockedCool = Math.max(0, s.blockedCool - Math.max(0, dt));
   if (i.blocked && s.blockedCool <= 0) {
     // Running straight from the player into a wall reads as a body stuck on the spot: turn hard to
-    // one side (seeded the first time, then the other side each time) and hold that turn, so it runs
-    // ALONG the wall until it is blocked again.
+    // one side and hold that turn, so it runs ALONG the wall until it is blocked again. The side is
+    // seeded the first time and the other one each time after; with a `clear` probe, the first
+    // candidate the body can actually walk wins (a level that rejects a blocked step outright gives
+    // no slide, so a blind turn can stand still).
     const side = s.bias === 0 ? (next(s) < 0.5 ? -1 : 1) : -Math.sign(s.bias);
-    s.bias = side * B.blockedTurnRad * (1 + B.blockedTurnExtra * next(s));
+    const wide = B.blockedTurnRad * (1 + B.blockedTurnExtra);
+    const turn = B.blockedTurnRad * (1 + B.blockedTurnExtra * next(s));
+    let pick = side * turn;
+    if (i.clear) {
+      for (const cand of [side * turn, -side * turn, side * wide, -side * wide, side * B.blockedTurnRad * 0.6, -side * B.blockedTurnRad * 0.6]) {
+        const [cx, cz] = turned(cand);
+        if (i.clear([i.self[0] + cx * B.probeM, i.self[1], i.self[2] + cz * B.probeM])) { pick = cand; break; }
+      }
+    }
+    s.bias = pick;
     s.blockedCool = B.blockedCoolSec;
   }
   const w = 2 * Math.PI * B.wobbleHz * s.t;
   const wob = (Math.sin(w + s.phase) + 0.5 * Math.sin(w * 2.3 + s.phase * 1.7)) / 1.5;
-  const a = s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f) * (s.bias !== 0 ? B.blockedWobble : 1);
-  const c = Math.cos(a), sn = Math.sin(a);
-  const hx = dx * c - dz * sn, hz = dx * sn + dz * c;
+  const [hx, hz] = turned(s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f) * (s.bias !== 0 ? B.blockedWobble : 1));
   const die = phase === 'done' && s.dies && !s.died;
   if (die) s.died = true;
   return {
