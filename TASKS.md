@@ -33,6 +33,8 @@
 
 - [~] **Imp built 2026-10-24, second pass 2026-11-02 (proportions, claw feet, demon skull when shot); owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
 
+- [~] **Tallow fifth pass 2026-11-14, boots and kit budget 2026-11-15; draft PR goblincore/blud#126.** A corpulent walking rendering vat: a 1.3 m wide fat man on stumps in heavy iron boots, his belly hanging to his knees, long gorilla arms grown into industrial cannons, a boiler sunk in his back, a breathing mask strapped into his face, blood wherever metal goes into him, his own mean red-eyed face, and a baked skin of fat rolls and veins. His attack is a VOLLEY: both cannons braced level, four fireballs right and left. Played in the arena 2026-11-15: volley damage lowered, muzzle blasts, recoil and dark bores added; kit 70k triangles. `?spawn=tallow`. [Characters](docs/tasks/characters.md).
+
 - [~] **Cerebrax built 2026-11-08 (boss); owner look pending.** A Spider-Mastermind-style boss: a huge pulsing brain (24 SDF prims; gyri, fissures and veins a baked random-wave normal map) turning in a bone-metal harness on four spider legs (knees poled high, `GaitProfile.kneePole`), a chaingun under its face (`gunner` + `spit`, the juggernaut's sweeping bursts). `?spawn=cerebrax`. Smaller drone variants not started. [Characters](docs/tasks/characters.md).
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)

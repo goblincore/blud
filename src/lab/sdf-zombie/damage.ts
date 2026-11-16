@@ -248,6 +248,18 @@ function frame(prim: Primitive, bodyYaw: number, axis0?: Vec3) {
     const q = qFromTo(axis0, axis);
     b = { u: qRotate(q, b.u), v: qRotate(q, b.v), w: qRotate(q, b.w) };
   }
+  // A POINT prim (a blob placed with at=, a == b) has no axis to follow, so its frame turned with the yaw alone and a
+  // falling corpse's trunk blobs, which take their bone's whole rotation as a pose orient (rig-bind.ts
+  // trunkRotation), tipped over under their wounds: the craters swam across the tallow's belly as he fell backward
+  // (owner, 2026-11-15). There the pose orient IS the turn: carry the de-yawed basis by it. Standing, it is the yaw
+  // rotation itself, so the frame is the one below; a rest prim has none and is untouched. A plain SPHERE's pose
+  // orient turns only its skin noise (rig-bind.ts posePrimitive), not its shape, and keeps the frame below.
+  const sc = prim.scale;
+  if (prim.orient && prim.poseOrient && prim.a[0] === prim.b[0] && prim.a[1] === prim.b[1] && prim.a[2] === prim.b[2]
+    && (sc[0] !== sc[1] || sc[1] !== sc[2] || prim.box || prim.shell || prim.strand)) {
+    const q = prim.orient;
+    return { u: qRotate(q, b.u), v: qRotate(q, b.v), w: qRotate(q, b.w) };
+  }
   if (bodyYaw === 0) return b;
   return { u: rotateYaw(b.u, bodyYaw), v: rotateYaw(b.v, bodyYaw), w: rotateYaw(b.w, bodyYaw) };
 }

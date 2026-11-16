@@ -182,3 +182,21 @@ describe('attackPose', () => {
     }
   });
 });
+
+describe('the tallow cannon kick (attack.ts cannonKick)', () => {
+  it('snaps each cannon up on its own shots only, then settles before the next', async () => {
+    const { cannonKick, CANNON_KICK, attackPose } = await import('./attack');
+    const { TALLOW_VOLLEY } = await import('./fireball');
+    const [r0, l0] = TALLOW_VOLLEY.shots;
+    expect(cannonKick(r0!.at - 0.001, 'R')).toBe(0);
+    expect(cannonKick(r0!.at, 'R')).toBe(1);
+    expect(cannonKick(r0!.at, 'L')).toBe(0);
+    // Gone before the other cannon fires: the two kicks read as two shots.
+    expect(cannonKick(l0!.at, 'R')).toBeLessThan(0.05);
+    const still = attackPose(r0!.at - 0.001, 'R', 'brace'), kicked = attackPose(r0!.at, 'R', 'brace');
+    expect(kicked.reach.pitchR - still.reach.pitchR).toBeCloseTo(CANNON_KICK.pitch, 2);
+    expect(kicked.reach.pitchL).toBeCloseTo(still.reach.pitchL, 2);
+    expect(kicked.offsets.shoulderR![2]).toBeLessThan(0);
+    expect(kicked.offsets.chest![2]).toBeLessThan(still.offsets.chest![2]);
+  });
+});

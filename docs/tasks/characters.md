@@ -2,6 +2,56 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass; boots approved 2026-11-15)
+
+- [x] **Body** `characters/tallow.blob`: a 2.05 m, 1.3 m wide fat man on short legs (the venus's bone names): gut,
+  apron, flank rolls, rear, a yoke of fat, forearm sleeves that swallow the cannons' breech blocks, a swollen rim of
+  back fat round the boiler. `?character=tallow`, `?spawn=tallow`. Pins in `characters/tallow-blob.test.ts`.
+- [x] **His own face** (the ogre's road, prims plus a mouth decal `scripts/make-tallow-face.py`): low broad crown, V
+  brow, red ember eyes in slanted sockets, cheekbones, hooked nose, downturned grimace.
+- [x] **Third pass (owner: the second pass's cannons were "too floral"; "heavy and industrial", "bloody decals where
+  the metal flesh interfaces", the breathing mask back).** Industrial cannons (`make_cannons.py`: octagonal breech
+  block, bolted bands, slotted brake, recoil piston, fuel tank). Gore (`gore` look, kit lumps and drips with blood
+  vertex colours) at every place metal goes into him: the breech blocks, the boiler, the hose ports, the mask edge and
+  strap, the chest ports. A shaped breathing mask with a grilled snout, cheek filters, a strap biting into the head and
+  two hoses into chest ports (`make_mask.py`). Boiler exhausts are pipes, not horns.
+- [x] **Gorilla arms** (owner: "longer, more ape gorilla like"): upper arm 0.50 m, forearm 0.44, hanging low and
+  ahead (the muzzles at y ~0.74), a deeper hunch (chest pitch 12).
+- [x] **More corpulent** (owner, fifth look: "doesnt quite read as corpulent ... legs shorter or footwear"): stumps
+  (thigh 0.30, shin 0.24; legs 29% of his height, crown 1.89), the apron hanging below the knees, heavy iron boots
+  with the ankle fat squeezed up over the cuffs (`make_boots.py`), and a waddle (`TALLOW_STOMP`: short steps, a wide
+  rock). Every kit and skin height follows the drop through one `LOWER` (0.16) in `scripts/tallow-surface.ts`.
+- [x] **Flesh detail** `characters/tallow.detail` from `scripts/tallow-detail-gen.ts`, baked into `tallow-body-n.png`
+  (1024 wide, `--torso-r0 0.95`; command in `bake-args.json`): fat rolls, the creases under the breasts and the apron,
+  a navel, cellulite, stretch marks, and veins (scaled 1.5x the recipe) radiating from the boiler and the cannon
+  blocks.
+- [x] **His own attack, the VOLLEY**: both cannons braced level (`attack.ts` 'brace', `BRACE_TUNING`) and four
+  fireballs right, left, right, left (`fireball.ts TALLOW_VOLLEY`, `enemy-mind.ts makeTallowMind`; `MindOutput.fireSide`
+  and `MotionProfile.spitL` pick the muzzle). He walks `gait.ts TALLOW_STOMP` (STOMP with reach arms: STOMP's carry
+  arms ignored every attack). Pinned by `fireball.test.ts` and `webgpu/game-actor-tallow.test.ts`.
+- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 70k triangles
+  after the 2026-11-15 optimisation pass (was 154k; no visible change at 1.3 m). Rounded egg-shaped hoof soles on the
+  boots (owner: no rectangle soles). No kit normal atlas.
+- [x] **Wiring**: `TALLOW_PROFILE` (TALLOW_STOMP, cruise 0.7, turn 1.6, `throws: 'volley'`).
+- [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
+- [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
+  now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
+  has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke). The shots draw as
+  ROCKETS (`webgpu/rocket-view.ts`): the Blender rocket (`assets-source/tallow-kit/make_rocket.py` ->
+  `public/assets/lab/tallow-rocket.glb`, 3.4k tris: riveted iron tube, rusted warhead, welded swept fins, sooted nozzle;
+  shading baked into vertex colours, the overlay is unlit), a seamless exhaust card, a nozzle glow and
+  a smoke trail (`TRAIL_SMOKE`; the first pass, a stretched tracer, showed a seam and no projectile);
+  lighting the level as they fly is left for a lighting pass and a kick (attack.ts
+  `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
+  The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
+- [x] **Belly wounds swam as he fell** (owner, 2026-11-15): a wound on a POINT blob (`at=`, the gut on spine1 and the
+  apron on pelvis) took its frame from a fixed up axis, so it ignored the trunk's turn as a corpse tipped over.
+  damage.ts `frame` now carries a non-spherical point prim's frame by its pose orient (pure yaw when standing, so
+  unchanged there). Shared: every character's anisotropic point blobs. Arena probe, four belly slugs then a collapse:
+  wound drift in the trunk frame 75 cm before, 22 cm after (the rest is spine1 bending against the pelvis).
+- [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).
+- [ ] Kit normal atlas (optional: only if a later cut needs it).
+
 ## Cerebrax (boss: a brain in a harness on four spider legs, a chaingun under its face) — first pass 2026-11-08
 
 - [x] **Body** `characters/cerebrax.blob` at `scale 1.60`: a brain of 24 SDF prims (mass, hemispheres, frontal,

@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 61 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 63 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -692,6 +692,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/march-test-support.ts` — Shared fixtures for the march shader-text tests (split out of march.wgsl.test.ts by march split task 3, 2026-09-19).
 - `webgpu/march.wgsl.ts` — The WGSL raymarch shader barrel: re-exports the layout, field, body and helper pieces under march/ that make up the SDF march.
 - `webgpu/material-environment.ts` — Scopes a MeshStandardMaterial's environment texture to its owner so shared compiled shaders do not borrow another owner's disposed map.
+- `webgpu/muzzle-smoke.ts` — MUZZLE SMOKE: soft grey puffs in the WORLD, for an enemy's gun (the tallow's arm-cannons, game-spawn.ts).
 - `webgpu/near-light-pick.ts` — Which of a level's point and spot lights matter at one point: a pure ranking by what each can deliver there, and a stable assignment of the winners…
 - `webgpu/near-lights.ts` — THE LIGHTS NEAR THE EYE, AS A FIXED SET OF PROXY LIGHTS: a few point, spot and directional lights that copy, every frame, the scene lights that…
 - `webgpu/normal-gradient-probe.wgsl.ts` — WGSL for normal-gradient-probe.ts (normal-gradient-check.html), kept apart from the page module so tests can import it without a browser.
@@ -700,6 +701,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/normal-gradient.wgsl.ts` — WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
 - `webgpu/occluder-hull.ts` — A conservative INNER hull of the bodies, rasterised so the march can stop early where something solid already covers the ray.
 - `webgpu/prewarm-order.ts` — WARM ORDER for the level pre-warm (game-level-prewarm.ts): of the meshes still to warm, the one whose bounding sphere is nearest the player goes…
+- `webgpu/rocket-view.ts` — ROCKET VIEW: how the tallow's volley shot draws (owner, 2026-11-15).
 - `webgpu/screen-emergence.wgsl.ts` — THE SCREEN EMERGENCE's march and shading (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 4; plan Task 6, round…
 - `webgpu/screen-lab-goblin.ts` — THE SCREEN LAB's goblin, pure half (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 6, plan Task 5; look round 1,…
 - `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…

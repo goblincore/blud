@@ -22,7 +22,7 @@ import {
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
 import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, slamAdvance, squirtFires, stabAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
-import { IMP_TUNING, throwFires } from '../fireball';
+import { IMP_TUNING, TALLOW_VOLLEY, throwFires, volleyShot } from '../fireball';
 import { BRAIN_TUNING, type BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
@@ -84,6 +84,9 @@ export interface MindOutput {
    *  scales the gait's cruise so the legs RUN the run rather than the root
    *  sliding under a walk. Absent = the profile's cruise. */
   runSpeed?: number;
+  /** Which of a two-gun body's muzzles `fire` leaves (the tallow's cannons: MotionProfile.spit is the right,
+   *  spitL the left). Absent = the right / the only one. */
+  fireSide?: 'L' | 'R';
 }
 
 /** Fields every mind reports, merged into ZombieActor.debug() by the actor. */
@@ -446,6 +449,59 @@ export function makeImpMind(): EnemyMind {
     debug: () => {
       const d = melee.debug();
       return throwT >= 0 ? { ...d, state: 'throw', variant: 'throw', swingT: throwT / T.throwSec, cooldown } : { ...d, cooldown };
+    },
+  };
+}
+
+/** THE TALLOW'S MIND: the zombie mind's club up close, and at range a two-cannon VOLLEY (fireball.ts TALLOW_VOLLEY).
+ *  Seeing a player between band.min and band.max with the volley off cooldown, no swing running and at least one
+ *  cannon arm on, it halts, turns to face, braces both cannons level (attack.ts 'brace') and fires four rounds through
+ *  the hold, right and left in turn; a round whose cannon arm is gone is skipped. A stagger cancels the volley. */
+export function makeTallowMind(): EnemyMind {
+  const T = TALLOW_VOLLEY;
+  const melee = makeZombieMind();
+  let braceT = -1;
+  let cooldown: number = T.first;
+  let prev = 0;
+  const armOn = (input: MindInput, side: 'L' | 'R') => !(side === 'L' ? input.missing?.armL : input.missing?.armR);
+  const halted = (input: MindInput, phase: number, shot: 'L' | 'R' | null): MindOutput => ({
+    target: null, halt: true,
+    attack: { phase, side: 'R', variant: 'brace' },
+    fire: shot !== null, ...(shot ? { fireSide: shot } : {}), weaponUp: false,
+    faceHeading: input.player ? Math.atan2(input.player.x - input.self.x, input.player.z - input.self.z) : null,
+    engaged: true, committed: true, contact: false, aimError: 0,
+  });
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      cooldown = Math.max(0, cooldown - input.dt);
+      const anyArm = armOn(input, 'L') || armOn(input, 'R');
+      if (braceT >= 0) {
+        braceT += input.dt;
+        const phase = braceT / T.braceSec;
+        if (phase < 1 && anyArm) {
+          const s = volleyShot(prev, phase);
+          prev = phase;
+          return halted(input, phase, s && armOn(input, s.side) ? s.side : null);
+        }
+        braceT = -1; prev = 0; cooldown = T.cooldown;
+      }
+      const out = melee.step(input);
+      const p = input.player;
+      if (!out.attack && p && melee.debug().alert && input.lineOfSight !== false && cooldown <= 0 && anyArm) {
+        const dist = Math.hypot(p.x - input.self.x, p.z - input.self.z);
+        if (dist >= T.band.min && dist <= T.band.max) {
+          braceT = 0; prev = 0;
+          return halted(input, 0, null);
+        }
+      }
+      return out;
+    },
+    stagger(holdSec) { braceT = -1; prev = 0; melee.stagger(holdSec); },
+    debug: () => {
+      const d = melee.debug();
+      return braceT >= 0 ? { ...d, state: 'brace', variant: 'brace', swingT: braceT / T.braceSec, cooldown } : { ...d, cooldown };
     },
   };
 }
