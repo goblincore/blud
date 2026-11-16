@@ -88,3 +88,25 @@ export const MELT_RED_PURITY = 0.12;
  * had no pink left at all).
  */
 export const MELT_SKIN_CONTRAST = 2.8;
+
+/**
+ * THE MELT WAVE (owner, 2026-11-16: "some kind of sinusoidal wave distortion into the flesh so you don't get straight
+ * tubes"). A limb's flesh is one capsule and a capsule is straight however it is moved, so the straightness is taken
+ * out in the FIELD: mapBody reads a melting instance at a point pushed sideways (and a little up and down) by three
+ * sines of its position, and every capsule, drip and pool edge of that body comes out wavy.
+ *  - AMP: metres of push at full strength.
+ *  - FREQ: radians per metre (20 is a 31 cm wave: about one bend along a forearm).
+ *  - FULL_T: the body's melt progress by which the wave is at full strength (it eases in from 0, so the first frame
+ *    of a melt is the body as it was).
+ *  - STEP: the instance's distance is scaled by this while it melts. The push stretches the field by up to
+ *    1 + AMP * FREQ * ~1.5, and a march stepping the unscaled value would tunnel through thin flesh.
+ * THE PHASE READS x AND z ONLY, never y: flesh falling straight down keeps its place in the wave. On a phase that
+ * read y the flesh fell THROUGH the wave and the surface swam (owner, 2026-11-16).
+ * mapLean has no wave, so the lean walk stands down for a pixel with a melting slot (lean-walk.wgsl.ts).
+ */
+// 0.008, not 0.022 (owner, 2026-11-16: "a bit maybe too intense", and wanted less of it on the body): the limbs now
+// get their straightness taken out per prim (melt.ts curlArm / curlLeg), and this is only a light lumpiness.
+export const MELT_WAVE_AMP = 0.008;
+export const MELT_WAVE_FREQ = 20;
+export const MELT_WAVE_FULL_T = 0.3;
+export const MELT_WAVE_STEP = 0.8;

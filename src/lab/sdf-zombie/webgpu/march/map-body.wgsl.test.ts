@@ -140,4 +140,12 @@ describe('the head split in mapBody (head-split.ts splitField)', () => {
   it('the walk skip never applies to an open slot: a piece skipped at the last sample measured no gap', () => {
     expect(MAP_BODY).toContain('let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0 && !splitOpen;');
   });
+
+  it('reads a melting instance through the melt wave, steps it short, and leaves every other body alone', () => {
+    // Owner, 2026-11-16: straight tubes of melting flesh. The wave is behind the per-instance melt lane, which is 0
+    // on every body that is not melting.
+    expect(MAP_BODY).toContain('if (gInstMelt.x > 0.0) {');
+    expect(MAP_BODY).toContain('if (meltStep < 1.0) { dPiece = dPiece * meltStep; }');
+    expect(MAP_BODY.indexOf('if (gInstMelt.x > 0.0) {')).toBeLessThan(MAP_BODY.indexOf('let p = pMoved;'));
+  });
 });

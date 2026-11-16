@@ -170,6 +170,56 @@ describe('applyMelt', () => {
     }
   });
 
+  it('gathers: a long prim is shorter and fatter by the middle of its melt, a short one keeps its length', () => {
+    // A limb's flesh is one capsule; hanging off a bone at full length it reads as a pipe.
+    const long: Primitive = { ...BODY[0]!, a: [0.3, 1.4, 0], b: [0.3, 1.0, 0], radius: 0.05, scale: [1, 1, 1] };
+    const short: Primitive = { ...long, a: [0, 1.4, 0], b: [0, 1.32, 0] };
+    const st = meltInitBody([long, short], 0);
+    const flat = { ...MELT_TUNING_BODY, stagger: 0, stretch: 0 };
+    const len = (p: Primitive) => Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]);
+    let least = Infinity, shortLeast = Infinity, fattest = 0;
+    for (let i = 1; i < 60; i++) {
+      const s = { ...st, t: i / 100 };
+      const on = applyMelt([long, short], s, flat), off = applyMelt([long, short], s, { ...flat, gather: undefined });
+      least = Math.min(least, len(on[0]!) / len(off[0]!));
+      shortLeast = Math.min(shortLeast, len(on[1]!) / len(off[1]!));
+      fattest = Math.max(fattest, on[0]!.scale[0] / off[0]!.scale[0]);
+      expect(on[0]!.radius).toBeCloseTo(off[0]!.radius, 9);   // the shader reads melt off the radius
+    }
+    expect(least).toBeLessThan(0.75);   // gather 0.5 (it was 0.3 before the prim also bent)
+    expect(shortLeast).toBeCloseTo(1, 6);
+    expect(fattest).toBeGreaterThan(1.1);
+  });
+
+  it('curls: a melting arm prim is bent across its own axis mid-melt, a trunk prim never, and both end straight', () => {
+    // Straight capsules of flesh read as tubes; the bend is the prim's own, so it rides the flesh down.
+    const arm: Primitive = { ...BODY[0]!, limb: 'armL', a: [0.3, 1.4, 0], b: [0.3, 1.0, 0], radius: 0.05, scale: [1, 1, 1] };
+    const trunk: Primitive = { ...arm, limb: 'torso', a: [0, 1.4, 0], b: [0, 1.0, 0] };
+    const st = meltInitBody([arm, trunk], 0);
+    let most = 0;
+    for (let i = 1; i < 100; i++) {
+      const [a, t] = applyMelt([arm, trunk], { ...st, t: i / 100 });
+      expect(t!.bend).toBeUndefined();
+      if (a!.bend) most = Math.max(most, Math.hypot(a!.bend[0], a!.bend[1], a!.bend[2]));
+    }
+    expect(most).toBeGreaterThan(0.1);
+    const done = applyMelt([arm, trunk], { ...st, t: 1 })[0]!;
+    expect(done.bend === undefined || Math.hypot(done.bend[0], done.bend[1], done.bend[2]) < 1e-6).toBe(true);
+  });
+
+  it('a turned prim comes upright as it melts: its crush ends on the world y, not on edge', () => {
+    // Owner, 2026-11-16 (a melted tallow): the puddle was red discs standing up with gaps between them.
+    const h = Math.SQRT1_2;
+    const turned: Primitive = { ...BODY[0]!, orient: [h, 0, 0, h] };   // 90 degrees about x: its y lies level
+    const st = meltInitBody([turned], 0);
+    expect(applyMelt([turned], { ...st, t: 0 })[0]!.orient).toEqual([h, 0, 0, h]);
+    const done = applyMelt([turned], { ...st, t: 1 })[0]!.orient!;
+    expect(done[3]).toBeCloseTo(1, 6);
+    expect(Math.hypot(done[0], done[1], done[2])).toBeCloseTo(0, 6);
+    const mid = applyMelt([turned], { ...st, t: 0.4 })[0]!.orient!;
+    expect(Math.hypot(...mid)).toBeCloseTo(1, 6);
+  });
+
   it('ends with everything within the pool height', () => {
     const out = meltedAt(1);
     for (const p of out) {

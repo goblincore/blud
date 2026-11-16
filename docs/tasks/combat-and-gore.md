@@ -82,7 +82,28 @@ into the game.
   big long tube"). `MeltBodyTuning.maxStretch` 1.5: once a prim's ends are pulled apart past 1.5 times its own length
   (or width), the upper end follows the lower one down, so the flesh draws out a little and then drops as a lump.
   Seen on stills (feet-up melt): the forearm flesh comes away at the wrist and the arm bones stand bare. Not seen in motion.
-- [ ] **Mesh skeleton reads wrong up close** (owner, 2026-11-15): with the flesh gone its parts float (no clavicles,
+- [~] **Long flesh gathers into drops** (owner, 2026-11-16, playtest shots: the arm flesh still hung off the bone as
+  straight sleeves; "avoid any long linear tube objects"). `MeltBodyTuning.gather` 0.3 by `gatherBy` 0.4: a prim
+  longer than twice its width draws its upper end down into its lower one as it melts and fattens on its
+  cross-section scale (radius untouched: the shader reads melt off it). Stills (feet and head shots): no sleeves, the
+  arm bones bare early with a lump at the wrist. Not seen in motion. Merged with main the same day (new skeleton kit).
+- [~] **The melt wave** (owner, 2026-11-16: the gathered drops were "still tubes just shorter"; asked for a sine
+  distortion). `mapBody` reads a melting instance at a point pushed about by three sines of its position
+  (`march/melt.ts` `MELT_WAVE_*`: 2.2 cm, a 31 cm wave, full by progress 0.3) and scales its distance by 0.6 so the
+  march does not tunnel. `mapLean` has no wave, so the lean walk stands down for a pixel with a melting slot. Stills:
+  every limb and the trunk come out lumpy and bent, no straight edges, no holes; the unmelted head is bent too (the
+  wave is per body, not per part). Not seen in motion; frame cost with a melting body on screen not measured.
+- [~] **Wave retuned, limbs curl instead** (owner, 2026-11-16: liked the wave but "too intense", the melt "falls
+  through" it (swimming), and wanted more on the arms, less on the body). The field wave is down to 0.8 cm and its
+  phase reads x and z only, so flesh falling straight down keeps its place in it. Limb prims get a per-prim BEND
+  (`Primitive.bend`, `curlArm` 0.9 / `curlLeg` 0.45 of the prim's length, in mid-melt only), which belongs to the
+  prim and rides it down; trunk and head get none. `gather` relaxed to 0.5. Stills: a curled rope at the wrist, calm
+  trunk. Not seen in motion.
+- [~] **Turned prims pool flat** (owner, 2026-11-16, melting a tallow: the puddle was red discs standing on edge with
+  gaps). The crush is on a prim's own y and a rig-turned prim's y points where the limb did. `meltOrient` eases a
+  prim's orientation to upright by 70% of its own melt. Still of a standing tallow: one flat pool. A tallow melted
+  mid-fall or lying down was not shot. Frame cost of a melting body is not measured (owner: later).
+- [x] **Mesh skeleton reads wrong up close** (owner, 2026-11-15; done in its own branch, merged as PR 127): with the flesh gone its parts float (no clavicles,
   gaps at the joints). Wants a more anatomically correct mesh skeleton; proposed as its own task.
 - [x] **Keeps moving while it melts** (owner, 2026-11-14): a melting body's motion still steps until progress
   `MELT_MOTION_UNTIL` 0.45 (doomed, so no agenda: it finishes its swing and stands), then holds its last pose.

@@ -13,7 +13,7 @@
 // NOT re-exported by the barrel (march.wgsl.ts): the golden snapshot hashes the barrel's export NAMES, so the text is
 // spliced into map-body.wgsl.ts / trace.wgsl.ts under the flag instead.
 import { TILE_REF as TR } from './tile-ref-flag';
-import { MAX_CROWD_INSTANCES, REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_HEAD_WCOUNT, REC_SPLIT_N, REC_VEC4S, REC_VOL_POSE0, REC_WIND_ALIVE } from '../crowd-records';
+import { MAX_CROWD_INSTANCES, REC_ANCHOR_BAND, REC_COUNTS, REC_COUNTS2, REC_HEAD_WCOUNT, REC_MELT, REC_SPLIT_N, REC_VEC4S, REC_VOL_POSE0, REC_WIND_ALIVE } from '../crowd-records';
 
 export const MAP_LEAN = /* wgsl */ `fn mapLean(pIn: vec3<f32>, data: texture_2d<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
@@ -114,6 +114,8 @@ ${TR ? `      let lFirst = lRun;
       // Wounds, an open head split, the baked-volume branch, the bare-bones bone fold. The wound count is
       // written so a not-a-number lane fails; the other three are mapBody's own comparisons, so such a lane agrees.
       if (!((*inst)[lrb + ${REC_HEAD_WCOUNT}].w < 0.5) || dot(lsn, lsn) > 0.5 || (*inst)[lrb + ${REC_VOL_POSE0}].w > 0.5 || (lc2.y > 0.5 && lc2.x > 0.0)) { leanOk = false; break; }
+      // A melting body's field is read through the melt wave (mapBody, march/melt.ts), which mapLean does not have.
+      if ((*inst)[lrb + ${REC_MELT}].x > 0.0) { leanOk = false; break; }
     }
   }`;
 

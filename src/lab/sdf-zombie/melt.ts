@@ -201,6 +201,14 @@ export interface MeltBodyTuning {
   /** The most a prim's two ends may be pulled apart vertically, as a multiple of its own length (or its width, when
    *  that is larger): past it the upper end lets go and follows the lower one down. Absent = no limit. */
   maxStretch?: number;
+  /** GATHER: a prim longer than twice its width draws its upper end down into its lower one as it melts, to this
+   *  fraction of its length, reached at prim progress `gatherBy`. Absent = prims keep their length. */
+  gather?: number;
+  gatherBy: number;
+  /** CURL: how far a melting limb prim's middle is pulled off its own line, as a fraction of its length (it is the
+   *  Bezier control point's offset; the curve's own bow is half of it). Arms and legs; the trunk and head get none. */
+  curlArm: number;
+  curlLeg: number;
   /** Offsets every per-prim hash (the ragged edge, the stagger): a different number is a different-looking melt of
    *  the same body. Absent = 0. */
   seed?: number;
@@ -230,6 +238,11 @@ export const MELT_TUNING_BODY: MeltBodyTuning = {
   stretch: 0.12,
   neck: 0.25,
   maxStretch: 1.5,
+  // 0.5, not 0.3, now that the prim bends (curlArm): a bent rope of flesh reads better than a bean.
+  gather: 0.5,
+  gatherBy: 0.4,
+  curlArm: 0.9,
+  curlLeg: 0.45,
 };
 
 /**
@@ -310,20 +323,7 @@ export function applyMelt(
     const ha = s.heights[i * 2] ?? 0, hb = s.heights[i * 2 + 1] ?? 0;
     let ua = progressAt(s, ha - lead - (ha < hb ? body.stretch : 0));
     let ub = progressAt(s, hb - lead - (hb < ha ? body.stretch : 0));
-    // IT LETS GO (owner, 2026-11-15, in bullet time: "the arms slough off in one big long tube"). A capsule whose
-    // lower end has pooled while its upper end still hangs at the shoulder is a metre of pipe. Past maxStretch
-    // times its own length the upper end is pulled down after the lower one: the flesh draws out a little, then
-    // comes away as a lump and falls.
-    if (body.maxStretch !== undefined) {
-      const pool = frame.floorY + body.poolHeight;
-      const ya = Math.min(p.a[1], lerp(p.a[1], pool, ua)), yb = Math.min(p.b[1], lerp(p.b[1], pool, ub));
-      const len = Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]);
-      const most = Math.max(len, p.radius * Math.max(p.scale[0], p.scale[2])) * body.maxStretch;
-      const pull = (top: number, restTop: number, low: number, uTop: number) =>
-        top - low > most && restTop > pool + 1e-6 ? Math.max(uTop, clamp01((restTop - (low + most)) / (restTop - pool))) : uTop;
-      if (ya >= yb) ua = pull(ya, p.a[1], yb, ua); else ub = pull(yb, p.b[1], ya, ub);
-    }
-    const u = (ua + ub) / 2;
+    const u = (ua + ub) / 2;   // before the stretch limit below: the scalars follow the front, not the pull
     // Thinnest half-way through its own melt, back to full width as it pools.
     const neck = 1 - body.neck * Math.sin(Math.PI * u) * (1 - u);
     const reach = body.spread * (1 + body.ragged * (meltHash(i + seed) * 2 - 1));
@@ -336,16 +336,81 @@ export function applyMelt(
     // one's volume separately over-counts the flesh and the fused pool came
     // out ~2 m across and deep enough to drown the skeleton lying in it.
     const swell = Math.pow(shrink || 1, -body.swell);
+    // NO LONG STRAIGHT TUBES (owner, 2026-11-16: "essentially want to avoid any long linear tube objects"). A limb's
+    // flesh is one capsule, and a capsule hanging off a bone is a pipe however it sags. So a long prim GATHERS as it
+    // melts: its upper end runs down into its lower one until it is `gather` of its length, and it fattens by what
+    // it lost. What comes off the arm is a drop, not a sleeve. Short prims (the trunk, the head) are left alone.
+    let pa = p.a, pb = p.b, fat = 1;
+    const wide = p.radius * Math.max(p.scale[0], p.scale[2]);
+    const span = Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]);
+    if (body.gather !== undefined && span > wide * 2) {
+      // Only as far as a drop about as long as it is wide; a prim already near that keeps its length.
+      const floor = Math.min(1, Math.max(body.gather, (wide * 1.2) / span));
+      const g = lerp(1, floor, smoothstep(clamp01(u / body.gatherBy)));
+      const toward = (hi: Vec3, lo: Vec3): Vec3 => [lo[0] + (hi[0] - lo[0]) * g, lo[1] + (hi[1] - lo[1]) * g, lo[2] + (hi[2] - lo[2]) * g];
+      if (p.a[1] >= p.b[1]) pa = toward(p.a, p.b); else pb = toward(p.b, p.a);
+      // On the cross-section scale, not the radius: the shader reads a prim's melt off its radius (melt.wgsl.ts).
+      fat = Math.pow(g, -0.4);
+    }
+    // ...AND IT BENDS (owner, 2026-11-16: the drops were "still tubes just shorter"; the field-wide wave that fixed
+    // it swam, because the flesh fell through it, and was too much on the trunk). A limb prim is given a BEND
+    // (Primitive.bend: its Bezier control point, off the midpoint) on a direction hashed from its index, across its
+    // own axis. The bend belongs to the prim, so it rides the flesh down, and it is per limb: arms most, legs less,
+    // the trunk and head none. It comes in as the prim starts to go and is gone before it pools.
+    let bend: Vec3 | undefined = p.bend;
+    const curl = p.limb === 'armL' || p.limb === 'armR' ? body.curlArm : p.limb === 'legL' || p.limb === 'legR' ? body.curlLeg : 0;
+    if (curl > 0 && span > wide * 2 && u > 0 && u < 1) {
+      const ang = meltHash(i + 173 + seed) * Math.PI * 2;
+      const ax: Vec3 = [(p.b[0] - p.a[0]) / span, (p.b[1] - p.a[1]) / span, (p.b[2] - p.a[2]) / span];
+      // A level direction with the prim's own axis taken out of it; a prim lying along it falls back to straight down.
+      let dir: Vec3 = [Math.cos(ang), 0, Math.sin(ang)];
+      const along = dir[0] * ax[0] + dir[2] * ax[2];
+      dir = [dir[0] - ax[0] * along, -ax[1] * along, dir[2] - ax[2] * along];
+      const dl = Math.hypot(dir[0], dir[1], dir[2]);
+      dir = dl > 0.2 ? [dir[0] / dl, dir[1] / dl, dir[2] / dl] : [0, -1, 0];
+      const amt = curl * span * smoothstep(clamp01(u / 0.3)) * (1 - smoothstep(clamp01((u - 0.65) / 0.35)));
+      const b0 = p.bend ?? [0, 0, 0];
+      bend = [b0[0] + dir[0] * amt, b0[1] + dir[1] * amt, b0[2] + dir[2] * amt];
+    }
+    // IT LETS GO (owner, 2026-11-15, in bullet time: "the arms slough off in one big long tube"). A capsule whose
+    // lower end has pooled while its upper end still hangs at the shoulder is a metre of pipe. Past maxStretch
+    // times its own length the upper end is pulled down after the lower one: the flesh draws out a little, then
+    // comes away as a lump and falls. Measured on the GATHERED prim (above), or the limit is the sleeve's own length.
+    if (body.maxStretch !== undefined) {
+      const pool = frame.floorY + body.poolHeight;
+      const ya = Math.min(pa[1], lerp(pa[1], pool, ua)), yb = Math.min(pb[1], lerp(pb[1], pool, ub));
+      const len = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
+      const most = Math.max(len, p.radius * Math.max(p.scale[0], p.scale[2])) * body.maxStretch;
+      const pull = (top: number, restTop: number, low: number, uTop: number) =>
+        top - low > most && restTop > pool + 1e-6 ? Math.max(uTop, clamp01((restTop - (low + most)) / (restTop - pool))) : uTop;
+      if (ya >= yb) ua = pull(ya, pa[1], yb, ua); else ub = pull(yb, pb[1], ya, ub);
+    }
     return {
       ...p,
-      a: meltPoint(p.a, ua, body.poolHeight, reach, frame, body.lean),
-      b: meltPoint(p.b, ub, body.poolHeight, reach, frame, body.lean),
+      a: meltPoint(pa, ua, body.poolHeight, reach, frame, body.lean),
+      b: meltPoint(pb, ub, body.poolHeight, reach, frame, body.lean),
       radius: p.radius * swell,
       ...(p.radiusB !== undefined ? { radiusB: p.radiusB * swell } : {}),
-      scale: [p.scale[0] * neck, yScale, p.scale[2] * neck] as Vec3,
+      scale: [p.scale[0] * neck * fat, yScale, p.scale[2] * neck * fat] as Vec3,
+      ...(bend !== undefined ? { bend } : {}),
+      ...(p.orient ? { orient: meltOrient(p.orient, u) } : {}),
       blendK: meltBlendK(p.blendK, p.limb === 'head' ? body.headFuseK : body.fuseK, body, u),
     };
   });
+}
+
+/**
+ * A turned prim comes UPRIGHT as it melts. The crush is on the prim's own y, and a prim with an orientation (a
+ * rig-turned limb, most of the tallow's body) has its y pointing wherever the limb did: pooled, it was a disc
+ * standing on edge, and the puddle a row of red plates with gaps between them (owner, 2026-11-16, melting a tallow).
+ * Eased to the identity by 70% of the prim's own melt, so the crush ends on the world's y.
+ */
+export function meltOrient(q: readonly [number, number, number, number], u: number): [number, number, number, number] {
+  const t = smoothstep(clamp01(u / 0.7));
+  const s = q[3] < 0 ? -1 : 1;   // the short way round
+  const x = q[0] * s * (1 - t), y = q[1] * s * (1 - t), z = q[2] * s * (1 - t), w = q[3] * s * (1 - t) + t;
+  const n = Math.hypot(x, y, z, w) || 1;
+  return [x / n, y / n, z / n, w / n];
 }
 
 /**
@@ -468,7 +533,10 @@ export function remeltClusters(
       // field reaches ~0.3 m past its prims' own edge (fuseK's note). A box
       // fitted to the bare prims cut the puddle off square.
       const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) + MELT_BULGE_PER_K * p.blendK;
-      for (const e of [p.a, p.b]) {
+      // A bent prim (applyMelt's curl) reaches out to its control point.
+      const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      const ends = p.bend === undefined ? [p.a, p.b] : [p.a, p.b, [mid[0] + p.bend[0], mid[1] + p.bend[1], mid[2] + p.bend[2]] as Vec3];
+      for (const e of ends) {
         x0 = Math.min(x0, e[0] - r); x1 = Math.max(x1, e[0] + r);
         y0 = Math.min(y0, e[1] - r); y1 = Math.max(y1, e[1] + r);
         z0 = Math.min(z0, e[2] - r); z1 = Math.max(z1, e[2] + r);
