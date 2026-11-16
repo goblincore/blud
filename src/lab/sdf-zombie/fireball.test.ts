@@ -139,7 +139,6 @@ describe('the tallow volley damage', () => {
   it('a volley shot draws as a rocket; the imp ball keeps its look', () => {
     expect(spawnFireball([0, 1, 0], [0, 1, 5], 1, TALLOW_VOLLEY.shotDamage, 'rocket').look).toBe('rocket');
     expect(spawnFireball([0, 1, 0], [0, 1, 5], 1).look).toBeUndefined();
-    expect(TALLOW_VOLLEY.rocket.radiusScale).toBeGreaterThan(2);
   });
 });
 

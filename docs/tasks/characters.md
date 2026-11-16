@@ -37,7 +37,8 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
   now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
   has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke). The shots draw as
-  ROCKETS (`TALLOW_VOLLEY.rocket`): a 2.6x tracer, white-hot, a 1.15 m flame tail and a smoke trail (`TRAIL_SMOKE`);
+  ROCKETS (`webgpu/rocket-view.ts`): an iron shell with a nose cone and fins, a seamless exhaust card, a nozzle glow and
+  a smoke trail (`TRAIL_SMOKE`; the first pass, a stretched tracer, showed a seam and no projectile);
   lighting the level as they fly is left for a lighting pass and a kick (attack.ts
   `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
   The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
