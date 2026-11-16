@@ -995,9 +995,18 @@ export function createZombieActor(opts: {
     const b = opts.bounds, m = 0.3, at = state.wander.pos;
     const loX = Math.min(at[0], Math.min(b.minX, b.maxX) + m), hiX = Math.max(at[0], Math.max(b.minX, b.maxX) - m);
     const loZ = Math.min(at[2], Math.min(b.minZ, b.maxZ) + m), hiZ = Math.max(at[2], Math.max(b.minZ, b.maxZ) - m);
-    if (p[0] < loX - 1e-6 || p[0] > hiX + 1e-6 || p[2] < loZ - 1e-6 || p[2] > hiZ + 1e-6) return false;
-    return clearCombatMove(state.wander.pos, p, opts.furniture)
-      && (!opts.navigation || opts.navigation.canTravel(state.wander.pos, p));
+    // With slack: a body standing just outside its bounds (a corner spawn) may run along the edge.
+    const slack = 0.25;
+    if (p[0] < loX - slack || p[0] > hiX + slack || p[2] < loZ - slack || p[2] > hiZ + slack) return false;
+    // The END of the probe and its midpoint must be standable. Not the path from where the body is:
+    // it is pressed against something (that is why it is asking), and a segment that starts on a
+    // crate's padded face reads as blocked in every direction.
+    const mid: Vec3 = [(at[0] + p[0]) / 2, at[1], (at[2] + p[2]) / 2];
+    for (const q of [mid, p]) {
+      if (insideFurniture(q)) return false;
+      if (opts.navigation && !opts.navigation.canTravel(q, q)) return false;
+    }
+    return true;
   };
   const burnTier = resolveBurnTier(opts.profile);
   /** It burned to death AND its tier dies on a burn fall (BurnTier.fall); otherwise a burn death is its ordinary death. */
@@ -2101,6 +2110,12 @@ export function createZombieActor(opts: {
           }
         } else {
           burnPhaseNow = bp.phase;
+          // Blocked and turned: a panicking body WHIPS round to the new heading. At its ordinary turn
+          // rate a shambler spends a second and a half walking into the wall while it comes about.
+          if (blocked && bp.target) {
+            const hx = bp.target[0] - state.wander.pos[0], hz = bp.target[2] - state.wander.pos[2];
+            if (Math.hypot(hx, hz) > 1e-6) state = { ...state, wander: { ...state.wander, heading: Math.atan2(hx, hz) } };
+          }
           think = { ...think, target: bp.target, halt: false, fire: false, weaponUp: false, attack: null, faceHeading: null };
           burnCruiseScale = bp.cruiseScale;
           const amp = bp.flail * burnTier.flail;
