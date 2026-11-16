@@ -22,6 +22,7 @@ import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
 import { BILE, stepBile } from '../bile';
 import { FIREBALL, burstPlayerDamage, stepFireballs } from '../fireball';
+import { stepMuzzleSmoke } from './muzzle-smoke';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -1249,6 +1250,8 @@ export function tick(ctx: GameContext, dt: number) {
         else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
       }
     }
+    // The tallow's muzzle smoke (muzzle-smoke.ts) drifts and faces the camera.
+    stepMuzzleSmoke(ctx, dt, ctx.boot.handle.camera);
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.

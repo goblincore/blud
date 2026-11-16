@@ -36,7 +36,7 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
 - [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
   now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
-  has a muzzle blast (a 0.45 m explosion-VFX air burst with smoke and light, `game-spawn.ts`) and a kick (attack.ts
+  has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke) and a kick (attack.ts
   `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
   The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
 - [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).

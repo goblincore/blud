@@ -64,8 +64,8 @@ export const TALLOW_VOLLEY = {
   /** Each shot's direct-hit damage (owner, 2026-11-15, after the arena: four imp-strength 14s were 56 a volley, more
    *  than a rocket's 45, and two volleys killed a player standing still). 9: a full volley is 36, its singe 3. */
   shotDamage: 9,
-  /** Each shot's muzzle blast (game-spawn.ts): an air burst this tall (the impact flash is 0.55), this far ahead. */
-  blast: { heightM: 0.45, aheadM: 0.22 },
+  /** Each shot's muzzle blast (game-spawn.ts): a flash of light and a smoke plume (muzzle-smoke.ts) this far ahead. */
+  blast: { aheadM: 0.18 },
 } as const;
 
 /** The volley's shot that leaves this frame (prevPhase -> phase crosses its `at`), or null. */
