@@ -61,6 +61,9 @@ export const TALLOW_VOLLEY = {
   band: { min: 3.0, max: 18 },
   cooldown: 2.6,
   first: 1.2,
+  /** Each shot's direct-hit damage (owner, 2026-11-15, after the arena: four imp-strength 14s were 56 a volley, more
+   *  than a rocket's 45, and two volleys killed a player standing still). 9: a full volley is 36, its singe 3. */
+  shotDamage: 9,
 } as const;
 
 /** The volley's shot that leaves this frame (prevPhase -> phase crosses its `at`), or null. */
@@ -80,6 +83,8 @@ export interface Fireball {
   ageSec: number;
   /** Actor id of the thrower. */
   owner: number;
+  /** Direct-hit damage when it is not FIREBALL.playerDamage (the tallow's volley shots); its singe scales with it. */
+  damage?: number;
 }
 
 export interface FireballWorld {
@@ -90,7 +95,7 @@ export interface FireballWorld {
 }
 
 export type FireballCause = 'world' | 'player' | 'age';
-export interface Burst { at: Vec3; cause: FireballCause; owner: number }
+export interface Burst { at: Vec3; cause: FireballCause; owner: number; damage?: number }
 
 /** The launch velocity that carries a ball from `origin` to `target` at FIREBALL.speed under its slight droop: the
  *  straight line, lifted by the drop over the flight time. Pure. */
@@ -104,8 +109,10 @@ export function fireballVelocity(origin: Vec3, target: Vec3, speed: number = FIR
   return [v[0] * s, v[1] * s, v[2] * s];
 }
 
-export function spawnFireball(origin: Vec3, target: Vec3, owner: number): Fireball {
-  return { pos: [...origin] as Vec3, vel: fireballVelocity(origin, target), ageSec: 0, owner };
+export function spawnFireball(origin: Vec3, target: Vec3, owner: number, damage?: number): Fireball {
+  const b: Fireball = { pos: [...origin] as Vec3, vel: fireballVelocity(origin, target), ageSec: 0, owner };
+  if (damage !== undefined) b.damage = damage;
+  return b;
 }
 
 /** Advance every ball one step. Returns the survivors and this step's bursts (at the last free point, so a burst is
@@ -125,7 +132,11 @@ export function stepFireballs(balls: readonly Fireball[], dt: number, world: Fir
       : world.hitsPlayer(from, to) ? 'player'
         : world.hitsWorld(from, to) ? 'world'
           : ageSec >= FIREBALL.maxAge ? 'age' : null;
-    if (cause) { bursts.push({ at: [...from] as Vec3, cause, owner: b.owner }); continue; }
+    if (cause) {
+      const burst: Burst = { at: [...from] as Vec3, cause, owner: b.owner };
+      if (b.damage !== undefined) burst.damage = b.damage;
+      bursts.push(burst); continue;
+    }
     live.push({ ...b, pos: to, vel, ageSec });
   }
   return { live, bursts };
@@ -134,7 +145,8 @@ export function stepFireballs(balls: readonly Fireball[], dt: number, world: Fir
 /** The player's share of a burst: the full hit when it struck them, a singe when it burst near (within splashRadius
  *  of `playerMid`, the middle of their capsule), else 0. */
 export function burstPlayerDamage(burst: Burst, playerMid: Vec3): number {
-  if (burst.cause === 'player') return FIREBALL.playerDamage;
+  const hit = burst.damage ?? FIREBALL.playerDamage;
+  if (burst.cause === 'player') return hit;
   const d = Math.hypot(burst.at[0] - playerMid[0], burst.at[1] - playerMid[1], burst.at[2] - playerMid[2]);
-  return d <= FIREBALL.splashRadius ? FIREBALL.splashDamage : 0;
+  return d <= FIREBALL.splashRadius ? Math.round(FIREBALL.splashDamage * hit / FIREBALL.playerDamage) : 0;
 }

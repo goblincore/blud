@@ -122,6 +122,22 @@ describe('makeImpMind', () => {
   });
 });
 
+describe('the tallow volley damage', () => {
+  it('a volley shot carries its own damage to the burst: a full volley stays under a rocket (45)', () => {
+    const b = spawnFireball([0, 1.1, 0], [0, 1.1, 5], 1, TALLOW_VOLLEY.shotDamage);
+    const { bursts } = stepFireballs([{ ...b, ageSec: 0.2 }], 0.6, { hitsWorld: () => false, hitsPlayer: () => true });
+    expect(bursts[0]!.damage).toBe(TALLOW_VOLLEY.shotDamage);
+    const mid: Vec3 = [0, 0.9, 0];
+    expect(burstPlayerDamage(bursts[0]!, mid)).toBe(TALLOW_VOLLEY.shotDamage);
+    expect(TALLOW_VOLLEY.shotDamage * TALLOW_VOLLEY.shots.length).toBeLessThan(45);
+    // Its singe scales down with it; the imp's ball (no damage) keeps the full hit and singe.
+    const singe = burstPlayerDamage({ at: [0, 0.9, FIREBALL.splashRadius * 0.8], cause: 'world', owner: 1, damage: TALLOW_VOLLEY.shotDamage }, mid);
+    expect(singe).toBeGreaterThan(0);
+    expect(singe).toBeLessThan(FIREBALL.splashDamage);
+    expect(spawnFireball([0, 1, 0], [0, 1, 5], 1).damage).toBeUndefined();
+  });
+});
+
 describe('makeTallowMind', () => {
   // The tallow's volley: both cannons braced (attack.ts 'brace'), four rounds through the hold, right and left in turn.
   it('braces at a player out of reach and fires four rounds, alternating cannons, then cools down', () => {

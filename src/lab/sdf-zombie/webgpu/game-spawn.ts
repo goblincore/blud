@@ -32,7 +32,7 @@ import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
 import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeTallowMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
-import { spawnFireball } from '../fireball';
+import { TALLOW_VOLLEY, spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
@@ -447,7 +447,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
       onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
-        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId, TALLOW_VOLLEY.shotDamage));
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
