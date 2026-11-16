@@ -81,6 +81,16 @@ describe('stepBurnPanic', () => {
     const b1 = ang(stepBurnPanic(s, { ...inp, blocked: true }, DT));
     expect(turn(b1, b0)).toBeGreaterThan(Math.PI / 2 - 0.3);
   });
+  it('however often it is blocked, it never heads back at the player', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = createBurnPanic(seed, { ...BURN_TIER_DEFAULT, panicSec: [30, 30] });
+      for (let k = 0; k < 400; k++) {
+        const o = stepBurnPanic(s, { self: [0, 0, 0], player: [5, 0, 0], forward: [0, 0, 1], blocked: k % 30 === 0 }, DT);
+        // The player is along +x: the heading stays out of the 30 degree cone toward him.
+        expect(Math.atan2(Math.abs(o.target[2]), o.target[0])).toBeGreaterThan(Math.PI / 6);
+      }
+    }
+  });
   it('is deterministic for a seed', () => {
     expect(run(5, 11).outs).toEqual(run(5, 11).outs);
   });

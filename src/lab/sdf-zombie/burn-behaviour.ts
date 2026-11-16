@@ -23,9 +23,14 @@ export const BURN_BEHAVIOUR = Object.freeze({
   /** Speed (as a fraction of the tier's) and flail amplitude at the end of falter. */
   falterSpeed: 0.45,
   falterFlail: 0.35,
-  /** BLOCKED (a wall, a crate, a corner): the flee heading is turned by at least this much (rad), plus
-   *  up to as much again, to a seeded side; no second turn for blockedCoolSec. */
+  /** BLOCKED (a wall, a crate, a corner): the flee heading is turned off the away direction by this much
+   *  (rad), plus up to blockedTurnExtra of it again, to a seeded side; blocked again, it takes the other
+   *  side. Never past ~145 degrees with the wobble, so a blocked body runs along the wall, not back at the player. No
+   *  second turn for blockedCoolSec. */
   blockedTurnRad: Math.PI / 2,
+  blockedTurnExtra: 0.25,
+  /** The wobble's scale while a blocked turn is held (the turn is already most of the way round). */
+  blockedWobble: 0.4,
   blockedCoolSec: 0.8,
 });
 
@@ -45,7 +50,7 @@ export interface BurnPanicState {
   speed: number; dies: boolean;
   /** `die` has been reported. */
   died: boolean;
-  /** Standing turn of the flee heading (rad), added each time the body reports it is blocked. */
+  /** Standing turn of the flee heading off the away direction (rad), set when the body reports it is blocked. */
   bias: number;
   /** Seconds until a blocked report may turn it again. */
   blockedCool: number;
@@ -104,14 +109,15 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   s.blockedCool = Math.max(0, s.blockedCool - Math.max(0, dt));
   if (i.blocked && s.blockedCool <= 0) {
     // Running straight from the player into a wall reads as a body stuck on the spot: turn hard to
-    // one side (seeded) and keep that turn, so it runs ALONG the wall, until it is blocked again.
-    const side = next(s) < 0.5 ? -1 : 1;
-    s.bias += side * B.blockedTurnRad * (1 + next(s));
+    // one side (seeded the first time, then the other side each time) and hold that turn, so it runs
+    // ALONG the wall until it is blocked again.
+    const side = s.bias === 0 ? (next(s) < 0.5 ? -1 : 1) : -Math.sign(s.bias);
+    s.bias = side * B.blockedTurnRad * (1 + B.blockedTurnExtra * next(s));
     s.blockedCool = B.blockedCoolSec;
   }
   const w = 2 * Math.PI * B.wobbleHz * s.t;
   const wob = (Math.sin(w + s.phase) + 0.5 * Math.sin(w * 2.3 + s.phase * 1.7)) / 1.5;
-  const a = s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f);
+  const a = s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f) * (s.bias !== 0 ? B.blockedWobble : 1);
   const c = Math.cos(a), sn = Math.sin(a);
   const hx = dx * c - dz * sn, hz = dx * sn + dz * c;
   const die = phase === 'done' && s.dies && !s.died;
