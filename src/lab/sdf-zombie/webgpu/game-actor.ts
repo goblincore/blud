@@ -560,6 +560,10 @@ export interface ZombieActor {
     staggerKind: string | null;
     /** The authored fall this body is playing (death-fall.ts), or null. */
     fallKind: string | null;
+    /** The burn flail's amplitude handed to motion on the last step (motion.ts cfg.burnFlail), or null for none. */
+    burnFlail: number | null;
+    /** The swing variant handed to motion on the last step (the mind's attack after every override), or null. */
+    attack: string | null;
     target: Vec3 | null;
     idle: number;
     state: string;
@@ -1035,8 +1039,9 @@ export function createZombieActor(opts: {
   /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
    *  still rolls the blow-away chance (blow-away.ts); a hit now plays the 'blown' fall instead of a free throw. */
   const deathFall = (): DeathFallChoice => {
-    // Burned to death: one of the three burn falls, seeded per body (death-fall.ts).
-    if (burnDied) return pickBurnFall(burnSeed + 2, burnForward());
+    // Burned to death: one of the three burn falls, seeded per body (death-fall.ts). It is the whole death: the
+    // physics death's slump and blow-away are never rolled for it (they would launch the rig and cut the fall's pull).
+    if (burnDied) { blowAwayRolled = true; return pickBurnFall(burnSeed + 2, burnForward()); }
     blowAwayRolled = true;
     const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
     const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
@@ -1098,6 +1103,10 @@ export function createZombieActor(opts: {
   }
   let soldierFatal = false;
   let propReleaseRequested = false;
+  /** The body is down or dying by a cause other than its fire: collapsed (a zombie's collapse is its death), a soft
+   *  target's death reel, a fatal soldier. Its burn panic ends and its burn clock can no longer kill it. */
+  const downOtherwise = (): boolean =>
+    softKilled || soldierFatal || dyingT > 0 || state.collapse.phase !== 'standing' || !!lastFrame?.collapsed;
 
   // ---- damage state -------------------------------------------------------
   /** THE shared wound ring (character-view.ts). The character's own when the
@@ -1204,6 +1213,8 @@ export function createZombieActor(opts: {
   })();
   /** See debug().fistGrip / fistGripAuthored. */
   let lastFistGrip: number | null = null;
+  /** debug().attack: the attack the last step handed motion. */
+  let lastAttack: string | null = null;
   let lastFistGripAuthored: number | null = null;
 
   // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
@@ -2050,6 +2061,12 @@ export function createZombieActor(opts: {
       // moveTarget in combat, either of which would erase the flee / chase
       // target on nearly every frame if the override ran first.
       burnFlail = null;
+      // Shot dead (or downed) mid-panic: the panic ends there and the clock never gives the corpse a second death.
+      if (burnPanic && !burnDied && downOtherwise()) {
+        burnPanic = null;
+        burnStuckT = 0;
+        burnPhaseNow = 'none';
+      }
       if (burnPanic && !doomed && !burnDied) {
         // The encounter director (not setBrainInput) feeds the game's minds,
         // so read the player from the order when present and remember the
@@ -2217,6 +2234,7 @@ export function createZombieActor(opts: {
         }
       }
       const beforeMove = state.wander.pos;
+      lastAttack = think.attack?.variant ?? null;
       const stepR = stepMotion(
         state, joints,
         {
@@ -2354,7 +2372,8 @@ export function createZombieActor(opts: {
       volleyAge += sdt;
       if (blownAway) blownT += sdt;
       // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
-      if (f.collapsed && !blowAwayRolled) {
+      // A burn death is an authored fall, never this (deathFall above marks it rolled; the guard holds whatever order).
+      if (f.collapsed && !blowAwayRolled && !burnDied) {
         blowAwayRolled = true;
         // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
         const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
@@ -2615,6 +2634,8 @@ export function createZombieActor(opts: {
         speed: d.speed,
         staggerKind: d.staggerKind,
         fallKind: state.fallKind?.kind ?? null,
+        burnFlail: burnFlail?.amp ?? null,
+        attack: lastAttack,
         target: state.wander.target ? [...state.wander.target] as Vec3 : null,
         idle: state.wander.idle,
         state: md.state, alert: md.alert,
@@ -3222,8 +3243,8 @@ export function createZombieActor(opts: {
       if (on === burningOn) return;
       burningOn = on;
       if (on) {
-        // A body that already burned to death is not re-lit into a fresh panic.
-        if (burnDied) return;
+        // A body that already burned to death, or is down by another cause, is not lit into a panic.
+        if (burnDied || downOtherwise()) return;
         // The id seed keeps two bodies lit on the same frame out of phase.
         burnPanic = createBurnPanic(burnSeed, burnTier);
         burnPhaseNow = 'panic';
@@ -3300,7 +3321,7 @@ export function createZombieActor(opts: {
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,
-      staggerKind: null, fallKind: state.fallKind?.kind ?? null, target: null, idle: 0,
+      staggerKind: null, fallKind: state.fallKind?.kind ?? null, burnFlail: burnFlail?.amp ?? null, attack: lastAttack, target: null, idle: 0,
       state: mind.debug().state, alert: mind.debug().alert,
       swingT: mind.debug().swingT,
       side: mind.debug().side, variant: mind.debug().variant,
