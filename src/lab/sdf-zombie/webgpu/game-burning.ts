@@ -378,6 +378,12 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       for (const a of burnCur) if (!burnPrev.has(a) && burnBehaviourEnabled()) a.setBurning(true);
       for (const a of burnPrev) if (!burnCur.has(a)) a.setBurning(false);
       const swap = burnPrev; burnPrev = burnCur; burnCur = swap;
+      // BURNED TO DEATH (spec 2026-11-16-burn-flail-and-death-design.md): the actor's clock ran out
+      // and it is falling. Start the burn-down once; the state stays registered, so the fire fades
+      // and the char completes on the corpse (retire(), the gib path, is what releases a body).
+      burning.forEachActive((a, s) => {
+        if (!s.dying && s.alight && a.burnPhase() === 'dead') burning.kill(a);
+      });
       let any = false;
       const simDt = Math.min(dt, 1 / 30);
       burning.forEachActive((a, s) => {
