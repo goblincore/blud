@@ -8,22 +8,25 @@
 # itself is now plainly a machine.
 #   barrel  forearm.l|barrel  block, barrel, bands, brake, piston, tank, bolts (impmetal; blood in vertex colours)
 #   gore    forearm.l|gore    the torn meat and clots round the block's back face, drips hanging off it (gore)
-#   throat  forearm.l|throat  a black plug down the bore behind the fire (void), at t 1.38
-#   ember   forearm.l|ember   the fire (ventglow)
+#   throat  forearm.l|throat  a black liner filling the bore (void) from t 1.20 to just behind the muzzle rim
+# The BORE IS A DARK HOLE (owner, 2026-11-15: the opening was "a light color so doesnt read as a barrel"): the brake
+# rings are hollow (they were solid octagons that capped the muzzle in pale metal), the inside walls are sooted black,
+# and the glowing ember disc and its bore glow are gone. The shot's fire is the muzzle blast (game-spawn.ts).
 # The fireball leaves the muzzle (MotionProfile.spit from handTipR: the hand bone's tail is forearm t ~1.55).
 # Everything rides the FOREARM. Built on the left and mirrored. PARTS selects a subset.
 # BoneFrame on this forearm (pointing forward and down): ph 0 is the TOP of the cannon, ph 180 its underside.
-import bpy, math
+import bpy, bmesh, math
 from mathutils import Vector, Matrix
 
 try:
     PARTS
 except NameError:
-    PARTS = {'barrel', 'gore', 'throat', 'ember'}
+    PARTS = {'barrel', 'gore', 'throat'}
 
 FA0, FA1 = BONE['forearm.l']
 F = BoneFrame(FA0, FA1)
 drop(['forearm.l|burner', 'forearm.r|burner'])      # the first pass's parts, if this .blend still has them
+drop(['forearm.l|ember', 'forearm.r|ember'])        # the bore's glowing disc (third pass): the bore is dark now
 at = lambda t: F.at(t, 0, 0, 0)
 E1, E2, _ = basis(F.u)                              # the frame `prism` builds in, for placing bolts on its flats
 face_dir = lambda a: E1 * math.cos(a) + E2 * math.sin(a)
@@ -34,8 +37,7 @@ WALL = 0.038
 # The barrel: 0.118 out of the block, tapering a little to the brake. Under the block it is hidden.
 rad = lambda t: 0.118 - 0.008 * min(1.0, max(0.0, (t - T_BLOCK1) / (T_MUZZLE - T_BLOCK1)))
 R_BLOCK, R_BAND, R_BRAKE = 0.152, 0.138, 0.150
-EMBER = at(1.44); EMBER_R = 0.070   # forward of the brake's first ring: at 1.34 the fire was lost down the bore
-LIGHT = [(EMBER, EMBER_R, 1.0)]
+T_THROAT = 1.20
 
 
 def tph(co):
@@ -43,10 +45,45 @@ def tph(co):
     return t, math.atan2(rel.dot(F.s), rel.dot(F.f))
 
 
+def hollow_prism(name, a, b, ro, ri, segs=8, rot=0.0, inner=48):
+    """A ring: a flat-sided prism of outer radius ro from a to b with a round hole of radius ri down its axis."""
+    e1, e2, _ = basis(b - a)
+    bm = bmesh.new()
+    def loop(c, r, n, rr):
+        return [bm.verts.new(c + (e1 * math.cos(rr + 2 * math.pi * k / n) + e2 * math.sin(rr + 2 * math.pi * k / n)) * r)
+                for k in range(n)]
+    # Same vertex count inside and out so the end caps are quads: the outer octagon resampled at `inner` points.
+    def oct_loop(c):
+        out = []
+        for k in range(inner):
+            th = 2 * math.pi * k / inner
+            # Radius of a regular segs-gon (circumradius ro, a vertex at rot) along angle th.
+            sector = 2 * math.pi / segs
+            x = (th - rot) % sector - sector / 2
+            r = ro * math.cos(sector / 2) / math.cos(x)
+            out.append(bm.verts.new(c + (e1 * math.cos(th) + e2 * math.sin(th)) * r))
+        return out
+    oa, ob = oct_loop(a), oct_loop(b)
+    ia, ib = loop(a, ri, inner, 0.0), loop(b, ri, inner, 0.0)
+    n = inner
+    for k in range(n):
+        j = (k + 1) % n
+        bm.faces.new((oa[k], oa[j], ob[j], ob[k]))      # outside
+        bm.faces.new((ib[k], ib[j], ia[j], ia[k]))      # the hole
+        bm.faces.new((ia[k], ia[j], oa[j], oa[k]))      # back face
+        bm.faces.new((ob[k], ob[j], ib[j], ib[k]))      # front face
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return mkobj(name, bm)
+
+
 def smear(co):
     """The metal's vertex colour: dark gunmetal, with blood thick where the block meets the flesh (t 0.62) and runs of
-    it streaking forward along the underside, each its own length."""
+    it streaking forward along the underside, each its own length. Inside the bore: soot, near black."""
     t, ph = tph(co)
+    d = co - F.h; r = (d - F.u * d.dot(F.u)).length
+    if t > 1.0 and r < rad(min(t, T_MUZZLE)) - WALL * 0.45:
+        lip = sm((T_MUZZLE - 0.004 - t) / 0.03)          # the very rim stays a little lighter, a worn edge
+        return mix3((0.30, 0.29, 0.28), (0.035, 0.032, 0.03), lip)
     # Mottled, never a painted band: a clot pattern times a fall-off from the flesh.
     mot = 0.5 + 0.5 * math.sin(co.x * 71.0 + math.sin(co.y * 53.0) * 2.4 + co.z * 59.0)
     base = (1 - sm((t - 0.63) / (0.06 + 0.12 * mot))) * (0.55 + 0.45 * mot)
@@ -77,8 +114,9 @@ if 'barrel' in PARTS:
             a = OCT + (2 * k + 1) * math.pi / 8
             bolt(f'nb{j}{k}', at(t) + face_dir(a) * R_BAND * math.cos(math.pi / 8), face_dir(a), r=0.009, h=0.010)
     # MUZZLE BRAKE: two octagonal rings joined by four bars, the barrel showing through the slots between.
-    prism('brake0', at(1.40), at(1.44), R_BRAKE, 8, OCT)
-    prism('brake1', at(1.51), at(T_MUZZLE), R_BRAKE, 8, OCT)
+    # Hollow: the bore runs open through both rings to the muzzle (solid rings capped it in pale metal).
+    hollow_prism('brake0', at(1.40), at(1.44), R_BRAKE, rad(1.42) - 0.006, 8, OCT)
+    hollow_prism('brake1', at(1.51), at(T_MUZZLE), R_BRAKE, rad(1.535) - 0.006, 8, OCT)
     for k in range(0, 8, 2):
         a = OCT + 2 * k * math.pi / 8
         d = face_dir(a) * (R_BRAKE - 0.012)
@@ -103,8 +141,7 @@ if 'barrel' in PARTS:
     for j, t in enumerate((1.02, 1.15)):
         prism(f'clamp{j}', at(t) + dn * 0.112, at(t) + dn * 0.152, 0.014, 4, math.pi / 4)
     tube('feedpipe', [K0 - F.u * 0.01, K0 - F.u * 0.04 + F.f * 0.02, at(0.88) + dn * 0.17, at(0.86) + dn * 0.135], [0.016] * 4, segs=10)
-    finish('barrel', 'forearm.l|barrel', 4200, material='impmetal', tint=smear, glow=(LIGHT, 0.05, 2.4, 0.15),   # the bore only: at reach 0.12 the outside went bronze
-          
+    finish('barrel', 'forearm.l|barrel', 4200, material='impmetal', tint=smear,
            voxel=0.0030, smooth=(0.4, 2), noise=0.0012, noise_scale=0.05)
 
 if 'gore' in PARTS:
@@ -125,8 +162,7 @@ def disc(name, centre, r, flatk):
 
 if 'throat' in PARTS:
     drop(['forearm.l|throat', 'forearm.r|throat']); clear_work()
-    plain_part(disc('throat', at(1.38), rad(1.38) - WALL - 0.004, 0.40), 'void', 'forearm.l|throat')
-
-if 'ember' in PARTS:
-    drop(['forearm.l|ember', 'forearm.r|ember']); clear_work()
-    plain_part(disc('ember', EMBER, EMBER_R, 0.50), 'ventglow', 'forearm.l|ember')
+    # A black LINER down the bore, its front face just behind the muzzle rim: the barrel's own metal, even sooted,
+    # caught the environment light and read pale. Black from the rim back is what reads as a hole.
+    T_LINER = T_MUZZLE - 0.028
+    plain_part(prism('throat', at(T_THROAT), at(T_LINER), rad(T_LINER) - WALL - 0.002, 32), 'void', 'forearm.l|throat')

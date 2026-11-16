@@ -35,6 +35,7 @@
 // +y up, +x the body's right.
 import type { Vec3 } from './types';
 import type { GaitJointName } from './gait';
+import { TALLOW_VOLLEY } from './fireball';
 
 export const ATTACK_TUNING = {
   /** Beat boundaries as fractions of the swing. */
@@ -180,6 +181,20 @@ export const BRACE_TUNING: AttackTuning = {
   handDrop: 0.0,
 };
 
+/** THE CANNON KICK (owner, 2026-11-15: "the firing animation needs to be more pronounced ... recoil"). Each volley
+ *  shot (fireball.ts TALLOW_VOLLEY.shots) snaps its cannon up and its shoulder back, then the arm settles over
+ *  `decay` of the brace's phase (0.03 x 2.8 s: about 0.08 s); the chest jolts back with every shot. 1 at the shot's
+ *  phase, 0 before it. Pure, and read off the brace's own phase, so the kick lands on the very frame the round leaves. */
+export const CANNON_KICK = { pitch: 0.22, shoulderBack: 0.07, chestBack: 0.035, decay: 0.03 } as const;
+export function cannonKick(phase: number, side: 'L' | 'R'): number {
+  let k = 0;
+  for (const s of TALLOW_VOLLEY.shots) {
+    if (s.side !== side || phase < s.at) continue;
+    k = Math.max(k, Math.exp(-(phase - s.at) / CANNON_KICK.decay));
+  }
+  return k < 1e-3 ? 0 : k;
+}
+
 /** The beats a variant swings on: the throw's and the brace's own, every other the melee swing's. */
 export function tuningOf(variant: SwingVariant): AttackTuning {
   return variant === 'throw' ? THROW_TUNING : variant === 'brace' ? BRACE_TUNING : ATTACK_TUNING;
@@ -310,12 +325,17 @@ export function attackPose(
   const fwd = d >= 0;
   if (variant === 'brace') {
     // BOTH arms take the arc (the two cannons), mirrored in yaw; the body leans back and plants (BRACE_TUNING).
-    const z = fwd ? d * T.lunge : d * T.windback, cz = fwd ? d * T.chestDrive : d * T.chestRear;
+    // Each shot kicks its own cannon up and its shoulder back, and jolts the chest (cannonKick).
+    const kL = cannonKick(phase, 'L'), kR = cannonKick(phase, 'R');
+    const z = fwd ? d * T.lunge : d * T.windback;
+    const cz = (fwd ? d * T.chestDrive : d * T.chestRear) - Math.max(kL, kR) * CANNON_KICK.chestBack;
     return {
       offsets: { chest: [0, 0, cz], neck: [0, 0, cz * T.headShare], head: [0, 0, cz * T.headShare],
-        shoulderL: ZERO, shoulderR: ZERO, handL: ZERO, handR: ZERO },
+        shoulderL: kL ? [0, 0, -kL * CANNON_KICK.shoulderBack] : ZERO,
+        shoulderR: kR ? [0, 0, -kR * CANNON_KICK.shoulderBack] : ZERO, handL: ZERO, handR: ZERO },
       rootOffset: [0, 0, z],
-      reach: { pitchL: arc.pitch, pitchR: arc.pitch, yawL: -arc.yaw, yawR: arc.yaw },
+      reach: { pitchL: arc.pitch + kL * CANNON_KICK.pitch, pitchR: arc.pitch + kR * CANNON_KICK.pitch,
+        yawL: -arc.yaw, yawR: arc.yaw },
     };
   }
 

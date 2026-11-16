@@ -49,7 +49,9 @@ import { clearMeshGibs } from './game-mesh-gibs';
 import { applyMoonKey } from './game-outdoor';
 import { bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor } from './game-skeleton-actors';
 import { spawnPellets, spawnRound } from './game-weapon';
-import { applyWoundRamp, faceFor } from './game-wound-vfx';
+import { applyWoundRamp, faceFor, scaleBurstVisual } from './game-wound-vfx';
+import { igniteExplosionLight } from './game-dynamite-throw';
+import { spawnBurstStandIn } from './game-weapon-rig';
 import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import { type LevelRoom } from './level-def';
 import { VITALS } from './player-vitals';
@@ -447,7 +449,19 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
       onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
-        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId, TALLOW_VOLLEY.shotDamage));
+        const target: Vec3 = [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]];
+        ctx.weapon.fireballs.push(spawnFireball(origin, target, zombieId, TALLOW_VOLLEY.shotDamage));
+        // THE MUZZLE BLAST (owner, 2026-11-15: "a bigger muzzle flash and maybe smoke"): a small air burst of the
+        // explosion VFX (fire, smoke, embers) and its light, just ahead of the muzzle so it blooms out of the bore
+        // rather than over the cannon. The arm's kick is attack.ts cannonKick.
+        const dx = target[0] - origin[0], dy = target[1] - origin[1], dz = target[2] - origin[2];
+        const l = Math.hypot(dx, dy, dz) || 1, ahead = TALLOW_VOLLEY.blast.aheadM / l;
+        const at: Vec3 = [origin[0] + dx * ahead, origin[1] + dy * ahead, origin[2] + dz * ahead];
+        const burst = scaleBurstVisual(ctx, { kind: 'air', at, heightM: TALLOW_VOLLEY.blast.heightM });
+        igniteExplosionLight(ctx, at);
+        if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(burst);
+        else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(burst);
+        else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain

@@ -34,8 +34,11 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   boots (owner: no rectangle soles). No kit normal atlas.
 - [x] **Wiring**: `TALLOW_PROFILE` (TALLOW_STOMP, cruise 0.7, turn 1.6, `throws: 'volley'`).
 - [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
-- [ ] **The volley in the arena** (`npm run dev:arena`, `?spawn=tallow`): seen only in the lab sweep and the game-actor
-  test, not played.
+- [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
+  now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
+  has a muzzle blast (a 0.45 m explosion-VFX air burst with smoke and light, `game-spawn.ts`) and a kick (attack.ts
+  `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
+  The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
 - [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).
 - [ ] Kit normal atlas (optional: only if a later cut needs it).
 

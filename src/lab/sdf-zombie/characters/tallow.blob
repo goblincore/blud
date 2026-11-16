@@ -186,7 +186,7 @@ body
   # sausages stuck on the machine. The meat stops at the breech block; the
   # blood there is kit.)
   # CORE inside the cannon (kit): the forearm rod and a stub of hand, all
-  # behind the throat plug (make_cannons.py: t 1.38 of the forearm), so
+  # behind the black bore liner (make_cannons.py: from t 1.20 of the forearm), so
   # none of it shows down the bore.
   bar  arm on forearm  from=0.35 to=1.00 r=0.050 blend=0.006 mirror color=2a2c30 metal gloss=0.5
   bar  arm on hand     from=0.00 to=0.10 r=0.045 blend=0.006 mirror color=2a2c30 metal gloss=0.5
