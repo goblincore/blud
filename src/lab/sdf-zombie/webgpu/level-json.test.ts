@@ -53,7 +53,7 @@ describe('parseLevelJson: two-rooms fixture', () => {
     const f = fixture('two-rooms');
     f.spawns[0].kind = 'cacodemon';
     expect(() => parseLevelJson(f))
-      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher, flayer, teratoma or imp');
+      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher, flayer, teratoma, imp or tallow');
   });
 });
 
