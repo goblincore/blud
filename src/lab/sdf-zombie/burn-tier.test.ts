@@ -26,7 +26,9 @@ describe('resolveBurnTier', () => {
     expect(t.dies).toBe(false);
     expect(t.flail).toBe(0.6);
   });
-  it('the gorehound has no arm flail', () => {
+  it('the gorehound has no arm flail and no burn fall (the falls are keyed for a biped)', () => {
     expect(resolveBurnTier(GOREHOUND_PROFILE).flail).toBe(0);
+    expect(resolveBurnTier(GOREHOUND_PROFILE).fall).toBe(false);
+    expect(resolveBurnTier(ZOMBIE_PROFILE).fall).toBe(true);
   });
 });

@@ -213,12 +213,16 @@ export interface BurnTier {
   flail: number;
   /** Fire kills this body when its clock ends. False: it panics, then carries on, alight. */
   dies: boolean;
+  /** It dies on an authored BURN fall (death-fall.ts BURN_FALL_KINDS). False: its ordinary death. The
+   *  burn falls are keyed for a biped: a quadruped whose rig reuses the humanoid joint names (the
+   *  gorehound) passes canDeathFall and must opt out here. */
+  fall: boolean;
 }
-export const BURN_TIER_DEFAULT: BurnTier = Object.freeze({ panicSec: [3, 6] as const, speed: 1.3, flail: 1, dies: true });
+export const BURN_TIER_DEFAULT: BurnTier = Object.freeze({ panicSec: [3, 6] as const, speed: 1.3, flail: 1, dies: true, fall: true });
 
 const BURN_SOLDIER: Partial<BurnTier> = { panicSec: [2.5, 4.5], speed: 1.4 };
 const BURN_HEAVY: Partial<BurnTier> = { panicSec: [5, 8], speed: 1.1, flail: 0.6, dies: false };
-const BURN_BEAST: Partial<BurnTier> = { panicSec: [2.5, 4], speed: 1.4, flail: 0 };
+const BURN_BEAST: Partial<BurnTier> = { panicSec: [2.5, 4], speed: 1.4, flail: 0, fall: false };
 
 export const ZOMBIE_PROFILE: MotionProfile = {
   name: 'zombie',

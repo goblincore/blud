@@ -997,6 +997,8 @@ export function createZombieActor(opts: {
       && (!opts.navigation || opts.navigation.canTravel(state.wander.pos, p));
   };
   const burnTier = resolveBurnTier(opts.profile);
+  /** It burned to death AND its tier dies on a burn fall (BurnTier.fall); otherwise a burn death is its ordinary death. */
+  const burnFell = (): boolean => burnDied && burnTier.fall;
   const burnSeed = opts.id * 7919 + 1;
   /**
    * Last world position the actor saw the player at. game-main does not call
@@ -1041,7 +1043,7 @@ export function createZombieActor(opts: {
   const deathFall = (): DeathFallChoice => {
     // Burned to death: one of the three burn falls, seeded per body (death-fall.ts). It is the whole death: the
     // physics death's slump and blow-away are never rolled for it (they would launch the rig and cut the fall's pull).
-    if (burnDied) { blowAwayRolled = true; return pickBurnFall(burnSeed + 2, burnForward()); }
+    if (burnFell()) { blowAwayRolled = true; return pickBurnFall(burnSeed + 2, burnForward()); }
     blowAwayRolled = true;
     const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
     const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
@@ -2241,9 +2243,9 @@ export function createZombieActor(opts: {
           enabled: true,
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
-          ...(DEATH_FALL.on && !softTarget && (!physicsDeath || burnDied) ? { deathFall } : {}),
+          ...(DEATH_FALL.on && !softTarget && (!physicsDeath || burnFell()) ? { deathFall } : {}),
           // A physics-death body (the zombie) burned to death plays its burn fall, not the ragdoll.
-          ...(burnDied && !softTarget ? { authoredDeath: true } : {}),
+          ...(burnFell() && !softTarget ? { authoredDeath: true } : {}),
           ...(burnFlail ? { burnFlail } : {}),
           ...(fallWalled ? { releaseFall: true } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
@@ -2373,7 +2375,7 @@ export function createZombieActor(opts: {
       if (blownAway) blownT += sdt;
       // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
       // A burn death is an authored fall, never this (deathFall above marks it rolled; the guard holds whatever order).
-      if (f.collapsed && !blowAwayRolled && !burnDied) {
+      if (f.collapsed && !blowAwayRolled && !burnFell()) {
         blowAwayRolled = true;
         // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
         const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;

@@ -855,6 +855,15 @@ describe('createZombieActor — burning panic and burn death', () => {
     expect(peak).toBe(0);
   });
 
+  it('a tier with fall off (the gorehound, whose rig passes canDeathFall) dies its ordinary death, not a burn fall', () => {
+    const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], fall: false } } });
+    a.setBurning(true);
+    for (let i = 0; i < 4 * 60; i++) a.step(1 / 60);
+    expect(a.burnPhase()).toBe('dead');
+    expect(a.motionFrame()?.collapsed).toBe(true);
+    expect(['burnKneel', 'burnTopple', 'burnHeap']).not.toContain(a.debug().fallKind);
+  });
+
   it('a body that cannot play the falls (the gutcrawler) panics and dies without a burn fall', () => {
     // The gutcrawler fails canDeathFall (no hips/knees/feet). (The gorehound does NOT: its rig names its legs
     // shoulder/elbow/hip/knee/foot, so it passes canDeathFall and plays authored falls on any death.)
