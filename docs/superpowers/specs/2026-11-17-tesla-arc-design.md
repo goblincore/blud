@@ -58,7 +58,7 @@ Rules at the edges:
 `src/lab/sdf-zombie/zap.ts`. No clock of its own, no randomness beyond the seed.
 
 ```ts
-export interface ZapTier { cookSec: [number, number]; dies: boolean; recoverSec: number; }
+export interface ZapTier { cookSec: [number, number]; dies: boolean; recoverSec: number; star: boolean; }
 export interface ZapState { phase: 'zapped' | 'recovering' | 'statue'; cook: number; cookSec: number;
                             t: number; seed: number; dies: boolean; recoverSec: number; }
 export interface ZapOut { glow: number; char: number; tremor: number; jolt: number; variant: number;
@@ -77,7 +77,7 @@ export function stepZap(s: ZapState, dt: number, arcOn: boolean): ZapOut;
   picks a new `variant` (0 to 2) and sets `invert` for its length.
 - `die` is true on the one step `cook` reaches 1 with `dies` set; `done` is true when a recovery ends.
 - `ZapTier` lives in `motion-profile.ts` beside `BurnTier`. Default: `cookSec [1.6, 2.2]`, `dies` true,
-  `recoverSec` 0.6. Per-character values are tuning, set when the owner judges it in the arena.
+  `recoverSec` 0.6, `star` true. Per-character values are tuning, set when the owner judges it in the arena.
 
 ### 2. The pose: `zap-pose.ts` (new, pure)
 
@@ -91,8 +91,7 @@ In `burn-flail.ts`'s mould: it returns hand targets in shoulder coordinates and 
 - Tremor: a positional shake of the whole body, `ZAP.tremorM` (0.012 m) at about 25 Hz, scaled by
   `ZapOut.tremor`.
 - Bodies that fail `canDeathFall`'s biped test, and the gorehound, which passes it with a non-biped rig,
-  get the tremor and a stiffened current pose instead of the star. `ZapTier` grows a `star: boolean` for
-  this when the plan reaches it.
+  get the tremor and a stiffened current pose instead of the star: their tier sets `star` false.
 
 ### 3. The actor: `game-actor.ts`
 
