@@ -4,7 +4,7 @@
 
 import type { BuiltBody, Primitive, Vec3 } from './types';
 import { bendCtrl } from './vec';
-import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
+import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX, MAX_GROUP_PRIMS, MAX_CLUSTER_GROUPS } from './validate';
 import { boxReach, shellReach, strandReach } from './extent';
 import { orientShapesField } from './orient-shape';
 
@@ -70,6 +70,10 @@ export interface PackedBody {
   primStrand: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
+  /** xyzw = Primitive.skinQuat (rest -> posed bone rotation); all zeros = unwritten (restPoint's swing fallback). */
+  primFrame: Float32Array;
+  /** xyzw = Primitive.skinQuatB (a joint-spanning prim's endpoint-B frame); zeros = one frame (the common case). */
+  primFrameB: Float32Array;
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
   /**
@@ -225,7 +229,7 @@ function put4(dst: Float32Array, o: number, x: number, y: number, z: number, w: 
 }
 
 /** The per-prim rows of a PackedBody: every array one prim writes at its index. */
-export type PrimRows = Pick<PackedBody, 'primA' | 'primB' | 'primScale' | 'primQuat' | 'primShape' | 'primBend' | 'primColor' | 'primShell' | 'primClip' | 'primWarp' | 'primStrand' | 'restA' | 'restB'>;
+export type PrimRows = Pick<PackedBody, 'primA' | 'primB' | 'primScale' | 'primQuat' | 'primShape' | 'primBend' | 'primColor' | 'primShell' | 'primClip' | 'primWarp' | 'primStrand' | 'restA' | 'restB' | 'primFrame' | 'primFrameB'>;
 
 /**
  * Writes prim `p`'s texels at index `i` of every per-prim row, with role code
@@ -236,7 +240,7 @@ export type PrimRows = Pick<PackedBody, 'primA' | 'primB' | 'primScale' | 'primQ
  * packs bodies far past MAX_PRIMS into rows of its own size.
  */
 export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number, rp: Primitive | undefined): void {
-  const { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB } = rows;
+  const { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, primFrame, primFrameB } = rows;
   const o = i * PRIM_STRIDE;
   // The prim role rides primScale.w, which held a cluster id the shader
   // never actually read.
@@ -315,6 +319,10 @@ export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number
   // Rest endpoints (motion-polish task 6). A missing rest prim packs as
   // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
   // always has radius > 0), which falls back to the old noiseLocal anchor.
+  const sq = p.skinQuat;
+  if (sq) put4(primFrame, o, sq[0], sq[1], sq[2], sq[3]); else put4(primFrame, o, 0, 0, 0, 0);
+  const sb = p.skinQuatB;
+  if (sb) put4(primFrameB, o, sb[0], sb[1], sb[2], sb[3]); else put4(primFrameB, o, 0, 0, 0, 0);
   if (rp) {
     put4(restA, o, rp.a[0], rp.a[1], rp.a[2], rp.radius);
     put4(restB, o, rp.b[0], rp.b[1], rp.b[2], rp.blendK);
@@ -344,12 +352,14 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   const primStrand = scratch?.primStrand.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = scratch?.restA.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = scratch?.restB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primFrame = scratch?.primFrame.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primFrameB = scratch?.primFrameB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
 
   // One row writer shared by flesh and bone (writePrimRows, above).
-  const rows: PrimRows = { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB };
+  const rows: PrimRows = { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, primFrame, primFrameB };
   const writePrim = (p: Primitive, i: number, w: number, rp: Primitive | undefined): void => writePrimRows(rows, p, i, w, rp);
 
   body.prims.forEach((p, i) => {
@@ -545,13 +555,21 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   const groupRange = scratch?.groupRange.fill(0) ?? new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
   const clusterGroups = scratch?.clusterGroups.fill(0) ?? new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
   let groupCount = 0;
+  const fitted = opts.singleGroup ? null : bodyBoundGroups(body);
   body.clusters.forEach((c, ci) => {
     const first = groupCount;
     const own = body.prims.slice(c.start, c.start + c.count);
     const cDistort = distortOf(own);
+    // singleGroup keeps the CLUSTER sphere (it is rewritten each frame for gib chunks) but still splits into runs of
+    // at most MAX_GROUP_PRIMS: foldGroup's prim loop stops at 64, and a hero-sized chunk can carry hundreds.
     const groups = opts.singleGroup
-      ? [{ start: c.start, count: c.count, center: c.center, radius: c.radius, distort: cDistort }]
-      : boundGroups(body.prims, c.start, c.count);
+      ? Array.from({ length: Math.max(1, Math.ceil(c.count / MAX_GROUP_PRIMS)) }, (_, k) => {
+          const s0 = c.start + k * MAX_GROUP_PRIMS;
+          return { start: s0, count: Math.min(MAX_GROUP_PRIMS, c.start + c.count - s0), center: c.center, radius: c.radius, distort: cDistort };
+        })
+      : fitted![ci]!;
+    if (groups.length > MAX_CLUSTER_GROUPS)
+      throw new Error(`pack: cluster ${ci} needs ${groups.length} bound groups, over the shader's ${MAX_CLUSTER_GROUPS}`);
     for (const g of groups) {
       const o = groupCount * CLUSTER_STRIDE;
       groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
@@ -582,7 +600,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, primFrame, primFrameB, clusterBounds, clusterRange,
     boneClusterBounds, boneClusterRange,
     boneSegmentBounds, boneSegmentRange,
     groupBounds, groupRange, clusterGroups, groupCount,
@@ -616,6 +634,24 @@ export function primAlive(packed: PackedBody, primIdx: number): boolean {
  * foot, large enough that a limb is two or three groups, not nine.
  */
 export const GROUP_RADIUS_MAX = 0.16;
+
+/**
+ * HERO BODIES (gargoyle-hd perf pass, 2026-11-17). A body fitted from a scan (hundreds of fat, overlapping prims) splits
+ * into hundreds of one- and two-prim groups at GROUP_RADIUS_MAX: a single prim's sphere is already 8-19 cm. Past
+ * HERO_GROUPS groups in all a body is regrouped at HERO_GROUP_RADIUS instead, which keeps it under the crowd path's
+ * TILE_REF_GROUPS (256) group index and its tiles under TILE_MAX_ENTRIES, so it draws through the crowd's compute
+ * march (gargoyle-hd: 286 -> 94 groups, march 22.6 -> 8.9 ms). The shipped cast tops out at 88 groups, far under the
+ * switch, so every other body packs exactly as before (pack-golden).
+ */
+export const HERO_GROUPS = 128;
+export const HERO_GROUP_RADIUS = 0.28;
+
+/** Each cluster's bound groups, at GROUP_RADIUS_MAX, or at HERO_GROUP_RADIUS for a body over HERO_GROUPS. */
+export function bodyBoundGroups(body: Pick<BuiltBody, 'prims' | 'clusters'>): BoundGroup[][] {
+  const at = (r: number) => body.clusters.map(c => boundGroups(body.prims, c.start, c.count, r));
+  const fine = at(GROUP_RADIUS_MAX);
+  return fine.reduce((n, g) => n + g.length, 0) > HERO_GROUPS ? at(HERO_GROUP_RADIUS) : fine;
+}
 
 export interface BoundGroup { start: number; count: number; center: [number, number, number]; radius: number; distort: number }
 
@@ -709,11 +745,11 @@ function radiusAbout(
 /**
  * Splits one cluster's prims [start, start+count) into contiguous bound
  * groups. Greedy in fold order: a prim joins the open group unless the
- * group's sphere would then exceed GROUP_RADIUS_MAX (a group always takes at
+ * group's sphere would then exceed `radiusMax` (a group always takes at
  * least one prim, so a single huge prim is its own group). Deterministic and
  * cheap — the hero re-packs every frame.
  */
-export function boundGroups(prims: Primitive[], start: number, count: number): BoundGroup[] {
+export function boundGroups(prims: Primitive[], start: number, count: number, radiusMax = GROUP_RADIUS_MAX): BoundGroup[] {
   const out: BoundGroup[] = [];
   // Per-prim constants of the fit, computed once per cluster instead of once
   // per refit of every growing run: bendCtrl and the reach are pure in the prim.
@@ -750,7 +786,7 @@ export function boundGroups(prims: Primitive[], start: number, count: number): B
   for (let i = start; i < start + count; i++) {
     add(i);
     const next = fitOpen(gStart, i + 1);
-    if (fit !== null && next.radius > GROUP_RADIUS_MAX) {
+    if (fit !== null && (next.radius > radiusMax || i - gStart >= MAX_GROUP_PRIMS)) {
       out.push({ start: gStart, count: i - gStart, ...fit, distort: distortRange(prims, gStart, i) });
       gStart = i;
       all.fill(0); solid.fill(0); anySolid = false;

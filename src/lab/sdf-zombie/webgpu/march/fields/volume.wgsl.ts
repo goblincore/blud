@@ -113,3 +113,39 @@ var<private> gDebugVolumeFallbacks: f32 = 0.0;
 // NOTE: these live at the tail of SAMPLE_VOLUME's source rather than in
 // their own HELPERS entry because three's wgslFn parser is ^-anchored on
 // "fn" — a var-declaration source would fail its parse contract.`;
+
+// The residual layer's samplers (gargoyle-hd), kept OUT of SAMPLE_VOLUME so that string stays the hand volume's own:
+// its tests count the hand sampler's texel reads. Spliced into HELPERS right after it (helpers.ts).
+// RESIDUAL LAYER (gargoyle-hd spike, 2026-11-17). The volume holds the MESH SDF / band (bake-residual.ts 'mesh') in the
+// body's REST frame; the caller passes rest points (restPointSkin), so the sculpt rides the bones.
+// sampleMeshSdf: trilinear, normalised to [-1, 1]; 1 (= "a band away, outside") off the grid.
+export const SAMPLE_RESIDUAL = /* wgsl */ `fn sampleMeshSdf(q: vec3<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, invH: f32) -> f32 {
+  let dims = vec3<i32>(textureDimensions(volumeTex, 0));
+  let u = (q - volumeMin) * invH;
+  let hi = vec3<f32>(dims - vec3<i32>(1, 1, 1));
+  if (any(u < vec3<f32>(0.0)) || any(u >= hi)) { return 1.0; }
+  let i0 = vec3<i32>(floor(u));
+  let i1 = i0 + vec3<i32>(1, 1, 1);
+  let fr = u - floor(u);
+  let s000 = textureLoad(volumeTex, i0, 0).r;
+  let s100 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i0.z), 0).r;
+  let s010 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i0.z), 0).r;
+  let s110 = textureLoad(volumeTex, vec3<i32>(i1.x, i1.y, i0.z), 0).r;
+  let s001 = textureLoad(volumeTex, vec3<i32>(i0.x, i0.y, i1.z), 0).r;
+  let s101 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i1.z), 0).r;
+  let s011 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i1.z), 0).r;
+  let s111 = textureLoad(volumeTex, i1, 0).r;
+  return mix(
+    mix(mix(s000, s100, fr.x), mix(s010, s110, fr.x), fr.y),
+    mix(mix(s001, s101, fr.x), mix(s011, s111, fr.x), fr.y),
+    fr.z);
+}
+
+// The offset that pulls the prim field toward the mesh: at most clampM, faded over the outer quarter of the band so
+// nothing steps where the bake ends. mNorm is a (possibly blended) sampleMeshSdf value.
+fn residualOffset(mNorm: f32, clampM: f32, bandM: f32, dPrims: f32) -> f32 {
+  let m = mNorm * bandM;
+  let fade = clamp((bandM - abs(m)) / (bandM * 0.25), 0.0, 1.0);
+  return clamp(m - dPrims, -clampM, clampM) * fade;
+}
+`;

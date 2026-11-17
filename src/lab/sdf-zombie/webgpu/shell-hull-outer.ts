@@ -368,6 +368,7 @@ export interface OuterHull {
  * a near depth test (entry) and once back-side with a far one (exit).
  */
 export function createOuterHull(maxInstances = 4096): OuterHull {
+  let warnedOverflow = false;
   // Icosahedron, subdivision 1 — but note this is an INSCRIBED approximation:
   // a subdivided icosahedron's faces sit INSIDE its circumsphere. For the
   // inner occluder that errs safe; here it errs the WRONG way, so the radius
@@ -461,6 +462,12 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     entryProxy.layers.mask = entryMesh.layers.mask;
     exitProxy.layers.mask = exitMesh.layers.mask;
     overflowed = inst.length > maxInstances;
+    // LOUD, not silent (gargoyle-hd spike, 2026-11-17): a truncated hull is a body whose spheres past the cap are never
+    // marched — the 513-prim gargoyle (4947 spheres) lost its legs and a wing to the old 4096 world cap with no error.
+    if (overflowed && !warnedOverflow) {
+      warnedOverflow = true;
+      console.warn(`[outer-hull] ${inst.length} spheres over the ${maxInstances} cap: bodies past it are not marched`);
+    }
     count = Math.min(inst.length, maxInstances);
     for (let i = 0; i < count; i++) {
       const s = inst[i]!;

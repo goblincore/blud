@@ -13,7 +13,7 @@ import { APPLY_BONES, FOLD_BONE_RANGE } from './fields/bones.wgsl';
 import { APPLY_CARVES, PREV_POSED, REST_POINT } from './fields/carves.wgsl';
 import { FOLD_GROUP, INSTANCE_STATE, SPLIT_MOVE_BACK } from './fields/groups.wgsl';
 import { CHAR_MASK, TISSUE_RAMP } from './fields/tissue.wgsl';
-import { SAMPLE_VOLUME } from './fields/volume.wgsl';
+import { SAMPLE_VOLUME, SAMPLE_RESIDUAL } from './fields/volume.wgsl';
 import { APPLY_WOUNDS, WOUND_MASK, WOUND_SHADOW } from './fields/wounds.wgsl';
 import { CALC_NORMAL, MAP_BODY } from './map-body.wgsl';
 import { FBM, HASH13, NOISE3, NOISE_LOCAL, Q_FROM_TO, Q_MUL, Q_ROT } from './math.wgsl';
@@ -44,7 +44,7 @@ export const HELPERS = [
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT, PREV_POSED,
-  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
+  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME, SAMPLE_RESIDUAL,
   FOLD_GROUP, INSTANCE_STATE, SPLIT_MOVE_BACK, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is

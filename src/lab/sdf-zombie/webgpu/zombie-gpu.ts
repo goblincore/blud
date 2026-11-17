@@ -47,7 +47,7 @@ import type { ComputeTileBinding } from './tile-bin-compute';
 import {
   HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_BURN_OUT, DETAIL_FIELD, HASH13, NOISE3, FBM,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
+  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, ROW_PRIM_FRAME, ROW_PRIM_FRAME_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
   QUAD_TILE_EMPTY_WGSL,
@@ -1825,6 +1825,9 @@ export interface CrowdMaterialSources {
   probeDyn?: { node: unknown };
   /** The shared light list's storage node (plan 1 task 9). Undefined = fallback. */
   lightList?: { node: unknown };
+  /** gargoyle-hd spike: the type's RESIDUAL volume (residual-volume.ts). The per-instance volumePose0.w == 2 and
+   *  the type block's volumeMin/volumeInvExtent come from the first attached view. Undefined = the fallback. */
+  volumeTex?: THREE.Texture;
 }
 
 /**
@@ -1979,7 +1982,7 @@ export function createCrowdMaterial(
         side: THREE.FrontSide,
       }
     : undefined;
-  const volumeTex = fallbackCrowdVolumeTexture();
+  const volumeTex = sources?.volumeTex ?? fallbackCrowdVolumeTexture();
   const segFallback = fallbackSegmentVolumeTextures();
   const depthSegAtlasNode = texture3D(segFallback.atlas);
   const depthSegMetaNode = texture(segFallback.meta);
@@ -2880,6 +2883,8 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_SHELL, p.primShell, W);
     writeRow(ROW_PRIM_WARP, p.primWarp, W);
     writeRow(ROW_PRIM_STRAND, p.primStrand, W);
+    writeRow(ROW_PRIM_FRAME, p.primFrame, W);
+    writeRow(ROW_PRIM_FRAME_B, p.primFrameB, W);
     writeRow(ROW_PRIM_CLIP, p.primClip, W);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
@@ -3848,6 +3853,8 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_SHELL, packed.primShell, stride);
     writeRow(ROW_PRIM_WARP, packed.primWarp, stride);
     writeRow(ROW_PRIM_STRAND, packed.primStrand, stride);
+    writeRow(ROW_PRIM_FRAME, packed.primFrame, stride);
+    writeRow(ROW_PRIM_FRAME_B, packed.primFrameB, stride);
     writeRow(ROW_PRIM_CLIP, packed.primClip, stride);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
     writeRow(ROW_GROUP_RANGE, packed.groupRange, stride);

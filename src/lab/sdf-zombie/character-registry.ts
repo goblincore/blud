@@ -41,6 +41,9 @@ import juggernautBlobSrc from './characters/juggernaut.blob?raw';
 import warbullBlobSrc from './characters/warbull.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
+import gargoyleHdBlobSrc from './characters/gargoyle-hd.blob?raw';
+import gargoyleHdResidual from './characters/gargoyle-hd-residual.json';
+import type { ResidualSpec } from './webgpu/residual-volume';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import butcherBlobSrc from './characters/butcher.blob?raw';
@@ -108,6 +111,8 @@ export interface CharacterEntry {
   /** A baked BODY NORMAL MAP (scripts/bake-body-normal.ts; webgpu/body-normal-load.ts): the torso relief the
    *  march does not carry as prims. Absent = none, and the body shades exactly as it did before maps existed. */
   bodyNormal?: BodyNormalSpec;
+  /** gargoyle-hd spike: a baked RESIDUAL volume added after the prim fold (webgpu/residual-volume.ts). */
+  residual?: ResidualSpec;
   /** The motion profile this character moves with. Profiles live in
    *  motion-profile.ts; this records WHICH one. Characters without a bespoke
    *  profile get motionProfileFor(name) — the zombie default. */
@@ -332,6 +337,14 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // BAKE would sample garbage; see the .blob header). mean is the
     // declared value; the face step re-measures off the decoded pixels.
     face: { url: '/assets/lab/faces/gargoyle-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
+    profile: motionProfileFor('gargoyle'),
+  },
+  // gargoyle-hd SPIKE (docs/dev-notes/2026-11-17-gargoyle-hd-spike/notes.md): fitted prims + a baked residual
+  // volume, the same creature as `gargoyle`. Borrows the gargoyle's motion profile.
+  'gargoyle-hd': {
+    name: 'gargoyle-hd', src: gargoyleHdBlobSrc,
+    face: ZOMBIE_FLAT,
+    residual: { url: '/assets/lab/gargoyle-hd-residual.binz', manifest: gargoyleHdResidual as ResidualSpec['manifest'] },
     profile: motionProfileFor('gargoyle'),
   },
   // The two-headed strogg conversion (twinhead.blob's header): flesh torso,

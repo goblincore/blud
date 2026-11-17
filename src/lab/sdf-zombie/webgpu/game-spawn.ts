@@ -37,6 +37,8 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
+import { bodyBoundGroups } from '../pack';
+import { TILE_REF_GROUPS } from './march/tile-ref-flag';
 import { applyStormBodyKey } from './game-dynamic-light';
 import { actorSpawnCentre, clampSpawnInside, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
 import { seatSpawnInsideMap } from './sector-debris';
@@ -147,6 +149,17 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   const crowdViewOptsFor = (built: BuildResult): GpuViewOpts => {
     if (!ctx.crowd.on) return {};
     const stride = bodyPrimStride(built);
+    // HERO BODIES (gargoyle-hd, 2026-11-17). The crowd path addresses a body's bound groups with an 8-bit index
+    // (TILE_REF_GROUPS) and lists at most TILE_MAX_ENTRIES a tile; a body past the index draws per-body (the fragment
+    // march, ~2.5x the cost: the perf pass measured 22.6 ms against 8.9 ms crowd). pack.ts regroups a scan-fitted body
+    // coarsely (HERO_GROUP_RADIUS) so it fits; this gate only catches one that still does not.
+    {
+      const groups = bodyBoundGroups(built).reduce((n, g) => n + g.length, 0);
+      if (groups > TILE_REF_GROUPS) {
+        console.info(`[crowd] ${name}: ${groups} bound groups, over the crowd's ${TILE_REF_GROUPS}; draws per-body`);
+        return {};
+      }
+    }
     const t = crowdTypeFor(ctx, name, room.id, stride);
     if (t.atlas.stride < stride) {
       console.warn(`[crowd] ${name}: body needs a ${stride}-wide atlas, type has ${t.atlas.stride}; drawing per-body`);

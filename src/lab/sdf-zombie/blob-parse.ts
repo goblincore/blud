@@ -385,8 +385,16 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
       throw new BlobError('hinge= only applies to the jaw bone', l.line, l.indent + 1);
     if (hinge !== undefined && !(hinge >= 0 && hinge <= 1))
       throw new BlobError('hinge= is a fraction along the skull bone, 0..1', l.line, l.indent + 1);
+    // Generated skeletons (gargoyle-hd): an explicit direction and head offset, and per-side copies for an
+    // asymmetric pose. `vec=` makes dir= optional (dir/pitch/tilt are ignored when it is present).
+    const vecW = strArg(l, 'vec'), vecRW = strArg(l, 'vecR'), offW = strArg(l, 'off'), offRW = strArg(l, 'offR');
+    if ((vecRW !== null || offRW !== null) && !s.inMirror)
+      throw new BlobError('vecR=/offR= only apply to a bone inside a mirror block', l.line, l.indent + 1);
+    const v3 = (key: string, w: string | null) => (w === null ? undefined : parseVec3Arg(l, key, w) as [number, number, number]);
+    const vec = v3('vec', vecW), vecR = v3('vecR', vecRW), off = v3('off', offW), offR = v3('offR', offRW);
     s.doc.bones.push({
-      name, parent, dir: dirArg(l),
+      name, parent, dir: vec !== undefined && !l.words.some(w => w.startsWith('dir=')) ? 'up' : dirArg(l),
+      ...(vec ? { vec } : {}), ...(vecR ? { vecR } : {}), ...(off ? { off } : {}), ...(offR ? { offR } : {}),
       pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
       len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), ...(hinge === undefined ? {} : { hinge }),
       side: numArg(l, 'side', 0),
@@ -536,6 +544,7 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     core: l.words.includes('core'),
     // `rigid`: both ends ride the declared bone as one piece. See BlobPart.rigid.
     rigid: l.words.includes('rigid'),
+    skinned: l.words.includes('skinned'),
     // `when=alive|dead`: shown only while alive / only once dead. See BlobPart.when.
     when: parseWhenArg(l),
     // `organ`: a bones-block line opting into viscera (organs r3). Same bare-

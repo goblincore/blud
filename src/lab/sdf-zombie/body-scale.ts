@@ -15,6 +15,7 @@ export type FieldUnit = 'length' | 'perLength' | 'same';
 
 export const BONE_UNITS = {
   name: 'same', parent: 'same', dir: 'same', length: 'length', lengthR: 'length', side: 'length', mirror: 'same',
+  offset: 'length', dirR: 'same', offsetR: 'length',
   // The jaw's hinge (goblin expressions): a FRACTION along the skull bone, not a distance.
   jawHinge: 'same',
 } as const satisfies Record<keyof BoneDef, FieldUnit>;
@@ -35,7 +36,7 @@ export const PRIM_UNITS = {
   // `side` on a PrimDef is 'l' | 'r' (which half a single-sided prim lives on), not a distance.
   side: 'same',
   op: 'same', grooveDepth: 'length', grooveWidth: 'length', offset: 'length', tip: 'length', mirrorOffset: 'same',
-  color: 'same', gloss: 'same', metal: 'same', glow: 'same', shroud: 'same', core: 'same', rigid: 'same', when: 'same',
+  color: 'same', gloss: 'same', metal: 'same', glow: 'same', shroud: 'same', core: 'same', rigid: 'same', skinned: 'same', when: 'same',
   // `shell` is recursed into below (SHELL_UNITS); `box` and `strand` hold fractions and counts only.
   shell: 'same', box: 'same', strand: 'same',
   // `morphs` is recursed into below (MORPH_UNITS).

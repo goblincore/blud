@@ -55,6 +55,11 @@ export type GaitJointName =
   // translation and yaw while the Verlet rig swings it on its constraint —
   // which is exactly the lag a robe's skirt should have (cultist, 2026-09-23).
   | 'hem'
+  // WING JOINTS (gargoyle-hd, 2026-11-17): the elbow and tip of a `wing1.l`/`wing2.l` chain off the chest. Like the hem,
+  // no gait offset names them: their targets ride the body (translation, yaw, the torso lean) and the Verlet rig holds
+  // them on their bones. Before these names existed any extra bone left a nameless rig point, which fails
+  // makeMotionJoints ('no motion joints') and kept winged bodies out of the game.
+  | 'wingL' | 'wingR' | 'wingTipL' | 'wingTipR'
   // A PENDULUM CHAIN: further segments hung off the hem (bones `hem2` parent=hem, `hem3` parent=hem2; the
   // gutcrawler's rear, 2026-10-23). Each free end lags the one before, so a body wave (GaitProfile.undulate) runs
   // down it instead of swinging one rigid stick. Optional like `hem`. NOT `tail2`/`tail3`: the cyclops, dragon and
@@ -75,6 +80,7 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
   'hem', 'hem2', 'hem3', 'jaw',
+  'wingL', 'wingR', 'wingTipL', 'wingTipR',
 ];
 
 /** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
@@ -1120,6 +1126,11 @@ export function stepGait(
     handTipR: armB.hand,
     toeL: legA.foot,
     toeR: legB.foot,
+    // Wings ride the chest: same sway and bob, so a folded wing stays folded against the back as the body walks.
+    wingL: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6, 0],
+    wingR: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6, 0],
+    wingTipL: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6, 0],
+    wingTipR: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6, 0],
     // The cloth pendulum bobs with the hips but NEVER sways: the hips swing
     // side to side over a hem that stays put, and the Verlet constraint
     // between them tilts the skirt — the hem lagging the waist, as cloth does.
@@ -1187,11 +1198,14 @@ const JOINT_AT: Record<string, { head: string; tail: string }> = {
   // The jaw carrier hangs off the skull's pivot (the neck joint) to the chin
   // (see GaitJointName 'jaw').
   jaw:      { head: 'neck',     tail: 'jaw' },
+  // Wing chains off the chest (see GaitJointName 'wingL').
+  wing1:    { head: 'chest',    tail: 'wing' },
+  wing2:    { head: 'wing',     tail: 'wingTip' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */
 const SIDED: ReadonlySet<string> = new Set([
-  'clavicle', 'shoulder', 'elbow', 'hand', 'handTip', 'hip', 'knee', 'foot', 'toe',
+  'clavicle', 'shoulder', 'elbow', 'hand', 'handTip', 'hip', 'knee', 'foot', 'toe', 'wing', 'wingTip',
 ]);
 
 /** Joint name for a resolved bone's head/tail, or null for unknown bones.

@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { HELPERS, MARCH_BODY, CONE_MARCH, MAP_BODY, SAMPLE_VOLUME, NOISE_LOCAL, SD_SHELL } from '../../march.wgsl';
 import { declaredName } from '../../march-test-support';
+import { MAX_CLUSTER_GROUPS } from '../../../validate';
 
 describe('baked hand volume branch (X1.26 task B2)', () => {
   it('exports SAMPLE_VOLUME starting with fn, per the wgslFn parse contract', () => {
@@ -73,7 +74,8 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
   });
 
   it('MAP_BODY: the volume branch supplies d, skips the primitive loop, and keeps the dominant index -1', () => {
-    const branch = MAP_BODY.indexOf('if (volumePose0.w > 0.5) {');
+    // The hand branch is 0.5 < w < 1.5 since w == 2 selects the gargoyle-hd residual layer instead.
+    const branch = MAP_BODY.indexOf('if (volumePose0.w > 0.5 && volumePose0.w < 1.5) {');
     expect(branch).toBeGreaterThanOrEqual(0);
     // The branch must precede carves/wounds — the bake is the body, damage
     // still stamps on top of it either way.
@@ -86,7 +88,7 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // ...and the primitive fold lives only in the else arm.
     const elseArm = MAP_BODY.slice(MAP_BODY.indexOf('} else {', branch));
     expect(elseArm).toContain('for (var c = 0; c < 8; c = c + 1)');
-    expect(elseArm).toContain('for (var gi = 0; gi < 64; gi = gi + 1)');
+    expect(elseArm).toContain(`for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1)`);
   });
 
   it('threads the texture and six volume uniforms through EVERY mapBody call', () => {

@@ -13,6 +13,7 @@ import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 import { REGION_MARGIN } from '../../head-split';
+import { MAX_CLUSTER_GROUPS } from '../../validate';
 import { SPLIT_ABL, ablWgsl } from '../split-ablate';
 import { CUT_NEAR } from '../../cut-wound';
 import { MELT_WAVE_AMP, MELT_WAVE_FREQ, MELT_WAVE_FULL_T, MELT_WAVE_STEP } from './melt';
@@ -163,6 +164,8 @@ ${TR ? `    var rFirst = 0;
     // dominant prim.
     gFoldBest = 1e9;
     gFoldBestIdx = -1.0;
+    gFoldSecond = 1e9;
+    gFoldSecondIdx = -1.0;
     gFoldBestDistort = 1.0;
     gWoundCluster = 0.0;
     gWoundOwners = 0u;
@@ -210,7 +213,7 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
   // — the dominant-prim index has no meaning against a volume, and faking
   // one would point restPoint at an unwritten prim row; -1 is its documented
   // no-live-prim path, so the noise falls back to the world-frame anchor.
-  if (volumePose0.w > 0.5) {
+  if (volumePose0.w > 0.5 && volumePose0.w < 1.5) {
     d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
   } else {
   let clusterCount = i32(counts.y);
@@ -270,7 +273,7 @@ ${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
 ${LIMBS ? `    if (limbMode) { limbSwitch(c); }
-` : ''}  for (var gi = 0; gi < 64; gi = gi + 1) {
+` : ''}  for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
     if (gi >= gCount) { break; }
     let g = gFirst + gi;
     let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE} + band), 0);
@@ -289,6 +292,22 @@ ${LIMBS ? `    if (limbMode) { limbSwitch(c); }
   }
 ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
 ` : ''}  gCullRef = 1e9;
+  // RESIDUAL LAYER (gargoyle-hd spike): volumePose0.w == 2 adds the baked offset, sampled at the dominant prim's
+  // REST point so it rides that prim's bone. Before carves and wounds, so craters cut the detailed surface.
+  gResidualOff = 0.0;
+  if (volumePose0.w > 1.5) {
+    // JOINT BLEND: within 2 cm of the runner-up prim, sample the sculpt through its frame too and blend the two
+    // distances (equal frames give equal samples, so this only acts across a joint).
+    let yawR = gInstNoiseShift.y;
+    var mN = sampleMeshSdf(restPointSkin(p, data, i32(gFoldBestIdx), p, band, yawR) - volumePose0.xyz, volumeTex, volumeMin, volumeInvExtent.x);
+    let gap = gFoldSecond - gFoldBest;
+    if (gFoldSecondIdx >= 0.0 && gap < 0.02) {
+      let m2 = sampleMeshSdf(restPointSkin(p, data, i32(gFoldSecondIdx), p, band, yawR) - volumePose0.xyz, volumeTex, volumeMin, volumeInvExtent.x);
+      mN = mix(mN, m2, 0.5 * (1.0 - gap / 0.02));
+    }
+    gResidualOff = residualOffset(mN, volumeInvExtent.y, volumeInvExtent.z, d);
+    d = d + gResidualOff;
+  }
   let foldSlot = d;
   let carved = applyCarves(d, p, data, counts, band);
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band${WOUND_VOL ? ', segVolumeAtlas' : ''});
@@ -329,7 +348,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // Never on an open split slot: the gap was measured on the pieces the LAST sample evaluated, and the early skip
   // may have left this one out.
   let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0 && !splitOpen;
-  if (${WOUND_FOLD ? '' : 'false && '}!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if (${WOUND_FOLD ? '' : 'false && '}!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && (volumePose0.w < 0.5 || volumePose0.w > 1.5) && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
@@ -367,7 +386,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
         if (exactFix) {
           let T = dmg + gWoundAmp[0] + gWoundAmp[c + 1];
           var anyGroup = false;
-          for (var gi = 0; gi < 64; gi = gi + 1) {
+          for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
             if (gi >= i32(gs.y)) { break; }
             let gb = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_BOUNDS} + band), 0);
             let gr = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_RANGE} + band), 0);
@@ -377,8 +396,10 @@ ${LIMBS ? `      let savedBest = gFoldBest;
         }
         gFoldBest = 1e9;
         gFoldBestIdx = -1.0;
+        gFoldSecond = 1e9;
+        gFoldSecondIdx = -1.0;
         gFoldBestDistort = 1.0;
-        for (var gi = 0; gi < 64; gi = gi + 1) {
+        for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
           if (gi >= i32(gs.y)) { break; }
           let group = i32(gs.x) + gi;
           let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE} + band), 0);
@@ -400,7 +421,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       if (exactFix) {
         let T = dmg + gWoundAmp[0] + gWoundAmp[c + 1];
         var anyGroup = false;
-        for (var gi = 0; gi < 64; gi = gi + 1) {
+        for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
           if (gi >= i32(gs.y)) { break; }
           let gb = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_BOUNDS} + band), 0);
           let gr = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_RANGE} + band), 0);
@@ -413,9 +434,11 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       let savedDistort = gFoldBestDistort;
       gFoldBest = 1e9;
       gFoldBestIdx = -1.0;
+      gFoldSecond = 1e9;
+      gFoldSecondIdx = -1.0;
       gFoldBestDistort = 1.0;
       var limb = 1e9;
-      for (var gi = 0; gi < 64; gi = gi + 1) {
+      for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
         if (gi >= i32(gs.y)) { break; }
         let group = i32(gs.x) + gi;
         let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE} + band), 0);
@@ -557,7 +580,9 @@ export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture
   // four copies of it. The loop only gathers the four distances; the taps and
   // the final weighted sum are the original expression verbatim, so the
   // result is bit-identical (a loop-carried accumulator was not — march-hash).
-  let e = vec2<f32>(1.0, -1.0) * gNormalEps;
+  // A RESIDUAL body (gargoyle-hd) differentiates over two-thirds of its 6 mm sculpt grid: trilinear's gradient kinks
+  // at every cell face, and the 1.5 mm stencil lit them as a faint quilt across smooth skin.
+  let e = vec2<f32>(1.0, -1.0) * select(gNormalEps, max(gNormalEps, 0.004), gInstVolPose0.w > 1.5);
   var m = vec4<f32>(0.0);
   for (var i = 0; i < 4; i = i + 1) {
     let tap = select(select(select(e.xxx, e.yxy, i == 2), e.yyx, i == 1), e.xyy, i == 0);

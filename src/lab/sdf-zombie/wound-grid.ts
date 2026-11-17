@@ -25,7 +25,7 @@ export const WG_MAX_WOUNDS = 128;
  *  then end at a cell's wall; it takes more than 64 wounds within reach of one 10 cm cell). */
 export const WG_CELL_MAX = 64;
 /** The band row the grid starts at (the band's row count without the switch) and the rows it takes. */
-export const WG_ROW0 = 26;
+export const WG_ROW0 = 28;
 export const WG_ROWS = 6;
 export const WG_COLS = 128;
 export const WG_TEXELS = WG_ROWS * WG_COLS;
