@@ -96,3 +96,41 @@ Not worth doing on this evidence: any change to burn or char shading in the body
 - Re-run the control on a quiet machine (load under 4, ideally under 2).
 - Measure candidate 1's premise directly: the same 4 bodies close together against spread out.
 - Confirm on screen that the `charOn` leg chars crowd bodies.
+
+## Update, same day: candidate 1's premise was wrong; the real cost was the cull sphere's lag pad (FIXED)
+
+Reading `fire-volume.wgsl.ts` showed the march already culls capsules per ray, marches only the union of the crossed
+spheres' intervals and skips empty space. The "one shared box" explanation above is wrong.
+
+What cost the time: each capsule's cull sphere was padded by `curlStrength + lagMaxM` (0.07 + 0.6 m) whether or not
+the body moved. Every sphere was over a metre across, so a ray near a body kept all of that body's capsules (up to
+16), and a ray through two overlapping bodies overflowed `FIRE_RAY_CAPS` (32) and fell back to looping over every
+capsule in the scene at every sample.
+
+**Premise test** (old code, `setFireVolume({lagMaxM: 0})` leg; load 10, so ratios only): flame march 2.47 -> 1.12 ms
+at 4 bodies, 8.47 -> 1.71 ms at 8.
+
+**The change:** the pad is now per capsule, `min(|vel| * lag * sheetLength, lagMaxM)`, which is the bound on what
+`fireLag` can actually displace that capsule's flame. A still body pads by nothing. The flame field is unchanged.
+The marched interval is shorter and `steps` is the same, so flames are sampled more finely than before; frames are
+not pixel-identical.
+
+**After** ([after-run.md](after-run.md), load up to 5.6; the flame march is a GPU span and read the same in every
+leg), `post:fire-march` ms p50, panic off:
+
+| bodies in the volume | before | after |
+| --- | ---: | ---: |
+| 4 (ship) | 1.51 | 0.67 |
+| 8 | 4.22 | 0.97 |
+
+The `lagMaxM: 0` legs now read the same as ship (0.66, 0.95), as they should for bodies standing still. Before and
+after frames: [before-firecalm.png](before-firecalm.png), [after-firecalm.png](after-firecalm.png). They are
+different frames (pose and flame phase differ), so they show the look is of the same kind, not that it is identical.
+
+Not measured: panicking (running) bodies, whose pad is their real trail (about 0.2 m at panic speed, by the
+formula), and a quiet-machine run.
+
+Open, seen in both frames: the far body's flame has a hard rectangular edge. Not caused by this change; not looked
+into.
+
+With the 8-body cost now under the old 4-body cost, raising `maxBodies` from 4 is an owner call.

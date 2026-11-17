@@ -163,7 +163,14 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
   // two burners costs nothing; each sample loops over the few capsules that
   // can reach it. (Smoke was removed from the volume, 2026-09-19: its 2.5 m
   // reach on every limb made every sphere huge and defeated this cull.)
-  let lagPad = cfg1.x + cfg1.z;
+  // THE LAG PAD IS PER CAPSULE (2026-11-16 fire cost pass). fireLag trails a
+  // sample by |vel| * lag * h, h <= the sheet length, clamped to lagMaxM. The
+  // sphere used to carry the clamp itself (0.6 m) on every capsule, moving or
+  // not: every sphere was over a metre across, so a ray near a body kept all of
+  // its capsules and a ray through two bodies overflowed FIRE_RAY_CAPS into the
+  // full list at every sample. The bound below is the same trail, exactly:
+  // a still body pads by nothing, a running one by its own trail.
+  let curlPad = cfg1.x;
   var hitIdx: array<i32, FIRE_RAY_CAPS>;
   var hitN = 0;
   var tMin = tFar;
@@ -176,7 +183,8 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // its crown burn shorter, headRise).
     let riseC = max(rise * abs((*caps)[i * 3 + 2].w), 1e-3);
     let fc = (r0.xyz + r1.xyz) * 0.5 + vec3<f32>(0.0, riseC * 0.5, 0.0);
-    let fR = length(r1.xyz - r0.xyz) * 0.5 + r0.w + coreR + lagPad + riseC * 0.5;
+    let lagPad = min(length((*caps)[i * 3 + 2].xyz) * cfg1.y * riseC, cfg1.z);
+    let fR = length(r1.xyz - r0.xyz) * 0.5 + r0.w + coreR + curlPad + lagPad + riseC * 0.5;
     let fi = fireRaySphere(origin, rayDir, fc, fR, tNear, tFar);
     if (fi.y > fi.x) {
       if (hitN < FIRE_RAY_CAPS) { hitIdx[hitN] = i; }
