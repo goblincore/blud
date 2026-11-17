@@ -615,8 +615,10 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
   the look). [Spec](../../docs/superpowers/specs/2026-11-16-burn-flail-and-death-design.md) ·
   [plan](../../docs/superpowers/plans/2026-11-16-burn-flail-and-death.md) ·
   [notes](../../docs/dev-notes/2026-11-16-burn-flail/NOTES.md) (open items there).
-- [ ] **Fire render cost** (owner ask 2026-11-16): attribute the ~7 ms fire adds to `sdf:march` (2026-09-22 census) before
-  optimizing; candidates in the session notes. No spec yet.
+- [ ] **Fire render cost** (owner ask 2026-11-16): measured, nothing optimised
+  ([notes](../../docs/dev-notes/2026-11-16-fire-cost/NOTES.md)). 23 burning bodies add ~2 ms of frame: flame volume 1.5 ms
+  (4.2 at 8 bodies), fire CPU ~0.5-1.4 ms, burn and char shading ~0 on the body march. Runs were at load ~4: re-run quiet.
+  Next: per-body march intervals in the flame volume; skip capsule and card work for bodies that do not need it. No spec yet.
 - [x] **Cold-boot compile (2026-09-19):** [census](../../docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](../../docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](../../docs/dev-notes/2026-09-18-march-split/NOTES.md)).
