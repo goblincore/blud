@@ -80,8 +80,14 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   // 0.4 / 48 -> 0.3 / 24 (2026-09-22 flame-march cost study): post:fire-march -58 %
   // (8.3 -> 3.4 ms in the panic-fire melee, loaded run). Owner: "looks worse but
   // acceptable", to be dressed by post (shutter blur, heat distortion).
-  resolutionScale: 0.3,
-  steps: 24,
+  //
+  // 0.3 / 24 -> 0.5 / 32 (2026-11-17, owner: 0.3 reads too low-res). The cull-sphere fix
+  // of 2026-11-16 cut the march from 1.51 to 0.67 ms at 0.3; 0.5 costs 1.72 ms (4 bodies,
+  // close-up melee, load ~4), about the old 0.3. Steps are near free now (16 / 24 / 32 at
+  // 0.5 read 1.30 / 1.72 / 1.41 ms, inside the noise). Bodies march at half resolution, so
+  // past 0.5 the flame is sharper than the body under it.
+  resolutionScale: 0.5,
+  steps: 32,
   tempGain: 2.0,
   rise: 0.45,
   curlStrength: 0.07,
