@@ -166,3 +166,23 @@ frame on a quiet machine, not more guessing.
 
 Candidates 4 (allocation reuse) and 5 (cards in the vertex shader) are not worth doing on this evidence: the work
 they would remove is about 0.1 to 0.3 ms.
+
+## Update 2026-11-17: flame default raised to 0.5 resolution / 32 steps (owner call)
+
+Owner: the 0.3 flames read too low-res. Sweep after the cull fix (melee bench, panic off, 4 bodies, load up to 4.5,
+about +-0.3 ms), `post:fire-march` / frame p50 ms:
+
+| resolutionScale | flame march | frame |
+| --- | ---: | ---: |
+| 0.3 (old default) | 0.69 | 8.3 |
+| 0.4 | 1.24 | 8.8 |
+| 0.5 (new default) | 1.72 | 9.3 |
+| 0.6 | 2.20 | 10.0 |
+| 0.75 | 2.81 | 11.1 |
+| 1.0 | 5.22 | 13.6 |
+
+Steps at 0.5: 16 -> 1.30, 24 -> 1.72, 32 -> 1.41 (inside the noise: the step count is no longer the lever).
+`maxBodies: 8` at 0.5 read 1.72, the same as 4; not understood (the far four may be small on screen), not relied on.
+
+The new default was picked from the timings and the owner's go-ahead; the pane captures taken for a side-by-side
+were not usable (the body kept moving), so there is no before/after image for this change.

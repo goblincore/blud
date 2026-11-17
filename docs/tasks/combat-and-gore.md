@@ -619,7 +619,8 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
   ([notes](../../docs/dev-notes/2026-11-16-fire-cost/NOTES.md)). 23 burning bodies add ~2 ms of frame: flame volume 1.5 ms
   (4.2 at 8 bodies), fire CPU ~0.5-1.4 ms, burn and char shading ~0 on the body march. Runs were at load ~4: re-run quiet.
   **Flame march cull fixed (same day):** the cull sphere's lag pad is per capsule, flame march 1.51 -> 0.67 ms at 4 bodies,
-  4.22 -> 0.97 at 8; owner look owed, and `maxBodies` could now rise. CPU skips built (capsules only for volume
+  4.22 -> 0.97 at 8; owner look owed, and `maxBodies` could now rise. Flame default 0.3 / 24 -> **0.5 / 32** (2026-11-17,
+  owner: 0.3 too low-res; 1.72 ms, about the old 0.3's cost). CPU skips built (capsules only for volume
   bodies, no card work out of view): correct by count, no measurable frame gain; fire's card bookkeeping is ~0.3 ms. Open:
   `crowd-sdf-inner` reads +0.5-1.5 ms with fire (unreliable at load 4) -> CPU-profile one burning frame on a quiet machine.
 - [x] **Cold-boot compile (2026-09-19):** [census](../../docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
