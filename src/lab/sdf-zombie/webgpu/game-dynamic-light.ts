@@ -124,6 +124,9 @@ export interface DynamicLightRuntime {
   shadowRoom: number | null;
   /** The shared light list's GPU buffer, written once a frame by writeLightList. */
   list: LightListGpu;
+  /** The test arena's L key (game-arena.ts): every lamp held at 0, so a body is judged under the flashlight and the
+   *  dark fill alone, the way most levels light it. Bowls, glass and the room fill follow, as for a lamp that dies. */
+  lampsOff: boolean;
 }
 
 export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
@@ -160,6 +163,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     roomLight: new Map(),
     shadowTick: 0,
     list: createLightListGpu(),
+    lampsOff: false,
   };
   // A level that starts dark idles the flashlight's two shadow maps until it is switched on.
   if (dark) {
@@ -468,7 +472,7 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
   const near = rt.lamps.some(l => l.beacon) ? nearRoomMask(ctx.world.level.tunnels, here, ppx, ppz) : 0;
   const speed = ctx.world.train?.speed ?? 0;
   for (const l of rt.lamps) {
-    l.level = lampLevel(l.mood, l.script, t, l.seed);
+    l.level = rt.lampsOff ? 0 : lampLevel(l.mood, l.script, t, l.seed);
     l.light.intensity = l.beacon ? 0 : l.base * l.level * (l.tube ? TUBE.spill : 1);
     if (l.beacon) {
       const bc = l.beacon;

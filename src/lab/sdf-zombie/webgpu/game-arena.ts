@@ -6,6 +6,8 @@
 // in with `"arena": true` (level-json.ts). In an arena:
 //   `   (Backquote) respawns the enemy fresh (rebuildCast: wounds, gore and gibs cleared),
 //   -/= steps to the previous / next character in the registry and spawns it,
+//   L   turns the room's lamps off and on (the arena is lit far brighter than a level; lamps off leaves the flashlight
+//       and the dark fill, which is how most levels show an enemy),
 // and a label at the top of the screen names the enemy and the keys. The keys are rising edges in applyInputEdges
 // (game-player-input.ts), like every other key side effect, so a recorded run replays them.
 //
@@ -40,13 +42,21 @@ function show(ctx: GameContext): void {
   const name = ctx.boot.spawnOverride ?? 'zombie';
   label.textContent = compiling
     ? `ARENA · compiling ${name}… (first time this session)`
-    : `ARENA · ${name} · \` respawn · - / = enemy`;
+    : `ARENA · ${name} · \` respawn · - / = enemy · L lights ${ctx.world.light?.lampsOff ? 'off' : 'on'}`;
 }
 
 /** Boot: the label, when the level is an arena. */
 export function installArena(ctx: GameContext): void {
   if (!ctx.world.level.def?.arena) return;
   compiled.add(ctx.boot.spawnOverride ?? 'zombie');   // the boot warm-up compiles the first cast
+  show(ctx);
+}
+
+/** The L key: the arena's lamps off (flashlight and dark fill only) or back on. */
+export function arenaToggleLights(ctx: GameContext): void {
+  const rt = ctx.world.light;
+  if (!ctx.world.level.def?.arena || !rt) return;
+  rt.lampsOff = !rt.lampsOff;
   show(ctx);
 }
 
