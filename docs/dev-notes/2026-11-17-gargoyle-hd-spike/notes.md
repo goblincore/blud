@@ -199,15 +199,51 @@ Residue: a faint ragged patch can show at the shoulder in some walk phases (clav
 ## Reproducing (committed 2026-11-17)
 
 - Re-emit the character from the committed fit (no refit needed):
-  `GHD_EYE=0.058,1.394,0.586 GHD_EYE_R=0.014 python scripts/gargoyle-hd/emit_blob.py assets-source/gargoyle-hd/sym-prims-500.npz src/lab/sdf-zombie/characters/gargoyle-hd.blob`
+  `GHD_EYE=0.058,1.394,0.586 GHD_EYE_R=0.014 python scripts/gargoyle-hd/emit_blob.py assets-source/gargoyle-hd/sym-prims-250.npz src/lab/sdf-zombie/characters/gargoyle-hd.blob`
 - Full pipeline from the reference mesh (the Meshy .glb, not in the repo):
   1. `sample_sdf.py` -> samples.npz.
   2. A 6 mm grid -> grid6.npz.
   3. `fit_planes.py` -> planes.json (committed).
   4. `repose.py` -> sym/{grid6, samples}.npz.
   5. `medial.py`.
-  6. `fit.py ... 500 --mirror 0.12`.
+  6. `fit.py ... 250 --mirror 0.12` (250 per side; the 500 fit is kept as sym-prims-500.npz).
   7. `emit_blob.py`.
   8. grid6 -> .f32/.json -> `bake-residual.ts` -> `public/assets/lab/gargoyle-hd-residual.binz` (gzipped, 4.7 MB).
 - Python deps: torch, libigl, trimesh, scikit-image, scipy, pillow. Blender for the clay renders.
 - `skinned` is a new opt-in prim word (joint-crossing ends, no rigid-head capture). Every shipped character packs byte-identically to its old pin; that was checked before re-pinning `pack-golden`.
+
+## Update 2026-11-17: performance pass
+
+Owner: "the performance is way worse with the gargoyle". Measured in the arena (headless Chrome, frozen close-up at
+3 m, `__sdfGame.bench({ kind: 'closeup' })`, per-pass GPU timestamps in `mode: 'passes'`):
+
+| | frame | march (GPU) |
+|---|---|---|
+| zombie | 3.9-4.9 ms | 1.0 ms (crowd compute march) |
+| gargoyle-hd, 500/side fit, per-body | 21.5 ms | 22.6 ms (fragment march) |
+| same, residual off (`?residual=0`) | 20.8 ms | |
+| old asymmetric 511-prim fit, residual off | 18.2 ms | |
+| **250/side fit, hero groups, crowd compute** | **13.1 ms** | **8.9 ms** |
+
+What it was NOT: the residual layer and the joint fixes cost ~0.7 ms.
+
+What it was:
+1. **The draw path.** The spike's own gate sent any body over 256 prims to the per-body fragment march, because the
+   crowd path's tile lists clamped. The gargoyle never used the compute march, even in its glitchy first version.
+2. **Tiny bound groups.** pack.ts cuts a group where its sphere passes 0.16 m, tuned for zombie-scale prims. The
+   scan-fitted prims are fat, so a single prim's sphere is already 8-19 cm. The result was 286 groups of 1-2 prims,
+   over the crowd path's 256-group index (TILE_REF_GROUPS). Reordering the fold did not help; the sphere size did.
+3. **Prim count.** The symmetric redo fitted 500 per side, about 1000 in all, against the old 511.
+
+Fixes:
+- `pack.ts` HERO_GROUPS / HERO_GROUP_RADIUS: a body past 128 groups is regrouped at 0.28 m (286 -> 94 groups). The
+  next-largest cast body has 88 groups, so every other character packs byte-identically (pack-golden).
+  0.22 m and 0.28 m march about the same (9.0 and 8.9 ms); 0.35 m is slower (11.3 ms).
+- `game-spawn.ts`: the hero gate counts bound groups against TILE_REF_GROUPS instead of prims.
+- Refit at 250 per side: surface error 2.1 mm mean, 9 mm p99 (1.0 / 5 mm at 500). Both are inside the residual's
+  15 mm clamp, so the detail layer covers the difference; the residual needs no re-bake (it stores the mesh SDF).
+- `emit_blob.py` orders the fold by recursive spatial bisection instead of a Morton walk.
+- A sweep of 20 camera positions (0.9-6 m, five angles) clamped no tiles.
+
+Still ~9 ms of march against the zombie's 1 ms: about 600 prims (with bones) plus the residual, filling most of the
+screen at 3 m.

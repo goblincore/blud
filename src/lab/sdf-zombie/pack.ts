@@ -555,6 +555,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   const groupRange = scratch?.groupRange.fill(0) ?? new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
   const clusterGroups = scratch?.clusterGroups.fill(0) ?? new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
   let groupCount = 0;
+  const fitted = opts.singleGroup ? null : bodyBoundGroups(body);
   body.clusters.forEach((c, ci) => {
     const first = groupCount;
     const own = body.prims.slice(c.start, c.start + c.count);
@@ -566,7 +567,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
           const s0 = c.start + k * MAX_GROUP_PRIMS;
           return { start: s0, count: Math.min(MAX_GROUP_PRIMS, c.start + c.count - s0), center: c.center, radius: c.radius, distort: cDistort };
         })
-      : boundGroups(body.prims, c.start, c.count);
+      : fitted![ci]!;
     if (groups.length > MAX_CLUSTER_GROUPS)
       throw new Error(`pack: cluster ${ci} needs ${groups.length} bound groups, over the shader's ${MAX_CLUSTER_GROUPS}`);
     for (const g of groups) {
@@ -633,6 +634,24 @@ export function primAlive(packed: PackedBody, primIdx: number): boolean {
  * foot, large enough that a limb is two or three groups, not nine.
  */
 export const GROUP_RADIUS_MAX = 0.16;
+
+/**
+ * HERO BODIES (gargoyle-hd perf pass, 2026-11-17). A body fitted from a scan (hundreds of fat, overlapping prims) splits
+ * into hundreds of one- and two-prim groups at GROUP_RADIUS_MAX: a single prim's sphere is already 8-19 cm. Past
+ * HERO_GROUPS groups in all a body is regrouped at HERO_GROUP_RADIUS instead, which keeps it under the crowd path's
+ * TILE_REF_GROUPS (256) group index and its tiles under TILE_MAX_ENTRIES, so it draws through the crowd's compute
+ * march (gargoyle-hd: 286 -> 94 groups, march 22.6 -> 8.9 ms). The shipped cast tops out at 88 groups, far under the
+ * switch, so every other body packs exactly as before (pack-golden).
+ */
+export const HERO_GROUPS = 128;
+export const HERO_GROUP_RADIUS = 0.28;
+
+/** Each cluster's bound groups, at GROUP_RADIUS_MAX, or at HERO_GROUP_RADIUS for a body over HERO_GROUPS. */
+export function bodyBoundGroups(body: Pick<BuiltBody, 'prims' | 'clusters'>): BoundGroup[][] {
+  const at = (r: number) => body.clusters.map(c => boundGroups(body.prims, c.start, c.count, r));
+  const fine = at(GROUP_RADIUS_MAX);
+  return fine.reduce((n, g) => n + g.length, 0) > HERO_GROUPS ? at(HERO_GROUP_RADIUS) : fine;
+}
 
 export interface BoundGroup { start: number; count: number; center: [number, number, number]; radius: number; distort: number }
 
@@ -726,11 +745,11 @@ function radiusAbout(
 /**
  * Splits one cluster's prims [start, start+count) into contiguous bound
  * groups. Greedy in fold order: a prim joins the open group unless the
- * group's sphere would then exceed GROUP_RADIUS_MAX (a group always takes at
+ * group's sphere would then exceed `radiusMax` (a group always takes at
  * least one prim, so a single huge prim is its own group). Deterministic and
  * cheap — the hero re-packs every frame.
  */
-export function boundGroups(prims: Primitive[], start: number, count: number): BoundGroup[] {
+export function boundGroups(prims: Primitive[], start: number, count: number, radiusMax = GROUP_RADIUS_MAX): BoundGroup[] {
   const out: BoundGroup[] = [];
   // Per-prim constants of the fit, computed once per cluster instead of once
   // per refit of every growing run: bendCtrl and the reach are pure in the prim.
@@ -767,7 +786,7 @@ export function boundGroups(prims: Primitive[], start: number, count: number): B
   for (let i = start; i < start + count; i++) {
     add(i);
     const next = fitOpen(gStart, i + 1);
-    if (fit !== null && (next.radius > GROUP_RADIUS_MAX || i - gStart >= MAX_GROUP_PRIMS)) {
+    if (fit !== null && (next.radius > radiusMax || i - gStart >= MAX_GROUP_PRIMS)) {
       out.push({ start: gStart, count: i - gStart, ...fit, distort: distortRange(prims, gStart, i) });
       gStart = i;
       all.fill(0); solid.fill(0); anySolid = false;

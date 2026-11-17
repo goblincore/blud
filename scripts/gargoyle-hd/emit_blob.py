@@ -84,14 +84,27 @@ for i in range(len(A)):
     base = bn.split('.')[0]
     rows.append((LIMB[base], base, bn.endswith('.l'), at, A[i] - anchor, B[i] - A[i], rA[i], rB[i], bl[i], mid))
 
-# fold order = spatial order inside each limb (tight bound groups); Morton-ish sort on a 4 cm lattice
-def key(r):
-    qq = np.floor((r[9] - np.array([-1, 0, -1.5])) / 0.04).astype(int)
-    k = 0
-    for bit in range(7):
-        for ax in range(3): k |= ((qq[ax] >> bit) & 1) << (3 * bit + ax)
-    return (r[0], k)
-rows.sort(key=key)
+# FOLD ORDER = compact spatial runs inside each limb. pack.ts cuts a bound group wherever the run's bounding sphere
+# passes GROUP_RADIUS_MAX (0.16 m), so the order decides the group count, and the crowd path holds at most 256 groups a
+# body (the tile reference's 8-bit index) and 64 a tile. A Morton walk on a 4 cm lattice jumps at every power-of-two
+# seam and gave 288 groups of < 2 prims (perf pass, 2026-11-17). Instead: split each limb's prims recursively along
+# their widest axis until a part's bounding sphere (prim extents included) is under LEAF_R, and emit leaf by leaf.
+LEAF_R = 0.13
+def extent(r):  # bounding sphere of a prim's capsule about its midpoint
+    return np.linalg.norm(r[5]) / 2 + max(r[6], r[7])
+def bisect(rs):
+    if len(rs) <= 1: return [rs]
+    M = np.stack([r[9] for r in rs])
+    c = M.mean(0)
+    if max(np.linalg.norm(r[9] - c) + extent(r) for r in rs) <= LEAF_R and len(rs) <= 48: return [rs]
+    ax = int(np.argmax(M.max(0) - M.min(0)))
+    o = np.argsort(M[:, ax], kind='stable'); h = len(rs) // 2
+    return bisect([rs[i] for i in o[:h]]) + bisect([rs[i] for i in o[h:]])
+ordered = []
+for lb in ('torso', 'head', 'arm', 'leg'):
+    for leaf in bisect([r for r in rows if r[0] == lb]): ordered += leaf
+assert len(ordered) == len(rows)
+rows = ordered
 
 # `core` (validate.ts clusterCore): each limb's fattest prim near its root joint; torso and head their fattest overall.
 ROOT = {'arm': bones['clavicle.l'][1], 'leg': bones['thigh.l'][0], 'head': bones['neck'][0], 'torso': bones['spine'][0]}

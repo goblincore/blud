@@ -37,6 +37,8 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
+import { bodyBoundGroups } from '../pack';
+import { TILE_REF_GROUPS } from './march/tile-ref-flag';
 import { applyStormBodyKey } from './game-dynamic-light';
 import { actorSpawnCentre, clampSpawnInside, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
 import { seatSpawnInsideMap } from './sector-debris';
@@ -147,13 +149,16 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   const crowdViewOptsFor = (built: BuildResult): GpuViewOpts => {
     if (!ctx.crowd.on) return {};
     const stride = bodyPrimStride(built);
-    // HERO BODIES (gargoyle-hd spike, 2026-11-17): past 256 prims a body packs into hundreds of bound groups, and the
-    // crowd path's per-tile list holds TILE_MAX_ENTRIES (64): a tile over the torso and wings clamped and the march
-    // dropped whole limbs (legs gone, a wing floating). The per-body path uses no tiles. A game of one or two
-    // such enemies does not need the crowd batch.
-    if (built.prims.length + (built.bonePrims?.length ?? 0) > 256) {
-      console.info(`[crowd] ${name}: hero body (${built.prims.length} prims) draws per-body`);
-      return {};
+    // HERO BODIES (gargoyle-hd, 2026-11-17). The crowd path addresses a body's bound groups with an 8-bit index
+    // (TILE_REF_GROUPS) and lists at most TILE_MAX_ENTRIES a tile; a body past the index draws per-body (the fragment
+    // march, ~2.5x the cost: the perf pass measured 22.6 ms against 8.9 ms crowd). pack.ts regroups a scan-fitted body
+    // coarsely (HERO_GROUP_RADIUS) so it fits; this gate only catches one that still does not.
+    {
+      const groups = bodyBoundGroups(built).reduce((n, g) => n + g.length, 0);
+      if (groups > TILE_REF_GROUPS) {
+        console.info(`[crowd] ${name}: ${groups} bound groups, over the crowd's ${TILE_REF_GROUPS}; draws per-body`);
+        return {};
+      }
     }
     const t = crowdTypeFor(ctx, name, room.id, stride);
     if (t.atlas.stride < stride) {

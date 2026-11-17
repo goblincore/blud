@@ -40,7 +40,7 @@ exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"f8f193ef6
 
 exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"ce49571f0046092d"`;
 
-exports[`packBody byte pin > gargoyle-hd.blob packs the pinned bytes 1`] = `"ff86efa227e52bf7"`;
+exports[`packBody byte pin > gargoyle-hd.blob packs the pinned bytes 1`] = `"c404ba93196e4a3c"`;
 
 exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"1bd321b7f84470ea"`;
 
