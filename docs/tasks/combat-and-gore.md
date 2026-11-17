@@ -607,6 +607,21 @@ Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2
 - [x] **Owner playtest feedback pass (2026-09-18/19) — merged to main.** **Handoff: [2026-09-19-burning-fire-handoff](../../docs/dev-notes/2026-09-19-burning-fire-handoff.md)** (state, learnings, open list).
   Volumetric fire is the game default (swept flame sheets, card accents, nearest-4 volume + crossfaded full-card LOD, skin 0.3, rise 0.45, no smoke);
   room fire light; zombie burn panic (soldier OFF); ivory bone; soldier legs burn. Open: cheap smoke, head flame (optional), real flare gun.
+- [~] **Burn flail and burn death (2026-11-16; branch `claude/burning-body-effect-optimization-4795c0`): built, owner look pending.**
+  A lit body stops attacking and panic-runs with an authored arm flail (`burn-flail.ts`), falters, then dies on one of three
+  authored burn falls (`death-fall.ts` `burnKneel` / `burnTopple` / `burnHeap`, the zombie included) and burns down on the corpse.
+  Per character: `MotionProfile.burn` (`BurnTier`: duration, speed, flail, `dies`, `fall`); the heavies panic but do not die.
+  Blocked by a wall it turns and runs along it. Soldier panic is back on. Checked by tests and the headless trace (numbers, not
+  the look). [Spec](../../docs/superpowers/specs/2026-11-16-burn-flail-and-death-design.md) ·
+  [plan](../../docs/superpowers/plans/2026-11-16-burn-flail-and-death.md) ·
+  [notes](../../docs/dev-notes/2026-11-16-burn-flail/NOTES.md) (open items there).
+- [ ] **Fire render cost** (owner ask 2026-11-16): measured, nothing optimised
+  ([notes](../../docs/dev-notes/2026-11-16-fire-cost/NOTES.md)). 23 burning bodies add ~2 ms of frame: flame volume 1.5 ms
+  (4.2 at 8 bodies), fire CPU ~0.5-1.4 ms, burn and char shading ~0 on the body march. Runs were at load ~4: re-run quiet.
+  **Flame march cull fixed (same day):** the cull sphere's lag pad is per capsule, flame march 1.51 -> 0.67 ms at 4 bodies,
+  4.22 -> 0.97 at 8; owner look owed, and `maxBodies` could now rise. CPU skips built (capsules only for volume
+  bodies, no card work out of view): correct by count, no measurable frame gain; fire's card bookkeeping is ~0.3 ms. Open:
+  `crowd-sdf-inner` reads +0.5-1.5 ms with fire (unreliable at load 4) -> CPU-profile one burning frame on a quiet machine.
 - [x] **Cold-boot compile (2026-09-19):** [census](../../docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](../../docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](../../docs/dev-notes/2026-09-18-march-split/NOTES.md)).

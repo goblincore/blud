@@ -43,7 +43,7 @@ import { ageJiggle, boneEndPoints, jiggleBulk, jiggleFlesh, kickJiggle, type Jig
 import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
 import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
-import { CORPSE_SHOVE, DEATH_FALL, pickDeathFall, type DeathFallChoice } from '../death-fall';
+import { CORPSE_SHOVE, DEATH_FALL, pickBurnFall, pickDeathFall, type DeathFallChoice } from '../death-fall';
 import { BLOW_THROW } from '../blow-away';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
@@ -76,7 +76,7 @@ import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
-import { isGoreBody, isSoldierFamily, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, resolveBurnTier, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import { judderLevel, type MotionFrame } from '../motion';
@@ -99,9 +99,7 @@ import { add, cross, normalize, qMul, qRotate, sub } from '../vec';
 import { planSlump, slumpVelocities } from '../slump-death';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
-import {
-  BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
-} from '../burn-behaviour';
+import { createBurnPanic, stepBurnPanic, type BurnPanicState } from '../burn-behaviour';
 import type { LevelGround } from './level-ground';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
@@ -117,6 +115,9 @@ const CALM: Omit<MotionSignals, 'dt'> = {
 };
 
 /** Wound-type ids the shader expects — same mapping as lab-main's TYPE_ID. */
+/** A panicking burner moving slower than this (m/s) for this long (s) is blocked: it turns. */
+const BURN_STUCK_MPS = 0.25;
+const BURN_STUCK_SEC = 0.3;
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
 /** Hit shove along the shot direction, PER WOUND PROFILE — the defect this
@@ -452,15 +453,16 @@ export interface ZombieActor {
    * BURNING PANIC (2026-09-18). Called by game-burning.ts on registry
    * transitions: true on the frame the body starts burning, false when it is
    * extinguished, burnt down or retired. While on, the mind's verdict is
-   * overridden (the `doomed` pattern) — a soldier flees the player without
-   * firing, a zombie keeps chasing with a jittered heading, both stumble.
+   * overridden (the `doomed` pattern): the body stops attacking and panic-runs
+   * from the player with flailing arms, falters, then (if its BurnTier dies)
+   * burns to death on an authored burn fall (burn-behaviour.ts, burn-flail.ts).
    * Idempotent: repeating the current state is a no-op.
    */
   setBurning(on: boolean): void;
-  /** Monotonic count of burn stumbles since the current ignite began (0 when
-   *  not burning). The capture-trace oracle — pose-level `staggerKind` cannot
-   *  tell a burn stumble from a hit reaction. */
-  burnStumbles(): number;
+  /** Where this body is in its burn (burn-behaviour.ts): 'none' = not panicking; 'resumed' = its tier
+   *  does not die and its panic is over; 'dead' = it burned to death. The capture trace's oracle, and
+   *  what game-burning.ts polls to start the burn-down. */
+  burnPhase(): 'none' | 'panic' | 'falter' | 'resumed' | 'dead';
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
@@ -556,6 +558,12 @@ export interface ZombieActor {
     blend: number;
     speed: number;
     staggerKind: string | null;
+    /** The authored fall this body is playing (death-fall.ts), or null. */
+    fallKind: string | null;
+    /** The burn flail's amplitude handed to motion on the last step (motion.ts cfg.burnFlail), or null for none. */
+    burnFlail: number | null;
+    /** The swing variant handed to motion on the last step (the mind's attack after every override), or null. */
+    attack: string | null;
     target: Vec3 | null;
     idle: number;
     state: string;
@@ -967,14 +975,43 @@ export function createZombieActor(opts: {
    * set alight until it is put out. The per-substep step overrides the mind's
    * target/fire verdict — the `doomed` pattern — so neither brain learns a
    * "burning" state. `burnCruiseScale` is the speed multiplier handed to
-   * motion; `burnFlailT` counts down to the next flail shudder (the arm-flail
-   * stand-in, since motion.ts has no additive arm channel).
+   * motion; `burnFlail` is this frame's arm/trunk flail overlay (motion.ts).
    */
   let burnPanic: BurnPanicState | null = null;
   let burnCruiseScale = 1;
-  let burnFlailT = 0;
-  /** Monotonic count of burn stumbles — the trace's unambiguous oracle. */
-  let burnStumbles = 0;
+  /** setBurning(true) has been called and not yet undone (the edge guard). */
+  let burningOn = false;
+  /** This frame's flail for stepMotion; null = none. */
+  let burnFlail: { t: number; seed: number; amp: number; fold: number } | null = null;
+  let burnPhaseNow: 'none' | 'panic' | 'falter' | 'resumed' | 'dead' = 'none';
+  /** The body burned to death: the collapse is forced and the fall is a burn fall. */
+  let burnDied = false;
+  /** Seconds the panicking body has been trying to run and getting nowhere (a wall, a corner). */
+  let burnStuckT = 0;
+  /** Can this body walk from where it stands to `p`? (The burn panic's blocked-turn probe.) */
+  const burnClear = (p: Vec3): boolean => {
+    // Inside the bounds by a margin, but never asked to be further from a wall than the body already
+    // is: a run ALONG the wall it is pressed against must count as clear.
+    const b = opts.bounds, m = 0.3, at = state.wander.pos;
+    const loX = Math.min(at[0], Math.min(b.minX, b.maxX) + m), hiX = Math.max(at[0], Math.max(b.minX, b.maxX) - m);
+    const loZ = Math.min(at[2], Math.min(b.minZ, b.maxZ) + m), hiZ = Math.max(at[2], Math.max(b.minZ, b.maxZ) - m);
+    // With slack: a body standing just outside its bounds (a corner spawn) may run along the edge.
+    const slack = 0.25;
+    if (p[0] < loX - slack || p[0] > hiX + slack || p[2] < loZ - slack || p[2] > hiZ + slack) return false;
+    // The END of the probe and its midpoint must be standable. Not the path from where the body is:
+    // it is pressed against something (that is why it is asking), and a segment that starts on a
+    // crate's padded face reads as blocked in every direction.
+    const mid: Vec3 = [(at[0] + p[0]) / 2, at[1], (at[2] + p[2]) / 2];
+    for (const q of [mid, p]) {
+      if (insideFurniture(q)) return false;
+      if (opts.navigation && !opts.navigation.canTravel(q, q)) return false;
+    }
+    return true;
+  };
+  const burnTier = resolveBurnTier(opts.profile);
+  /** It burned to death AND its tier dies on a burn fall (BurnTier.fall); otherwise a burn death is its ordinary death. */
+  const burnFell = (): boolean => burnDied && burnTier.fall;
+  const burnSeed = opts.id * 7919 + 1;
   /**
    * Last world position the actor saw the player at. game-main does not call
    * setBrainInput (the encounter director feeds the mind instead), so the
@@ -1016,6 +1053,9 @@ export function createZombieActor(opts: {
   /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
    *  still rolls the blow-away chance (blow-away.ts); a hit now plays the 'blown' fall instead of a free throw. */
   const deathFall = (): DeathFallChoice => {
+    // Burned to death: one of the three burn falls, seeded per body (death-fall.ts). It is the whole death: the
+    // physics death's slump and blow-away are never rolled for it (they would launch the rig and cut the fall's pull).
+    if (burnFell()) { blowAwayRolled = true; return pickBurnFall(burnSeed + 2, burnForward()); }
     blowAwayRolled = true;
     const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
     const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
@@ -1077,6 +1117,10 @@ export function createZombieActor(opts: {
   }
   let soldierFatal = false;
   let propReleaseRequested = false;
+  /** The body is down or dying by a cause other than its fire: collapsed (a zombie's collapse is its death), a soft
+   *  target's death reel, a fatal soldier. Its burn panic ends and its burn clock can no longer kill it. */
+  const downOtherwise = (): boolean =>
+    softKilled || soldierFatal || dyingT > 0 || state.collapse.phase !== 'standing' || !!lastFrame?.collapsed;
 
   // ---- damage state -------------------------------------------------------
   /** THE shared wound ring (character-view.ts). The character's own when the
@@ -1183,6 +1227,8 @@ export function createZombieActor(opts: {
   })();
   /** See debug().fistGrip / fistGripAuthored. */
   let lastFistGrip: number | null = null;
+  /** debug().attack: the attack the last step handed motion. */
+  let lastAttack: string | null = null;
   let lastFistGripAuthored: number | null = null;
 
   // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
@@ -1991,11 +2037,6 @@ export function createZombieActor(opts: {
           canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
         } : {}),
       });
-      // The MIND's own target, captured before the encounter director's halt
-      // (a ring hold with `holdSecs > 0` nulls the post-encounter target). A
-      // burning zombie's chase must follow the mind's intent, not a ring hold
-      // that would freeze it at range.
-      const mindTarget = think.target;
       // A DOOMED BODY KEEPS NO AGENDA. It is already dead for gameplay — the
       // blast resolved that on impact — it just has not finished coming apart,
       // so it must not keep chasing, swinging or shooting during the window.
@@ -2033,50 +2074,60 @@ export function createZombieActor(opts: {
       // purpose: the director emits `halt: true` for an idle actor and a
       // moveTarget in combat, either of which would erase the flee / chase
       // target on nearly every frame if the override ran first.
-      if (burnPanic && !doomed) {
+      burnFlail = null;
+      // Shot dead (or downed) mid-panic: the panic ends there and the clock never gives the corpse a second death.
+      if (burnPanic && !burnDied && downOtherwise()) {
+        burnPanic = null;
+        burnStuckT = 0;
+        burnPhaseNow = 'none';
+      }
+      if (burnPanic && !doomed && !burnDied) {
         // The encounter director (not setBrainInput) feeds the game's minds,
         // so read the player from the order when present and remember the
         // last seen point for when sight is lost.
         const playerNow = encounterOrder?.player ?? brainPlayer;
-        // BrainPlayer has no height: the panic's flee/chase points are ground-plane, on this body's floor.
+        // BrainPlayer has no height: the flee point is ground-plane, on this body's floor.
         if (playerNow) lastPlayerPos = [playerNow.x, state.floorY, playerNow.z];
+        const blocked = burnStuckT > BURN_STUCK_SEC;
+        if (blocked) burnStuckT = 0;
         const bp = stepBurnPanic(burnPanic, {
-          kind: mind.kind,
-          self: state.wander.pos,
-          player: lastPlayerPos,
-          // A held zombie (ring token / blast recovery) reports a null mind
-          // target; its chase falls back to the last seen player point so the
-          // panic keeps it closing instead of freezing at range.
-          chaseTarget: mindTarget ?? lastPlayerPos,
+          self: state.wander.pos, player: lastPlayerPos, forward: burnForward(),
+          // Blocked: the turn probes for a direction this body can walk (inside its bounds, clear of
+          // furniture, and a step the level's navigation allows).
+          ...(blocked ? { blocked, clear: burnClear } : {}),
         }, sdt);
-        think = {
-          ...think,
-          target: bp.target,
-          halt: bp.target === null,
-          fire: false,
-          weaponUp: false,
-          // A zombie keeps its swipe; a soldier drops the attack (no aiming).
-          attack: mind.kind === 'zombie' ? think.attack : null,
-          faceHeading: null,
-        };
-        burnCruiseScale = bp.cruiseScale;
-        burnFlailT -= sdt;
-        // A soldier's `small` soldier reaction must lap before it can restart
-        // (equal level does not restart an active one) — see burn-behaviour.ts.
-        const flailPeriod = soldierDamage
-          ? BURN_BEHAVIOUR.soldierFlailPeriodSec : BURN_BEHAVIOUR.flailPeriodSec;
-        if (bp.stumble) {
-          burnStumbles++;
-          signals.shot = burnStumbleShot();
-          burnFlailT = flailPeriod;
-        } else if (burnFlailT <= 0 && signals.shot === null) {
-          // The arm-flail stand-in (see burn-behaviour.ts's note): a burn
-          // shudder re-emitted on a timer. A real hit signal wins the frame.
-          signals.shot = burnFlailShot();
-          burnFlailT = flailPeriod;
+        if (bp.phase === 'done') {
+          burnPanic = null;
+          burnCruiseScale = 1;
+          if (bp.die) {
+            burnDied = true;
+            burnPhaseNow = 'dead';
+            // A soldier reaches the authored fall through his own path: cfg.deathFall()
+            // is asked when the collapse is fatal (motion.ts excludes him from authoredDeath).
+            if (soldierDamage) soldierFatal = true;
+          } else {
+            burnPhaseNow = 'resumed';
+          }
+        } else {
+          burnPhaseNow = bp.phase;
+          // Blocked and turned: a panicking body WHIPS round to the new heading. At its ordinary turn
+          // rate a shambler spends a second and a half walking into the wall while it comes about.
+          if (blocked && bp.target) {
+            const hx = bp.target[0] - state.wander.pos[0], hz = bp.target[2] - state.wander.pos[2];
+            if (Math.hypot(hx, hz) > 1e-6) state = { ...state, wander: { ...state.wander, heading: Math.atan2(hx, hz) } };
+          }
+          think = { ...think, target: bp.target, halt: false, fire: false, weaponUp: false, attack: null, faceHeading: null };
+          burnCruiseScale = bp.cruiseScale;
+          const amp = bp.flail * burnTier.flail;
+          if (amp > 0) burnFlail = { t: burnPanic.t, seed: burnSeed, amp, fold: bp.fold };
         }
       } else {
         burnCruiseScale = 1;
+      }
+      // Burned to death: no agenda, and the collapse is forced every frame until it is down.
+      if (burnDied) {
+        think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+        signals.forcedCollapse = true;
       }
       // The burn override's speed multiplier rides the same signals object
       // stepMotion consumes; 1 (absent-equivalent) when not burning.
@@ -2114,7 +2165,7 @@ export function createZombieActor(opts: {
       }
       // A burning soldier must never fire, whatever the mind or the injury
       // path computed above (the panic override is the last word).
-      if (burnPanic && !doomed) signals.fire = false;
+      if ((burnPanic && !doomed) || burnDied) signals.fire = false;
       if (softKilled) {
         // A STAGGER stays up for dyingT, reeling, and may clench the trigger:
         // one round every 70 ms, sprayed high (see the onFire site).
@@ -2137,7 +2188,7 @@ export function createZombieActor(opts: {
       // FLOATERS (floater-move.ts): the float altitude follows the state (cruise idle, down to the player
       // chasing); idle, the body wanders Doom's chase-dir legs instead of holding still.
       if (floater) {
-        floaterDown ||= doomed || softKilled || (lastFrame?.collapsed ?? false);
+        floaterDown ||= doomed || softKilled || burnDied || (lastFrame?.collapsed ?? false);
         if (!floaterDown) {
           const pl = encounterOrder ? encounterOrder.player : brainPlayer;
           const seen = pl !== null && (encounterOrder ? encounterOrder.visible : rangedSight(pl));
@@ -2203,13 +2254,17 @@ export function createZombieActor(opts: {
         }
       }
       const beforeMove = state.wander.pos;
+      lastAttack = think.attack?.variant ?? null;
       const stepR = stepMotion(
         state, joints,
         {
           enabled: true,
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
-          ...(DEATH_FALL.on && !softTarget && !physicsDeath ? { deathFall } : {}),
+          ...(DEATH_FALL.on && !softTarget && (!physicsDeath || burnFell()) ? { deathFall } : {}),
+          // A physics-death body (the zombie) burned to death plays its burn fall, not the ragdoll.
+          ...(burnFell() && !softTarget ? { authoredDeath: true } : {}),
+          ...(burnFlail ? { burnFlail } : {}),
           ...(fallWalled ? { releaseFall: true } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
@@ -2306,6 +2361,15 @@ export function createZombieActor(opts: {
         }
         state = { ...state, wander: w };
       }
+      // A panicking burner that is not getting anywhere (it fled into a wall; measured AFTER the
+      // furniture and navigation corrections) is told so, and turns (burn-behaviour.ts `blocked`).
+      // The first 0.3 s is its turn-and-accelerate, not a wall.
+      if (burnPanic && burnPanic.t > 0.3) {
+        const moved = Math.hypot(state.wander.pos[0] - beforeMove[0], state.wander.pos[2] - beforeMove[2]);
+        burnStuckT = moved < BURN_STUCK_MPS * sdt ? burnStuckT + sdt : 0;
+      } else {
+        burnStuckT = 0;
+      }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw, sdt);
       // LIFE-STATE PRIMS: the first collapsed sub-step swaps the body to its
@@ -2328,7 +2392,8 @@ export function createZombieActor(opts: {
       volleyAge += sdt;
       if (blownAway) blownT += sdt;
       // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
-      if (f.collapsed && !blowAwayRolled) {
+      // A burn death is an authored fall, never this (deathFall above marks it rolled; the guard holds whatever order).
+      if (f.collapsed && !blowAwayRolled && !burnFell()) {
         blowAwayRolled = true;
         // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
         const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
@@ -2588,6 +2653,9 @@ export function createZombieActor(opts: {
         blend: d.blend,
         speed: d.speed,
         staggerKind: d.staggerKind,
+        fallKind: state.fallKind?.kind ?? null,
+        burnFlail: burnFlail?.amp ?? null,
+        attack: lastAttack,
         target: state.wander.target ? [...state.wander.target] as Vec3 : null,
         idle: state.wander.idle,
         state: md.state, alert: md.alert,
@@ -2799,47 +2867,9 @@ export function createZombieActor(opts: {
     return [x / n, y / n, z / n];
   }
 
-  // ---- burning panic motion signals (Task 2) ------------------------------
-  // These are POSE reactions only. They ride `signals.shot`, which stepMotion
-  // routes to stagger.ts (lurch / shudder) and the localized recoil — no
-  // wound is stamped and `freshWounds` is never touched, so a burn stumble
-  // cannot bleed or gib the body.
+  // ---- burning panic ------------------------------------------------------
   /** The burning body's forward (unit), world space. */
   const burnForward = (): Vec3 => headingDir(bodyYaw);
-  /**
-   * The stumble: a `blast` signal → stagger.ts's directional lurch. For a
-   * soldier it is `medium`, not `small`: the periodic flail already keeps a
-   * `small` soldier reaction alive, and `stepSoldierStagger` will not restart
-   * an equal-level reaction, so a `small` stumble would vanish behind the
-   * flail. `medium` ranks up and lands; it is still a lurch (fullStagger is
-   * false), never a knockdown.
-   */
-  function burnStumbleShot(): NonNullable<MotionSignals['shot']> {
-    return {
-      type: 'blast',
-      dirWorld: burnForward(),
-      woundWorld: [...bodyCentreWorld()] as Vec3,
-      torso: true,
-      gain: BURN_BEHAVIOUR.stumbleGain,
-      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
-    };
-  }
-  /**
-   * The arm-flail stand-in: a `burn` signal → stagger.ts's shudder (and, for
-   * a soldier, a `small` soldier arm-open on the same signal). `small` keeps
-   * it a wave, not a stagger; motion.ts has no additive arm channel, so this
-   * is the seam the plan names as the stand-in.
-   */
-  function burnFlailShot(): NonNullable<MotionSignals['shot']> {
-    return {
-      type: 'burn',
-      dirWorld: burnForward(),
-      woundWorld: [...bodyCentreWorld()] as Vec3,
-      torso: true,
-      gain: BURN_BEHAVIOUR.flailGain,
-      ...(soldierDamage ? { soldierLevel: 'small' as const } : {}),
-    };
-  }
 
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
@@ -3179,6 +3209,7 @@ export function createZombieActor(opts: {
     tearFrame: ruptureFrameNow,
     endTear: () => {
       tear = null; tearPlan = null; tearPrimRegion = null; doomed = false;
+      burnDied = false; burnPanic = null; burningOn = false; burnPhaseNow = 'none'; burnFlail = null; burnCruiseScale = 1;
       // Restore the ordinary packed-bone layout for a body returned to play
       // (a reset mid-window). A retired body keeps its view hidden either way.
       view.setBonesBare(false);
@@ -3227,24 +3258,24 @@ export function createZombieActor(opts: {
       if (alerted) brainAlerted = true;
     },
     setBurning: (on: boolean) => {
-      // Edge-triggered: game-burning only calls this on transitions, but a
-      // repeated call must not re-seed the panic (that would reset the RNG
-      // and restart every stumble/repick clock).
-      if (on === (burnPanic !== null)) return;
-      // Soldier panic is switched off for now (BURN_BEHAVIOUR.soldierPanic):
-      // a burning soldier keeps his mind, speed and gun, with no stumbles.
-      if (on && mind.kind === 'soldier' && !BURN_BEHAVIOUR.soldierPanic) return;
+      // Edge-triggered: a repeated call must not restart the clock, and a body that has already
+      // burned to death or resumed stays that way until it is put out.
+      if (on === burningOn) return;
+      burningOn = on;
       if (on) {
+        // A body that already burned to death, or is down by another cause, is not lit into a panic.
+        if (burnDied || downOtherwise()) return;
         // The id seed keeps two bodies lit on the same frame out of phase.
-        burnPanic = createBurnPanic(opts.id * 7919 + 1);
-        burnFlailT = 0;
-        burnStumbles = 0;
+        burnPanic = createBurnPanic(burnSeed, burnTier);
+        burnPhaseNow = 'panic';
       } else {
         burnPanic = null;
         burnCruiseScale = 1;
+        burnFlail = null;
+        if (!burnDied) burnPhaseNow = 'none';
       }
     },
-    burnStumbles: () => burnStumbles,
+    burnPhase: () => burnPhaseNow,
     mind: () => mind,
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,
@@ -3310,7 +3341,7 @@ export function createZombieActor(opts: {
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,
-      staggerKind: null, target: null, idle: 0,
+      staggerKind: null, fallKind: state.fallKind?.kind ?? null, burnFlail: burnFlail?.amp ?? null, attack: lastAttack, target: null, idle: 0,
       state: mind.debug().state, alert: mind.debug().alert,
       swingT: mind.debug().swingT,
       side: mind.debug().side, variant: mind.debug().variant,

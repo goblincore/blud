@@ -23,8 +23,11 @@ import type { GaitJointName } from './gait';
 import { rotateYaw } from './gait';
 import { add, lerp, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
 
-export type DeathFallKind = 'blown' | 'backward' | 'crumple' | 'spin' | 'sit';
+export type DeathFallKind = 'blown' | 'backward' | 'crumple' | 'spin' | 'sit' | 'burnKneel' | 'burnTopple' | 'burnHeap';
+/** The falls a gun or blast death picks from. The burn falls are NOT here: only pickBurnFall returns them. */
 export const DEATH_FALL_KINDS: readonly DeathFallKind[] = ['blown', 'backward', 'crumple', 'spin', 'sit'];
+/** The falls a body that burned to death plays (spec 2026-11-16-burn-flail-and-death-design.md). */
+export const BURN_FALL_KINDS: readonly DeathFallKind[] = ['burnKneel', 'burnTopple', 'burnHeap'];
 
 /** The fall a death plays: picked once, when the body goes down. */
 export interface DeathFallChoice {
@@ -130,6 +133,34 @@ export const FALLS: Record<DeathFallKind, FallSpec> = {
     ],
     travel: 0.3, travelSec: 0.5, air: 0, airSec: 1,
   },
+  // BURNED: drops to the knees with the arms clawing up, pitches onto the face, then the arms and legs
+  // draw in to a curl (the pugilist posture a burnt body takes).
+  burnKneel: {
+    keys: [
+      k({ at: 0.45, topple: 0.1, legNear: [-0.15, 1.5, 1.5], legFar: [-0.2, 1.45, 1.45], armNear: [-2.4, -2.9, -2.9], armFar: [-2.1, -2.7, -2.7], armSplay: 0.5, legSplay: 0.15 }),
+      k({ at: 1.0, topple: 0.5, legNear: [-0.4, 1.4, 1.4], legFar: [-0.45, 1.35, 1.4], armNear: [-1.6, -2.4, -2.4], armFar: [-1.4, -2.2, -2.2], armSplay: 0.35, legSplay: 0.15 }),
+      k({ at: 1.5, topple: 1.48, legNear: [0.1, 0.35, 0.6], legFar: [0, 0.2, 0.5], armNear: [-0.9, -2.2, -2.2], armFar: [-0.8, -2.1, -2.1], armSplay: 0.3, legSplay: 0.15 }),
+      k({ at: 2.2, topple: 1.48, legNear: [-0.9, 0.9, 0.9], legFar: [-0.7, 0.8, 0.8], armNear: [-0.8, -2.5, -2.5], armFar: [-0.7, -2.4, -2.4], armSplay: 0.2, legSplay: 0.2 }),
+    ],
+    travel: 0, travelSec: 1, air: 0, airSec: 1,
+  },
+  // BURNED: goes rigid, arms locked half raised, and falls like a board.
+  burnTopple: {
+    keys: [
+      k({ at: 0.25, topple: 0.12, armNear: [-1.2, -1.9, -1.9], armFar: [-1.0, -1.7, -1.7], armSplay: 0.6, legSplay: 0.1 }),
+      k({ at: 1.1, topple: 1.5, armNear: [-1.3, -2.0, -2.0], armFar: [-1.1, -1.8, -1.8], armSplay: 0.6, legSplay: 0.1 }),
+    ],
+    travel: 0, travelSec: 1, air: 0, airSec: 1,
+  },
+  // BURNED: the knees and hips fold together and it sits down into itself, the trunk slumping over the legs.
+  burnHeap: {
+    keys: [
+      k({ at: 0.5, topple: 0.2, legNear: [-1.3, 0.2, 0.3], legFar: [-1.2, 0.3, 0.3], armNear: [0.2, -0.3, -0.3], armFar: [0.2, -0.3, -0.3], armSplay: 0.3, legSplay: 0.3 }),
+      k({ at: 1.0, topple: 0.45, legNear: [-1.5, 0.1, 0.2], legFar: [-1.4, 0.2, 0.2], armNear: [-0.2, -0.6, -0.6], armFar: [-0.1, -0.5, -0.5], armSplay: 0.3, legSplay: 0.3 }),
+      k({ at: 1.6, topple: 1.2, legNear: [-1.55, 0, 0.2], legFar: [-1.45, 0.1, 0.2], armNear: [-0.5, -0.9, -0.9], armFar: [-0.4, -0.8, -0.8], armSplay: 0.4, legSplay: 0.35 }),
+    ],
+    travel: 0, travelSec: 1, air: 0, airSec: 1,
+  },
 };
 
 /** Seconds until the last key lands. */
@@ -171,6 +202,34 @@ export function pickDeathFall(input: DeathFallInput, rand: () => number): DeathF
     if (r < acc) return { kind, strength: 1, side };
   }
   return { kind: 'backward', strength: 1, side };
+}
+
+/** Weights of the burn falls. */
+export const BURN_FALL_WEIGHTS: Readonly<Record<'burnKneel' | 'burnTopple' | 'burnHeap', number>> =
+  { burnKneel: 0.4, burnTopple: 0.3, burnHeap: 0.3 };
+
+/**
+ * The fall a body that burned to death plays, from its seed. `forward` is the body's own forward on the
+ * ground plane: a burn fall topples along it (face first), not along a shot. Half the board topples go
+ * over to the seeded side instead.
+ */
+export function pickBurnFall(seed: number, forward: Vec3): DeathFallChoice {
+  let s = seed | 0;
+  const next = (): number => {          // mulberry32
+    let x = (s = (s + 0x6d2b79f5) | 0);
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  const r = next();
+  const side: 1 | -1 = next() < 0.5 ? 1 : -1;
+  const sideways = next() < 0.5;
+  const W = BURN_FALL_WEIGHTS;
+  const kind: DeathFallKind = r < W.burnKneel ? 'burnKneel' : r < W.burnKneel + W.burnTopple ? 'burnTopple' : 'burnHeap';
+  const l = Math.hypot(forward[0], forward[2]);
+  const f: Vec3 = l > 1e-6 ? [forward[0] / l, 0, forward[2] / l] : [0, 0, 1];
+  const impact: Vec3 = kind === 'burnTopple' && sideways ? [f[2] * side, 0, -f[0] * side] : f;
+  return { kind, strength: 1, side, impact };
 }
 
 /** A body can play the falls when it has a humanoid skeleton. */

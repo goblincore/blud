@@ -9,8 +9,7 @@ import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import brideSrc from '../characters/bride.blob?raw';
-import { BRIDE_PROFILE, runWeight } from '../motion-profile';
-import { BURN_BEHAVIOUR } from '../burn-behaviour';
+import { BRIDE_PROFILE, BURN_TIER_DEFAULT, runWeight } from '../motion-profile';
 import { makeSwordMind } from './enemy-mind';
 import { createZombieActor } from './game-actor';
 import { makeMotionJoints } from '../motion';
@@ -85,7 +84,7 @@ describe('bride actor (game path)', () => {
   // when any swing starts is always the guard. If this fails, make
   // swordCarryAt start from the carry pose at swing start instead.
   it('never runs in the game, so a swing always starts from the guard', () => {
-    const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_BEHAVIOUR.zombieSpeed, 1);
+    const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_TIER_DEFAULT.speed, 1);
     expect(runWeight(BRIDE_PROFILE, fastest)).toBe(0);
   });
 

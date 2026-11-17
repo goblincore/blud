@@ -220,7 +220,9 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   // ZOMBIE BITES. The zombie mind never reports melee contact; a live zombie in reach
   // bites, rate-limited by the melee invulnerability window. Frozen AI never bites.
   if (!ctx.demo.wanderFrozen) {
-    const zombies = ctx.world.actors.filter(a => a.kind === 'zombie' && !rt.biteExempt.has(a.id))
+    // A body panicking on fire attacks nobody (burn-behaviour.ts): it does not bite as it runs past.
+    const zombies = ctx.world.actors.filter(a => a.kind === 'zombie' && !rt.biteExempt.has(a.id)
+      && a.burnPhase() !== 'panic' && a.burnPhase() !== 'falter')
       .map(a => ({ id: a.id, pos: a.pose().pos, down: !!a.motionFrame()?.collapsed }));
     // An arm-weapon body (motion-profile.ts armWeapon, the butcher's axe) hits harder than a bite.
     const biters = bitesInReach(feet, zombies, VITALS.biteReach);

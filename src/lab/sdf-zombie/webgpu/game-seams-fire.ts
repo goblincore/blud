@@ -88,7 +88,7 @@ export function createFireSeams(ctx: GameContext) {
         speed: d.speed,
         firing: a.sinceFire() <= 1e-6,
         staggerKind: d.staggerKind,
-        stumbles: a.burnStumbles(),
+        burnPhase: a.burnPhase(),
         burning: (ctx.vfx.burning.registry.get(a)?.burn ?? 0) > 0.02,
         alerted: md.alert,
         mindState: md.state,
@@ -110,7 +110,7 @@ export function createFireSeams(ctx: GameContext) {
     flameCards: () => {
       const c = ctx.vfx.burning.flameCards();
       return c
-        ? { created: true, active: ctx.vfx.burning.activeCount(), live: c.liveCards, atlas: c.atlasMode }
+        ? { created: true, active: ctx.vfx.burning.activeCount(), live: c.liveCards, atlas: c.atlasMode, ...ctx.vfx.burning.cullStats() }
         : { created: false, active: 0, live: 0, atlas: false };
     },
     /** Live burn tuning, clamped through resolveBurnTuning. The fire-light

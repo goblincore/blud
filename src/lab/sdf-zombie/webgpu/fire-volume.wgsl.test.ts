@@ -90,6 +90,14 @@ describe('fire volume march WGSL', () => {
   });
 });
 
+describe('fire volume cull sphere', () => {
+  it('pads each capsule by its OWN trail (|vel| * lag * sheet length, clamped), not by lagMaxM', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let lagPad = min(length((*caps)[i * 3 + 2].xyz) * cfg1.y * riseC, cfg1.z);');
+    // The old blanket pad: curlStrength + lagMaxM on every capsule.
+    expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('cfg1.x + cfg1.z');
+  });
+});
+
 describe('fire volume resolve WGSL', () => {
   it('starts with its main fn', () => {
     expect(/^fn\s+fireVolumeResolve\s*\(/.test(FIRE_VOLUME_RESOLVE_WGSL)).toBe(true);

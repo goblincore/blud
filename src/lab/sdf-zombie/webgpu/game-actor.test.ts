@@ -29,6 +29,11 @@ import { rotateYaw } from '../gait';
 import { mulberry32 } from './game-weapon';
 import type { Vec3 } from '../types';
 import { gibPlan } from '../gib-parts';
+import { CULTIST_PROFILE, GUTCRAWLER_PROFILE, ZOMBIE_PROFILE } from '../motion-profile';
+import cultistSrc from '../characters/cultist.blob?raw';
+import crawlerSrc from '../characters/gutcrawler.blob?raw';
+import { makeSoldierMind } from './enemy-mind';
+import { SMG_TUNING } from '../soldier-brain';
 
 const stubView = () => ({
   setRootShift: () => {},
@@ -644,34 +649,236 @@ function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = 
 }
 
 // ---------------------------------------------------------------------------
-// Burning panic (Task 2): the actor applies the pure burn-behaviour step as an
-// override of its mind, so a burning zombie keeps closing on the player.
+// Burning panic and burn death (2026-11-16): the actor applies the pure burn
+// clock (burn-behaviour.ts) as an override of its mind: the body runs from the
+// player, falters, then dies on an authored burn fall (death-fall.ts).
 // ---------------------------------------------------------------------------
-describe('createZombieActor — burning panic override', () => {
-  it('a burning zombie closes on the player', () => {
+describe('createZombieActor — burning panic and burn death', () => {
+  type Actor = ReturnType<typeof makeTestActor>;
+  const burnFor = (a: Actor, secs: number) => { for (let i = 0; i < secs * 60; i++) a.step(1 / 60); };
+  const BURN_FALLS = ['burnKneel', 'burnTopple', 'burnHeap'];
+  /** The head joint's height above the floor, from the rig the last step solved. */
+  const headY = (a: Actor) => { const j = a.rigJoints(); return j.points[j.names.indexOf('head')]![1]; };
+  /** Max distance between the two bodies' rig joints (m). */
+  const jointGap = (a: Actor, b: Actor) => {
+    const pa = a.rigJoints().points, pb = b.rigJoints().points;
+    return Math.max(...pa.map((p, i) => Math.hypot(p[0] - pb[i]![0], p[1] - pb[i]![1], p[2] - pb[i]![2])));
+  };
+  /** The frame the body's burn phase first reads 'dead' (-1: never, within `secs`). */
+  const deathFrame = (a: Actor, secs: number, at?: (frame: number) => void) => {
+    for (let i = 0; i < secs * 60; i++) { at?.(i); a.step(1 / 60); if (a.burnPhase() === 'dead') return i; }
+    return -1;
+  };
+
+  it('a burning zombie runs AWAY from the player', () => {
     const a = makeTestActor({ start: [0, 0, 0] });
-    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
-    for (let i = 0; i < 60; i++) a.step(1 / 60);
-    const p0 = a.pose().pos;
-    const d0 = Math.hypot(p0[0] - 8, p0[2]);
+    a.setBrainInput({ x: 6, z: 0, room: 1 }, true);
+    burnFor(a, 0.5);
+    const d0 = Math.hypot(a.pose().pos[0] - 6, a.pose().pos[2]);
     a.setBurning(true);
-    for (let i = 0; i < 60; i++) a.step(1 / 60);
-    const p1 = a.pose().pos;
-    const d1 = Math.hypot(p1[0] - 8, p1[2]);
-    expect(d1).toBeLessThan(d0);
+    expect(a.burnPhase()).toBe('panic');
+    burnFor(a, 1.5);
+    const d1 = Math.hypot(a.pose().pos[0] - 6, a.pose().pos[2]);
+    expect(d1).toBeGreaterThan(d0);
   });
 
-  it('setBurning is edge-triggered (repeat calls keep the same panic clock)', () => {
+  it('setBurning is edge-triggered (a repeat call keeps the same clock)', () => {
     const a = makeTestActor({ start: [0, 0, 0] });
-    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
     a.setBurning(true);
-    for (let i = 0; i < 30; i++) a.step(1 / 60);
-    const first = a.pose().pos;
-    a.setBurning(true);   // no-op: must NOT reseed the panic
-    for (let i = 0; i < 30; i++) a.step(1 / 60);
-    const second = a.pose().pos;
-    // The body kept moving in the same direction across the repeat call.
-    expect(Math.hypot(second[0] - first[0], second[2] - first[2])).toBeGreaterThan(0.1);
+    burnFor(a, 7);                       // past any zombie duration (3..6 s)
+    expect(a.burnPhase()).toBe('dead');
+    a.setBurning(true);                  // must NOT restart the panic
+    expect(a.burnPhase()).toBe('dead');
+  });
+
+  it('a repeat setBurning(true) MID-panic does not restart the clock: it dies at the original time', () => {
+    const once = makeTestActor({ start: [0, 0, 0] });
+    once.setBurning(true);
+    const tOnce = deathFrame(once, 8);
+    const twice = makeTestActor({ start: [0, 0, 0] });
+    twice.setBurning(true);
+    const tTwice = deathFrame(twice, 8, i => { if (i === 120) { expect(twice.burnPhase()).toBe('panic'); twice.setBurning(true); } });
+    expect(tOnce).toBeGreaterThan(120);
+    expect(tTwice).toBe(tOnce);
+  });
+
+  it('falters, then dies on a burn fall even though the zombie is a physics-death body', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBurning(true);
+    const seen = new Set<string>();
+    for (let i = 0; i < 8 * 60; i++) { a.step(1 / 60); seen.add(a.burnPhase()); }
+    expect([...seen]).toEqual(expect.arrayContaining(['panic', 'falter', 'dead']));
+    expect(BURN_FALLS).toContain(a.debug().fallKind);
+    // It is down: collapsed, the head near the floor (it stands at ~1.6 m).
+    expect(a.motionFrame()?.collapsed).toBe(true);
+    expect(headY(a)).toBeLessThan(0.4);
+  });
+
+  it('a burn death never rolls the physics-death slump or blow-away: the same fall ends in the same pose across seeds', () => {
+    // The slump is the first draw of a per-seed rng (planSlump, chance 0.4): seeds 1 and 6 roll under it, 7 and 8
+    // over. The burn fall and the burn clock are seeded by the id, so all four play the same fall.
+    const heads = [1, 6, 7, 8].map(seed => {
+      const a = makeTestActor({ start: [0, 0, 0], seed });
+      a.setBurning(true);
+      burnFor(a, 10);
+      expect(a.burnPhase()).toBe('dead');
+      expect(BURN_FALLS).toContain(a.debug().fallKind);
+      return headY(a);
+    });
+    for (const h of heads) expect(Math.abs(h - heads[2]!)).toBeLessThan(0.01);
+  });
+
+  it('shot dead mid-panic, it dies the ordinary death: no burn death later, the same corpse as one put out', () => {
+    // Twin `out` is put out the frame after both are killed; `lit` keeps burning past the end of its clock.
+    const lit = makeTestActor({ start: [0, 0, 0] }), out = makeTestActor({ start: [0, 0, 0] });
+    for (const a of [lit, out]) { a.setBurning(true); burnFor(a, 1); }
+    expect(lit.burnPhase()).toBe('panic');
+    for (const a of [lit, out]) {
+      a.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none', forceCollapse: true });
+      a.step(1 / 60);
+    }
+    out.setBurning(false);
+    for (const a of [lit, out]) burnFor(a, 8);   // well past the clock (3..6 s)
+    expect(lit.motionFrame()?.collapsed).toBe(true);
+    expect(lit.burnPhase()).not.toBe('dead');
+    expect(BURN_FALLS).not.toContain(lit.debug().fallKind);
+    expect(lit.debug().fallKind).toBe(out.debug().fallKind);
+    expect(jointGap(lit, out)).toBeLessThan(0.01);
+  });
+
+  it('a soft target (the cultist) shot dead mid-panic plays its soft death, not cut short by the panic', () => {
+    const doc = parseBlob(cultistSrc);
+    const cBody = buildBody(compileBlob(doc, compileFace(doc)));
+    const cultist = () => createZombieActor({
+      id: 1, room: 1, seed: 42, start: [0, 0, 0],
+      bounds: { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, furniture: [],
+      body: cBody, view: stubView() as never,
+      profile: CULTIST_PROFILE, mind: makeSoldierMind(SMG_TUNING),
+      character: { wounds: undefined, releaseProp: () => {} } as never,
+    });
+    let shotId = 5000;
+    const volley = (a: Actor) => {
+      const p = a.posed().prims.find(q => q.bone === 'hem' && q.shell)!;
+      const m: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      const id = ++shotId;
+      a.beginHits();
+      for (let i = 0; i < 6; i++) a.hit([m[0] + (i - 3) * 0.02, m[1], m[2]], [0, 0, -1], { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+      a.endHits();
+    };
+    const lit = cultist(), out = cultist();
+    for (const a of [lit, out]) { a.setBurning(true); burnFor(a, 0.5); }
+    expect(lit.burnPhase()).toBe('panic');
+    for (const a of [lit, out]) { volley(a); a.step(1 / 60); volley(a); }
+    out.setBurning(false);
+    for (const a of [lit, out]) burnFor(a, 6);   // past the soldier tier's clock (2.5..4.5 s)
+    expect(lit.motionFrame()?.collapsed).toBe(true);
+    expect(lit.burnPhase()).not.toBe('dead');
+    expect(jointGap(lit, out)).toBeLessThan(0.01);
+  });
+
+  it('put out before the clock ends, it goes back to its mind', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBurning(true);
+    burnFor(a, 1);
+    a.setBurning(false);
+    expect(a.burnPhase()).toBe('none');
+    burnFor(a, 8);
+    expect(a.burnPhase()).toBe('none');
+    expect(a.debug().fallKind).toBeNull();
+  });
+
+  it('fleeing into a corner, it turns and keeps running instead of pressing the walls', () => {
+    // The player is diagonally opposite, so the body flees into the corner half a metre away.
+    const a = makeTestActor({
+      start: [3.5, 0, 3.5], bounds: { minX: -4, maxX: 4, minZ: -4, maxZ: 4 },
+      profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [6, 6] } },
+    });
+    a.setBrainInput({ x: -3, z: -3, room: 1 }, true);
+    a.setBurning(true);
+    burnFor(a, 1.5);
+    // Path length over the next 2 s: a body pressing the wall covers almost none.
+    let path = 0, prev = a.pose().pos;
+    for (let i = 0; i < 120; i++) {
+      a.step(1 / 60);
+      const p = a.pose().pos;
+      path += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    expect(path).toBeGreaterThan(1.2);
+  });
+
+  it('in melee range, a burning zombie does not attack while it panics', () => {
+    // The zombie mind never reports contact (its bite is the loop's reach test), so read the swing handed to motion.
+    const run = (burning: boolean) => {
+      const a = makeTestActor({ start: [0, 0, 0], room: 3, profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [6, 6] } } });
+      if (burning) a.setBurning(true);
+      let swings = 0;
+      for (let i = 0; i < 3 * 60; i++) {
+        a.setBrainInput({ x: 0, z: 0.6, room: 3 }, true);
+        a.setRingInput(true, 0);
+        a.step(1 / 60);
+        if (a.debug().attack !== null) swings++;
+      }
+      return { a, swings };
+    };
+    expect(run(false).swings).toBeGreaterThan(0);   // the control swings
+    const lit = run(true);
+    expect(['panic', 'falter']).toContain(lit.a.burnPhase());
+    expect(lit.swings).toBe(0);
+  });
+
+  it('a tier that does not die panics, then resumes and goes back to closing on the player', () => {
+    const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], dies: false } } });
+    const player = { x: 5, z: 0, room: 1 };
+    const dist = () => Math.hypot(a.pose().pos[0] - player.x, a.pose().pos[2] - player.z);
+    a.setBrainInput(player, true);
+    a.setBurning(true);
+    for (let i = 0; i < 2 * 60; i++) { a.setBrainInput(player, true); a.step(1 / 60); }
+    expect(a.burnPhase()).toBe('resumed');
+    expect(a.debug().fallKind).toBeNull();
+    const d0 = dist();
+    for (let i = 0; i < 2 * 60; i++) { a.setBrainInput(player, true); a.step(1 / 60); }
+    expect(dist()).toBeLessThan(d0 - 0.5);
+  });
+
+  it('a tier with no flail still panics and dies, and no flail reaches motion', () => {
+    const flailOf = (flail: number) => {
+      const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], flail } } });
+      a.setBurning(true);
+      let peak = 0;
+      for (let i = 0; i < 3 * 60; i++) { a.step(1 / 60); peak = Math.max(peak, a.debug().burnFlail ?? 0); }
+      return { a, peak };
+    };
+    expect(flailOf(1).peak).toBeGreaterThan(0);   // the control hands motion a flail
+    const { a, peak } = flailOf(0);
+    expect(a.burnPhase()).toBe('dead');
+    expect(peak).toBe(0);
+  });
+
+  it('a tier with fall off (the gorehound, whose rig passes canDeathFall) dies its ordinary death, not a burn fall', () => {
+    const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], fall: false } } });
+    a.setBurning(true);
+    for (let i = 0; i < 4 * 60; i++) a.step(1 / 60);
+    expect(a.burnPhase()).toBe('dead');
+    expect(a.motionFrame()?.collapsed).toBe(true);
+    expect(['burnKneel', 'burnTopple', 'burnHeap']).not.toContain(a.debug().fallKind);
+  });
+
+  it('a body that cannot play the falls (the gutcrawler) panics and dies without a burn fall', () => {
+    // The gutcrawler fails canDeathFall (no hips/knees/feet). (The gorehound does NOT: its rig names its legs
+    // shoulder/elbow/hip/knee/foot, so it passes canDeathFall and plays authored falls on any death.)
+    const crawler = createZombieActor({
+      id: 1, room: 1, seed: 7, start: [0, 0, 0],
+      body: buildBody(compileBlob(parseBlob(crawlerSrc))), view: stubView() as never,
+      bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [], profile: GUTCRAWLER_PROFILE,
+    });
+    crawler.setBurning(true);
+    const seen = new Set<string>();
+    for (let i = 0; i < 6 * 60; i++) { crawler.step(1 / 60); seen.add(crawler.burnPhase()); }
+    expect(seen.has('panic')).toBe(true);
+    expect(crawler.burnPhase()).toBe('dead');
+    expect(crawler.motionFrame()?.collapsed).toBe(true);
+    expect(crawler.debug().fallKind).toBeNull();
   });
 });
 

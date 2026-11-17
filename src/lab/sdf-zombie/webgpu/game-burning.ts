@@ -63,6 +63,9 @@ export interface GameBurning {
   readonly tuning: BurnTuning;
   /** The pool, or null while nothing has ever ignited. */
   flameCards(): FlameCards | null;
+  /** Fire cost pass (2026-11-16): how many burning bodies had their card work skipped last draw
+   *  (out of view) and how many capsule sets the volume is holding. */
+  cullStats(): { cardsCulled: number; capsuleSets: number };
   /** Slot 5's one verb: set this actor alight. Idempotent. */
   igniteActor(a: ZombieActor): void;
   /** A body leaving the world (gibbed/retired). */
@@ -126,6 +129,9 @@ export function createGameBurning(ctx: GameContext): GameBurning {
   const volW = new Map<ZombieActor, number>();
   const lodRank: { a: ZombieActor; d: number }[] = [];
   const inVolume = new Set<ZombieActor>();
+  /** Bodies whose burn death has had its burn-down kill. The actor's burnPhase() stays 'dead' on the corpse, so
+   *  without this a later re-light of the charred corpse was killed again on the next step: once per death. */
+  const burnDeathKilled = new Set<ZombieActor>();
   let lodLastT = -1;
   const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const _fireView = new THREE.Matrix4();
@@ -168,7 +174,10 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     inVolume.clear();
     if (technique === 'volume') {
       burning.forEachActive((a, s) => {
-        if (!fireSrc.get(a) || s.burn <= 0.02) return;
+        // Ranked whether or not it has capsules yet: step() only builds them for the bodies this
+        // selection keeps, so a body entering the set gets its capsules on the next tick, while its
+        // weight is still fading in from 0.
+        if (s.burn <= 0.02) return;
         const p = a.pose().pos;
         const d = (p[0] - eye.x) ** 2 + (p[1] + 1 - eye.y) ** 2 + (p[2] - eye.z) ** 2;
         lodRank.push({ a, d: (volW.get(a) ?? 0) > 0.5 ? d * LOD_HYSTERESIS_SQ : d });
@@ -232,6 +241,19 @@ export function createGameBurning(ctx: GameContext): GameBurning {
    *  reused; only its entries are re-pushed. */
   const cardFrames: FlameCardFrame[] = [];
   const cardLastPos = new Map<ZombieActor, Vec3>();
+  /** OUT-OF-VIEW BODIES GET NO CARD WORK (2026-11-16 fire cost pass). A body whose bounding sphere
+   *  is outside the camera frustum keeps its SLOT in both pools (a card's seed is its body's index)
+   *  at burn 0, which update() skips before it reads the anchors: no limbAnchors, no floor probe.
+   *  The sphere is generous (the body, its flame length, the lean trail and the burn-down pile),
+   *  so a body walking into view has its cards before any of it shows. */
+  const CARD_CULL_RADIUS_M = 2.5;
+  const _cullView = new THREE.Matrix4();
+  const _cullVp = new THREE.Matrix4();
+  const _cullFrustum = new THREE.Frustum();
+  const _cullSphere = new THREE.Sphere(new THREE.Vector3(), CARD_CULL_RADIUS_M);
+  /** Shared by every culled body's frame: never read, because burn 0 is skipped first. */
+  let culledAnchors: ReturnType<typeof limbAnchors> | null = null;
+  let cardsCulled = 0;
   /** Transition tracking for the actors' burn-panic override (Task 2): the
    *  previous step's alight set and a scratch set to build this step's, swapped
    *  each step so the per-frame cost is set membership, not allocation. */
@@ -343,6 +365,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     registry: burning,
     tuning,
     flameCards: () => cards,
+    cullStats: () => ({ cardsCulled, capsuleSets: fireSrc.size }),
     igniteActor(a) {
       burning.ignite(a);
       ensureCards();
@@ -357,6 +380,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       cardLastPos.delete(a);
       fireSrc.delete(a);
       volW.delete(a);
+      burnDeathKilled.delete(a);
       // The body is leaving the world: release the panic override at once and
       // drop it from the transition sets, so a later reuse of the same actor
       // (or a stale set entry) cannot keep it fleeing.
@@ -378,6 +402,17 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       for (const a of burnCur) if (!burnPrev.has(a) && burnBehaviourEnabled()) a.setBurning(true);
       for (const a of burnPrev) if (!burnCur.has(a)) a.setBurning(false);
       const swap = burnPrev; burnPrev = burnCur; burnCur = swap;
+      // BURNED TO DEATH (spec 2026-11-16-burn-flail-and-death-design.md): the actor's clock ran out
+      // and it is falling. Start the burn-down once; the state stays registered, so the fire fades
+      // and the char completes on the corpse (retire(), the gib path, is what releases a body).
+      // A body no longer 'dead' (an actor reset to play) can burn to death again.
+      for (const a of burnDeathKilled) if (a.burnPhase() !== 'dead') burnDeathKilled.delete(a);
+      burning.forEachActive((a, s) => {
+        if (!s.dying && s.alight && a.burnPhase() === 'dead' && !burnDeathKilled.has(a)) {
+          burnDeathKilled.add(a);
+          burning.kill(a);
+        }
+      });
       let any = false;
       const simDt = Math.min(dt, 1 / 30);
       burning.forEachActive((a, s) => {
@@ -385,6 +420,12 @@ export function createGameBurning(ctx: GameContext): GameBurning {
         writeUniforms(a, s);
         // The fire volume's sources ride the same posed field the cards do.
         if (technique === 'volume') {
+          // ONLY THE VOLUME'S BODIES (2026-11-16 fire cost pass). The volume draws the nearest
+          // maxBodies; every other burner is cards and surface fire, which read no capsules. A
+          // room of 23 burners used to build 23 capsule sets a tick for the 4 that were used.
+          // inVolume and volW are last draw's selection and fade, so a body fading out keeps its
+          // capsules until its weight reaches 0.
+          if (!inVolume.has(a) && (volW.get(a) ?? 0) <= 0.001) { fireSrc.delete(a); return; }
           // The soldier's greaves are a kit mesh over his shins: burn on them.
           const caps = fireCapsules(a.posed(), {
             legKitRadius: isSoldierFamily(a.character?.entry.profile) ? SOLDIER_LEG_KIT_RADIUS : 0,
@@ -407,9 +448,22 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       lodFrames.length = 0;
       const volumeMode = technique === 'volume';
       const inv = frameDt > 1e-4 ? 1 / frameDt : 0;
+      camera.updateMatrixWorld();
+      _cullView.copy(camera.matrixWorld).invert();
+      _cullVp.multiplyMatrices((camera as THREE.PerspectiveCamera).projectionMatrix, _cullView);
+      _cullFrustum.setFromProjectionMatrix(_cullVp);
+      cardsCulled = 0;
       burning.forEachActive((a, s) => {
         const p = a.pose();
         const pos: Vec3 = [p.pos[0], 0, p.pos[2]];
+        _cullSphere.center.set(p.pos[0], p.pos[1] + 1, p.pos[2]);
+        if (culledAnchors && !_cullFrustum.intersectsSphere(_cullSphere)) {
+          cardsCulled++;
+          if (volumeMode) lodFrames.push({ yaw: p.yaw, anchors: culledAnchors, burn: 0 });
+          cardFrames.push({ yaw: p.yaw, anchors: culledAnchors, burn: 0 });
+          cardLastPos.set(a, pos);
+          return;
+        }
         // The burn-down pile settles on the floor under the body (sector levels: that sector's
         // floor; room levels: exactly 0, the old value).
         const floorY = standingFloor(ctx.world.level.ground, p.pos[0], p.pos[2]);
@@ -419,6 +473,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
         // card's seed is its body's index: the pattern holds through a fade.
         const w = volumeMode ? (volW.get(a) ?? 0) : 1;
         const anchors = limbAnchors(a.posed());
+        culledAnchors ??= anchors;
         if (volumeMode) {
           lodFrames.push({
             yaw: p.yaw, anchors, burn: s.burn * (1 - w),

@@ -90,3 +90,22 @@ describe('burn registry', () => {
     expect(r.size).toBe(1);       // still tracked, just not active
   });
 });
+
+describe('a body that burns to death keeps burning down', () => {
+  const DOWN: BurnRates = { igniteSec: 0.5, extinguishSec: 1, charRate: 0.1, corpseBurnSec: 4 };
+  it('kill starts the burn-down and leaves the state in the registry until it is cold', () => {
+    const reg = createBurnRegistry<object>();
+    const body = {};
+    reg.ignite(body);
+    for (let i = 0; i < 60; i++) reg.step(1 / 30, DOWN);
+    reg.kill(body);
+    expect(reg.get(body)!.dying).toBe(true);
+    for (let i = 0; i < 60; i++) reg.step(1 / 30, DOWN);
+    expect(reg.has(body)).toBe(true);
+    expect(reg.get(body)!.burn).toBeGreaterThan(0);
+    for (let i = 0; i < 90; i++) reg.step(1 / 30, DOWN);
+    expect(reg.get(body)!.burn).toBe(0);
+    expect(reg.get(body)!.char).toBe(1);
+    expect(reg.get(body)!.dying).toBe(false);
+  });
+});

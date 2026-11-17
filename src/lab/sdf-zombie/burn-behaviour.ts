@@ -1,57 +1,68 @@
 // src/lab/sdf-zombie/burn-behaviour.ts
 //
-// WHAT A BURNING BODY DOES, as a pure seeded step. Per type (owner call,
-// 2026-09-18): a soldier panics — no shooting, flees the player on an erratic
-// heading, faster; a zombie is mindless — keeps chasing, faster, heading
-// jittering. Both stumble every stumbleMinSec..stumbleMaxSec. The actor applies
-// this as an override of its mind's verdict (the `doomed` pattern), so neither
-// brain learns a new state.
+// WHAT A BURNING BODY DOES, as a pure seeded step (spec 2026-11-16-burn-flail-and-death-design.md).
+// One clock per burning body, its length rolled from the body's tier (motion-profile.ts BurnTier):
+//   panic   it runs from the player on a smoothly wandering heading, flailing (burn-flail.ts);
+//   falter  the last stretch: speed and flail ease down, the heading wanders wider, the arms fold;
+//   done    the clock is out. `die` is true on that one step when the tier dies.
+// The actor applies this as an override of its mind's verdict (the `doomed` pattern), so no brain
+// learns a burn state.
 import type { Vec3 } from './types';
+import { BURN_TIER_DEFAULT, type BurnTier } from './motion-profile';
 
 export const BURN_BEHAVIOUR = Object.freeze({
-  /** OFF (owner playtest 2026-09-18): the flee + stumble read as jerky on the
-   *  soldier, so a burning soldier keeps behaving exactly as unburnt. The panic
-   *  logic below stays for the real flare-gun pass. Zombies are unaffected. */
-  soldierPanic: false,
-  soldierSpeed: 1.4,
-  zombieSpeed: 1.25,
-  /** Soldier flee target: this far from self, re-picked every repickMin..Max s. */
+  /** Flee target: this far from self along the wobbled heading. */
   fleeDistM: 4,
-  repickMinSec: 1,
-  repickMaxSec: 2,
-  /** Max heading swing off the away/chase direction, radians. */
-  soldierSwingRad: 1.0,
-  zombieJitterRad: 0.45,
-  /** Zombie jitter rate (Hz of the smooth wobble). */
-  zombieJitterHz: 0.7,
-  stumbleMinSec: 1.5,
-  stumbleMaxSec: 3,
-  /** Stagger impulse gain handed to the motion system's lurch. */
-  stumbleGain: 0.6,
-  /**
-   * ARM-FLAIL STAND-IN (see game-actor's `queueBurnFlail`): motion.ts has no
-   * additive arm-pose channel, so the flail is the existing burn→shudder
-   * stagger re-emitted this often. Gain > 1 makes the 2 cm tuned shudder read
-   * as a raised, frantic wave rather than a sub-perceptual tremor.
-   *
-   * A SOLDIER gets a longer period: any shot signal also starts
-   * `stepSoldierStagger`, and an equal-level hit does not restart an active
-   * soldier reaction, so a `small` soldier flail (0.42 s) must be re-emitted
-   * only after it has lapsed or it fires once and dies.
-   */
-  flailPeriodSec: 0.35,
-  soldierFlailPeriodSec: 0.5,
-  flailGain: 1.8,
+  /** Max heading swing off the away direction (rad) and the wobble's base rate (Hz). */
+  wobbleRad: 0.9,
+  wobbleHz: 0.45,
+  /** The wobble's amplitude scale by the end of falter. */
+  falterWobble: 1.5,
+  /** Fraction of the clock at which falter begins. */
+  falterAt: 0.75,
+  /** Speed (as a fraction of the tier's) and flail amplitude at the end of falter. */
+  falterSpeed: 0.45,
+  falterFlail: 0.35,
+  /** BLOCKED (a wall, a crate, a corner): the flee heading is turned off the away direction by this much
+   *  (rad), plus up to blockedTurnExtra of it again, to a seeded side; blocked again, it takes the other
+   *  side. Never past ~145 degrees with the wobble, so a blocked body runs along the wall, not back at the player. No
+   *  second turn for blockedCoolSec. */
+  blockedTurnRad: Math.PI / 2,
+  blockedTurnExtra: 0.25,
+  /** The wobble's scale while a blocked turn is held (the turn is already most of the way round). */
+  blockedWobble: 0.4,
+  blockedCoolSec: 0.5,
+  /** How far along a candidate turn the `clear` probe looks (m). */
+  probeM: 1,
+  /** The last-resort turn (rad) when the probe finds no sideways way out: most of the way round. */
+  blockedTurnBack: 2.4,
+  /** Boxed in (no probe clear): seconds the body runs on its own wander legs instead of a flee heading. */
+  scatterSec: 1,
 });
 
-/** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep
- *  behaving as unburnt (no speed-up, jitter, stumble or flail), so the fire's render
- *  cost can be compared against the same motion without fire. Ship: true. */
+/** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep behaving as
+ *  unburnt (no panic, no flail, no burn death), so the fire's render cost can be compared against the
+ *  same motion without fire. Ship: true. */
 let burnBehaviourOn = true;
 export const setBurnBehaviourEnabled = (on: boolean) => { burnBehaviourOn = on; };
 export const burnBehaviourEnabled = () => burnBehaviourOn;
 
-export interface BurnPanicState { rng: number; nextRepick: number; swing: number; nextStumble: number; t: number; phase: number }
+export type BurnPhase = 'panic' | 'falter' | 'done';
+
+export interface BurnPanicState {
+  rng: number; t: number; phase: number;
+  /** Seconds of panic + falter, rolled once. */
+  durationSec: number;
+  speed: number; dies: boolean;
+  /** `die` has been reported. */
+  died: boolean;
+  /** Standing turn of the flee heading off the away direction (rad), set when the body reports it is blocked. */
+  bias: number;
+  /** Seconds until a blocked report may turn it again. */
+  blockedCool: number;
+  /** Seconds left of running wherever the body's own wander takes it (boxed in: `target` is null). */
+  scatter: number;
+}
 
 function next(s: BurnPanicState): number {          // mulberry32
   let x = (s.rng = (s.rng + 0x6d2b79f5) | 0);
@@ -59,50 +70,100 @@ function next(s: BurnPanicState): number {          // mulberry32
   x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
   return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
 }
-const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+const smooth = (u: number) => { const k = Math.min(1, Math.max(0, u)); return k * k * (3 - 2 * k); };
 
-export function createBurnPanic(seed: number): BurnPanicState {
-  const s: BurnPanicState = { rng: seed | 0, nextRepick: 0, swing: 0, nextStumble: 0, t: 0, phase: 0 };
+export function createBurnPanic(seed: number, tier: BurnTier = BURN_TIER_DEFAULT): BurnPanicState {
+  const s: BurnPanicState = { rng: seed | 0, t: 0, phase: 0, durationSec: 0, speed: tier.speed, dies: tier.dies, died: false, bias: 0, blockedCool: 0, scatter: 0 };
   s.phase = next(s) * Math.PI * 2;
-  s.nextStumble = lerp(BURN_BEHAVIOUR.stumbleMinSec, BURN_BEHAVIOUR.stumbleMaxSec, next(s));
+  const [lo, hi] = tier.panicSec;
+  s.durationSec = Math.max(0.1, lo + (hi - lo) * next(s));
   return s;
 }
 
-export interface BurnPanicInput { kind: 'zombie' | 'soldier'; self: Vec3; player: Vec3 | null; chaseTarget: Vec3 | null }
-export interface BurnPanicOut { target: Vec3 | null; cruiseScale: number; fire: false; stumble: boolean }
-
-function rotateXZ(dx: number, dz: number, a: number): [number, number] {
-  const c = Math.cos(a), s = Math.sin(a);
-  return [dx * c - dz * s, dx * s + dz * c];
+export interface BurnPanicInput {
+  self: Vec3;
+  /** Last known player position; null = never seen. */
+  player: Vec3 | null;
+  /** The body's own forward (unit, ground plane): the heading when no player is known. */
+  forward: Vec3;
+  /** The body is trying to run and getting nowhere (a wall): turn the flee heading. Absent = false. */
+  blocked?: boolean;
+  /** Can the body walk from `self` to this point? Asked only on a blocked step, of a point probeM along
+   *  each candidate turn; the first clear one is taken. Absent = every direction counts as clear. */
+  clear?: (point: Vec3) => boolean;
+}
+export interface BurnPanicOut {
+  /** Where to run. Null = boxed in: no flee heading, the body's own wander picks its legs (still at
+   *  cruiseScale, still flailing). */
+  target: Vec3 | null;
+  cruiseScale: number;
+  fire: false;
+  phase: BurnPhase;
+  /** 0..1 through the whole clock. */
+  u: number;
+  /** Flail amplitude 0..1 (before the tier's own scale). */
+  flail: number;
+  /** 0..1 across falter: how far the arms have folded to the chest. */
+  fold: number;
+  /** True on the one step the clock ends, when the tier dies. */
+  die: boolean;
 }
 
 export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number): BurnPanicOut {
   const B = BURN_BEHAVIOUR;
-  s.t += dt;
-  let stumble = false;
-  if (s.t >= s.nextStumble) {
-    stumble = true;
-    s.nextStumble = s.t + lerp(B.stumbleMinSec, B.stumbleMaxSec, next(s));
-  }
-  if (i.kind === 'soldier') {
-    if (s.t >= s.nextRepick) {
-      s.swing = (next(s) * 2 - 1) * B.soldierSwingRad;
-      s.nextRepick = s.t + lerp(B.repickMinSec, B.repickMaxSec, next(s));
+  s.t += Math.max(0, dt);
+  const u = Math.min(1, s.t / s.durationSec);
+  const f = smooth((u - B.falterAt) / (1 - B.falterAt));
+  const phase: BurnPhase = u >= 1 ? 'done' : u >= B.falterAt ? 'falter' : 'panic';
+  let dx = i.forward[0], dz = i.forward[2];
+  if (i.player) { dx = i.self[0] - i.player[0]; dz = i.self[2] - i.player[2]; }
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) { dx = 0; dz = 1; } else { dx /= len; dz /= len; }
+  const turned = (a: number): [number, number] => { const c = Math.cos(a), sn = Math.sin(a); return [dx * c - dz * sn, dx * sn + dz * c]; };
+  s.blockedCool = Math.max(0, s.blockedCool - Math.max(0, dt));
+  s.scatter = Math.max(0, s.scatter - Math.max(0, dt));
+  if (i.blocked && s.blockedCool <= 0) {
+    // Running straight from the player into a wall reads as a body stuck on the spot: turn hard to
+    // one side and hold that turn, so it runs ALONG the wall until it is blocked again. The side is
+    // seeded the first time and the other one each time after; with a `clear` probe, the first
+    // candidate the body can actually walk wins (a level that rejects a blocked step outright gives
+    // no slide, so a blind turn can stand still).
+    const side = s.bias === 0 ? (next(s) < 0.5 ? -1 : 1) : -Math.sign(s.bias);
+    const wide = B.blockedTurnRad * (1 + B.blockedTurnExtra);
+    const turn = B.blockedTurnRad * (1 + B.blockedTurnExtra * next(s));
+    let pick = side * turn;
+    if (i.clear) {
+      // Sideways first at the full probe; then the same turns at half the probe (a nook); last, most
+      // of the way round: running past the player beats standing still against a wall.
+      const sideways = [side * turn, -side * turn, side * wide, -side * wide, side * B.blockedTurnRad * 0.6, -side * B.blockedTurnRad * 0.6];
+      const tries: [number, number][] = [
+        ...sideways.map((c): [number, number] => [c, B.probeM]),
+        ...sideways.map((c): [number, number] => [c, B.probeM * 0.5]),
+        [side * B.blockedTurnBack, B.probeM], [-side * B.blockedTurnBack, B.probeM],
+      ];
+      let found = false;
+      for (const [cand, reach] of tries) {
+        const [cx, cz] = turned(cand);
+        if (i.clear([i.self[0] + cx * reach, i.self[1], i.self[2] + cz * reach])) { pick = cand; found = true; break; }
+      }
+      // Boxed in (a corner between a wall and a crate): no heading to give. Hand the legs back to the
+      // body's own wander for a moment; its random legs and push-out are the designed unstick.
+      if (!found) s.scatter = B.scatterSec;
     }
-    const p = i.player ?? [i.self[0] + 1, 0, i.self[2]];
-    let dx = i.self[0] - p[0], dz = i.self[2] - p[2];
-    const len = Math.hypot(dx, dz) || 1;
-    [dx, dz] = rotateXZ(dx / len, dz / len, s.swing);
-    return {
-      target: [i.self[0] + dx * B.fleeDistM, i.self[1], i.self[2] + dz * B.fleeDistM],
-      cruiseScale: B.soldierSpeed, fire: false, stumble,
-    };
+    s.bias = pick;
+    s.blockedCool = B.blockedCoolSec;
   }
-  const c = i.chaseTarget;
-  if (!c) return { target: null, cruiseScale: B.zombieSpeed, fire: false, stumble };
-  const dx = c[0] - i.self[0], dz = c[2] - i.self[2];
-  const wob = Math.sin(s.t * B.zombieJitterHz * Math.PI * 2 + s.phase)
-    + 0.5 * Math.sin(s.t * B.zombieJitterHz * 5.3 + s.phase * 1.7);
-  const [rx, rz] = rotateXZ(dx, dz, (wob / 1.5) * B.zombieJitterRad);
-  return { target: [i.self[0] + rx, c[1], i.self[2] + rz], cruiseScale: B.zombieSpeed, fire: false, stumble };
+  const w = 2 * Math.PI * B.wobbleHz * s.t;
+  const wob = (Math.sin(w + s.phase) + 0.5 * Math.sin(w * 2.3 + s.phase * 1.7)) / 1.5;
+  const [hx, hz] = turned(s.bias + wob * B.wobbleRad * (1 + (B.falterWobble - 1) * f) * (s.bias !== 0 ? B.blockedWobble : 1));
+  const die = phase === 'done' && s.dies && !s.died;
+  if (die) s.died = true;
+  return {
+    target: s.scatter > 0 ? null : [i.self[0] + hx * B.fleeDistM, i.self[1], i.self[2] + hz * B.fleeDistM],
+    cruiseScale: s.speed * (1 + (B.falterSpeed - 1) * f),
+    fire: false, phase, u,
+    flail: 1 + (B.falterFlail - 1) * f,
+    fold: f,
+    die,
+  };
 }

@@ -139,6 +139,8 @@ export interface MotionProfile {
   /** The free physics death (collapse.ts) instead of an authored fall (death-fall.ts). The zombie's (owner
    *  2026-11-02: the five falls repeat in a crowd); the bodies built on his profile opt back out. */
   physicsDeath?: boolean;
+  /** HOW THIS BODY BURNS (burn-behaviour.ts): absent fields take BURN_TIER_DEFAULT. */
+  burn?: Partial<BurnTier>;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */
@@ -156,6 +158,10 @@ export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | 
  */
 export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | null | undefined): boolean {
   return !isSoldierFamily(profile) && !profile?.soft;
+}
+
+export function resolveBurnTier(profile: Pick<MotionProfile, 'burn'> | null | undefined): BurnTier {
+  return { ...BURN_TIER_DEFAULT, ...(profile?.burn ?? {}) };
 }
 
 /**
@@ -197,6 +203,27 @@ export const SOLDIER_FLAIL: FlailTuning = {
   abduct: 0.55, liftL: 0, liftR: -0.35, yawOut: 1.30, lagL: true, riseSec: 0.25, durationSec: 1.35, arch: 0,
 };
 
+/** How a character burns: how long it panics, how fast, how hard it flails, and whether fire kills it. */
+export interface BurnTier {
+  /** Seconds of panic + falter before the burn death, rolled per body. */
+  panicSec: readonly [number, number];
+  /** Cruise speed multiplier while panicking. */
+  speed: number;
+  /** Flail amplitude scale (0 = no arm flail). */
+  flail: number;
+  /** Fire kills this body when its clock ends. False: it panics, then carries on, alight. */
+  dies: boolean;
+  /** It dies on an authored BURN fall (death-fall.ts BURN_FALL_KINDS). False: its ordinary death. The
+   *  burn falls are keyed for a biped: a quadruped whose rig reuses the humanoid joint names (the
+   *  gorehound) passes canDeathFall and must opt out here. */
+  fall: boolean;
+}
+export const BURN_TIER_DEFAULT: BurnTier = Object.freeze({ panicSec: [3, 6] as const, speed: 1.3, flail: 1, dies: true, fall: true });
+
+const BURN_SOLDIER: Partial<BurnTier> = { panicSec: [2.5, 4.5], speed: 1.4 };
+const BURN_HEAVY: Partial<BurnTier> = { panicSec: [5, 8], speed: 1.1, flail: 0.6, dies: false };
+const BURN_BEAST: Partial<BurnTier> = { panicSec: [2.5, 4], speed: 1.4, flail: 0, fall: false };
+
 export const ZOMBIE_PROFILE: MotionProfile = {
   name: 'zombie',
   gait: { walk: SHAMBLE, run: SHAMBLE },
@@ -208,6 +235,7 @@ export const ZOMBIE_PROFILE: MotionProfile = {
 
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
+  burn: BURN_SOLDIER,
   family: 'soldier',
   gait: { walk: MARCH, run: RUN },
   // Cruise and the walk→run band come from the reference clips' implied
@@ -254,6 +282,7 @@ export const SOLDIER_PROFILE: MotionProfile = {
  *  on the shared GUN_GRIP locators. */
 export const OGRE_PROFILE: MotionProfile = {
   name: 'ogre',
+  burn: BURN_HEAVY,
   // One gait: an ogre does not break into a run (runBand never reached).
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
@@ -285,6 +314,7 @@ export const CULTIST_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'cultist',
+  burn: BURN_SOLDIER,
   // Carry-style glide: the tommy gun owns the arms (gait.ts GLIDE_CARRY).
   gait: { walk: GLIDE_CARRY, run: GLIDE_CARRY },
   armStyle: 'carry',
@@ -316,6 +346,7 @@ export const CULTIST_PROFILE: MotionProfile = {
 export const JUGGERNAUT_PROFILE: MotionProfile = {
   ...SOLDIER_PROFILE,
   name: 'juggernaut',
+  burn: BURN_HEAVY,
   // MARCH only: a tank does not sprint. runBand at Infinity keeps runWeight 0.
   gait: { walk: MARCH, run: MARCH },
   runBand: { from: Infinity, to: Infinity },
@@ -347,6 +378,7 @@ export const JUGGERNAUT_PROFILE: MotionProfile = {
 export const WARBULL_PROFILE: MotionProfile = {
   ...SOLDIER_PROFILE,
   name: 'warbull',
+  burn: BURN_HEAVY,
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
   // Under the juggernaut's 0.9: at 2.4 m he covers ground by stride, and the
@@ -406,6 +438,7 @@ export const BUTCHER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'butcher',
+  burn: BURN_HEAVY,
   gait: { walk: PROWL, run: PROWL },
   // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
   cruise: 1.45,
@@ -439,6 +472,7 @@ export const DEADEYE_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'deadeye',
+  burn: BURN_SOLDIER,
   gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
   // Slower than the butcher: he walks to a range and holds it.
   cruise: 1.3,
@@ -480,6 +514,7 @@ export const TALLOW_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'tallow',
+  burn: BURN_HEAVY,
   // The STOMP with reach arms (gait.ts TALLOW_STOMP): on STOMP's carry arms the brace never moved them.
   gait: { walk: TALLOW_STOMP, run: TALLOW_STOMP },
   cruise: 0.7,
@@ -500,6 +535,7 @@ export const GOREHOUND_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'gorehound',
+  burn: BURN_BEAST,
   gait: { walk: GOREHOUND, run: GOREHOUND },
   runBand: { from: Infinity, to: Infinity },
   cruise: 1.3,
@@ -516,6 +552,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'gutcrawler',
+  burn: BURN_BEAST,
   gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
   runBand: { from: Infinity, to: Infinity },
   cruise: 0.75,
