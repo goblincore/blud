@@ -134,3 +134,35 @@ Open, seen in both frames: the far body's flame has a hard rectangular edge. Not
 into.
 
 With the 8-body cost now under the old 4-body cost, raising `maxBodies` from 4 is an owner call.
+
+## Update, same day: the CPU skips (candidates 2 and 3) are in, and they did NOT move the frame
+
+Built in `game-burning.ts`:
+
+- Fire capsules are built only for bodies the volume draws or is fading out (last draw's selection). A body entering
+  the set gets its capsules on the next tick, while its weight is still fading in from 0.
+- A burning body whose 2.5 m bounding sphere is outside the camera frustum keeps its slot in both card pools at
+  burn 0 and skips `limbAnchors` and the floor probe.
+- `__sdfGame.flameCards()` now also reports `cardsCulled` and `capsuleSets`.
+
+Checked in the live page (ring testbed, 23 bodies lit, panic off): `capsuleSets` 4 (was one per burner, 23),
+`cardsCulled` 7 of 23. Only 7 are culled because a body behind a wall is still inside the frustum.
+
+**Timing: no measurable gain.** Melee bench, load about 4: `effects-tail` read 0.3 to 0.4 ms without fire and 1.1
+to 1.2 ms with it, the same as before the change (0.8 to 1.0). The bench is frozen, so the capsule saving (which is
+in the sim tick) cannot show there at all.
+
+Temporary timers in the live page (7 frames only, because the browser pane throttles the page; 0.1 ms timer
+resolution, so indicative): the whole of `updateCards` is about 0.33 ms for 23 burners (volume feed 0.13, per-body
+loop 0.09, card pool write 0.06, LOD pool 0.06), and the effects scene draw after it about 0.36 ms. The timers are
+removed again.
+
+So the fire's card and volume bookkeeping was never more than a few tenths of a millisecond, and the earlier "+1.4 ms
+of `cpu:draw`" is not explained by it. What still rises with fire in every run is `cpu:phase:crowd-sdf-inner` (the
+SDF layer's own CPU submit): 2.9 -> 3.4 and 3.2..4.3 -> 4.9..5.6 ms. Those runs were at load 4, where CPU spans are
+unreliable, so this could be load. If it is real, the suspects are the 23 fire lights pushed into the per-body light
+lists and per-body burn uniform uploads. Not investigated. The next step would be a CPU profile of one burning
+frame on a quiet machine, not more guessing.
+
+Candidates 4 (allocation reuse) and 5 (cards in the vertex shader) are not worth doing on this evidence: the work
+they would remove is about 0.1 to 0.3 ms.
