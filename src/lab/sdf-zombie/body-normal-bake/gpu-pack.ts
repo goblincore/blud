@@ -33,7 +33,7 @@ export interface BakePacked {
 export function packBakeBody(body: Body): BakePacked {
   const n = Math.max(1, body.prims.length);
   const rows = Object.fromEntries(
-    ['primA', 'primB', 'primScale', 'primQuat', 'primShape', 'primBend', 'primColor', 'primShell', 'primClip', 'primWarp', 'primStrand', 'restA', 'restB']
+    ['primA', 'primB', 'primScale', 'primQuat', 'primShape', 'primBend', 'primColor', 'primShell', 'primClip', 'primWarp', 'primStrand', 'restA', 'restB', 'primFrame', 'primFrameB']
       .map(k => [k, new Float32Array(n * PRIM_STRIDE)]),
   ) as unknown as PrimRows;
   body.prims.forEach((p, i) => writePrimRows(rows, p, i, primRole(p), undefined));

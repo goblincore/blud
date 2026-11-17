@@ -25,7 +25,8 @@ export function resolveBones(bones: BoneDef[], root: Vec3): Map<string, Resolved
     for (const b of remaining) {
       const parentTail = b.parent === null ? root : out.get(b.parent)?.tail;
       if (parentTail === undefined) { next.push(b); continue; }
-      const head: Vec3 = [parentTail[0] + (b.side ?? 0), parentTail[1], parentTail[2]];
+      const o = b.offset ?? [0, 0, 0];
+      const head: Vec3 = [parentTail[0] + (b.side ?? 0) + o[0], parentTail[1] + o[1], parentTail[2] + o[2]];
       out.set(b.name, {
         head, tail: add(head, scale(normalize(b.dir), b.length)),
         ...(b.jawHinge === undefined ? {} : { jawHinge: b.jawHinge }),
@@ -114,6 +115,7 @@ export function placePrims(
       ...(p.metal === undefined ? {} : { metal: p.metal }),
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
+      ...(p.skinned ? { skinned: true } : {}),
       // A dead-only prim starts hidden; the actor swaps the sets on death
       // (death-state.ts). `dead` is the same switch severing uses.
       ...(p.when ? { when: p.when } : {}),

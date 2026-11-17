@@ -147,6 +147,14 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   const crowdViewOptsFor = (built: BuildResult): GpuViewOpts => {
     if (!ctx.crowd.on) return {};
     const stride = bodyPrimStride(built);
+    // HERO BODIES (gargoyle-hd spike, 2026-11-17): past 256 prims a body packs into hundreds of bound groups, and the
+    // crowd path's per-tile list holds TILE_MAX_ENTRIES (64): a tile over the torso and wings clamped and the march
+    // dropped whole limbs (legs gone, a wing floating). The per-body path uses no tiles. A game of one or two
+    // such enemies does not need the crowd batch.
+    if (built.prims.length + (built.bonePrims?.length ?? 0) > 256) {
+      console.info(`[crowd] ${name}: hero body (${built.prims.length} prims) draws per-body`);
+      return {};
+    }
     const t = crowdTypeFor(ctx, name, room.id, stride);
     if (t.atlas.stride < stride) {
       console.warn(`[crowd] ${name}: body needs a ${stride}-wide atlas, type has ${t.atlas.stride}; drawing per-body`);

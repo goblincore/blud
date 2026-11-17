@@ -2573,7 +2573,9 @@ async function main() {
   // The conservative OUTER hull (shell-hull-outer.ts). Default OFF: it is a
   // measurement instrument until the march consumes it, and rasterising it
   // for nothing is pure cost.
-  ctx.world.outerHull = createOuterHull();
+  // 16384 (gargoyle-hd spike): a fitted hero body chains ~5000 spheres alone (thin prims, many links); the old 4096
+  // world cap silently cut it. Instanced spheres, so the cost is the buffer and the raster of what is drawn.
+  ctx.world.outerHull = createOuterHull(16384);
   ctx.world.outerHull.entryObject.layers.set(SHELL_LAYER);
   ctx.world.outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
   scene.add(ctx.world.outerHull.entryObject);

@@ -121,7 +121,10 @@ ${RAYMASK ? `    // RAY-MASK PROBE (?raymask, debug mode 21): would a per-ray pr
       let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
       sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);
     }
-    if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
+    if (sd < gFoldBest) {
+      gFoldSecond = gFoldBest; gFoldSecondIdx = gFoldBestIdx;
+      gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z;
+    } else if (sd < gFoldSecond) { gFoldSecond = sd; gFoldSecondIdx = f32(idx); }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
     // bit 2 (value 4); box is bit 3 (value 8); METAL is bit 4 (value 16),
     // packed by pack.ts and read ONLY in the shading block (it is a
@@ -165,6 +168,13 @@ ${LIMBS ? `    // SCALAR on purpose: the caller (mapBody) swaps gLimbCur in and 
 // applies.
 var<private> gFoldBest: f32 = 1e9;
 var<private> gFoldBestIdx: f32 = -1.0;
+// The RUNNER-UP prim (gargoyle-hd joint blend): the residual samples the sculpt through both when they are close, so
+// two bones' frames meet smoothly at a joint instead of stepping where the dominant prim flips.
+var<private> gFoldSecond: f32 = 1e9;
+var<private> gFoldSecondIdx: f32 = -1.0;
+// The residual layer's last offset (map-body, gargoyle-hd): negative where the real surface sits BELOW the prim body,
+// i.e. a groove, wrinkle or crease. The occlusion block reads it at the hit as a free cavity term.
+var<private> gResidualOff: f32 = 0.0;
 // The dominant prim's GROUP DISTORTION factor (grp.z), for MARCH_BODY's
 // footprint-AA epsilon (perf round 2 task 6): sdPrimitive under-reports
 // Euclid by up to this factor, so the epsilon divides by it. Rides a private

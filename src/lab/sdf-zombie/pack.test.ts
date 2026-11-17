@@ -565,6 +565,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'imp.blob': 2,
     // The two red ember eyes in his slanted sockets.
     'tallow.blob': 2,
+    // The two red eyes in its sockets (gargoyle-hd spike, 2026-11-17).
+    'gargoyle-hd.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

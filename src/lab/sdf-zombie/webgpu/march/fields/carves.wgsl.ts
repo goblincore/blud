@@ -3,7 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): carve/noise anchor helpers.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { ROW_CLUSTER_RANGE, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_REST_A, ROW_REST_B } from '../layout';
+import { ROW_CLUSTER_RANGE, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_REST_A, ROW_REST_B, ROW_PRIM_FRAME, ROW_PRIM_FRAME_B } from '../layout';
 
 // REST-SPACE NOISE ANCHOR (motion-polish task 6). Maps a world point into the
 // DOMINANT primitive's rest frame — translation between capsule midpoints,
@@ -53,6 +53,59 @@ export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2
     q = qMulQ(qFromToV(qRot(q, axisP / lenP), axisR / lenR), q);
   }
   return midR + qRot(q, p - midP);
+}
+
+// YAW-AWARE REST POINT (gargoyle-hd residual, 2026-11-17). restPoint recovers a capsule's SWING (axis to axis) but
+// not a TWIST about its own axis, and for an upright torso prim the body's heading IS such a twist: a body spawned
+// facing the player (yaw pi) mapped torso points to the far side of its rest pose, and the residual carved the
+// gargoyle hollow. Undo the heading first (the noiseLocal rotation, about the prim's own centre), then the swing.
+// yaw = gInstNoiseShift.y. Exact for heading-plus-swing poses; twist WITHIN a limb is still lost (orient quats aside).
+fn restPointYaw(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>, band: i32, yaw: f32) -> vec3<f32> {
+  if (best < 0) { return fallback; }
+  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A} + band), 0);
+  if (ra.w <= 0.0) { return fallback; }
+  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B} + band), 0);
+  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_A} + band), 0).xyz;
+  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_B} + band), 0).xyz;
+  let ch = cos(yaw);
+  let sh = sin(yaw);
+  let midP = (pa + pb) * 0.5;
+  let midR = (ra.xyz + rb.xyz) * 0.5;
+  let dp = p - midP;
+  let lp = vec3<f32>(dp.x * ch - dp.z * sh, dp.y, dp.x * sh + dp.z * ch);
+  let ax = pb - pa;
+  let axisP = vec3<f32>(ax.x * ch - ax.z * sh, ax.y, ax.x * sh + ax.z * ch);
+  let axisR = rb.xyz - ra.xyz;
+  let lenP = length(axisP);
+  let lenR = length(axisR);
+  var q = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  if (lenP > 1e-6 && lenR > 1e-6) { q = qFromToV(axisP / lenP, axisR / lenR); }
+  return midR + qRot(q, lp);
+}
+
+// SKIN-FRAME REST POINT (gargoyle-hd residual, 2026-11-17). A \`rigid\` prim rides its bone's whole frame, and the rig
+// packs that frame's rest->posed rotation in ROW_PRIM_FRAME. Inverting it is EXACT, and every prim on one bone gives
+// the same answer for the same point, so the residual no longer tears where the dominant prim flips (restPoint's
+// per-prim swing disagreed between neighbours: dark seams along every capsule the moment the body moved).
+// An unwritten frame (w == 0: no rig yet, a non-rigid prim) falls back to the yaw-aware swing.
+fn restPointSkin(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>, band: i32, yaw: f32) -> vec3<f32> {
+  if (best < 0) { return fallback; }
+  let f = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_FRAME} + band), 0);
+  if (dot(f, f) < 0.5) { return restPointYaw(p, data, best, fallback, band, yaw); }
+  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A} + band), 0);
+  if (ra.w <= 0.0) { return fallback; }
+  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B} + band), 0);
+  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_A} + band), 0).xyz;
+  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_B} + band), 0).xyz;
+  let g = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_FRAME_B} + band), 0);
+  if (dot(g, g) < 0.5) { return (ra.xyz + rb.xyz) * 0.5 + qRot(vec4<f32>(-f.xyz, f.w), p - (pa + pb) * 0.5); }
+  // A JOINT-SPANNING prim (its ends ride two bones): map through each end's bone, anchored at that end, and blend along
+  // the capsule. Each end agrees exactly with the prims on its own bone, so the residual stays continuous both sides.
+  let ab = pb - pa;
+  let u = clamp(dot(p - pa, ab) / max(dot(ab, ab), 1e-10), 0.0, 1.0);
+  let mapA = ra.xyz + qRot(vec4<f32>(-f.xyz, f.w), p - pa);
+  let mapB = rb.xyz + qRot(vec4<f32>(-g.xyz, g.w), p - pb);
+  return mix(mapA, mapB, u);
 }`;
 
 // MOTION VECTORS (2026-09-22, docs/dev-notes/2026-09-22-cost-census/MOTION-VECTORS-PLAN.md): the

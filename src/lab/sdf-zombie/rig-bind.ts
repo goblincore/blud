@@ -19,8 +19,22 @@ import {
   scale as vscale, sub,
 } from './vec';
 
+/** Distance from p to segment ab. */
+const segDist = (p: Vec3, a: Vec3, b: Vec3): number => {
+  const ab = sub(b, a), l2 = dot(ab, ab);
+  const u = l2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(p, a), ab) / l2));
+  return len(sub(p, add(a, vscale(ab, u))));
+};
+
 /** Which rig point an endpoint follows, and its fixed offset from that point. */
-interface EndpointBind { point: number; offset: Vec3 }
+interface EndpointBind {
+  point: number;
+  offset: Vec3;
+  /** A JOINT-CROSSING endpoint of a `rigid` prim (gargoyle-hd wrists, 2026-11-17): it lies past its own bone's end, so
+   *  it rides the NEIGHBOURING bone across that joint and its offset turns with that bone's frame instead of the
+   *  prim's own. A capsule spanning the wrist then bends with the hand rather than poking straight on past it. */
+  frame?: { head: number; tail: number; restDir: Vec3 };
+}
 interface PrimBind {
   a: EndpointBind;
   b: EndpointBind;
@@ -425,9 +439,13 @@ export function bindRig(body: BuildResult): BoundRig {
    *  exactly — a bone prim posed BOTH rigidly and axially is posed twice. */
   // `on jaw` prims ride the head TOO (then the gape, in headTransform): the
   // jaw is part of the rigid head that also hinges.
-  const ridesHead = (p: { limb: string; a: Vec3; b: Vec3; bone?: string }): boolean =>
+  // A `skinned` prim belongs to its DECLARED bone (gargoyle-hd, 2026-11-17): a fitted neck prim near the skull bound
+  // both ends to skull points and rode the head while its neighbours rode the neck, so one bone's prims disagreed
+  // about the rest frame by 12 cm and the residual tore at the throat.
+  const ridesHead = (p: { limb: string; a: Vec3; b: Vec3; bone?: string; rigid?: boolean; skinned?: boolean }): boolean =>
     skullPts !== null
     && p.limb === 'head'
+    && !(p.skinned && p.bone !== undefined && p.bone !== 'skull' && p.bone !== 'jaw')
     && ((jawBone !== undefined && p.bone === 'jaw')
       || len(sub(p.a, p.b)) < KEY_EPS
       || (skullPts.has(bindEnd(p.a, p.bone).point) && skullPts.has(bindEnd(p.b, p.bone).point)));
@@ -481,7 +499,26 @@ export function bindRig(body: BuildResult): BoundRig {
       const h = indexOf(own.head), t = indexOf(own.tail);
       if (h !== t) {
         const origin = positions[h]!;
-        return { a: { point: h, offset: sub(p.a, origin) }, b: { point: h, offset: sub(p.b, origin) },
+        const crossing = (e: Vec3): EndpointBind => {
+          const plain = { point: h, offset: sub(e, origin) };
+          const ab = sub(own.tail, own.head), u = dot(sub(e, own.head), ab) / dot(ab, ab);
+          if (!p.skinned || (u >= 0 && u <= 1)) return plain;
+          // Past an end: the bones sharing that joint, nearest by segment distance, if nearer than the own bone.
+          const joint = u > 1 ? t : h;
+          let best: { name: string; d: number } | null = null;
+          for (const [name, b] of body.bones) {
+            if (name === p.bone) continue;
+            const bh = indexOf(b.head), bt = indexOf(b.tail);
+            if (bh === bt || (bh !== joint && bt !== joint)) continue;
+            const d = segDist(e, b.head, b.tail);
+            if (!best || d < best.d) best = { name, d };
+          }
+          if (!best || best.d >= segDist(e, own.head, own.tail)) return plain;
+          const nb = body.bones.get(best.name)!, nh = indexOf(nb.head);
+          return { point: nh, offset: sub(e, positions[nh]!),
+            frame: { head: nh, tail: indexOf(nb.tail), restDir: normalize(sub(nb.tail, nb.head)) } };
+        };
+        return { a: crossing(p.a), b: crossing(p.b),
           armFrame: { head: h, tail: t, restDir: normalize(sub(own.tail, own.head)) } };
       }
     }
@@ -762,11 +799,11 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     // world. Leaving either behind made the same zombie look thin-chested
     // and wide-footed when it faced sideways (the apparent room variants).
     // Isotropic capsules retain the cheap un-oriented field path.
-    const a = add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset));
+    const a = add(pos[bind.a.point]!.pos, qRotate(bind.a.frame ? rotationOf(bind.a.frame) : q, bind.a.offset));
     const posed: Primitive = {
       ...p,
       a,
-      b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
+      b: add(pos[bind.b.point]!.pos, qRotate(bind.b.frame ? rotationOf(bind.b.frame) : q, bind.b.offset)),
       ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
       ...(p.shell ? { shell: poseShellPlane(p, a, q) } : {}),
       ...(turned && orientedShape
@@ -779,6 +816,12 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     // centre leaves its field alone, so the shape and the march path are untouched (orient-shape.ts; the pack keeps
     // the cluster off sdPrimO). An anisotropic point prim (the spine and foot blobs) keeps the orient it shapes with
     // above: turning only its noise would slide the texture over a silhouette that does not turn.
+    // The bone frame the residual layer reads back (ROW_PRIM_FRAME): exact for a `rigid` prim, which rides the frame whole.
+    if (bind.armFrame) {
+      const qa = bind.a.frame ? rotationOf(bind.a.frame) : q, qb = bind.b.frame ? rotationOf(bind.b.frame) : q;
+      posed.skinQuat = qa;
+      if (bind.a.frame || bind.b.frame) posed.skinQuatB = qb;  // a joint-spanning prim: blend along it
+    }
     if (flesh && !orientedShape && !orientShapesField(posed)) {
       const qn = bind.armFrame ? q : bind.noiseFrame ? rotationOf(bind.noiseFrame) : q;
       if (Math.abs(1 - qn[3]) > 1e-6) { posed.orient = qn; posed.poseOrient = true; }
@@ -809,7 +852,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const shaped = sq ? squashShape(morphedShape, sq.s) : morphedShape;
       const shellRest = sq && p.shell
         ? squashRestPrim(p, add(sub(p.a, bound.head!.prims.get(i)!.a), sq.c), sq.s) : p;
-      return { ...shaped, a, b: add(rigid.origin, face.b), orient: q,
+      return { ...shaped, a, b: add(rigid.origin, face.b), orient: q, skinQuat: q,
         ...(shaped.bend ? { bend: qRotate(q, shaped.bend) } : {}),
         ...(p.shell ? { shell: poseShellPlane(shellRest, a, q) } : {}) };
     }

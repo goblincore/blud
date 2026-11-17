@@ -452,6 +452,7 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.metal ? { metal: true } : {}),
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
+      ...(p.skinned ? { skinned: true } : {}),
       ...(p.when ? { when: p.when } : {}),
       ...(p.morphs.length > 0 ? { morphs: p.morphs } : {}),
       ...(p.kind === 'shell'
@@ -494,13 +495,21 @@ function withFaceMorphs(prims: ReturnType<typeof facePrims>, doc: BlobDoc): Prim
   });
 }
 
+const unit3 = (v: readonly number[]): Vec3 => {
+  const n = Math.hypot(v[0]!, v[1]!, v[2]!) || 1;
+  return [v[0]! / n, v[1]! / n, v[2]! / n];
+};
+
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
   const bones: BoneDef[] = [
     { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
     ...doc.bones.map(b => ({
       name: b.name,
       parent: b.parent,
-      dir: dirVector(b.dir, b.pitchDeg, b.tiltDeg),
+      dir: b.vec ? unit3(b.vec) : dirVector(b.dir, b.pitchDeg, b.tiltDeg),
+      ...(b.vecR ? { dirR: unit3(b.vecR) } : {}),
+      ...(b.off ? { offset: b.off } : {}),
+      ...(b.offR ? { offsetR: b.offR } : {}),
       length: b.len,
       ...(b.lenR === undefined ? {} : { lengthR: b.lenR }),
       ...(b.hinge === undefined ? {} : { jawHinge: b.hinge }),

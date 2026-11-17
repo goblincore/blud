@@ -35,7 +35,7 @@ import {
   ROW_PREV_A,
   ROW_PREV_B,
   ROW_PREV_QUAT,
-  ROW_WOUND_CUT,
+  ROW_WOUND_CUT, ROW_PRIM_FRAME, ROW_PRIM_FRAME_B,
 } from '../march.wgsl';
 import { MAX_WOUNDS } from '../../damage';
 import { WG_CELL_MAX, WG_ROWS } from '../../wound-grid';
@@ -52,6 +52,7 @@ describe('data texture layout', () => {
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
       ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_WOUND_CUT,
+      ROW_PRIM_FRAME, ROW_PRIM_FRAME_B,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     // The crater grid's rows (wound-grid-flag.ts, on by default) follow the band of before.

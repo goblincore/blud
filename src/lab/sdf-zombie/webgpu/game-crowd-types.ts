@@ -7,6 +7,9 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { residualTexture } from './residual-volume';
+import { CHARACTERS } from '../character-registry';
+const residualOf = (name: string) => CHARACTERS[name]?.residual;
 import type { GameContext } from './game-context';
 import { createCrowdType, type CrowdType } from './crowd-type';
 import { DEPTH_PREPASS_LAYER, SDF_LAYER } from './sdf-layer';
@@ -48,6 +51,7 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
       probeDyn: ctx.probes.gather ? { node: ctx.probes.gather.probeDynNode } : undefined,
       // The shared light list (plan 1 task 9); game-main turns lightListCfg.x on (task 10).
       lightList: ctx.world.light?.list ? { node: ctx.world.light.list.node } : undefined,
+      ...(residualOf(name) ? { volumeTex: residualTexture(residualOf(name)!) } : {}),
     },
     // `stride` (validate.ts primStride of the first body) fixes the atlas
     // width for the type's life; the caller checks later bodies fit.

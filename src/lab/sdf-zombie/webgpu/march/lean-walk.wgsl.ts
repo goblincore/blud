@@ -52,6 +52,8 @@ ${TR ? `    // THE TILE REFERENCE LIST (tile-ref-flag.ts): this slot's run of th
     var d = 1e9;
     gFoldBest = 1e9;
     gFoldBestIdx = -1.0;
+    gFoldSecond = 1e9;
+    gFoldSecondIdx = -1.0;
     gFoldBestDistort = 1.0;
     // UPPER-BOUND CULL, mapBody's expression for a closed slot (piece 0, no limb mode).
     gCullRef = select(1e9, gCullUB, base + s == gCullSlot && gCullPiece == 0);

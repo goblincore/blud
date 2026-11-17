@@ -35,7 +35,11 @@ import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRot
  * The WebGL GLSL twin (`march.glsl.ts`, unsupported: Blud is WebGPU-only)
  * still bakes MAX_PRIMS into three uniform arrays; it is not a constraint.
  */
-export const MAX_PRIMS = 256;
+// 1024 since the gargoyle-hd spike (2026-11-17): a fitted hero body of several hundred prims, for a game that shows
+// one or two enemies at a time. Width still steps by PRIM_STRIDE_STEP, so a <=128-prim body is byte-identical.
+// 2048 (gargoyle-hd, 2026-11-17): ~1000 fitted flesh prims plus their ~350 derived bones. Only a ceiling: every texture is
+// sized per body (primStride), so the shipped cast pays nothing for it.
+export const MAX_PRIMS = 2048;
 /** Data-texture width for any body with at most this many flesh + bone prims
  *  — the whole shipped cast, and the width every texture had before per-body
  *  widths. Gib chunks and the FPV hands always use it. */
@@ -87,6 +91,16 @@ export const BONE_SEG_MAX = 32;
  * rather than trusting them to stay in step.
  */
 export const MAX_CLUSTER_PRIMS = 64;
+
+/**
+ * gargoyle-hd spike (2026-11-17): MAX_CLUSTER_PRIMS is really the per-GROUP loop (foldGroup's `i < 64`); a
+ * cluster folds up to MAX_CLUSTER_GROUPS groups (map-body's `gi < 64`). pack.ts boundGroups caps each group at
+ * MAX_GROUP_PRIMS and splits gib chunks' single group the same way, so a cluster may hold far more than 64
+ * prims as long as it packs into at most MAX_CLUSTER_GROUPS groups (pack.ts throws otherwise).
+ */
+export const MAX_GROUP_PRIMS = 64;
+export const MAX_CLUSTER_GROUPS = 256;
+export const MAX_CLUSTER_TOTAL = MAX_GROUP_PRIMS * MAX_CLUSTER_GROUPS;
 
 export interface ValidateOpts {
   silhouetteNoiseAmp: number;
@@ -914,10 +928,10 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
   // geometry. Report it as the count against the bound so the author knows
   // which way to move.
   for (const c of body.clusters)
-    if (c.count > MAX_CLUSTER_PRIMS)
+    if (c.count > MAX_CLUSTER_TOTAL)
       errs.push(
         `cluster "${c.limb}" holds ${c.count} primitives, over the per-cluster ` +
-        `shader ceiling ${MAX_CLUSTER_PRIMS} — the fold silently truncates`);
+        `shader ceiling ${MAX_CLUSTER_TOTAL} — the fold silently truncates`);
 
   // Fold order: each cluster must own a contiguous run of same-limb primitives.
   for (const c of body.clusters) {

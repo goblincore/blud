@@ -155,7 +155,9 @@ await send('Emulation.setDeviceMetricsOverride', {
 });
 
 const url = `http://localhost:${VITE}/sdf-lab-webgpu.html`
-  + (CHARACTER ? `?character=${encodeURIComponent(CHARACTER)}` : '');
+  + (CHARACTER ? `?character=${encodeURIComponent(CHARACTER)}` : '')
+  // BLOB_QUERY=a=1&b=2 appends raw query params (e.g. residual=0 for an A/B).
+  + (process.env.BLOB_QUERY ? `${CHARACTER ? '&' : '?'}${process.env.BLOB_QUERY}` : '');
 console.log(`shooting ${url}`);
 await send('Page.navigate', { url });
 
