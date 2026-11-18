@@ -357,6 +357,9 @@ var<private> gBurnOut: vec4<f32> = vec4<f32>(0.0);
 // THE ZAP (blocks/post/zap.wgsl.ts): (glow 0..1, bones inverted 0/1, near a bone 0..1, 1 when written).
 // Written in the surface prep's zap block and read by the lighting tail, like gBurnEmit.
 var<private> gZap: vec4<f32> = vec4<f32>(0.0);
+// THE ZAP'S LOOK VARIANT (zap-look.ts, look spike 2026-11-18): (the variant's code, the crackle 0..1, 0, 0).
+// Zero on the baseline look and on every body the arc is not on.
+var<private> gZapLook: vec4<f32> = vec4<f32>(0.0);
 // UPPER-BOUND CULL REFERENCE (cultist perf pass, 2026-09-24). The group and
 // cluster culls compare a sphere against the RUNNING fold d — and d starts at
 // 1e9, so the FIRST cluster folded (the head: CLUSTER_ORDER) could never cull

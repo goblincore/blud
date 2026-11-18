@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 94 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 95 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 65 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 66 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 25 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 34 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 36 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -425,6 +425,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-wound-streams.ts` — Wound stream ids and the refine-twin gate that decides which actors get the march cull.
 - `webgpu/game-wound-tuning.ts` — applyWoundTuning: writes wound panel values into the game (ramp, viscera, gut ropes), rebuilding the cast when boneRatio changes.
 - `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
+- `webgpu/game-zap-fx.ts` — THE ZAP'S OVERLAY (look spike 2026-11-18, docs/dev-notes/2026-11-18-zap-look-spike/NOTES.md).
 - `webgpu/game-zap.ts` — THE ZAP IN THE GAME (spec 2026-11-17-tesla-arc-design.md).
 - `webgpu/game-zombie-face.ts` — The zombie's flat face sheet (url, atlas rect, mean) and headShape, the head prim that normalises the face projection.
 - `webgpu/game-zone-cull.ts` — ZONE / PORTAL CULL AND ENEMY UPDATE LOD IN PLAY (occlusion pass, 2026-10-28).
@@ -736,6 +737,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/tube-beam.wgsl.ts` — THE TUBE BEAM (owner, 2026-09-26: "harsh overhead light cone ...
 - `webgpu/warm-background.ts` — THE BACKGROUND-COMPILE POLICY (defer-compile task, 2026-09-19).
 - `webgpu/warm-gate.ts` — THE WARM-UP'S LIFECYCLE CONTRACT (startup-freeze task, 2026-09-16; corrected 2026-09-16 after reviewer review of the first pass).
+- `webgpu/zap-halo.wgsl.ts` — THE ZAP'S HALO (look spike 2026-11-18, look variant c): a soft blue-white glow round the whole of a zapped body, flesh and kit alike.
 
 ## Character authoring
 
@@ -945,5 +947,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…
 - `wound-grid.ts` — THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stages 1 and 2).
 - `wound-volume-stamp.ts` — THE BAKED WOUND VOLUME, pure half (`?woundvol`; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").
+- `zap-arcs.ts` — THE ZAP'S CRAWL ARCS (look spike 2026-11-18): small arcs crawling over a zapped body and spark-like forks leaping off it.
+- `zap-look.ts` — THE ZAP'S LOOK VARIANTS (look spike 2026-11-18, docs/dev-notes/2026-11-18-zap-look-spike/NOTES.md).
 - `zap-pose.ts` — THE ZAP POSE, as a pure pose (spec 2026-11-17-tesla-arc-design.md): the electrocuted star.
 - `zap.ts` — THE ZAP CLOCK (spec 2026-11-17-tesla-arc-design.md).

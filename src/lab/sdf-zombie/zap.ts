@@ -7,6 +7,7 @@
 // The actor applies the output as an override of its mind's verdict (the burn panic's pattern).
 // Pure: no clock of its own, no randomness beyond the seed. stepZap mutates the state it is given.
 import type { ZapTier } from './motion-profile';
+import { ZAP_LOOKS, type ZapStrobe } from './zap-look';
 
 export const ZAP = Object.freeze({
   /** Cook lost per second off the arc. */
@@ -15,7 +16,8 @@ export const ZAP = Object.freeze({
   attackSec: 0.06,
   /** Cook at which the flesh starts to char. */
   charFrom: 0.6,
-  /** A jolt's length, and the range of the gap to the next (seconds). */
+  /** A jolt's length, and the range of the gap to the next (seconds): the baseline strobe (zap-look.ts 'a'). The
+   *  other look variants hand stepZap a strobe of their own. */
   joltSec: 0.08,
   joltGapSec: [0.25, 0.7] as const,
   /** The glow's floor under the flicker (its ceiling is 1). */
@@ -43,6 +45,8 @@ export interface ZapState {
   charMax: number;
   joltIn: number;
   joltLeft: number;
+  /** Jolts still to come in the burst under way (a strobe with bursts). */
+  burstLeft: number;
   variant: number;
   statueT: number;
   phase0: number;
@@ -80,21 +84,25 @@ function next(s: ZapState): number {
   return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
 }
 const smooth = (a: number, b: number, v: number) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
-const gap = (s: ZapState) => ZAP.joltGapSec[0] + (ZAP.joltGapSec[1] - ZAP.joltGapSec[0]) * next(s);
+/** A value in a strobe's range. A range of one value draws nothing from the seed, so the baseline strobe's draws
+ *  are the 2026-11-17 clock's exactly. */
+const pick = (s: ZapState, r: readonly [number, number]) => (r[1] > r[0] ? r[0] + (r[1] - r[0]) * next(s) : r[0]);
+const BASE_STROBE: ZapStrobe = ZAP_LOOKS.a.strobe;
 
-export function createZap(seed: number, tier: ZapTier): ZapState {
+export function createZap(seed: number, tier: ZapTier, strobe: ZapStrobe = BASE_STROBE): ZapState {
   const s: ZapState = {
     phase: 'zapped', cook: 0, cookSec: 0, t: 0, seed: seed | 0, dies: tier.dies, recoverSec: Math.max(1e-3, tier.recoverSec),
-    rng: seed | 0, env: 0, charMax: 0, joltIn: 0, joltLeft: 0, variant: 0, statueT: 0, phase0: 0,
+    rng: seed | 0, env: 0, charMax: 0, joltIn: 0, joltLeft: 0, burstLeft: 0, variant: 0, statueT: 0, phase0: 0,
   };
   const [lo, hi] = tier.cookSec;
   s.cookSec = Math.max(0.1, lo + (hi - lo) * next(s));
   s.phase0 = next(s) * TAU;
-  s.joltIn = gap(s);
+  s.joltIn = pick(s, strobe.gapSec);
   return s;
 }
 
-export function stepZap(s: ZapState, dt: number, arcOn: boolean): ZapOut {
+/** `strobe`: the live look variant's (zap-look.ts); it may change between steps. */
+export function stepZap(s: ZapState, dt: number, arcOn: boolean, strobe: ZapStrobe = BASE_STROBE): ZapOut {
   s.t += dt;
   if (s.phase === 'statue') {
     s.statueT += dt;
@@ -108,8 +116,11 @@ export function stepZap(s: ZapState, dt: number, arcOn: boolean): ZapOut {
     else {
       s.joltIn -= dt;
       if (s.joltIn <= 0) {
-        s.joltLeft = ZAP.joltSec;
-        s.joltIn = gap(s);
+        // A burst: its first jolt rolls how many follow, each a short gap after the last; then the long gap.
+        if (s.burstLeft > 0) s.burstLeft--;
+        else s.burstLeft = Math.max(0, Math.round(pick(s, strobe.burst)) - 1);
+        s.joltLeft = pick(s, strobe.joltSec);
+        s.joltIn = s.burstLeft > 0 ? strobe.burstGapSec : pick(s, strobe.gapSec);
         // One of the OTHER two variants, so every jolt is a visible change.
         s.variant = (s.variant + 1 + Math.floor(next(s) * 2)) % 3;
       }
@@ -119,6 +130,7 @@ export function stepZap(s: ZapState, dt: number, arcOn: boolean): ZapOut {
     s.cook = Math.max(0, s.cook - ZAP.coolRate * dt);
     s.env = Math.max(0, s.env - dt / s.recoverSec);
     s.joltLeft = 0;
+    s.burstLeft = 0;
   }
   s.charMax = Math.max(s.charMax, smooth(ZAP.charFrom, 1, s.cook));
   if (arcOn && s.dies && s.cook >= 1) {

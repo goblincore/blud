@@ -9,7 +9,8 @@
 import { setBurnBehaviourEnabled } from '../burn-behaviour';
 import type { GameContext } from './game-context';
 import { meltActor } from './game-melter';
-import { zapActor, zaps } from './game-zap';
+import { zapActor, zapLookSeam, zaps } from './game-zap';
+import { setZapFxArcs, zapBodyBox } from './game-zap-fx';
 import { meltSlumpOn, setMeltSlump } from './game-actor';
 import { type Vec3 } from '../types';
 import type { SplitPresetId } from '../head-split';
@@ -32,6 +33,11 @@ export function createFireSeams(ctx: GameContext) {
       .filter(a => zapActor(ctx, a)).length,
     unzapActor: (id?: number) => { for (const a of ctx.world.actors) if (id === undefined || a.id === id) a.setArc(false); },
     zaps: () => zaps(ctx),
+    // The zap's look variant (zap-look.ts, look spike 2026-11-18): 'a' the baseline, 'b', 'c'. No argument: read it.
+    zapLook: (id?: string) => zapLookSeam(id),
+    // Capture seams of the look spike: the crawl arcs on or off; the box round actor `id`'s live parts.
+    zapFxArcs: (on = true) => setZapFxArcs(on),
+    zapBox: (id: number) => { const a = ctx.world.actors.find(x => x.id === id); return a ? zapBodyBox(a) : null; },
     // Slot 9's verb: hold (true) or release (false) the tesla's fire; and its state (fire held, the arc's body or -1).
     fireTesla: (on = true) => { ctx.weapon.tesla?.fire(on); },
     tesla: () => ctx.weapon.tesla?.debug() ?? null,

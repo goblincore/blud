@@ -27,7 +27,7 @@
 
 import * as THREE from 'three/webgpu';
 import type { NodeBuilder, NodeMaterial } from 'three/webgpu';
-import { Fn, attribute, cameraPosition, mat4, modelWorldMatrix, normalLocal, positionGeometry, positionLocal, transformNormal, varying, vec4, wgslFn } from 'three/tsl';
+import { Fn, attribute, cameraPosition, mat4, modelWorldMatrix, normalLocal, positionGeometry, positionLocal, transformNormal, varying, vec3, vec4, wgslFn, float } from 'three/tsl';
 import { ZAP_XRAY_PULL_WGSL } from './zap-xray';
 
 /** The per-instance zap glow (zap-xray.ts): one float, on every geometry a mesh-renderer.ts segment material draws. */
@@ -122,11 +122,15 @@ export const segmentInstance = Fn((builder: NodeBuilder) => {
   // debris meshes are placed by their own matrices, and carry iZap 0, which is no pull). Geometry without the
   // attribute (the level batches, the shotgun casings) takes the plain path.
   const placed = m.mul(positionLocal).xyz;
+  // The instance's normal first: look b of the zap (zap-look.ts) draws a bone's surface a little way in along it.
+  // An eyeball is never thinned (its material says so: mesh-renderer.ts marks userData.zapNoThin).
+  const normal = has('normal') ? transformNormal(normalLocal, m as never) : null;
+  const thin = (builder as unknown as { material?: { userData?: { zapNoThin?: boolean } } }).material?.userData?.zapNoThin ? 0 : 1;
   positionLocal.assign(has(SEGMENT_ZAP_ATTR)
-    ? zapXrayPull({ p: placed, eye: cameraPosition, zap: attribute(SEGMENT_ZAP_ATTR, 'float') })
+    ? zapXrayPull({ p: placed, eye: cameraPosition, zap: attribute(SEGMENT_ZAP_ATTR, 'float'), n: normal ?? vec3(0, 0, 0), thin: float(thin) })
     : placed);
-  if (has('normal')) {
-    normalLocal.assign(transformNormal(normalLocal, m as never));
+  if (normal) {
+    normalLocal.assign(normal);
   }
 }, 'void');
 

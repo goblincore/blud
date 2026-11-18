@@ -101,6 +101,7 @@ import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
 import { createBurnPanic, stepBurnPanic, type BurnPanicState } from '../burn-behaviour';
 import { createZap, stepZap, type ZapOut, type ZapState } from '../zap';
+import { zapLook as liveZapLook } from '../zap-look';
 import type { LevelGround } from './level-ground';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
@@ -477,6 +478,8 @@ export interface ZombieActor {
   /** What the renderer draws: the glow, whether the bones are inverted, and the char. Null on a body the
    *  arc has never charred and is not on. */
   zapLook(): { glow: number; invert: boolean; char: number } | null;
+  /** Whether this body's mesh skeleton shows in the zap's glow (ZapTier.xray): the look variants b and c ask. */
+  zapXray(): boolean;
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
@@ -2161,7 +2164,7 @@ export function createZombieActor(opts: {
       zapPoseCfg = null;
       if (zap && (doomed || downOtherwise())) { zap = null; zapOut = null; zapArc = false; }
       if (zap) {
-        const o = stepZap(zap, sdt, zapArc);
+        const o = stepZap(zap, sdt, zapArc, liveZapLook().strobe);
         zapChar = Math.max(zapChar, o.char);
         if (o.statueDone) {
           // The statue's time is up: the body's ORDINARY death (its ragdoll or its own fall), not a burn fall.
@@ -3343,7 +3346,7 @@ export function createZombieActor(opts: {
       // A downed soldier (alive on the floor) is not stood back up into the star.
       if (soldierDamage && soldierInjury(current, soldierWounds, injuryTuning).downed) return false;
       if (zap) return zap.phase !== 'statue';
-      zap = createZap(zapSeed, zapTier);
+      zap = createZap(zapSeed, zapTier, liveZapLook().strobe);
       return true;
     },
     setArc: (on: boolean) => { zapArc = on && zap !== null && zap.phase !== 'statue'; },
@@ -3352,6 +3355,7 @@ export function createZombieActor(opts: {
     zapLook: () => (zap && zapOut
       ? { glow: zapOut.glow, invert: zapOut.invert, char: zapChar }
       : zapChar > 0 ? { glow: 0, invert: false, char: zapChar } : null),
+    zapXray: () => zapTier.xray,
     mind: () => mind,
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,

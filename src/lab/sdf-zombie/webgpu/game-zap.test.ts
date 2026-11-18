@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/webgpu/game-zap.test.ts
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { GameContext } from './game-context';
-import { stepZapLook, syncZapXray } from './game-zap';
+import { stepZapLook, syncZapXray, zapLookSeam } from './game-zap';
+import { decodeZapLane, setZapLook } from '../zap-look';
 
 type Look = { glow: number; invert: boolean; char: number } | null;
 const body = (look: Look) => {
@@ -89,5 +90,44 @@ describe('the zap look in the game', () => {
     stepZapLook(ctx); syncZapXray(ctx);
     stepZapLook(ctx); syncZapXray(ctx);
     expect(syncs).toEqual([2, 0]);
+  });
+
+  describe('the look variants (zap-look.ts)', () => {
+    afterEach(() => { setZapLook('a'); });
+
+    it('the baseline look writes the signed glow; a variant\'s code rides the lane with it', () => {
+      const a = body({ glow: 0.75, invert: true, char: 0 });
+      const { ctx } = world([a]);
+      stepZapLook(ctx);
+      expect(a.view.uniforms.burnCfg.value.w).toBe(-0.75);
+      expect(zapLookSeam('b').id).toBe('b');
+      stepZapLook(ctx);
+      expect(decodeZapLane(a.view.uniforms.burnCfg.value.w)).toEqual({ glow: 0.75, invert: true, code: 1 });
+      expect(zapLookSeam('c').code).toBe(2);
+      stepZapLook(ctx);
+      expect(decodeZapLane(a.view.uniforms.burnCfg.value.w)).toEqual({ glow: 0.75, invert: true, code: 2 });
+      expect(zapLookSeam('nope').id).toBe('c');
+      a.look = null;
+      stepZapLook(ctx);
+      expect(a.view.uniforms.burnCfg.value.w).toBe(0);
+    });
+
+    it('a body with no skeleton to show keeps its bones out of the x-ray under a variant, not under the baseline', () => {
+      const a = body({ glow: 0.75, invert: false, char: 0 }) as ReturnType<typeof body> & { zapXray: () => boolean };
+      a.zapXray = () => false;
+      const { ctx, syncs } = world([a]);
+      stepZapLook(ctx);
+      syncZapXray(ctx);
+      expect(syncs.at(-1)).toBe(1);
+      setZapLook('b');
+      stepZapLook(ctx);
+      syncZapXray(ctx);
+      expect(syncs.at(-1)).toBe(0);
+      // Its flesh still takes the look.
+      expect(decodeZapLane(a.view.uniforms.burnCfg.value.w).code).toBe(1);
+      a.look = null;
+      stepZapLook(ctx);
+      syncZapXray(ctx);
+    });
   });
 });

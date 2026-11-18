@@ -5,6 +5,19 @@
 // one on a body (zapActor) and, each tick, copying every body's zap look to its view (stepZapLook).
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
+import { encodeZapLane, setZapLook, zapLook, type ZapLookId } from '../zap-look';
+import { stepZapFx, zapFxDebug } from './game-zap-fx';
+
+// THE LOOK VARIANT (zap-look.ts, look spike 2026-11-18): `&zapLook=b` in the URL picks it at boot; the console
+// seam `__sdfGame.zapLook('b')` switches it live.
+if (typeof location !== 'undefined') setZapLook(new URLSearchParams(location.search).get('zapLook'));
+
+/** The live look variant; with an id, switch to it first. Bodies under the arc take the new look on their next tick. */
+export function zapLookSeam(id?: string): { id: ZapLookId; code: number; fx: ReturnType<typeof zapFxDebug> } {
+  if (id !== undefined) setZapLook(id);
+  const l = zapLook();
+  return { id: l.id, code: l.code, fx: zapFxDebug() };
+}
 
 /**
  * Start the zap on `a` and put the arc on it. False, and nothing done, when the body cannot be zapped
@@ -28,7 +41,8 @@ const glowing = new Set<ZombieActor>();
  * carries its source view's uniforms, so a value read there is every body's of the type. A body with no
  * zap look (never touched, or reset by endTear) carries no glow and no char. Call after the burn step.
  */
-export function stepZapLook(ctx: GameContext): void {
+export function stepZapLook(ctx: GameContext, dt = 0): void {
+  const code = zapLook().code;
   // A body that left the world while it glowed (gibbed, culled, a new cast) is not walked below: let it go.
   if (glowing.size > 0) for (const a of glowing) if (!ctx.world.actors.includes(a)) glowing.delete(a);
   for (const a of ctx.world.actors) {
@@ -39,10 +53,13 @@ export function stepZapLook(ctx: GameContext): void {
       if (u.zapChar.value !== 0) u.zapChar.value = 0;
       continue;
     }
-    u.burnCfg.value.w = z.invert ? -z.glow : z.glow;
+    // The lane (zap-look.ts): the signed glow on the baseline look; the variant's code rides it otherwise.
+    u.burnCfg.value.w = encodeZapLane(z.glow, z.invert, code);
     u.zapChar.value = z.char;
     if (z.glow > 0) glowing.add(a); else glowing.delete(a);
   }
+  // The overlay of the look variants (crawl arcs, the kit's flash, the halo). Nothing on the baseline look.
+  stepZapFx(ctx, glowing, dt);
 }
 
 /** True while any body's bones carry a zap glow, and for the one frame after the last one goes out. */
@@ -51,7 +68,12 @@ let xrayLive = false;
  *  the renderer's owner-less fallback slot has no zapLook. Hoisted: the per-frame sync allocates nothing. */
 const ownerZap = (owner: unknown): number => {
   const z = (owner as Partial<ZombieActor> | undefined)?.zapLook?.();
-  return z && z.glow > 0 ? (z.invert ? -z.glow : z.glow) : 0;
+  if (!z || !(z.glow > 0)) return 0;
+  // A body with no skeleton worth showing (ZapTier.xray false) keeps its bones in its flesh under the look
+  // variants; the baseline look x-rays every body, as built.
+  const look = zapLook();
+  if (look.code > 0 && (owner as Partial<ZombieActor>).zapXray?.() === false) return 0;
+  return encodeZapLane(z.glow, z.invert, look.code);
 };
 
 /**

@@ -236,8 +236,15 @@ export interface ZapTier {
   recoverSec: number;
   /** It takes the star pose. False (a non-biped rig, the gorehound): tremor only, arms left alone. */
   star: boolean;
+  /**
+   * Its mesh skeleton shows in the glow (the x-ray). False for a body whose "skeleton" is not one a player can
+   * read (the teratoma's lone skull plate, the cerebrax's four discs): its bones stay inside the flesh and its
+   * polygon KIT plays the skeleton's part, dark in the bright body and bright in the dark one. Honoured by the
+   * look variants b and c only (zap-look.ts, look spike 2026-11-18); the baseline look x-rays every body.
+   */
+  xray: boolean;
 }
-export const ZAP_TIER_DEFAULT: ZapTier = Object.freeze({ cookSec: [1.6, 2.2] as const, dies: true, recoverSec: 0.6, star: true });
+export const ZAP_TIER_DEFAULT: ZapTier = Object.freeze({ cookSec: [1.6, 2.2] as const, dies: true, recoverSec: 0.6, star: true, xray: true });
 
 const BURN_SOLDIER: Partial<BurnTier> = { panicSec: [2.5, 4.5], speed: 1.4 };
 const BURN_HEAVY: Partial<BurnTier> = { panicSec: [5, 8], speed: 1.1, flail: 0.6, dies: false };
@@ -645,6 +652,8 @@ export const TERATOMA_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'teratoma',
+  // A ball with one skull plate in it: no skeleton to x-ray (look spike 2026-11-18). Its kit (eye, teeth, horns) plays the bones.
+  zap: { xray: false },
   gait: { walk: HOVER, run: HOVER },
   runBand: { from: Infinity, to: Infinity },
   // A slow drift: slower than the zombie's 1.15 and the twinhead's 0.95, so its fireballs are the threat, not its
@@ -716,6 +725,8 @@ export const CEREBRAX_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   physicsDeath: false,
   name: 'cerebrax',
+  // A brain on a mesh harness: its bone instances are four discs (look spike 2026-11-18). Its kit (legs, harness, gun) plays the bones.
+  zap: { xray: false },
   gait: { walk: CEREBRAX_STRIDE, run: CEREBRAX_STRIDE },
   runBand: { from: Infinity, to: Infinity },
   // Slow and heavy: its legs are long, so it covers ground anyway; the gun is the threat.

@@ -1356,7 +1356,7 @@ export function tick(ctx: GameContext, dt: number) {
     // here, before the chunk step, like the gibs above.
     stepMelts(ctx, dt);
     // The zap's look (game-zap.ts): after the burn step, which owns the rest of burnCfg.
-    stepZapLook(ctx);
+    stepZapLook(ctx, dt);
     // The staged release's due impulses, BEFORE the chunk step, so a piece
     // that goes this frame integrates at its launch velocity for the whole
     // frame rather than a frame late.
