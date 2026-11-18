@@ -427,6 +427,7 @@ import { applyWoundTuning } from './game-wound-tuning';
 import { DemoReplayOpts, applyDemoQuery, demoSynthesize, runDemoReplay } from './game-demo-replay';
 import { applyRig } from './game-ambient-rig';
 import { boneExposedActors, nearestCrowdBody } from './game-crowd-queries';
+import { syncZapXray } from './game-zap';
 import { ENGAGED_RADIUS, FORE_HAND_REST, GRIP_HAND_REST, GUN_REST, SPRITE_TRAIL_ID_BASE, Y_UP, _tmpV, tick } from './game-tick';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
@@ -2257,6 +2258,8 @@ async function main() {
         ctx.render.segMeshRenderer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
         if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights, ownerFill);
       }
+      // The zap x-ray (game-zap.ts): each bone instance's owner's glow. Not the light list's: it runs with it off.
+      syncZapXray(ctx);
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
       // the carved library build their OWN instances (they need their own

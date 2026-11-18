@@ -27,6 +27,8 @@ const glowing = new Set<ZombieActor>();
  * touched is skipped after one null check. Call after the burn step, which writes x, y and z.
  */
 export function stepZapLook(ctx: GameContext): void {
+  // A body that left the world while it glowed (gibbed, culled, a new cast) is not walked below: let it go.
+  if (glowing.size > 0) for (const a of glowing) if (!ctx.world.actors.includes(a)) glowing.delete(a);
   for (const a of ctx.world.actors) {
     const z = a.zapLook();
     if (!z) {
@@ -38,6 +40,26 @@ export function stepZapLook(ctx: GameContext): void {
     if (z.char > v.z) v.z = z.char;
     if (z.glow > 0) glowing.add(a); else glowing.delete(a);
   }
+}
+
+/** True while any body's bones carry a zap glow, and for the one frame after the last one goes out. */
+let xrayLive = false;
+/** A bone instance's owner's signed glow. An owner is the actor itself (game-main hands update() ctx.world.actors);
+ *  the renderer's owner-less fallback slot has no zapLook. Hoisted: the per-frame sync allocates nothing. */
+const ownerZap = (owner: unknown): number => {
+  const z = (owner as Partial<ZombieActor> | undefined)?.zapLook?.();
+  return z && z.glow > 0 ? (z.invert ? -z.glow : z.glow) : 0;
+};
+
+/**
+ * The skeleton's half of the look: each bone instance takes its owner's signed glow (zap-xray.ts). Call
+ * once a frame after the segment renderer's update. Nothing zapped, and nothing to clear: no work.
+ */
+export function syncZapXray(ctx: GameContext): void {
+  const any = glowing.size > 0;
+  if (!any && !xrayLive) return;
+  xrayLive = any;
+  ctx.render.segMeshRenderer?.syncZap(ownerZap);
 }
 
 /** Console readout: every body the arc has touched. */

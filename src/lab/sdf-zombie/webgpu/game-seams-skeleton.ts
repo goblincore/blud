@@ -75,6 +75,14 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!a || !r) return null;
       return { listOn: r.uniforms.lightListCfg.value.x, instances: r.ownerLights(a), fill: r.ownerFill(a), body: a.view.uniforms.bodyLights.value.toArray() };
     },
+    /** The zap x-ray (skeleton-spike/zap-xray.ts): the iZap of one actor's drawn bone-mesh instances (its signed glow
+     *  on its bones and eyes, 0 on an organ and on every body the arc is not on). null without the mesh skeleton or
+     *  the actor; [] for a body none of whose bones are drawn. */
+    boneZap: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const r = ctx.render.segMeshRenderer;
+      return a && r ? r.ownerZap(a) : null;
+    },
     /** skeleton=mesh: the bone-exposure spheres game-main last fed the segment meshes ([x, y, z, radius] rows, every
      *  visual actor's in order; cut-wound.ts boneExposureOf). null without the mesh skeleton. The cut gate's turned-body
      *  check reads these against the wound's uploaded slot. */

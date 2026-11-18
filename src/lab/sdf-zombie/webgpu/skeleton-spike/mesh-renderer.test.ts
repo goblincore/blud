@@ -21,7 +21,7 @@ import { bindRig, applyRig } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
-import { BATCH_IDLE_UPDATES, PREWARM_PER_UPDATE, SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import { BATCH_IDLE_UPDATES, PREWARM_PER_UPDATE, SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn, segmentLitColour } from './mesh-renderer';
 import {
   SEGMENT_MATRIX_ATTRS, batchDraws, batchInstances, batchMatrixAt, ensureSegmentMatrices, isSegmentBatch, type SegmentBatchMesh,
 } from './segment-instance';
@@ -340,6 +340,96 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
   });
 });
 
+describe('the zap x-ray (zap-xray.ts): iZap carries the owner\'s signed glow', () => {
+  const batchesOf = (r: ReturnType<typeof createSegmentMeshRenderer>) => r.object.children.filter(isBatch) as BatchMesh[];
+  const zapOf = (o: unknown) => (o as { zap?: number }).zap ?? 0;
+  it('every batch has an iZap beside its iFill, zero until a zap is synced', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = [{ id: 1, zap: 0.75 }, { id: 2 }];
+    renderer.update([[headSrc], [headSrc]], owners);
+    for (const m of batchesOf(renderer)) {
+      const z = m.geometry.getAttribute('iZap') as THREE.InstancedBufferAttribute;
+      expect(z, m.name).toBeDefined();
+      expect(z.itemSize).toBe(1);
+      expect(z.count).toBe(m.geometry.getAttribute('iFill').count);
+      expect(Array.from(z.array).every(v => v === 0)).toBe(true);
+    }
+    expect(renderer.ownerZap(owners[0]!).length).toBeGreaterThan(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('writes the owner\'s glow to its segment and its eyes, negative on a jolt, and nothing to another body\'s', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const a = { id: 1, zap: 0.75 }, b = { id: 2 };
+    renderer.update([[headSrc], [headSrc]], [a, b]);
+    renderer.syncZap(zapOf);
+    expect(renderer.ownerZap(a).length).toBeGreaterThan(1);   // the skull and its eyes
+    expect(renderer.ownerZap(a).every(v => v === 0.75)).toBe(true);
+    expect(renderer.ownerZap(b).every(v => v === 0)).toBe(true);
+    a.zap = -0.5;
+    renderer.syncZap(zapOf);
+    expect(renderer.ownerZap(a).every(v => v === -0.5)).toBe(true);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('clears a row its batch no longer draws, so the next body to take it is not pulled', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const a = { id: 1 }, b = { id: 2, zap: 1 }, c = { id: 3 };
+    renderer.update([[headSrc], [headSrc]], [a, b]);
+    renderer.syncZap(zapOf);
+    expect(renderer.ownerZap(b).every(v => v === 1)).toBe(true);
+    // b leaves; the one sync after (the game's "one frame after") clears its rows though nothing draws them.
+    renderer.update([[headSrc]], [a]);
+    renderer.syncZap(zapOf);
+    for (const m of batchesOf(renderer)) expect(Array.from((m.geometry.getAttribute('iZap') as THREE.InstancedBufferAttribute).array).every(v => v === 0), m.name).toBe(true);
+    // No sync from here on (nothing is zapped): c takes b's old rows.
+    renderer.update([[headSrc], [headSrc]], [a, c]);
+    expect(renderer.ownerZap(c).length).toBeGreaterThan(0);
+    expect(renderer.ownerZap(c).every(v => v === 0)).toBe(true);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('an unchanged sync uploads nothing', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const a = { id: 1, zap: 0.5 };
+    renderer.update([[headSrc]], [a]);
+    renderer.syncZap(zapOf);
+    const attrs = batchesOf(renderer).map(m => m.geometry.getAttribute('iZap') as THREE.InstancedBufferAttribute);
+    const versions = attrs.map(z => z.version);
+    renderer.syncZap(zapOf);
+    expect(attrs.map(z => z.version)).toEqual(versions);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('wraps every segment material\'s colour: the lit colour is kept under it, and its alpha is the lit colour\'s', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    renderer.update([[headSrc]], [{ id: 1 }]);
+    const seen = new Set<MeshBasicNodeMaterial>();
+    for (const m of batchesOf(renderer)) seen.add(m.material as MeshBasicNodeMaterial);
+    expect(seen.size).toBeGreaterThanOrEqual(2);   // bone and eye
+    const reach = (root: Node) => {
+      const out = new Set<Node>(), todo = [root];
+      while (todo.length) { const n = todo.pop()!; if (out.has(n)) continue; out.add(n); for (const c of n.getChildren()) todo.push(c as Node); }
+      return [...out] as (Node & { functionNode?: { code: string } })[];
+    };
+    for (const m of seen) {
+      const lit = segmentLitColour(m);
+      expect(lit).not.toBe(m.colorNode);
+      const all = reach(m.colorNode!);
+      expect(all.some(n => n.functionNode?.code.includes('fn zapXrayColour')), m.name).toBe(true);
+      expect(all.includes(lit), m.name).toBe(true);
+      expect(reach(lit).some(n => n.functionNode?.code.includes('fn zapXrayColour')), m.name).toBe(false);
+    }
+    renderer.dispose();
+    cache.dispose();
+  });
+});
+
 describe('the head split: the skull is drawn once per piece that owns part of it (head-split.ts skullSplitOf)', () => {
   type R = ReturnType<typeof createSegmentMeshRenderer>;
   const segs = (r: R, owner: unknown) => r.drawn.filter(d => d.owner === owner && !d.eye);
@@ -526,7 +616,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.syncLights(o => new THREE.Vector4(...(o as { bodyLights: number[] }).bodyLights), o => (o as { fill: number }).fill);
     const sb = batch(renderer, 'skeleton-segments-split')!;
     expect(instancesOf(sb)).toBe(120);
-    for (const name of [...SPLIT_INSTANCE_ATTRS, ...SEGMENT_MATRIX_ATTRS, 'iLights', 'iFill']) {
+    for (const name of [...SPLIT_INSTANCE_ATTRS, ...SEGMENT_MATRIX_ATTRS, 'iLights', 'iFill', 'iZap']) {
       expect((sb.geometry.getAttribute(name) as THREE.InstancedBufferAttribute).count, name).toBeGreaterThanOrEqual(capOf(sb));
     }
     const K = 12;   // the K lane's offset in a row: (piece, + turns, - turns, seed)
@@ -650,7 +740,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
      *  values declared ahead of the branch on the clip (real variables: an intent is written where it is first read),
      *  `branch` what the branch stacks. */
     const colourOf = (m: MeshBasicNodeMaterial) => {
-      const body = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
+      const body = (segmentLitColour(m) as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
       const was = getCurrentStack(), outer = stack();
       try {
         setCurrentStack(outer); body.jsFunc();
@@ -685,10 +775,10 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       // What each one paints with. The plates: their own surface and normal map, the cut-bone rim, no inner wall.
       // The rim reads the fracture's own distance: the extracted bone and the eyes do not call it.
       expect([...allCalls(plateSplit)].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade', 'meshSplitClip', 'meshSplitCutBone', 'meshSplitFracture']);
-      expect([...calls(reach([plate.colorNode!]))].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade']);
+      expect([...calls(reach([segmentLitColour(plate)]))].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade']);
       // The extracted bone: the painted surface, and the dark wall on its back faces.
       expect([...allCalls(boneSplit)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
-      expect([...calls(reach([bone.colorNode!]))].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet']);
+      expect([...calls(reach([segmentLitColour(bone)]))].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet']);
       // The seated eyes are closed spheres: theirs is the eye split material, wall and all.
       const eyeCopies = eyes(renderer, open);
       expect(eyeCopies.map(d => d.piece).sort()).toEqual([1, 2]);
@@ -717,7 +807,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       expect(z!.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plate]);
       expect(i!.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plate]);
       expect(i![0]).not.toBe(z![0]);
-      const nodes = (m: MeshBasicNodeMaterial) => reach([m.colorNode!]);
+      const nodes = (m: MeshBasicNodeMaterial) => reach([segmentLitColour(m)]);
       expect([samples(nodes(z![0]!), human), samples(nodes(z![0]!), mine)]).toEqual([true, false]);
       expect([samples(nodes(i![0]!), mine), samples(nodes(i![0]!), human)]).toEqual([true, false]);
       // The imp's skull is a plain one: no eye at the sculpted bone's human seats (sculpt-variant.ts
@@ -856,7 +946,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       // The extracted bone's split copies read their surface at q as well; the closed materials at the fragment.
       const boneSplit = graphOf(matOf(renderer, segs(renderer, otherOpen)[0]!));
       isClipPoint(callOf(boneSplit, 'meshBoneSurface').parameters.pWorld!, callOf(boneSplit, 'meshSplitClip'), 'meshBoneSurface pWorld');
-      expect(callOf(reach([matOf(renderer, segs(renderer, shut)[0]!).colorNode!]), 'anatomicalSkullSurface').parameters.pWorld).toBe(positionWorld);
+      expect(callOf(reach([segmentLitColour(matOf(renderer, segs(renderer, shut)[0]!))]), 'anatomicalSkullSurface').parameters.pWorld).toBe(positionWorld);
       renderer.dispose(); cache.dispose();
     });
 
@@ -1460,8 +1550,8 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
           for (let i = 0; i < n; i++) expect([arr[i * 4], arr[i * 4 + 1], arr[i * 4 + 2], arr[i * 4 + 3]]).toEqual([0, 0, 0, 1]);
         }
         // The organ pipeline's vertex buffers: position, normal, organTube, the instance matrix (segment-instance.ts:
-        // one interleaved buffer behind iM0..iM3), iLights, iFill (6 of WebGPU's 8).
-        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'iM0', 'iM1', 'iM2', 'iM3', 'normal', 'organTube', 'position']);
+        // one interleaved buffer behind iM0..iM3), iLights, iFill, iZap (7 of WebGPU's 8).
+        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'iM0', 'iM1', 'iM2', 'iM3', 'iZap', 'normal', 'organTube', 'position']);
       }
       renderer.dispose();
       cache.dispose();

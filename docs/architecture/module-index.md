@@ -37,7 +37,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 71 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 29 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 30 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 3 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -191,6 +191,7 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.
 - `webgpu/skeleton-spike/volume.ts` — SKELETON REPRESENTATION COMPARISON — Task 3: cached segment-local bone distance GRIDS.
 - `webgpu/skeleton-spike/volume.wgsl.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: GPU atlas sampler for the baked segment-local bone distance grids (volume.ts).
+- `webgpu/skeleton-spike/zap-xray.ts` — THE SKELETON X-RAY (spec 2026-11-17-tesla-arc-design.md): the bone meshes of a body under the tesla arc show through its glowing flesh.
 
 ## webgpu/upscale/
 

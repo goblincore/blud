@@ -27,7 +27,12 @@
 
 import * as THREE from 'three/webgpu';
 import type { NodeBuilder, NodeMaterial } from 'three/webgpu';
-import { Fn, attribute, mat4, normalLocal, positionLocal, transformNormal } from 'three/tsl';
+import { Fn, attribute, cameraPosition, mat4, normalLocal, positionLocal, transformNormal, wgslFn } from 'three/tsl';
+import { ZAP_XRAY_PULL_WGSL } from './zap-xray';
+
+/** The per-instance zap glow (zap-xray.ts): one float, on every geometry a mesh-renderer.ts segment material draws. */
+export const SEGMENT_ZAP_ATTR = 'iZap';
+const zapXrayPull = wgslFn(ZAP_XRAY_PULL_WGSL);
 
 /** The instance matrix's four columns, in this order, in one row of SEGMENT_MATRIX_FLOATS (column-major, as
  *  Matrix4.toArray writes it). */
@@ -98,8 +103,16 @@ export const batchMatrixAt = (mesh: SegmentBatchMesh, i: number, out: THREE.Matr
  *  normal by the matrix's inverse transpose (exact for the head deform's axis scales, as InstancedMesh's was). */
 export const segmentInstance = Fn((builder: NodeBuilder) => {
   const m = mat4(...SEGMENT_MATRIX_ATTRS.map(name => attribute(name, 'vec4')) as [never, never, never, never]);
-  positionLocal.assign(m.mul(positionLocal).xyz);
-  if ((builder as unknown as { hasGeometryAttribute(name: string): boolean }).hasGeometryAttribute('normal')) {
+  const has = (name: string) => (builder as unknown as { hasGeometryAttribute(name: string): boolean }).hasGeometryAttribute(name);
+  // THE ZAP X-RAY (zap-xray.ts): a zapped body's bones are pulled toward the eye, clear of its flesh. The skeleton's
+  // batches sit under a group that is never moved (mesh-renderer.ts: "the instance matrix IS the world matrix"; its
+  // debris meshes are placed by their own matrices, and carry iZap 0, which is no pull). Geometry without the
+  // attribute (the level batches, the shotgun casings) takes the plain path.
+  const placed = m.mul(positionLocal).xyz;
+  positionLocal.assign(has(SEGMENT_ZAP_ATTR)
+    ? zapXrayPull({ p: placed, eye: cameraPosition, zap: attribute(SEGMENT_ZAP_ATTR, 'float') })
+    : placed);
+  if (has('normal')) {
     normalLocal.assign(transformNormal(normalLocal, m as never));
   }
 }, 'void');

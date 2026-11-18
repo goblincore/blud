@@ -7,75 +7,199 @@
         "id": 1,
         "kind": "zombie",
         "pos": [
-          0.3677945240734128,
+          0.37271028375840787,
           0,
-          -5.602458081009981
+          -5.63875678782419
         ]
       }
     ],
-    "distance": 2.63,
+    "distance": 2.66,
     "pipelines": {
-      "before": 120,
-      "after": 120
+      "before": 121,
+      "after": 121
     },
     "luma": {
       "centre": {
-        "before": 74.7,
+        "before": 74.68,
         "series": [
-          84.89,
-          81.55,
-          43.35,
-          101.98,
-          95.96,
-          88.61,
-          84.76,
-          59.26,
-          60.09,
-          61.38,
-          60.6,
-          46.43,
-          32.41,
-          25.24,
-          25.28,
-          25.36
+          67.77,
+          58.93,
+          72.74,
+          83.07,
+          66.97,
+          69.34,
+          71.36,
+          59.09,
+          59.1,
+          60.24,
+          60.38,
+          45.88,
+          31.8,
+          25.34,
+          25.34,
+          25.35
         ],
-        "zappedMean": 89.63,
-        "zappedOverBefore": 1.2,
-        "last": 25.36
+        "zappedMean": 69.57,
+        "zappedOverBefore": 0.93,
+        "last": 25.35
       },
       "chest": {
-        "before": 197.72,
+        "before": 198.63,
         "beforeRgb": [
-          207.3,
-          195.5,
-          183.6
+          208.5,
+          196.5,
+          183.5
         ],
-        "beforeBlueMinusRed": -23.7,
+        "beforeBlueMinusRed": -25,
         "series": [
-          227.49,
-          222.61,
-          75.3,
-          228.32,
-          218.65,
-          222.68,
-          218.28,
-          149.72,
-          152.02,
-          155.01,
-          153.28,
-          111.98,
-          81.35,
-          24.83,
-          24.83,
-          24.96
+          162.29,
+          129.01,
+          179.11,
+          170.75,
+          122,
+          153.67,
+          169.44,
+          151.05,
+          150.38,
+          153.04,
+          153.52,
+          109.97,
+          80.27,
+          24.99,
+          24.97,
+          24.95
         ],
-        "zappedMean": 223,
-        "zappedMin": 218.28,
-        "zappedOverBefore": 1.13,
-        "zappedBlueMinusRed": 22.8,
-        "joltMean": 75.3,
-        "statueMean": 152.51,
-        "last": 24.96
+        "zappedMean": 151.19,
+        "zappedMin": 122,
+        "zappedOverBefore": 0.76,
+        "zappedBlueMinusRed": 6.9,
+        "joltMean": 179.11,
+        "statueMean": 152,
+        "last": 24.95
+      },
+      "fleshChest": {
+        "luma": 230.27,
+        "rgb": [
+          218.9,
+          235.1,
+          235.2
+        ]
+      }
+    },
+    "xray": {
+      "glow": {
+        "t": 0.25,
+        "boneZap": {
+          "instances": 22,
+          "min": 0.7348845601081848,
+          "max": 0.7348845601081848
+        },
+        "drawn": {
+          "segments": 22,
+          "hidden": 2
+        },
+        "skeleton": {
+          "meanAbs": 11.49,
+          "movedShare": 0.1766
+        },
+        "noise": {
+          "meanAbs": 3.88,
+          "movedShare": 0.1224
+        },
+        "bodyLumaShown": 72.82,
+        "bodyLumaHidden": 81.3,
+        "hiddenChest": {
+          "luma": 230.27,
+          "rgb": [
+            218.9,
+            235.1,
+            235.2
+          ]
+        }
+      },
+      "jolt": {
+        "t": 0.75,
+        "boneZap": {
+          "instances": 22,
+          "min": -0.6967968344688416,
+          "max": -0.6967968344688416
+        },
+        "drawn": {
+          "segments": 22,
+          "hidden": 2
+        },
+        "skeleton": {
+          "meanAbs": 17.4,
+          "movedShare": 0.1497
+        },
+        "noise": {
+          "meanAbs": 3.3,
+          "movedShare": 0.1004
+        },
+        "bodyLumaShown": 74.22,
+        "bodyLumaHidden": 58.75,
+        "hiddenChest": {
+          "luma": 75.15,
+          "rgb": [
+            73.8,
+            76.4,
+            72.5
+          ]
+        }
+      },
+      "boneZapBefore": [
+        0,
+        0,
+        0
+      ],
+      "boneZapAfter": [
+        0,
+        0,
+        0
+      ]
+    },
+    "splitHead": {
+      "forced": true,
+      "zapped": 1,
+      "copies": [
+        {
+          "material": "skeleton-bone-split",
+          "piece": 0,
+          "eye": false
+        },
+        {
+          "material": "skeleton-bone-split",
+          "piece": 1,
+          "eye": false
+        },
+        {
+          "material": "skeleton-bone-split",
+          "piece": 2,
+          "eye": false
+        },
+        {
+          "material": "skeleton-eye-split",
+          "piece": 2,
+          "eye": true
+        },
+        {
+          "material": "skeleton-eye-split",
+          "piece": 1,
+          "eye": true
+        }
+      ],
+      "instances": 24,
+      "zapMin": 0.7348845601081848,
+      "zapMax": 0.7348845601081848,
+      "phase": "zapped",
+      "invert": false,
+      "closeDistance": 1.12,
+      "closeZap": {
+        "id": 1,
+        "phase": "zapped",
+        "glow": 0.5891069709981501,
+        "invert": false,
+        "char": 0
       }
     }
   },
@@ -87,17 +211,17 @@
       "glow": 0.735,
       "invert": false,
       "char": 0,
-      "centreLuma": 84.89,
-      "chestLuma": 227.49,
+      "centreLuma": 67.77,
+      "chestLuma": 162.29,
       "chestRgb": [
-        216.9,
-        231.8,
-        233.1
+        162.9,
+        162.3,
+        160.4
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -107,17 +231,17 @@
       "glow": 0.931,
       "invert": false,
       "char": 0,
-      "centreLuma": 81.55,
-      "chestLuma": 222.61,
+      "centreLuma": 58.93,
+      "chestLuma": 129.01,
       "chestRgb": [
-        209.8,
-        227.6,
-        230.3
+        118.9,
+        131.4,
+        143
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -127,17 +251,17 @@
       "glow": 0.697,
       "invert": true,
       "char": 0,
-      "centreLuma": 43.35,
-      "chestLuma": 75.3,
+      "centreLuma": 72.74,
+      "chestLuma": 179.11,
       "chestRgb": [
-        73.8,
-        76.7,
-        72.2
+        179.7,
+        178.3,
+        181.8
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -147,17 +271,17 @@
       "glow": 0.638,
       "invert": false,
       "char": 0,
-      "centreLuma": 101.98,
-      "chestLuma": 228.32,
+      "centreLuma": 83.07,
+      "chestLuma": 170.75,
       "chestRgb": [
-        218.8,
-        232.3,
-        232.8
+        173,
+        170.5,
+        166
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -167,17 +291,17 @@
       "glow": 0.969,
       "invert": false,
       "char": 0.026,
-      "centreLuma": 95.96,
-      "chestLuma": 218.65,
+      "centreLuma": 66.97,
+      "chestLuma": 122,
       "chestRgb": [
-        203.1,
-        224.3,
-        230.4
+        110.1,
+        125.1,
+        137.5
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -187,17 +311,17 @@
       "glow": 0.789,
       "invert": false,
       "char": 0.376,
-      "centreLuma": 88.61,
-      "chestLuma": 222.68,
+      "centreLuma": 69.34,
+      "chestLuma": 153.67,
       "chestRgb": [
-        205.1,
-        230,
-        230.9
+        148.9,
+        156.2,
+        153
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -207,17 +331,17 @@
       "glow": 0.559,
       "invert": false,
       "char": 0.828,
-      "centreLuma": 84.76,
-      "chestLuma": 218.28,
+      "centreLuma": 71.36,
+      "chestLuma": 169.44,
       "chestRgb": [
-        198.5,
-        225.8,
-        231.2
+        168.3,
+        171.2,
+        163.8
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -227,17 +351,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 59.26,
-      "chestLuma": 149.72,
+      "centreLuma": 59.09,
+      "chestLuma": 151.05,
       "chestRgb": [
-        157,
-        149,
-        134.3
+        158.1,
+        150.4,
+        136.1
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -247,17 +371,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 60.09,
-      "chestLuma": 152.02,
+      "centreLuma": 59.1,
+      "chestLuma": 150.38,
       "chestRgb": [
-        159.4,
-        151.3,
-        136.6
+        157.3,
+        149.6,
+        136.4
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -267,17 +391,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 61.38,
-      "chestLuma": 155.01,
+      "centreLuma": 60.24,
+      "chestLuma": 153.04,
       "chestRgb": [
-        162.6,
-        154,
-        140.1
+        159.4,
+        152.6,
+        138.8
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -287,17 +411,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 60.6,
-      "chestLuma": 153.28,
+      "centreLuma": 60.38,
+      "chestLuma": 153.52,
       "chestRgb": [
-        160.6,
-        152.6,
-        137.3
+        159.4,
+        153.2,
+        139.8
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 1.15
     },
@@ -307,17 +431,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 46.43,
-      "chestLuma": 111.98,
+      "centreLuma": 45.88,
+      "chestLuma": 109.97,
       "chestRgb": [
-        121.6,
-        109.5,
-        99.3
+        119.3,
+        107.3,
+        99.2
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 0
     },
@@ -327,17 +451,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 32.41,
-      "chestLuma": 81.35,
+      "centreLuma": 31.8,
+      "chestLuma": 80.27,
       "chestRgb": [
-        93.7,
-        77.4,
-        69
+        92.3,
+        76.8,
+        66.5
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 0
     },
@@ -347,17 +471,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 25.24,
-      "chestLuma": 24.83,
+      "centreLuma": 25.34,
+      "chestLuma": 24.99,
       "chestRgb": [
-        21.5,
-        26.3,
+        21.7,
+        26.4,
         26.2
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 0
     },
@@ -367,17 +491,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 25.28,
-      "chestLuma": 24.83,
+      "centreLuma": 25.34,
+      "chestLuma": 24.97,
       "chestRgb": [
-        21.5,
-        26.3,
-        26.1
+        21.6,
+        26.4,
+        26.3
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 0
     },
@@ -387,17 +511,17 @@
       "glow": 0,
       "invert": false,
       "char": 1,
-      "centreLuma": 25.36,
-      "chestLuma": 24.96,
+      "centreLuma": 25.35,
+      "chestLuma": 24.95,
       "chestRgb": [
         21.6,
         26.4,
-        26.3
+        26.2
       ],
       "pos": [
-        0.36,
+        0.37,
         0,
-        -5.56
+        -5.6
       ],
       "speed": 0
     }

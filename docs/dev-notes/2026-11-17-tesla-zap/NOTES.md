@@ -77,3 +77,108 @@ PNGs under `docs/dev-notes` are gitignored; the script rewrites them and the con
   so the pin is now four and names both fades.
 - `ZAP_LOOK` colours are written through the float formatter (`1.0`, not `1`) in the WGSL.
 - `zaps()` also returns `invert`, which the trace needs to tell a jolt from the glow.
+
+## Task 5: the skeleton in the glow
+
+Each bone and eye instance of the mesh skeleton carries `iZap`, its owner's signed glow (`syncZap`, driven by
+`game-zap.ts syncZapXray` once a frame from `game-main.ts`, outside the light-list `if`). Where it is not zero
+`segmentInstance` pulls the vertex toward the eye along its own ray (`zap-xray.ts`, 0.6 m, never under a quarter
+of its distance) and the fragment's lit colour is mixed toward the flat bone colour (dark in the glow, the
+glow's colour on a jolt). No new batch, material or pipeline.
+
+### What had to be checked, and what was found
+
+- **An intact body does not draw its skeleton.** The bone exposure cull (`segmentNeeded`) draws only the head
+  segment (it carries the eyes) of a body with no carving wound: 3 instances for the arena zombie. The plan did
+  not cover this. `boneExposedActors` (`game-crowd-queries.ts`) now adds every body that is `zapping()`, so its
+  22 bone and eye instances are in the batches. The batches were pre-warmed at boot, so nothing compiles.
+- **Organs stay as they were.** `syncZap` writes 0 to an organ batch whatever its owner's glow: an organ is never
+  pulled or flattened, and it is still drawn only where a wound's exposure sphere reaches it (the exposed set
+  alone does not draw one). **Eyes take the zap** like bone: pulled with the skull and shaded flat, so the red
+  pupil is gone and the eye is part of the skull's shape.
+- **Vertex buffers (limit 8 a pipeline).** With `iZap`: closed bone 7 (position, normal, meshFeature, instance
+  matrix, iLights, iFill, iZap), closed plate 7 (uv in meshFeature's place), eye 6, organ 7 (organTube), split
+  bone and split plate **8** (the split record), split eye 7. Nothing is over, so `iZap` is its own buffer as the
+  plan has it, but the split batches have no room left: the next per-instance value there has to ride an existing
+  buffer (the comment above `splitRows` says so). The split pipelines were run on the GPU with a forced split
+  under the arc (below): no pipeline error.
+- **Where `iZap` is created:** `ensureLights` (every batch, and the three debris makers: a released plate, a
+  sculpted skull's fragments, the melt's dropped segments) and `debrisEyeGeometry`. Those are every site that
+  creates an `iFill`; nothing outside `mesh-renderer.ts` draws on a segment material (`bone-instancer.ts` has an
+  `iFill` of its own, on its own material). The level batches and the shotgun casings use `useSegmentInstance`
+  with no `iZap`: `segmentInstance` takes the plain path for them (`hasGeometryAttribute`).
+- **World space:** the group is made in `createSegmentMeshRenderer`, never moved, and added to the scene root
+  (`game-main.ts`, `scene.add(ctx.render.segMeshRenderer.object)`); the instance matrix is the world matrix.
+- **Owners** are the actors (`update(..., ctx.world.actors, ...)`); the renderer's owner-less fallback slot has
+  no `zapLook`, which reads as 0.
+- **Stale rows.** A batch remembers how many of its `iZap` rows may hold a glow; `syncZap` clears rows the batch
+  no longer draws, so a body that leaves mid-zap cannot hand its glow to the next instance in that row. An
+  unchanged sync uploads nothing.
+- **The colour wrap** runs after every material's `colorNode` is assigned and keeps its alpha. Tests that walk a
+  material's paint graph read it through `segmentLitColour(material)` (the colour under the wrap).
+- `stepZapLook` prunes `glowing` of bodies that left the world.
+
+### The trace (`node scripts/zap-trace.mjs`)
+
+Same series as Task 4, plus: on the first zapped sample and on the first jolt, the same instant is drawn three
+times under `setRenderLock` (bones shown, bones and eyes hidden with `meshSkeletonShow`, shown again) and the
+mean absolute difference over the body's box (28% x 80% of the frame) is taken; then a second boot forces the
+head open (`forceSplit`), zaps the body and looks at it from 1.1 m. Last run (three runs agreed):
+
+| | iZap on its 22 instances | shown vs hidden (of 255) | shown vs shown again (noise) | body box luma shown / hidden |
+| --- | --- | --- | --- | --- |
+| glow, t = 0.25 s | +0.735 | 11.49 | 3.88 | 72.82 / 81.30 |
+| jolt, t = 0.75 s | -0.697 | 17.40 | 3.30 | 74.22 / 58.75 |
+
+(10.21 and 14.89 in the first run, at 3.0 m instead of 2.65 m; 11.74 and 17.61 in the second.) Before the zap
+and at the end the body's instances read `[0, 0, 0]`. The plan's floor was 8. The noise floor is high because
+two draws of one instant differ by the VHS pass.
+
+- Pipelines: 121 before, 121 after (120 and 120 in the two earlier runs).
+- Split head under the arc: 3 bone copies on `skeleton-bone-split` and 2 eye copies on `skeleton-eye-split`,
+  24 instances, all at iZap 0.735, no renderer error.
+- **The Task 4 chest gate was changed.** The ribcage now stands in front of the chest box, so its luminance
+  falls in the glow (198 before, 119 to 169 zapped with bones). The flesh is gated on the bones-hidden frame
+  instead (chest 230, blue minus red +16 against -26 before); the bones-and-all series is reported, not gated.
+
+### What the frames show
+
+- Glow: the skeleton is there and in register with the body: skull, ribs and sternum, spine, pelvis, both arms
+  to the hands, the thighs down to where the gun hides them. Hidden, the same frame is the flat blue-white
+  figure of Task 4.
+- **The bones are not dark at these glows.** The colour is a mix by the glow (0.56 to 0.97 in this zap), and
+  the bone under it is lit by the flashlight, so at 0.74 the skeleton reads as mid brown-grey bone with its own
+  shading, and only near 0.93 to 0.97 as a dark purple-grey figure. It never reaches the near-black of
+  `ZAP_LOOK.bone`. It is clearly a skeleton in a bright body, but it flickers between "lit bone" and "dark
+  bone" with the glow. From 1.1 m (glow 0.59) the skull is a plainly lit brown skull with teeth and dark
+  sockets.
+- **The bones nearly fill the flesh.** The glow shows as a rim round the skeleton (wide at the torso, a thin
+  line along the arms), not as a body with bones inside it.
+- Jolt: a clean bright white skeleton in a dark grey body. This reads best of the three.
+- Eyes: no red pupil; the sockets are dark.
+- Nothing draws over the first-person gun at 2.65 m or at 1.1 m. No z-fighting between bones. The statue and the
+  corpse show no skeleton.
+- Not looked at: a zapped body with a wall, a pillar or another body within 0.6 m in front of it (the arena is
+  empty; the pull would put the bones in front of anything that close), a wounded body with organs showing, a
+  second body beside the zapped one (the unit tests pin its instances at 0), and Night Train.
+
+### Boot time (`node scripts/boot-time.mjs`, fresh profile each run, interleaved)
+
+| run | branch `drawOnce` (ms) | `main` `drawOnce` (ms) | branch warmMs | main warmMs |
+| --- | --- | --- | --- | --- |
+| 1 | 944.1 | 944.9 | 1739 | 21488 |
+| 2 | 1055.4 | 1059.1 | 1450 | 1464 |
+
+`main` at e8fb57110. No difference outside the run-to-run spread.
+
+### Departures from the plan's code
+
+- `boneExposedActors` adds zapping bodies (above); without it only the skull shows.
+- `syncZap` writes 0 to organ batches, clears rows a batch stopped drawing, and skips the upload when nothing
+  changed; `ownerZap(owner)` and the `__sdfGame.boneZap(id)` seam read the values back.
+- `segmentLitColour(material)` exported from `mesh-renderer.ts`; `mesh-renderer.test.ts`,
+  `sculpt-renderer.test.ts` and `sculpt-default-pin.test.ts` read the paint graph through it. One text pin
+  grew: the organ batch's attribute list in `mesh-renderer.test.ts` now includes `iZap`.
+- `xrayColour` is written as WGSL's mix (`c * (1 - k) + to * k`), exact at both ends; the plan's form was off
+  by a rounding at k = 1 and failed its own test.
+- The WGSL numbers go through the float formatter, as in `zap.wgsl.ts`.

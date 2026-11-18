@@ -1,12 +1,16 @@
 // scripts/zap-trace.mjs
 //
-// ZAP TRACE (tesla arc plan 2026-11-17-tesla-1-zap-state.md, Task 4). Proves the zap's glow on the flesh
-// with NUMBERS, in the real game:
+// ZAP TRACE (tesla arc plan 2026-11-17-tesla-1-zap-state.md, Tasks 4 and 5). Proves the zap's glow on the
+// flesh, and the skeleton showing in it, with NUMBERS, in the real game:
 //
 //   * a zombie the arc is put on (`__sdfGame.zapActor()`) reads phase 'zapped' at once, later 'statue',
 //     and ends with glow 0 and char 1 (`__sdfGame.zaps()`, sampled every 0.25 s of sim time for 4 s);
 //   * the centre 30% crop of the frame is brighter while it is zapped than before the zap, and darker
 //     than before by the end (a charred corpse);
+//   * the skeleton is in the glow (Task 5): on the first zapped sample and on the first jolt, the same frame
+//     is drawn again with the bone meshes hidden (`meshSkeletonShow`, under `setRenderLock`), and the mean
+//     absolute difference over the body's box is the skeleton's share of the picture. A third draw with the
+//     bones shown again is the noise floor. `boneZap(id)` reads the glow the bone instances carry;
 //   * the zap compiles NO pipeline: `__sdfGame.pipelineLog().totalPipelines` is the same before and after.
 //
 // The harness is scripts/burn-behaviour-trace.mjs's: own vite + headless Chrome on an unused port pair,
@@ -156,6 +160,27 @@ function cropLuma(png, box = CENTRE) {
   return { mean: +(s / n).toFixed(2), rgb: [+(r / n).toFixed(1), +(g / n).toFixed(1), +(b / n).toFixed(1)] };
 }
 
+/** How near the close look at the x-ray stands to the body (m). */
+const CLOSE_M = 1.1;
+/** The body in the star, 2.6 to 3 m off: head to feet, hands included. */
+const BODY = [0.36, 0.64, 0.10, 0.90];
+/** Mean absolute difference (0..255, over R, G and B) of two frames in a box, and the share of its pixels that
+ *  moved by more than 24 in any channel. */
+function boxDiff(pngA, pngB, box = BODY) {
+  const a = decodePng(pngA), b = decodePng(pngB);
+  const x0 = Math.round(a.w * box[0]), x1 = Math.round(a.w * box[1]), y0 = Math.round(a.h * box[2]), y1 = Math.round(a.h * box[3]);
+  let n = 0, s = 0, moved = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * a.w + x) * 4;
+      const d = [0, 1, 2].map((k) => Math.abs(a.rgba[i + k] - b.rgba[i + k]));
+      s += (d[0] + d[1] + d[2]) / 3; n++;
+      if (Math.max(...d) > 24) moved++;
+    }
+  }
+  return { meanAbs: +(s / n).toFixed(2), movedShare: +(moved / n).toFixed(4) };
+}
+
 async function waitFor(url, what, tries = 120) {
   for (let i = 0; i < tries; i++) {
     try { const r = await fetch(url); if (r.ok) return; } catch { /* not up */ }
@@ -275,7 +300,7 @@ async function capture(name, note = '') {
   if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
   writeFileSync(`${OUT}/zap-${name}.png`, buf);
   console.log(`  ${name}: luma std=${stats.std} mean=${stats.mean} centre=${crop.mean} chest=${chest.mean} chestRgb=${chest.rgb.join(',')}`);
-  return { name, note, b64: shot.result.data, lumaStd: stats.std, lumaMean: stats.mean, centreLuma: crop.mean, centreRgb: crop.rgb, chestLuma: chest.mean, chestRgb: chest.rgb };
+  return { name, note, png: buf, b64: shot.result.data, lumaStd: stats.std, lumaMean: stats.mean, centreLuma: crop.mean, centreRgb: crop.rgb, chestLuma: chest.mean, chestRgb: chest.rgb };
 }
 
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
@@ -293,6 +318,34 @@ async function frameOn(id) {
     g.setPose(p[0], p[2], Math.atan2(dx, -dz), 0);
     return +Math.hypot(dx, dz).toFixed(2);
   })()`);
+}
+
+/**
+ * THE SKELETON'S SHARE of the frame on screen: the same sim instant drawn three times under the render lock,
+ * bones shown, bones and eyes hidden, bones shown again. Shown against hidden is the skeleton; shown against
+ * shown again is what two draws of one instant differ by anyway. The sim does not advance.
+ */
+async function xrayPair(tag, id) {
+  const boneZap = await evaluate(`window.__sdfGame.boneZap(${id})`);
+  const drawn = await evaluate(`(() => { const s = window.__sdfGame.skeletonMesh?.(); return s ? { segments: s.segments, hidden: s.hidden } : null; })()`).catch(() => null);
+  await evaluate('window.__sdfGame.setRenderLock(true)');
+  await step(2);
+  const shown = await capture(`xray-${tag}-shown`, `${tag}: bones shown`);
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: false, eyes: false })');
+  await step(2);
+  const hidden = await capture(`xray-${tag}-hidden`, `${tag}: bones hidden`);
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: true, eyes: true })');
+  await step(2);
+  const again = await capture(`xray-${tag}-shown-again`, `${tag}: bones shown again`);
+  await evaluate('window.__sdfGame.setRenderLock(false)');
+  const out = {
+    boneZap: boneZap ? { instances: boneZap.length, min: Math.min(...boneZap), max: Math.max(...boneZap) } : null,
+    drawn,
+    skeleton: boxDiff(shown.png, hidden.png), noise: boxDiff(shown.png, again.png),
+    bodyLumaShown: cropLuma(shown.png, BODY).mean, bodyLumaHidden: cropLuma(hidden.png, BODY).mean,
+  };
+  console.log(`  xray ${tag}: ${JSON.stringify(out)}`);
+  return { ...out, hiddenChest: { luma: hidden.chestLuma, rgb: hidden.chestRgb }, shots: [shown, hidden] };
 }
 
 try {
@@ -314,6 +367,7 @@ try {
   const zapsBefore = await evaluate('window.__sdfGame.zaps()');
   if (zapsBefore.length !== 0) fail(`a body reads as zapped before the zap: ${JSON.stringify(zapsBefore)}`);
   const beforeShot = await capture('00-before');
+  const boneZapBefore = await evaluate(`window.__sdfGame.boneZap(${id})`);
   const pipelinesBefore = await evaluate('window.__sdfGame.pipelineLog().totalPipelines');
 
   // ---- THE ARC -----------------------------------------------------------
@@ -324,6 +378,7 @@ try {
   // ---- 4 s UNDER IT, a sample and a frame every 0.25 s ---------------------
   const samples = [];
   const shots = [];
+  const xray = {};
   for (let i = 0; i < SAMPLES; i++) {
     await step(SAMPLE_FRAMES);
     const t = +((i + 1) * SAMPLE_FRAMES * DT).toFixed(2);
@@ -337,8 +392,12 @@ try {
       centreLuma: shot.centreLuma, chestLuma: shot.chestLuma, chestRgb: shot.chestRgb, ...lane });
     shots.push(shot);
     console.log(`  t=${t.toFixed(2)} ${JSON.stringify(samples[samples.length - 1])}`);
+    // The skeleton's share, once in the glow and once on a jolt (the sim does not advance while it is taken).
+    const which = z?.phase === 'zapped' ? (z.invert ? 'jolt' : 'glow') : null;
+    if (which && !xray[which]) xray[which] = { t, ...(await xrayPair(which, id)) };
   }
   const pipelinesAfter = await evaluate('window.__sdfGame.pipelineLog().totalPipelines');
+  const boneZapAfter = await evaluate(`window.__sdfGame.boneZap(${id})`);
 
   // ---- AFTER: look down at where the body stood (not part of the series) ----
   await evaluate(`(() => { const g = window.__sdfGame; const p = g.playerPos(); const a = g.actorTrace().find(x => x.id === ${id});
@@ -383,25 +442,87 @@ try {
   console.log('chest luma before:', beforeShot.chestLuma, 'series:', samples.map((s) => s.chestLuma).join(' '));
   console.log('luma:', JSON.stringify(report.checks.luma));
   console.log('pipelines:', JSON.stringify(report.checks.pipelines));
+  const strip = (x) => (x ? Object.fromEntries(Object.entries(x).filter(([k]) => k !== 'shots')) : null);
+  report.checks.xray = { glow: strip(xray.glow), jolt: strip(xray.jolt), boneZapBefore, boneZapAfter };
+  console.log('xray:', JSON.stringify(report.checks.xray));
 
   if (samples[0].phase !== 'zapped') fail(`the first sample's phase is '${samples[0].phase}', not 'zapped'`);
   if (!statues.length) fail('no sample reads phase statue');
   if (last.glow !== 0 || last.char !== 1) fail(`the last sample has glow ${last.glow} char ${last.char}, expected 0 and 1`);
   if (pipelinesAfter !== pipelinesBefore) fail(`the zap compiled pipelines: ${pipelinesBefore} -> ${pipelinesAfter}`);
   if (!lit.length) fail('no zapped sample without a jolt: nothing to measure the glow on');
-  // The glowing flesh is brighter and bluer than the lit flesh it replaces, in every sample; and the statue is
-  // darker than the body before the zap. (The plan's 1.5x on the centre crop is REPORTED above, not gated: the
-  // arena's zombie stands in the flashlight at a chest luminance near 200 of 255, so no glow can reach 1.5x it,
-  // and the centre crop is mostly the room.)
+  // The glowing FLESH is brighter and bluer than the lit flesh it replaces; and the statue is darker than the body
+  // before the zap. Since Task 5 the ribcage stands in front of the chest (dark in the glow), so the flesh is read
+  // on the frame drawn with the bones hidden; the chest series above, bones and all, is reported and not gated.
+  // (The plan's 1.5x on the centre crop is REPORTED above, not gated: the arena's zombie stands in the flashlight
+  // at a chest luminance near 200 of 255, so no glow can reach 1.5x it, and the centre crop is mostly the room.)
   const c = report.checks.luma.chest;
-  if (!(c.zappedMin > c.before)) fail(`a zapped chest sample (${c.zappedMin}) is not brighter than before the zap (${c.before})`);
-  if (!(c.zappedBlueMinusRed > c.beforeBlueMinusRed + 20)) fail(`the zapped chest is not bluer: blue - red ${c.zappedBlueMinusRed} against ${c.beforeBlueMinusRed} before`);
+  const flesh = xray.glow?.hiddenChest;
+  report.checks.luma.fleshChest = flesh ?? null;
+  if (!flesh) fail('no zapped sample without a jolt: the flesh glow was not measured');
+  if (!(flesh.luma > c.before)) fail(`the zapped flesh's chest (${flesh.luma}, bones hidden) is not brighter than before the zap (${c.before})`);
+  if (!(blue(flesh.rgb) > c.beforeBlueMinusRed + 20)) fail(`the zapped flesh is not bluer: blue - red ${blue(flesh.rgb)} against ${c.beforeBlueMinusRed} before`);
+  // THE SKELETON (Task 5). The bones carry the glow while the body is zapped and nothing before or after; hiding
+  // them changes the body's box by at least 8 of 255 in the glow (the plan's number), and well over the noise.
+  if (!xray.glow) fail('no zapped sample without a jolt: the skeleton was not measured');
+  if (!xray.jolt) fail('no sample landed on a jolt: the inverted skeleton was not measured');
+  for (const [name, x] of Object.entries(xray)) {
+    if (!x.boneZap || x.boneZap.instances < 10) fail(`${name}: ${x.boneZap?.instances ?? 0} bone instances drawn for the zapped body, expected its whole skeleton`);
+    if (name === 'glow' ? !(x.boneZap.min > 0) : !(x.boneZap.max < 0)) fail(`${name}: the bone instances carry iZap ${x.boneZap.min}..${x.boneZap.max}`);
+    if (!(x.skeleton.meanAbs >= 8)) fail(`${name}: hiding the bones changes the body box by ${x.skeleton.meanAbs} of 255, under 8: the skeleton is not in front of the flesh`);
+    if (!(x.skeleton.meanAbs > 2 * x.noise.meanAbs)) fail(`${name}: the skeleton's share (${x.skeleton.meanAbs}) is not clear of the noise (${x.noise.meanAbs})`);
+  }
+  // Dark bones in the glow (hiding them brightens the box), bright bones on a jolt (hiding them darkens it).
+  if (!(xray.glow.bodyLumaShown < xray.glow.bodyLumaHidden)) fail(`in the glow the bones do not darken the body box: ${xray.glow.bodyLumaShown} shown, ${xray.glow.bodyLumaHidden} hidden`);
+  if (!(xray.jolt.bodyLumaShown > xray.jolt.bodyLumaHidden)) fail(`on a jolt the bones do not brighten the body box: ${xray.jolt.bodyLumaShown} shown, ${xray.jolt.bodyLumaHidden} hidden`);
+  if ((boneZapBefore ?? []).some((v) => v !== 0)) fail(`a bone instance carries a zap before the zap: ${JSON.stringify(boneZapBefore)}`);
+  if ((boneZapAfter ?? []).some((v) => v !== 0)) fail(`a bone instance still carries a zap at the end: ${JSON.stringify(boneZapAfter)}`);
   if (!(c.statueMean < c.before)) fail(`the statue's chest (${c.statueMean}) is not darker than before the zap (${c.before})`);
+
+  // ---- A SPLIT HEAD UNDER THE ARC (Task 5) -----------------------------------
+  // The split skull's batches are the ones at the vertex-buffer limit (8: mesh-renderer.ts splitRows), and no
+  // closed head draws them. A fresh boot, the head forced open, then the zap: the split copies must carry the
+  // glow and the renderer must log no pipeline error.
+  await bootGame('?level=arena&spawn=zombie');
+  await evaluate('window.__sdfGame.setBloodBlur(false)');
+  await step(30);
+  const id2 = (await evaluate('window.__sdfGame.actorTrace().map(a => a.id)'))[0];
+  await frameOn(id2);
+  const forced = await evaluate(`window.__sdfGame.forceSplit(${id2}, "middle", 0, 0, 1)`);
+  await step(5);
+  const zapped2 = await evaluate(`window.__sdfGame.zapActor(${id2})`);
+  await step(SAMPLE_FRAMES);
+  const splitShot = await capture('xray-split-head', 'split head, zapped');
+  const split = await evaluate(`(() => {
+    const g = window.__sdfGame, d = g.skullDrawn(${id2}), z = g.boneZap(${id2}), q = g.zaps().find(x => x.id === ${id2});
+    return { copies: d ? d.copies.map(c => ({ material: c.material, piece: c.piece, eye: c.eye })) : null,
+      instances: z ? z.length : 0, zapMin: z && z.length ? Math.min(...z) : null, zapMax: z && z.length ? Math.max(...z) : null,
+      phase: q ? q.phase : 'none', invert: q ? q.invert : null };
+  })()`);
+  // The same body from CLOSE_M away: is the skeleton still in register with the flesh, and does a bone pulled
+  // toward the eye come through the first-person gun? (The sim runs: the render lock holds the camera too.)
+  await evaluate(`(() => {
+    const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
+    const dx = a.pos[0] - p[0], dz = a.pos[2] - p[2], d = Math.hypot(dx, dz);
+    g.setPose(a.pos[0] - dx / d * ${CLOSE_M}, a.pos[2] - dz / d * ${CLOSE_M}, Math.atan2(dx, -dz), 0);
+  })()`);
+  await step(3);
+  const closeShot = await capture('xray-close', `zapped, from ${CLOSE_M} m`);
+  split.closeDistance = await evaluate(`(() => { const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
+    return +Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]).toFixed(2); })()`);
+  split.closeZap = await evaluate(`window.__sdfGame.zaps().find(x => x.id === ${id2}) ?? null`);
+  report.checks.splitHead = { forced, zapped: zapped2, ...split };
+  console.log('split head under the arc:', JSON.stringify(report.checks.splitHead));
+  if (!forced || zapped2 !== 1) fail(`the split check did not set up: forceSplit ${forced}, zapActor ${zapped2}`);
+  if (!split.copies || split.copies.length < 2) fail(`the forced split drew ${split.copies?.length ?? 0} skull copies`);
+  if (!(Math.abs(split.zapMin) > 0 && Math.abs(split.zapMax) > 0)) fail(`the split body's bones carry iZap ${split.zapMin}..${split.zapMax}`);
 
   // ---- CONTACT SHEET: before, then every second sample ---------------------
   const tiles = [{ label: 'before', b64: beforeShot.b64 },
     ...shots.filter((_, i) => i % 2 === 1 || i === 0).map((s) => ({ label: `${s.name.slice(3)} ${s.note}`, b64: s.b64 })),
-    { label: afterShot.note, b64: afterShot.b64 }];
+    { label: afterShot.note, b64: afterShot.b64 },
+    ...['glow', 'jolt'].flatMap((k) => (xray[k]?.shots ?? []).map((s) => ({ label: s.note, b64: s.b64 }))),
+    { label: splitShot.note, b64: splitShot.b64 }, { label: closeShot.note, b64: closeShot.b64 }];
   await evaluate('window.__sheet = []');
   for (const t of tiles) await evaluate(`window.__sheet.push(${JSON.stringify(t)})`);
   const dataUrl = await evaluate(`(async () => {
