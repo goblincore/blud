@@ -71,6 +71,7 @@ import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
 import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
 import { carryFreshShots, expired, GRAPESHOT, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { shotFixEnabled, traceField } from '../body-field';
+import { prewarmZapFx } from './game-zap-fx';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -1415,7 +1416,9 @@ export function tick(ctx: GameContext, dt: number) {
     const kitBuilt = ctx.boot.kitPrewarm?.step() ?? false;
     // The pellet tracers' pipelines (game-weapon-rig.ts prewarmTracer), on a step the kit warm built nothing.
     const tracerBuilt = !kitBuilt && shotFixEnabled() && prewarmTracer(ctx);
-    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt);
+    // The zap's crawl arcs and halo (game-zap-fx.ts prewarmZapFx), likewise on a step nothing else built.
+    const zapFxBuilt = !kitBuilt && !tracerBuilt && prewarmZapFx(ctx);
+    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt && !zapFxBuilt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

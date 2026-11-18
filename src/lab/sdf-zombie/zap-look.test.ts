@@ -1,18 +1,18 @@
 // src/lab/sdf-zombie/zap-look.test.ts
 import { afterEach, describe, expect, it } from 'vitest';
 import { createZap, stepZap, ZAP } from './zap';
-import { ZAP_LOOKS, ZAP_LOOK_DEFAULT, ZAP_LOOK_IDS, decodeZapLane, encodeZapLane, setZapLook, strobeRate, zapLook, type ZapLookId } from './zap-look';
+import { ZAP_LOOKS, ZAP_LOOK_DEFAULT, ZAP_LOOK_IDS, ZAP_STROBE_REDUCED, setZapReducedFlashes, decodeZapLane, encodeZapLane, setZapLook, strobeRate, zapLook, type ZapLookId } from './zap-look';
 
 const DT = 1 / 60;
 const TIER = { cookSec: [50, 60] as [number, number], dies: false, recoverSec: 0.6, star: true, xray: true };
 /** The frames a jolt starts on over `sec` of a held arc, and the frames spent in a jolt. */
-const strobe = (id: ZapLookId, seed: number, sec = 10) => {
-  const s = createZap(seed, TIER, ZAP_LOOKS[id].strobe);
+const strobe = (id: ZapLookId, seed: number, sec = 10, st = ZAP_LOOKS[id].strobe) => {
+  const s = createZap(seed, TIER, st);
   const starts: number[] = [];
   let was = false, neg = 0;
   const n = Math.round(sec / DT);
   for (let i = 0; i < n; i++) {
-    const o = stepZap(s, DT, true, ZAP_LOOKS[id].strobe);
+    const o = stepZap(s, DT, true, st);
     if (o.invert && !was) starts.push(i);
     if (o.invert) neg++;
     was = o.invert;
@@ -21,7 +21,7 @@ const strobe = (id: ZapLookId, seed: number, sec = 10) => {
 };
 
 describe('the zap look variants', () => {
-  afterEach(() => { setZapLook(ZAP_LOOK_DEFAULT); });
+  afterEach(() => { setZapLook(ZAP_LOOK_DEFAULT); setZapReducedFlashes(false); });
 
   it('the game starts in look c; the baseline keeps code 0 and the 2026-11-17 strobe', () => {
     expect(ZAP_LOOK_DEFAULT).toBe('c');
@@ -40,6 +40,30 @@ describe('the zap look variants', () => {
     expect(setZapLook('z')).toBe('b');
     expect(setZapLook(null)).toBe('b');
     expect(setZapLook('c')).toBe('c');
+  });
+
+  it('reduced flashes: b and c take the slow strobe and keep the rest of their look; off, they have their own', () => {
+    for (const id of ['b', 'c'] as const) {
+      setZapLook(id);
+      expect(zapLook().strobe).toBe(ZAP_LOOKS[id].strobe);
+      setZapReducedFlashes(true);
+      expect(zapLook()).toEqual({ ...ZAP_LOOKS[id], strobe: ZAP_STROBE_REDUCED });
+      setZapReducedFlashes(false);
+    }
+    setZapLook('a'); setZapReducedFlashes(true);
+    expect(zapLook()).toBe(ZAP_LOOKS.a);
+  });
+
+  it('reduced flashes: never more than 3 jolts in any one-second window (photosensitivity guidance)', () => {
+    for (const seed of [1, 2, 3, 7, 20261118]) {
+      const r = strobe('c', seed, 60, ZAP_STROBE_REDUCED);
+      expect(r.starts.length).toBeGreaterThan(60);
+      const t = r.starts.map(f => f * DT);
+      for (let i = 0; i < t.length; i++) expect(t.filter(x => x >= t[i]! && x < t[i]! + 1).length).toBeLessThanOrEqual(3);
+    }
+    // The baseline, which the setting leaves alone, is inside the same bound.
+    const a = strobe('a', 3, 60).starts.map(f => f * DT);
+    for (let i = 0; i < a.length; i++) expect(a.filter(x => x >= a[i]! && x < a[i]! + 1).length).toBeLessThanOrEqual(3);
   });
 
   it('every variant has its own code', () => {

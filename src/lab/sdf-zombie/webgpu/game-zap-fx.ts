@@ -15,8 +15,9 @@ import type { ZombieActor } from './game-actor';
 import { createBrainArcs } from './character-effects';
 import { ZAP_ARCS, strikeZapArcs, zapPartsBox, type ZapArcPart } from '../zap-arcs';
 import { zapLook } from '../zap-look';
-import { ZAP_HALO, ZAP_HALO_WGSL } from './zap-halo.wgsl';
+import { ZAP_HALO, ZAP_HALO_WGSL, zapHaloAmount } from './zap-halo.wgsl';
 import type { Vec3 } from '../types';
+import { ARC_POINTS } from '../brain-arcs';
 
 /** The most arcs drawn at once, over every zapped body. */
 const MAX_ARCS = 28;
@@ -28,9 +29,12 @@ interface Fx {
   clock: number;
   next: number;
   seed: number;
-  halos: Map<ZombieActor, { sprite: THREE.Sprite; amount: { value: number } }>;
+  halos: Map<ZombieActor, Halo>;
+  /** Halos not on a body: kept (never disposed), so a later zap draws a billboard whose pipeline is already built. */
+  spareHalos: Halo[];
   flashed: Set<ZombieActor>;
 }
+type Halo = { sprite: THREE.Sprite; amount: { value: number } };
 let fx: Fx | null = null;
 /** Capture seam: the crawl arcs off, so a measurement of the bones under them is not a measurement of the arcs. */
 let arcsShown = true;
@@ -66,19 +70,56 @@ function makeHalo(scene: THREE.Object3D) {
   return { sprite, amount: amount as unknown as { value: number } };
 }
 
+const makeFx = (scene: THREE.Object3D): Fx => {
+  const f: Fx = { arcs: createBrainArcs(MAX_ARCS, ARC_WIDTH, true), clock: 0, next: 0, seed: 1, halos: new Map(), spareHalos: [], flashed: new Set() };
+  f.arcs.object.name = 'ZapArcs';
+  scene.add(f.arcs.object);
+  return f;
+};
+const sceneOf = (ctx: GameContext) => (ctx as Partial<GameContext>).vfx?.characterEffects?.scene as THREE.Object3D | undefined;
+
+/**
+ * PRE-WARM (game-tick.ts, beside the tracers'): the crawl arcs' two ribbon layers and the halo are pipelines no
+ * other effect builds, and the first zap of a session built them in its own frame. This draws them once, far under
+ * the floor and at no strength, on a step nothing else is building; the step after takes them down again. The
+ * baseline look draws none of it and warms nothing. True on the step it put them up (a build is due this frame).
+ */
+let warm: 'shown' | 'done' | null = null;
+export function prewarmZapFx(ctx: GameContext): boolean {
+  if (warm === 'done') return false;
+  const scene = sceneOf(ctx);
+  if (!scene || zapLook().code === 0) return false;
+  if (!fx) fx = makeFx(scene);
+  const f = fx;
+  if (warm === 'shown') {
+    if (f.halos.size === 0) for (const h of f.spareHalos) h.sprite.removeFromParent();
+    if (f.flashed.size === 0 && f.halos.size === 0) f.arcs.show([], []);
+    warm = 'done';
+    return false;
+  }
+  if (f.halos.size > 0 || f.arcs.visible) { warm = 'done'; return false; }   // a live zap is drawing (and building) them itself
+  const under: Vec3 = [0, -1000, 0];
+  f.arcs.show([Array.from({ length: ARC_POINTS }, (_, i): Vec3 => [0, -1000, i * 1e-4])], [0]);
+  const h = makeHalo(scene);
+  h.sprite.position.set(under[0], under[1], under[2]);
+  h.sprite.scale.set(1e-3, 1e-3, 1);
+  h.amount.value = 0;
+  f.spareHalos.push(h);
+  warm = 'shown';
+  return true;
+}
+
 /**
  * Step the overlay. `zapped`: the bodies whose view carries a glow this tick. With the baseline look live, or
  * nothing zapped, it only takes down what an earlier tick put up.
  */
 export function stepZapFx(ctx: GameContext, zapped: ReadonlySet<ZombieActor>, dt: number): void {
   const look = zapLook();
-  const scene = (ctx as Partial<GameContext>).vfx?.characterEffects?.scene as THREE.Object3D | undefined;
+  const scene = sceneOf(ctx);
   const live = look.code > 0 && zapped.size > 0 && !!scene;
   if (!fx) {
     if (!live) return;
-    fx = { arcs: createBrainArcs(MAX_ARCS, ARC_WIDTH, true), clock: 0, next: 0, seed: 1, halos: new Map(), flashed: new Set() };
-    fx.arcs.object.name = 'ZapArcs';
-    scene!.add(fx.arcs.object);
+    fx = makeFx(scene!);
   }
   const f = fx;
   // The kit: every zapped body's kit takes this tick's strobe state; a body no longer zapped gets its kit back.
@@ -91,7 +132,7 @@ export function stepZapFx(ctx: GameContext, zapped: ReadonlySet<ZombieActor>, dt
   for (const [a, h] of f.halos) {
     if (live && look.halo && zapped.has(a)) continue;
     h.sprite.removeFromParent();
-    (h.sprite.material as THREE.Material).dispose();
+    f.spareHalos.push(h);
     f.halos.delete(a);
   }
   if (!live) { f.arcs.show([], []); return; }
@@ -111,11 +152,18 @@ export function stepZapFx(ctx: GameContext, zapped: ReadonlySet<ZombieActor>, dt
       const box = zapPartsBox(parts);
       if (box) {
         let h = f.halos.get(a);
-        if (!h) { h = makeHalo(scene!); f.halos.set(a, h); }
+        if (!h) {
+          h = f.spareHalos.pop() ?? makeHalo(scene!);
+          if (!h.sprite.parent) scene!.add(h.sprite);
+          f.halos.set(a, h);
+        }
         h.sprite.position.set(box.center[0], box.center[1], box.center[2]);
         const wide = 2 * (Math.max(box.half[0], box.half[2]) * ZAP_HALO.fit + ZAP_HALO.padM), tall = 2 * (box.half[1] * ZAP_HALO.fit + ZAP_HALO.padM);
         h.sprite.scale.set(wide, tall, 1);
-        h.amount.value = z.invert ? ZAP_HALO.negative : 1;
+        // Fainter up close, where the billboard would fill the view and grey the room (zap-halo.wgsl.ts).
+        const eye = (ctx as Partial<GameContext>).boot?.handle?.camera?.position;
+        const dist = eye ? Math.hypot(box.center[0] - eye.x, box.center[1] - eye.y, box.center[2] - eye.z) : Infinity;
+        h.amount.value = zapHaloAmount(z.invert, dist);
       }
     }
     if (strike && look.arcs > 0 && arcsShown) {

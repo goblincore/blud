@@ -65,6 +65,9 @@ export const ZAP_XRAY_LOOK = Object.freeze({
   deflateM: 0.010,
   /** c: the body's glow seen through the bone's middle. */
   cThrough: 1.1,
+  /** c AT RANGE: a bone's dark edge is under a pixel from a few metres, and a see-through bone is then no bone at
+   *  all. From cFarM[0] to cFarM[1] from the eye the middle goes from the body's glow to look b's dark bone. */
+  cFarM: [1.6, 3.0] as const,
   /** The bright bone (the negative frame, b and c): its edge, as a share of the bright. */
   edgeDim: 0.12,
   /** An eye: the gain on the glow in the positive frame, and on the dark bone in the negative. */
@@ -77,9 +80,10 @@ const sstep = (a: number, b: number, v: number) => { const u = Math.min(1, Math.
 
 /**
  * The bone's colour under the lane `zap` (zap-look.ts encodeZapLane) for every look variant: code 0 is
- * xrayColour. `facing` is |n . v| (1: square to the eye), `eye` true for an eyeball.
+ * xrayColour. `facing` is |n . v| (1: square to the eye), `eye` true for an eyeball, `distM` the bone's distance
+ * from the eye (look c's bones go dark at range).
  */
-export function xrayColourLook(lit: readonly number[], zap: number, facing: number, eye: boolean): number[] {
+export function xrayColourLook(lit: readonly number[], zap: number, facing: number, eye: boolean, distM = 0): number[] {
   const m = Math.abs(zap), code = Math.floor(m / 2), amt = m - 2 * code;
   if (code === 0) return xrayColour(lit, zap);
   const k = Math.min(1, amt * ZAP_XRAY.saturate), neg = zap < 0, L = ZAP_XRAY_LOOK;
@@ -91,7 +95,13 @@ export function xrayColourLook(lit: readonly number[], zap: number, facing: numb
   if (eye) to = neg ? dark.map(c => c * L.eyeDark) : bright.map(c => c * L.eyeBright);
   else if (neg) to = bright.map(c => c * paint * (1 - edge) + c * L.edgeDim * edge);
   else if (code === 1) to = dark.map((c, i) => (c + L.bLift[i]! * paint) * (1 - edge) + c * L.bEdgeDark * edge);
-  else to = ZAP_LOOK.core.map((c, i) => c * L.cThrough * paint * (1 - edge) + dark[i]! * edge);
+  else {
+    const far = sstep(L.cFarM[0], L.cFarM[1], distM);
+    to = ZAP_LOOK.core.map((c, i) => {
+      const mid = c * L.cThrough * paint * (1 - far) + (dark[i]! + L.bLift[i]! * paint) * far;
+      return mid * (1 - edge) + dark[i]! * edge;
+    });
+  }
   return lit.map((c, i) => c * (1 - k) + to[i]! * k);
 }
 
@@ -113,8 +123,8 @@ export const ZAP_XRAY_PULL_WGSL = /* wgsl */ `fn zapXrayPull(p: vec3<f32>, eye: 
   return eye + d * keep;
 }`;
 
-/** `facing`: |n . v| at the fragment. `kind`: 1 for an eyeball, 0 for bone. */
-export const ZAP_XRAY_COLOUR_WGSL = /* wgsl */ `fn zapXrayColour(lit: vec3<f32>, zap: f32, facing: f32, kind: f32) -> vec3<f32> {
+/** `facing`: |n . v| at the fragment. `kind`: 1 for an eyeball, 0 for bone. `dist`: metres from the eye. */
+export const ZAP_XRAY_COLOUR_WGSL = /* wgsl */ `fn zapXrayColour(lit: vec3<f32>, zap: f32, facing: f32, kind: f32, dist: f32) -> vec3<f32> {
   let code = floor(abs(zap) * 0.5);
   let amt = abs(zap) - 2.0 * code;
   let k = min(1.0, amt * ${f(ZAP_XRAY.saturate)});
@@ -136,7 +146,9 @@ export const ZAP_XRAY_COLOUR_WGSL = /* wgsl */ `fn zapXrayColour(lit: vec3<f32>,
   } else if (code < 1.5) {
     to = mix(dark + ${v3(ZAP_XRAY_LOOK.bLift)} * paint, dark * ${f(ZAP_XRAY_LOOK.bEdgeDark)}, edge);
   } else {
-    to = mix(${v3(ZAP_LOOK.core)} * (${f(ZAP_XRAY_LOOK.cThrough)} * paint), dark, edge);
+    let far = smoothstep(${f(ZAP_XRAY_LOOK.cFarM[0])}, ${f(ZAP_XRAY_LOOK.cFarM[1])}, dist);
+    let mid = mix(${v3(ZAP_LOOK.core)} * (${f(ZAP_XRAY_LOOK.cThrough)} * paint), dark + ${v3(ZAP_XRAY_LOOK.bLift)} * paint, far);
+    to = mix(mid, dark, edge);
   }
   return mix(lit, to, k);
 }`;

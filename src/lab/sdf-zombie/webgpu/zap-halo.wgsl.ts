@@ -14,7 +14,19 @@ export const ZAP_HALO = Object.freeze({
   gain: 0.45,
   power: 2.2,
   negative: 0.12,
+  /** UP CLOSE the billboard fills the view and greys the whole room behind the body. Its strength falls from full
+   *  at nearM[1] from the eye to nearFloor of it at nearM[0] and nearer. */
+  nearM: [1.2, 3.0] as const,
+  nearFloor: 0.2,
 });
+
+/** The halo's strength for a body `distM` from the eye, on the positive or the negative (jolt) frame. */
+export function zapHaloAmount(invert: boolean, distM: number): number {
+  const [n0, n1] = ZAP_HALO.nearM;
+  const u = Math.min(1, Math.max(0, (distM - n0) / (n1 - n0)));
+  const near = ZAP_HALO.nearFloor + (1 - ZAP_HALO.nearFloor) * (u * u * (3 - 2 * u));
+  return (invert ? ZAP_HALO.negative : 1) * near;
+}
 
 const f = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 

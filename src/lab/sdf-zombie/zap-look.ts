@@ -50,7 +50,20 @@ export const isZapLookId = (v: unknown): v is ZapLookId => typeof v === 'string'
 export const ZAP_LOOK_DEFAULT: ZapLookId = 'c';
 /** The live variant. Plain module state: a dev A/B switch, read by the actor's zap step and the renderer glue. */
 let live: ZapLookId = ZAP_LOOK_DEFAULT;
-export const zapLook = (): ZapLookDef => ZAP_LOOKS[live];
+/**
+ * THE REDUCED-FLASHES STROBE (`?flashes=reduced`, the repo's setting; lamp-moods.ts has the lamps' side). Look c's
+ * bursts run at 10 jolts a second and b sits at 3: under the setting every variant strobes with single, longer
+ * jolts no more than 3 to a second, whatever the seed. The look is otherwise the same.
+ */
+export const ZAP_STROBE_REDUCED: ZapStrobe = { joltSec: [0.12, 0.12], gapSec: [0.4, 0.6], burst: [1, 1], burstGapSec: 0 };
+let reduced = false;
+export function setZapReducedFlashes(on: boolean): boolean { reduced = !!on; return reduced; }
+const REDUCED_LOOKS: Readonly<Record<ZapLookId, ZapLookDef>> = Object.freeze({
+  a: ZAP_LOOKS.a,   // the baseline is already under 2 jolts a second
+  b: { ...ZAP_LOOKS.b, strobe: ZAP_STROBE_REDUCED },
+  c: { ...ZAP_LOOKS.c, strobe: ZAP_STROBE_REDUCED },
+});
+export const zapLook = (): ZapLookDef => (reduced ? REDUCED_LOOKS : ZAP_LOOKS)[live];
 /** Set the live variant; anything that is not a variant's name leaves it as it was. Returns the live id. */
 export function setZapLook(id: unknown): ZapLookId {
   if (isZapLookId(id)) live = id;

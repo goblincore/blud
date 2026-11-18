@@ -5,12 +5,18 @@
 // one on a body (zapActor) and, each tick, copying every body's zap look to its view (stepZapLook).
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
-import { encodeZapLane, setZapLook, zapLook, type ZapLookId } from '../zap-look';
+import { encodeZapLane, setZapLook, setZapReducedFlashes, zapLook, type ZapLookId } from '../zap-look';
+import { reducedFlashes } from './lamp-moods';
 import { stepZapFx, zapFxDebug } from './game-zap-fx';
 
 // THE LOOK VARIANT (zap-look.ts, look spike 2026-11-18): `&zapLook=b` in the URL picks it at boot; the console
 // seam `__sdfGame.zapLook('b')` switches it live.
-if (typeof location !== 'undefined') setZapLook(new URLSearchParams(location.search).get('zapLook'));
+if (typeof location !== 'undefined') {
+  const search = new URLSearchParams(location.search);
+  setZapLook(search.get('zapLook'));
+  // `?flashes=reduced`: every variant's strobe drops to single jolts, at most 3 a second (zap-look.ts).
+  setZapReducedFlashes(reducedFlashes(search));
+}
 
 /** The live look variant; with an id, switch to it first. Bodies under the arc take the new look on their next tick. */
 export function zapLookSeam(id?: string): { id: ZapLookId; code: number; fx: ReturnType<typeof zapFxDebug> } {

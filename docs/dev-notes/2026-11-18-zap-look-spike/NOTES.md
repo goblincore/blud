@@ -373,3 +373,26 @@ Contact sheets (PNGs here are gitignored; the script rewrites them):
 
 Single frames: `<character>-<look>-body-pos.png`, `-body-neg.png`, and for the zombie `-skull-pos.png`,
 `-skull-neg.png` (with `-bones` / `-nobones` twins: the measurement's pair, arcs off).
+
+## Update 2026-11-18: look c is the default, and its four weak spots
+
+The owner played all three and picked **c** (`ZAP_LOOK_DEFAULT` in `zap-look.ts`). `scripts/zap-trace.mjs` pins
+`zapLook=a`, since its gates were written against the baseline. Then the four things this spike had flagged in c:
+
+- **Bones at range.** A see-through bone with a sub-pixel dark edge is no bone from a few metres. The bone's middle
+  now goes from the body's glow at 1.6 m to look b's dark bone at 3.0 m and beyond (`ZAP_XRAY_LOOK.cFarM`;
+  `zapXrayColour` takes the fragment's distance from the eye). Up close it is unchanged.
+- **The halo up close.** Its strength falls from full at 3.0 m to a fifth at 1.2 m and nearer (`zapHaloAmount`,
+  `ZAP_HALO.nearM` / `nearFloor`), so the billboard no longer greys the room when it fills the view.
+- **First-zap hitch.** `prewarmZapFx` (called beside the tracers' pre-warm in `game-tick.ts`) draws the crawl arcs
+  and one halo once, under the floor at no strength. Halos are now pooled instead of disposed.
+- **Flash rate.** The default bursts are left as the owner picked them (10 jolts a second inside a burst). Under
+  the repo's `?flashes=reduced` every variant strobes with single 0.12 s jolts, never more than 3 in any second
+  (`ZAP_STROBE_REDUCED`, tested over 60 s at five seeds).
+
+Capture (`cfix/zap-look-sheet-cfix.png`, zombie, look c): pipelines on the first zap 131 before and 131 after (it
+was +3); skull from 1 m contrast 40.7 / 27.6 and edge 19.2 / 10.9 (positive / negative), inside the earlier run's
+spread; from 3.5 m the skeleton is dark against the bright body, and the close frames' background is dark.
+
+Not verified: cold-boot `drawOnce` after the bone shader's new parameter; `?flashes=reduced` in the running game
+(unit tests only); the pre-warm on Night Train or with look a at boot and a later switch to c; any of it in motion.

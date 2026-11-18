@@ -60,7 +60,7 @@ describe('the skeleton x-ray', () => {
     expect(ZAP_XRAY_PULL_WGSL).toContain('fn zapXrayPull(p: vec3<f32>, eye: vec3<f32>, zap: f32, n: vec3<f32>, thin: f32) -> vec3<f32>');
     expect(ZAP_XRAY_PULL_WGSL).toContain(`${ZAP_XRAY.pullM}`);
     expect(ZAP_XRAY_PULL_WGSL).toContain(`${ZAP_XRAY.minKeep}`);
-    expect(ZAP_XRAY_COLOUR_WGSL).toContain('fn zapXrayColour(lit: vec3<f32>, zap: f32, facing: f32, kind: f32) -> vec3<f32>');
+    expect(ZAP_XRAY_COLOUR_WGSL).toContain('fn zapXrayColour(lit: vec3<f32>, zap: f32, facing: f32, kind: f32, dist: f32) -> vec3<f32>');
     expect(ZAP_XRAY_COLOUR_WGSL).toContain('let k = min(1.0, amt * 4.0);');
     // The baseline look (code 0) leaves by the 2026-11-17 line, before any of the variants' terms.
     expect(ZAP_XRAY_COLOUR_WGSL).toContain('if (code < 0.5) { return mix(lit, select(dark, bright, neg), k); }');
@@ -72,6 +72,24 @@ describe('the x-ray bones of the look variants (zap-look.ts)', () => {
   const lit = [0.5, 0.4, 0.3];
   const lane = (glow: number, invert: boolean, code: number) => encodeZapLane(glow, invert, code);
   const lum = (c: number[]) => 0.299 * c[0]! + 0.587 * c[1]! + 0.114 * c[2]!;
+
+  it("look c's bone middle is the body's glow up close and a dark bone at range; b and the edges do not change", () => {
+    const [n, fr] = ZAP_XRAY_LOOK.cFarM;
+    const mid = (code: number, d: number) => lum(xrayColourLook(lit, lane(0.8, false, code), 1, false, d));
+    expect(mid(2, 0)).toBe(mid(2, n));                       // unchanged up close (and with no distance given)
+    expect(mid(2, fr)).toBeLessThan(mid(2, n) * 0.5);        // dark from cFarM[1] out
+    expect(mid(2, fr)).toBeCloseTo(mid(1, fr), 6);           // ... look b's dark bone exactly
+    expect(mid(2, 50)).toBe(mid(2, fr));
+    expect(mid(2, (n + fr) / 2)).toBeLessThan(mid(2, n));
+    expect(mid(2, (n + fr) / 2)).toBeGreaterThan(mid(2, fr));
+    expect(mid(1, 0)).toBe(mid(1, 50));
+    const edge = (d: number) => xrayColourLook(lit, lane(0.8, false, 2), 0, false, d);
+    expect(edge(0)).toEqual(edge(50));
+    // The negative frame (bright bones) does not read the distance.
+    expect(xrayColourLook(lit, lane(0.8, true, 2), 1, false, 0)).toEqual(xrayColourLook(lit, lane(0.8, true, 2), 1, false, 50));
+    expect(ZAP_XRAY_COLOUR_WGSL).toContain('dist: f32');
+    expect(ZAP_XRAY_COLOUR_WGSL).toContain(`smoothstep(${n}, ${fr}.0, dist)`);
+  });
 
   it('code 0 is the baseline colour whatever the facing or the kind', () => {
     for (const z of [0.1, 0.7, -0.7]) for (const facing of [0, 0.5, 1]) for (const eye of [false, true]) {

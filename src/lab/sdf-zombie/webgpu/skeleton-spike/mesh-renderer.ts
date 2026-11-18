@@ -665,10 +665,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     const lit = m.colorNode as unknown as { xyz: unknown; w: unknown };
     litColours.set(m, m.colorNode);
     // The look variants (zap-look.ts) shade by how far the surface faces the eye, and tell an eye from bone.
-    const facing = normalWorld.dot(cameraPosition.sub(positionWorld).normalize()).abs();
+    const toEye = cameraPosition.sub(positionWorld);
+    const facing = normalWorld.dot(toEye.normalize()).abs();
     const isEye = m === eyeMaterial || m === eyeSplitMaterial;
     if (isEye) m.userData.zapNoThin = true;
-    m.colorNode = vec4(zapColour({ lit: lit.xyz as never, zap: zapAttr, facing: facing as never, kind: float(isEye ? 1 : 0) }) as never, lit.w as never);
+    m.colorNode = vec4(zapColour({ lit: lit.xyz as never, zap: zapAttr, facing: facing as never, kind: float(isEye ? 1 : 0), dist: toEye.length() as never }) as never, lit.w as never);
   }
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
   // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
