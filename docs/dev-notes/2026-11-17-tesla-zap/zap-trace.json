@@ -1,0 +1,405 @@
+{
+  "branch": "claude/electric-arc-weapon-effect-63ed31",
+  "checks": {
+    "warmGate": "ready",
+    "actors": [
+      {
+        "id": 1,
+        "kind": "zombie",
+        "pos": [
+          0.3677945240734128,
+          0,
+          -5.602458081009981
+        ]
+      }
+    ],
+    "distance": 2.63,
+    "pipelines": {
+      "before": 120,
+      "after": 120
+    },
+    "luma": {
+      "centre": {
+        "before": 74.7,
+        "series": [
+          84.89,
+          81.55,
+          43.35,
+          101.98,
+          95.96,
+          88.61,
+          84.76,
+          59.26,
+          60.09,
+          61.38,
+          60.6,
+          46.43,
+          32.41,
+          25.24,
+          25.28,
+          25.36
+        ],
+        "zappedMean": 89.63,
+        "zappedOverBefore": 1.2,
+        "last": 25.36
+      },
+      "chest": {
+        "before": 197.72,
+        "beforeRgb": [
+          207.3,
+          195.5,
+          183.6
+        ],
+        "beforeBlueMinusRed": -23.7,
+        "series": [
+          227.49,
+          222.61,
+          75.3,
+          228.32,
+          218.65,
+          222.68,
+          218.28,
+          149.72,
+          152.02,
+          155.01,
+          153.28,
+          111.98,
+          81.35,
+          24.83,
+          24.83,
+          24.96
+        ],
+        "zappedMean": 223,
+        "zappedMin": 218.28,
+        "zappedOverBefore": 1.13,
+        "zappedBlueMinusRed": 22.8,
+        "joltMean": 75.3,
+        "statueMean": 152.51,
+        "last": 24.96
+      }
+    }
+  },
+  "consoleErrors": [],
+  "samples": [
+    {
+      "t": 0.25,
+      "phase": "zapped",
+      "glow": 0.735,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 84.89,
+      "chestLuma": 227.49,
+      "chestRgb": [
+        216.9,
+        231.8,
+        233.1
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 0.5,
+      "phase": "zapped",
+      "glow": 0.931,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 81.55,
+      "chestLuma": 222.61,
+      "chestRgb": [
+        209.8,
+        227.6,
+        230.3
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 0.75,
+      "phase": "zapped",
+      "glow": 0.697,
+      "invert": true,
+      "char": 0,
+      "centreLuma": 43.35,
+      "chestLuma": 75.3,
+      "chestRgb": [
+        73.8,
+        76.7,
+        72.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1,
+      "phase": "zapped",
+      "glow": 0.638,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 101.98,
+      "chestLuma": 228.32,
+      "chestRgb": [
+        218.8,
+        232.3,
+        232.8
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.25,
+      "phase": "zapped",
+      "glow": 0.969,
+      "invert": false,
+      "char": 0.026,
+      "centreLuma": 95.96,
+      "chestLuma": 218.65,
+      "chestRgb": [
+        203.1,
+        224.3,
+        230.4
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.5,
+      "phase": "zapped",
+      "glow": 0.789,
+      "invert": false,
+      "char": 0.376,
+      "centreLuma": 88.61,
+      "chestLuma": 222.68,
+      "chestRgb": [
+        205.1,
+        230,
+        230.9
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.75,
+      "phase": "zapped",
+      "glow": 0.559,
+      "invert": false,
+      "char": 0.828,
+      "centreLuma": 84.76,
+      "chestLuma": 218.28,
+      "chestRgb": [
+        198.5,
+        225.8,
+        231.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 59.26,
+      "chestLuma": 149.72,
+      "chestRgb": [
+        157,
+        149,
+        134.3
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.25,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 60.09,
+      "chestLuma": 152.02,
+      "chestRgb": [
+        159.4,
+        151.3,
+        136.6
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.5,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 61.38,
+      "chestLuma": 155.01,
+      "chestRgb": [
+        162.6,
+        154,
+        140.1
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.75,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 60.6,
+      "chestLuma": 153.28,
+      "chestRgb": [
+        160.6,
+        152.6,
+        137.3
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 3,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 46.43,
+      "chestLuma": 111.98,
+      "chestRgb": [
+        121.6,
+        109.5,
+        99.3
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.25,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 32.41,
+      "chestLuma": 81.35,
+      "chestRgb": [
+        93.7,
+        77.4,
+        69
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.5,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.24,
+      "chestLuma": 24.83,
+      "chestRgb": [
+        21.5,
+        26.3,
+        26.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.75,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.28,
+      "chestLuma": 24.83,
+      "chestRgb": [
+        21.5,
+        26.3,
+        26.1
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 0
+    },
+    {
+      "t": 4,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.36,
+      "chestLuma": 24.96,
+      "chestRgb": [
+        21.6,
+        26.4,
+        26.3
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.56
+      ],
+      "speed": 0
+    }
+  ]
+}

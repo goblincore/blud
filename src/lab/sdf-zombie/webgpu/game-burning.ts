@@ -330,7 +330,8 @@ export function createGameBurning(ctx: GameContext): GameBurning {
    *  view. */
   function writeUniforms(a: ZombieActor, s: BurnState): void {
     const u = a.view.uniforms;
-    u.burnCfg.value.set(s.burn, s.burnSec, s.char, 0);
+    // w is the zap's (game-zap.ts) and z is shared with it: the larger char wins.
+    u.burnCfg.value.set(s.burn, s.burnSec, Math.max(s.char, a.zapLook()?.char ?? 0), u.burnCfg.value.w);
     u.burnNoiseScale.value = tuning.noiseScale;
     u.burnRiseSpeed.value = tuning.riseSpeed;
     u.burnCharPatch.value = tuning.charPatch;

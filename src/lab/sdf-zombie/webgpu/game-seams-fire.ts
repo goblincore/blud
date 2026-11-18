@@ -9,6 +9,7 @@
 import { setBurnBehaviourEnabled } from '../burn-behaviour';
 import type { GameContext } from './game-context';
 import { meltActor } from './game-melter';
+import { zapActor, zaps } from './game-zap';
 import { meltSlumpOn, setMeltSlump } from './game-actor';
 import { type Vec3 } from '../types';
 import type { SplitPresetId } from '../head-split';
@@ -25,6 +26,12 @@ export function createFireSeams(ctx: GameContext) {
     // `hit` (world): where it was shot; the melt starts there.
     meltActor: (id?: number, hit?: Vec3) => ctx.world.actors.filter(a => id === undefined || a.id === id)
       .filter(a => meltActor(ctx, a, hit)).length,
+    // ZAP (game-zap.ts): put the arc on actor `id` (or every body when omitted), how many started; drop it;
+    // and the readout.
+    zapActor: (id?: number) => ctx.world.actors.filter(a => id === undefined || a.id === id)
+      .filter(a => zapActor(ctx, a)).length,
+    unzapActor: (id?: number) => { for (const a of ctx.world.actors) if (id === undefined || a.id === id) a.setArc(false); },
+    zaps: () => zaps(ctx),
     melts: () => ctx.world.actors.filter(a => a.melting()).map(a => ({ id: a.id, t: a.meltProgress() })),
     /** A/B: whether a melting body slumps as a ragdoll part-way (default on). Returns the new state. */
     setMeltSlump: (on: boolean) => { setMeltSlump(on); return meltSlumpOn(); },

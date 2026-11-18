@@ -822,7 +822,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  body's record (REC_LIGHTS), like bodyFlash. */
     bodyLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
     /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
-     *  0..1, w spare. Per VIEW, so a single body burns through this; crowd
+     *  0..1, w = the zap glow, signed (zap.wgsl.ts). Per VIEW, so a single body burns through this; crowd
      *  instances burn through REC_BURN. */
     burnCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** Rest-space frequency of the fire noise. */
@@ -1868,7 +1868,7 @@ export function writeViewRecord(
     eyeMask: u.faceEyeMask.value.toArray(),
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
-    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
+    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z, zap: u.burnCfg.value.w,
     // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),

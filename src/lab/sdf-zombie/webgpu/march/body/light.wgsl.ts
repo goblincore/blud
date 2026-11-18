@@ -9,6 +9,7 @@ import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
 import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
 import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
 import { DISPLAY_DEBUG_BLOCK } from './blocks/light/display-debug.wgsl';
+import { ZAP_LIGHT_BLOCK } from './blocks/post/zap.wgsl';
 import { afterHitStop } from '../after-hit-flag';
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
@@ -86,6 +87,8 @@ ${COMPOSE_BLOCK}
   // gBurnEmit is 0 on every non-burning body, so this line is bit-identical to
   // the old one everywhere burn is off (adding 0.0 is exact).
   var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow + gBurnEmit;
+
+${ZAP_LIGHT_BLOCK}
 
 ${DISPLAY_DEBUG_BLOCK}
 

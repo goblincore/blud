@@ -46,6 +46,7 @@ import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepMelts } from './game-melter';
+import { stepZapLook } from './game-zap';
 import { igniteExplosionLight } from './game-dynamite-throw';
 import { scaleBurstVisual } from './game-wound-vfx';
 import { stepPendingGibImpulses } from './game-gib-spawn';
@@ -1353,6 +1354,8 @@ export function tick(ctx: GameContext, dt: number) {
     // Melting bodies (game-melter.ts): their own clock, since a melting body no longer steps; bone groups let go
     // here, before the chunk step, like the gibs above.
     stepMelts(ctx, dt);
+    // The zap's look (game-zap.ts): after the burn step, which owns the rest of burnCfg.
+    stepZapLook(ctx);
     // The staged release's due impulses, BEFORE the chunk step, so a piece
     // that goes this frame integrates at its launch velocity for the whole
     // frame rather than a frame late.

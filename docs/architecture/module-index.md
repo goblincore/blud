@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 70 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 71 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 29 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 92 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 93 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -97,6 +97,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/body/blocks/post/split-hit.wgsl.ts` — THE HEAD SPLIT after the hit (head-split.ts unwarpPoint / unwarpDir are the CPU mirror): the hit piece's un-warped point, its turn, the head frame…
 - `webgpu/march/body/blocks/post/tissue.wgsl.ts` — Task-3 split of the march body (2026-09-19): tissue-depth ramp and viscera (post-hit material).
 - `webgpu/march/body/blocks/post/wound-masks.wgsl.ts` — Task-3 split of the march body (2026-09-19): wound and char masks, micro-detail normal (post-hit material).
+- `webgpu/march/body/blocks/post/zap.wgsl.ts` — THE ZAP ON THE FLESH (spec 2026-11-17-tesla-arc-design.md): a body under the tesla arc is a flat blue-white glow, brighter at its silhouette, with…
 - `webgpu/march/body/blocks/setup/hull-bounds.wgsl.ts` — Task-3 split of the march body (2026-09-19): occluder pre-pass and outer-hull entry/exit bounds.
 - `webgpu/march/body/blocks/setup/ray-window.wgsl.ts` — Task-3 split of the march body (2026-09-19): ray window: tMax, proxy-box entry, early discards.
 - `webgpu/march/body/blocks/setup/start-bounds.wgsl.ts` — Task-3 split of the march body (2026-09-19): cone, depth-prepass and temporal ray start bounds.
@@ -422,6 +423,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-wound-streams.ts` — Wound stream ids and the refine-twin gate that decides which actors get the march cull.
 - `webgpu/game-wound-tuning.ts` — applyWoundTuning: writes wound panel values into the game (ramp, viscera, gut ropes), rebuilding the cast when boneRatio changes.
 - `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
+- `webgpu/game-zap.ts` — THE ZAP IN THE GAME (spec 2026-11-17-tesla-arc-design.md).
 - `webgpu/game-zombie-face.ts` — The zombie's flat face sheet (url, atlas rect, mean) and headShape, the head prim that normalises the face projection.
 - `webgpu/game-zone-cull.ts` — ZONE / PORTAL CULL AND ENEMY UPDATE LOD IN PLAY (occlusion pass, 2026-10-28).
 
