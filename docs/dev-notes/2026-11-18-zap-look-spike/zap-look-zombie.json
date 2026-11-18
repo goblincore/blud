@@ -1,0 +1,250 @@
+{
+  "tag": "zombie",
+  "characters": {
+    "zombie": {
+      "variants": {
+        "a": {
+          "distance": 3.48,
+          "box": {
+            "center": [
+              -0.002365287554892459,
+              0.8617752917584821,
+              -9.609773635544894
+            ],
+            "half": [
+              0.3628670715110989,
+              0.8687570014788931,
+              0.4452243534259859
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 54.93,
+              "std": 51.91,
+              "blueMinusRed": 5.7
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 57.49,
+              "std": 56.89,
+              "blueMinusRed": 2.1
+            }
+          },
+          "pipelines": {
+            "before": 127,
+            "after": 127
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 22,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 3,
+            "joltsPerSec": 1.88,
+            "negativeShare": 0.156
+          },
+          "skullPos": {
+            "features": {
+              "pixels": 10456,
+              "mean": 40.8,
+              "contrast": 4.7,
+              "spread": 3.4,
+              "edge": 2.22
+            },
+            "skullBox": {
+              "mean": 37.93,
+              "std": 40.12,
+              "blueMinusRed": 9
+            }
+          },
+          "skullNeg": {
+            "features": {
+              "pixels": 11472,
+              "mean": 254.2,
+              "contrast": 3.25,
+              "spread": 6,
+              "edge": 1.56
+            },
+            "skullBox": {
+              "mean": 69.49,
+              "std": 84.95,
+              "blueMinusRed": 2.8
+            }
+          }
+        },
+        "b": {
+          "distance": 3.47,
+          "box": {
+            "center": [
+              -0.0025667812568311854,
+              0.8573825602692345,
+              -9.599531570990372
+            ],
+            "half": [
+              0.3609240190473746,
+              0.864459132212649,
+              0.44455364799606034
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 19,
+            "glow": 0.9031436866381073,
+            "char": 0,
+            "body": {
+              "mean": 62.42,
+              "std": 60.99,
+              "blueMinusRed": 8.8
+            }
+          },
+          "bodyNeg": {
+            "frames": 11,
+            "glow": 0.7714463797367764,
+            "char": 0,
+            "body": {
+              "mean": 51.84,
+              "std": 48.42,
+              "blueMinusRed": 4.6
+            }
+          },
+          "pipelines": {
+            "before": 139,
+            "after": 141
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 22,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 5,
+            "joltsPerSec": 3.13,
+            "negativeShare": 0.344
+          },
+          "skullPos": {
+            "features": {
+              "pixels": 6846,
+              "mean": 95.7,
+              "contrast": 24.73,
+              "spread": 76.8,
+              "edge": 14.53
+            },
+            "skullBox": {
+              "mean": 51.75,
+              "std": 61.7,
+              "blueMinusRed": 9.8
+            }
+          },
+          "skullNeg": {
+            "features": {
+              "pixels": 5991,
+              "mean": 229.3,
+              "contrast": 38.68,
+              "spread": 106.2,
+              "edge": 17.03
+            },
+            "skullBox": {
+              "mean": 55.23,
+              "std": 69.46,
+              "blueMinusRed": 8.9
+            }
+          }
+        },
+        "c": {
+          "distance": 3.45,
+          "box": {
+            "center": [
+              -0.34948884229767685,
+              0.8545570837576888,
+              -9.684517726733645
+            ],
+            "half": [
+              0.5144776343807423,
+              0.8616928641680344,
+              0.44881569829295653
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8725073753589487,
+            "char": 0,
+            "body": {
+              "mean": 77.3,
+              "std": 65.14,
+              "blueMinusRed": 8.3
+            }
+          },
+          "bodyNeg": {
+            "frames": 14,
+            "glow": 0.7915070756796606,
+            "char": 0,
+            "body": {
+              "mean": 56.52,
+              "std": 52.04,
+              "blueMinusRed": 5
+            }
+          },
+          "pipelines": {
+            "before": 153,
+            "after": 154
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 1,
+            "flashedKits": 0
+          },
+          "bones": 22,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 8,
+            "joltsPerSec": 5,
+            "negativeShare": 0.333
+          },
+          "skullPos": {
+            "features": {
+              "pixels": 5859,
+              "mean": 143,
+              "contrast": 45.81,
+              "spread": 146,
+              "edge": 29.6
+            },
+            "skullBox": {
+              "mean": 79.92,
+              "std": 59.13,
+              "blueMinusRed": 12.4
+            }
+          },
+          "skullNeg": {
+            "features": {
+              "pixels": 9211,
+              "mean": 226.1,
+              "contrast": 35.04,
+              "spread": 107,
+              "edge": 18.59
+            },
+            "skullBox": {
+              "mean": 58.64,
+              "std": 67.14,
+              "blueMinusRed": 9.1
+            }
+          }
+        }
+      }
+    }
+  },
+  "consoleErrors": []
+}

@@ -14,6 +14,12 @@ Branch `claude/electric-arc-weapon-effect-63ed31`. Spec
   on a jolt), chars from a cook of 0.6, and on a full cook (1.6 to 2.2 s) stands 0.8 s as a charred statue and dies
   its ordinary death. Released early it recovers and keeps its char. Tests: `zap.test.ts`, `game-actor-zap.test.ts`;
   trace `node scripts/zap-trace.mjs`.
+- [~] **Look spike, 2026-11-18** ([notes](../dev-notes/2026-11-18-zap-look-spike/NOTES.md)): the owner found the first
+  look short of a cartoon electrocution. Three looks, switchable live: `__sdfGame.zapLook('a' | 'b' | 'c')` or
+  `&zapLook=b` (a is the look as built). b is recommended: a hard strobe at about 3 a second, bones that keep
+  their features, crackle and crawl arcs, the kit flashing with the body, and the kit playing the bones on the
+  teratoma and the cerebrax. Spike code, not played; the owner's look call is open, and the spec is not yet
+  updated. `node scripts/zap-look-capture.mjs`.
 - [~] **Slot 9, the coil:** placeholder primitive prop, one verb (hold fire to zap the body under the crosshair;
   straight 12 m trace, walls block it, it holds within 8 degrees of the body's centre). Nothing is drawn between the
   prop and the body. Console: `__sdfGame.zapActor(id?)`, `unzapActor(id?)`, `zaps()`, `fireTesla(on)`, `tesla()`,
