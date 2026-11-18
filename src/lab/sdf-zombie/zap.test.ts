@@ -112,6 +112,35 @@ describe('the zap clock', () => {
     }
   });
 
+  it('a statue ignores the arc', () => {
+    const s = createZap(1, ZAP_TIER_DEFAULT);
+    let o = stepZap(s, DT, true);
+    for (let i = 0; i < 4 * 60 && !o.die; i++) o = stepZap(s, DT, true);
+    expect(o.die).toBe(true);
+    for (let i = 0; i < 20; i++) {
+      o = stepZap(s, DT, i >= 10);
+      expect(s.phase).toBe('statue');
+      expect(o.done).toBe(false);
+      expect(o.die).toBe(false);
+      expect(o.glow).toBe(0);
+    }
+  });
+
+  it('done never fires while the arc is on, even when it toggles every frame', () => {
+    const tier: ZapTier = { ...ZAP_TIER_DEFAULT, dies: false };
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = createZap(seed, tier);
+      let char = 0;
+      for (let i = 0; i < 600; i++) {
+        const arcOn = i % 2 === 0;
+        const o = stepZap(s, DT, arcOn);
+        if (arcOn) expect(o.done).toBe(false);
+        expect(o.char).toBeGreaterThanOrEqual(char);
+        char = o.char;
+      }
+    }
+  });
+
   it('resolves a profile tier over the default', () => {
     expect(resolveZapTier(null)).toEqual(ZAP_TIER_DEFAULT);
     expect(resolveZapTier({ zap: { star: false } }).star).toBe(false);
