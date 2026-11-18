@@ -479,3 +479,32 @@ jolt 18.05 (3.47). Pipelines 126 before, 126 after; slot 9's scenario 125 and 12
 `main` at e8fb57110; the branch now carries Task 6 as well. The branch is 13 and 54 ms over `main` in these
 two pairs. Earlier pairs on the same day had `main` between 944 and 1092, so this is inside what one checkout
 spreads over, but it is the first time the branch is the slower of both pairs.
+
+## Follow-ups after the final review
+
+- **The x-ray holds with a half-rate frame.** The reviewer's reading held: on a half-rate hold frame (`meshHold`
+  in `game-main.ts`) the flesh drawn is the last frame's and the segment renderer's `update` is skipped, but
+  `syncZapXray(ctx)` ran every frame and rewrote `iZap` on the held batches, so the bones could invert or lose
+  their pull a frame before the flesh. It is now not called when `meshHold` is true. `xrayLive` changes only
+  inside the call, so the one clearing pass after the last glow is still owed on the next live frame
+  (`game-zap.test.ts`: a skipped frame, then a live one, still clears, once). Not looked at in a half-rate
+  capture.
+- **The two-body glow gate.** Two gates on the neighbour's own state, which walking does not move: it has no
+  entry in `zaps()`, and every row of `boneZap(<its id>)` is 0, read with the bones drawn for two frames (hidden,
+  the read is empty) and with the zapped body's rows as the control (they must be non-zero). The chest-box
+  gate is widened from 8 to 14 (`GLOW_BLEED_MAX`): clean runs measured -3.9 to +7.0, the bleed +21.0. A
+  wide-box reading (`fleshBlue`: blue - red of the pixels at or over the 90th-percentile luminance of the
+  `NEIGHBOUR` box) is reported, not gated: its value under the bleed was never measured.
+
+  | `ZAP_TRACE_BLEED_ONLY=1` run | neighbour chest shift | neighbour `fleshBlue` shift | neighbour bone rows | zapped body's rows | zapped body's chest shift |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | -0.4 | +1.9 | 3, all 0 | 22, all non-zero | +78.9 |
+  | 2 | +1.0 | +2.5 | 3, all 0 | 22, all non-zero | +51.1 |
+  | 3 | +6.4 | +3.3 | 3, all 0 | 22, all non-zero | +48.0 |
+
+  The neighbour draws 3 bone instances (the head and its eyes, as any intact body), so its zero rows are few.
+- **`mesh-renderer.ts`**: the `positionWorld` binding moved below the imports. No behaviour change.
+- **The gorehound and the gutcrawler do take the zap pose.** Both rigs have the six arm joints `motion.ts`
+  asks for (`burnArms`): built from their blobs, `makeMotionJoints(...).index` has `shoulderL/R`, `elbowL/R`
+  and `handL/R` (gorehound 7 to 12, gutcrawler 9 to 14). So `zapPose` runs for them and `star: false` is a
+  live path (no hand targets, the tremor on the trunk). Read from the rig only; not seen in a capture.

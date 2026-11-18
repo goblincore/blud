@@ -57,6 +57,8 @@ const ownerZap = (owner: unknown): number => {
 /**
  * The skeleton's half of the look: each bone instance takes its owner's signed glow (zap-xray.ts). Call
  * once a frame after the segment renderer's update. Nothing zapped, and nothing to clear: no work.
+ * game-main does NOT call it on a half-rate hold frame (the bones hold with the held flesh). `xrayLive` changes
+ * only in here, so a clearing pass owed when a frame is skipped is still owed on the next call.
  */
 export function syncZapXray(ctx: GameContext): void {
   const any = glowing.size > 0;

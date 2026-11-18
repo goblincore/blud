@@ -114,13 +114,14 @@ import {
   SEGMENT_MATRIX_FLOATS, SEGMENT_ZAP_ATTR, ensureSegmentMatrices, instancedShareOf, segmentWorldPosition, setSegmentMatrix,
   useSegmentInstance,
 } from './segment-instance';
+import { ZAP_XRAY_COLOUR_WGSL } from './zap-xray';
 
 // WHERE THE BONE IS. Every material here reads the fragment's world position as segmentWorldPosition (segment-instance.ts),
 // the surface's own place, never three's positionWorld: on a zapped instance that one is the x-ray's PULLED place, up
 // to 0.6 m toward the eye, where a split copy clips to nothing (a split head drew a closed skull), a wound's exposure
 // sphere is elsewhere and the lights are measured from the wrong point. With no zap the two are the same point.
+// The local name is bound to the UN-PULLED point, in place of three's positionWorld, so no material below can read the pulled one.
 const positionWorld = segmentWorldPosition;
-import { ZAP_XRAY_COLOUR_WGSL } from './zap-xray';
 
 const MAX_WOUNDS_TEX = 64;
 /** The materials' names, by what each draws: a bone segment (the sculpted skull among them), a plate of the anatomical

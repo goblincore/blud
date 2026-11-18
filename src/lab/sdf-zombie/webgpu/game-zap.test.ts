@@ -61,6 +61,23 @@ describe('the zap look in the game', () => {
     expect(syncs).toEqual([1, 0]);
   });
 
+  it('still does the clearing sync on the live frame after a skipped one (a half-rate hold frame)', () => {
+    const a = body({ glow: 0.75, invert: false, char: 0 });
+    const { ctx, syncs } = world([a]);
+    stepZapLook(ctx); syncZapXray(ctx);
+    expect(syncs).toEqual([1]);
+    // The glow goes out on a held frame: the look steps, game-main does not call the sync.
+    a.look = null;
+    stepZapLook(ctx);
+    expect(syncs).toEqual([1]);
+    // Further held frames change nothing; the next live frame clears the bones, once.
+    stepZapLook(ctx);
+    stepZapLook(ctx); syncZapXray(ctx);
+    expect(syncs).toEqual([1, 0]);
+    stepZapLook(ctx); syncZapXray(ctx);
+    expect(syncs).toEqual([1, 0]);
+  });
+
   it('lets go of a glowing body that left the world: a cast rebuild empties the set', () => {
     const actors = [body({ glow: 0.75, invert: false, char: 0 }), body({ glow: 0.4, invert: false, char: 0 })];
     const { ctx, syncs } = world(actors);

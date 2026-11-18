@@ -211,6 +211,21 @@ function boxPercentile(png, box, q) {
   return 255;
 }
 
+/** Mean blue - red of a box's lit flesh: the pixels at or over the box's `q` luminance (boxPercentile). The wide-box
+ *  twin of the chest box's blue - red, for a body that walks while it is measured. */
+function boxFleshBlue(png, box, q) {
+  const floor = boxPercentile(png, box, q);
+  const { w, h, rgba } = decodePng(png);
+  const x0 = Math.round(w * box[0]), x1 = Math.round(w * box[1]), y0 = Math.round(h * box[2]), y1 = Math.round(h * box[3]);
+  let n = 0, s = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = (y * w + x) * 4;
+    if (Math.round(0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]) < floor) continue;
+    s += rgba[i + 2] - rgba[i]; n++;
+  }
+  return n > 0 ? +(s / n).toFixed(1) : 0;
+}
+
 /** The head, with the camera level on the body from 2.6 m: the skull and, on a split head, its turned halves. */
 const HEAD = [0.44, 0.56, 0.43, 0.53];
 /**
@@ -460,6 +475,12 @@ const BLEED_ONLY = process.env.ZAP_TRACE_BLEED_ONLY === '1';
 const SPLIT_ONLY = process.env.ZAP_TRACE_SPLIT_ONLY === '1';
 /** The most the un-zapped body's chest may darken while its neighbour chars (a share of its luminance). */
 const CHAR_FALL_MAX = 0.12;
+/** The most the un-zapped neighbour's chest box may move in blue - red with the arc on the other body. The body walks
+ *  toward the player while it is measured, so the box drifts over it: clean runs measured -3.9 to +7.0. The bleed
+ *  (the crowd material reading its source view's glow) measured +21.0 on the neighbour, and a zapped body's own
+ *  chest moves about +40. 14 is half way between the clean range's top and the bleed. The neighbour's own state
+ *  (no entry in zaps(), every bone instance at iZap 0) is gated beside it and does not drift. */
+const GLOW_BLEED_MAX = 14;
 /** The least width (columns of the 960 px frame) of a zapped split skull's footprint; a closed skull is narrower. */
 const SPLIT_SKULL_MIN_WIDTH = 57;
 const TESLA_ONLY = process.env.ZAP_TRACE_TESLA_ONLY === '1';
@@ -654,6 +675,13 @@ try {
   const zapAtB = await evaluate(`window.__sdfGame.zaps()`);
   const aZapped = await look(idA, 'bleed-a-zapped', 'two bodies: the first, zapped');
   const zapAtA = await evaluate(`window.__sdfGame.zaps()`);
+  // The neighbour's own state, which no walking moves: its bone instances' iZap, read with the bones drawn (hidden,
+  // a body has no instances and the read is empty). The zapped body's are read with it: they prove the read is live.
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: true, eyes: true })');
+  await step(2);
+  const bones = await evaluate(`(() => { const g = window.__sdfGame; return { first: g.boneZap(${idA}), other: g.boneZap(${idB}), zaps: g.zaps() }; })()`);
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: false, eyes: false })');
+  await step(2);
   // THE CHAR (second review pass): hold the arc on the first body until it has cooked (char 0.8, or the statue).
   // The zap's char must be that body's alone too: the other's chest must not darken as the first one chars.
   let cooked = null;
@@ -671,7 +699,14 @@ try {
     first: { beforeRgb: aBefore.chestRgb, zappedRgb: aZapped.chestRgb, blueMinusRedBefore: blue(aBefore.chestRgb), blueMinusRedZapped: blue(aZapped.chestRgb),
       shift: +(blue(aZapped.chestRgb) - blue(aBefore.chestRgb)).toFixed(1) },
     other: { beforeRgb: bBefore.chestRgb, zappedRgb: bZapped.chestRgb, blueMinusRedBefore: blue(bBefore.chestRgb), blueMinusRedZapped: blue(bZapped.chestRgb),
-      shift: +(blue(bZapped.chestRgb) - blue(bBefore.chestRgb)).toFixed(1), lumaBefore: bBefore.chestLuma, lumaZapped: bZapped.chestLuma },
+      shift: +(blue(bZapped.chestRgb) - blue(bBefore.chestRgb)).toFixed(1), lumaBefore: bBefore.chestLuma, lumaZapped: bZapped.chestLuma,
+      // Reported, not gated (its value under the bleed was never measured): blue - red of the wide box's lit flesh.
+      fleshBlue: { before: boxFleshBlue(bBefore.png, NEIGHBOUR, 0.9), arcOn: boxFleshBlue(bZapped.png, NEIGHBOUR, 0.9),
+        shift: +(boxFleshBlue(bZapped.png, NEIGHBOUR, 0.9) - boxFleshBlue(bBefore.png, NEIGHBOUR, 0.9)).toFixed(1) },
+      // Its own state with the arc on the first body.
+      inZaps: bones.zaps.some((x) => x.id === idB),
+      boneZap: bones.other ? { instances: bones.other.length, nonZero: bones.other.filter((v) => v !== 0).length } : null,
+      firstBoneZap: bones.first ? { instances: bones.first.length, nonZero: bones.first.filter((v) => v !== 0).length } : null },
     char: {
       first: cookedAt ? { phase: cookedAt.phase, char: +cookedAt.char.toFixed(3) } : null,
       firstLuma: { before: aBefore.chestLuma, cooked: aCooked.chestLuma, rgb: aCooked.chestRgb },
@@ -691,7 +726,10 @@ try {
   if (!crowd.on || !srcRow?.isSource || !otherRow || otherRow.isSource || otherRow.type !== srcRow.type) fail(`the two-body scenario is not arranged: crowd ${JSON.stringify(crowd)}`);
   if (zappedA !== 1 || zapAtB.length !== 1 || zapAtB[0].id !== idA || zapAtB[0].invert || zapAtA[0]?.invert) fail(`the two-body zap is not the first body's alone, un-inverted: ${JSON.stringify([zapAtB, zapAtA])}`);
   if (!(bleed.first.shift > 20)) fail(`the zapped body did not turn bluer: blue - red moved ${bleed.first.shift}`);
-  if (!(Math.abs(bleed.other.shift) < 8)) fail(`THE GLOW BLEEDS: the un-zapped body's chest moved ${bleed.other.shift} in blue - red (${bleed.other.blueMinusRedBefore} -> ${bleed.other.blueMinusRedZapped}) with the arc on the other body`);
+  if (bleed.other.inZaps || zapAtB.some((x) => x.id === idB) || zapAtA.some((x) => x.id === idB)) fail(`THE ZAP IS ON THE OTHER BODY: zaps() lists the un-zapped body: ${JSON.stringify([zapAtB, zapAtA, bones.zaps])}`);
+  if (!bleed.other.firstBoneZap || !(bleed.other.firstBoneZap.nonZero > 0)) fail(`the zapped body's bone instances carry no iZap (${JSON.stringify(bleed.other.firstBoneZap)}): the neighbour's zero rows prove nothing`);
+  if (!bleed.other.boneZap || bleed.other.boneZap.instances === 0 || bleed.other.boneZap.nonZero !== 0) fail(`THE X-RAY BLEEDS: the un-zapped body's bone instances are ${JSON.stringify(bleed.other.boneZap)} (iZap ${JSON.stringify(bones.other)}), expected some, all 0`);
+  if (!(Math.abs(bleed.other.shift) < GLOW_BLEED_MAX)) fail(`THE GLOW BLEEDS: the un-zapped body's chest moved ${bleed.other.shift} in blue - red (${bleed.other.blueMinusRedBefore} -> ${bleed.other.blueMinusRedZapped}) with the arc on the other body`);
   if (!bleed.char.first || !(bleed.char.first.char >= 0.8)) fail(`the first body did not cook: ${JSON.stringify(bleed.char.first)}`);
   if (!(bleed.char.otherFall < CHAR_FALL_MAX)) fail(`THE CHAR BLEEDS: the un-zapped body's flesh fell ${(bleed.char.otherFall * 100).toFixed(1)}% (${JSON.stringify(bleed.char.otherFlesh)}) as the other body charred`);
   if (BLEED_ONLY) { console.log('\nDONE (bleed scenario only)'); shutdown(0); await sleep(5000); }

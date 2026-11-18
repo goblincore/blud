@@ -2260,7 +2260,10 @@ async function main() {
         if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights, ownerFill);
       }
       // The zap x-ray (game-zap.ts): each bone instance's owner's glow. Not the light list's: it runs with it off.
-      syncZapXray(ctx);
+      // Not on a half-rate hold frame: the flesh drawn is the last frame's and the bones' pose is held with it
+      // (meshHold, above), so their glow, inversion and pull hold too. The sync, and the one clearing pass after the
+      // last glow, run on the next live frame: game-zap.ts keeps that owed until it is called.
+      if (!meshHold) syncZapXray(ctx);
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
       // the carved library build their OWN instances (they need their own
