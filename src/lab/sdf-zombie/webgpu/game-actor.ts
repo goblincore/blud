@@ -76,7 +76,7 @@ import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
-import { isGoreBody, isSoldierFamily, resolveBurnTier, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, resolveBurnTier, resolveZapTier, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import { judderLevel, type MotionFrame } from '../motion';
@@ -100,6 +100,7 @@ import { planSlump, slumpVelocities } from '../slump-death';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
 import { createBurnPanic, stepBurnPanic, type BurnPanicState } from '../burn-behaviour';
+import { createZap, stepZap, type ZapOut, type ZapState } from '../zap';
 import type { LevelGround } from './level-ground';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
@@ -463,6 +464,19 @@ export interface ZombieActor {
    *  does not die and its panic is over; 'dead' = it burned to death. The capture trace's oracle, and
    *  what game-burning.ts polls to start the burn-down. */
   burnPhase(): 'none' | 'panic' | 'falter' | 'resumed' | 'dead';
+  /**
+   * THE ZAP (zap.ts, spec 2026-11-17-tesla-arc-design.md): the tesla arc has landed on this body. False,
+   * and nothing done, when it is melting, tearing, a corpse or already a statue. The caller then holds
+   * the arc on it with setArc(true) each tick and drops it with setArc(false).
+   */
+  beginZap(): boolean;
+  setArc(on: boolean): void;
+  /** Under the arc, recovering from it, or standing as a statue. */
+  zapping(): boolean;
+  zapPhase(): 'none' | 'zapped' | 'recovering' | 'statue';
+  /** What the renderer draws: the glow, whether the bones are inverted, and the char. Null on a body the
+   *  arc has never charred and is not on. */
+  zapLook(): { glow: number; invert: boolean; char: number } | null;
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
@@ -988,6 +1002,22 @@ export function createZombieActor(opts: {
   let burnDied = false;
   /** Seconds the panicking body has been trying to run and getting nowhere (a wall, a corner). */
   let burnStuckT = 0;
+  /**
+   * THE ZAP (zap.ts). Non-null while the body is under the tesla arc, recovering from it or standing as
+   * a statue. Applied below as an override of the mind's verdict, after the burn panic's, which it
+   * suspends. `zapArc` is the weapon's word, each tick, on whether the arc is still on this body.
+   */
+  let zap: ZapState | null = null;
+  let zapArc = false;
+  let zapOut: ZapOut | null = null;
+  /** The most char the arc has left on this body, kept after the zap ends. */
+  let zapChar = 0;
+  /** The statue's time ran out: the body is killed, and the collapse is forced until it is down. */
+  let zapDied = false;
+  /** This frame's pose for stepMotion; null = none. */
+  let zapPoseCfg: { t: number; seed: number; amp: number; variant: number; tremor: number; star: boolean } | null = null;
+  const zapTier = resolveZapTier(opts.profile);
+  const zapSeed = opts.id * 104729 + 3;
   /** Can this body walk from where it stands to `p`? (The burn panic's blocked-turn probe.) */
   const burnClear = (p: Vec3): boolean => {
     // Inside the bounds by a margin, but never asked to be further from a wall than the body already
@@ -2081,7 +2111,7 @@ export function createZombieActor(opts: {
         burnStuckT = 0;
         burnPhaseNow = 'none';
       }
-      if (burnPanic && !doomed && !burnDied) {
+      if (burnPanic && !doomed && !burnDied && !zap) {
         // The encounter director (not setBrainInput) feeds the game's minds,
         // so read the player from the order when present and remember the
         // last seen point for when sight is lost.
@@ -2123,6 +2153,33 @@ export function createZombieActor(opts: {
         }
       } else {
         burnCruiseScale = 1;
+      }
+      // THE ZAP. An override of the mind's verdict, after the burn panic's so a body that is both alight
+      // and under the arc holds the star. Killed by something else mid-zap (or torn apart, statue or
+      // not): the zap ends there, the glow cuts, and the char it had stays.
+      zapPoseCfg = null;
+      if (zap && (doomed || (zap.phase !== 'statue' && downOtherwise()))) { zap = null; zapOut = null; zapArc = false; }
+      if (zap) {
+        const o = stepZap(zap, sdt, zapArc);
+        zapChar = Math.max(zapChar, o.char);
+        if (o.statueDone) {
+          // The statue's time is up: the body's ORDINARY death (its ragdoll or its own fall), not a burn fall.
+          zap = null; zapOut = null; zapArc = false;
+          zapDied = true;
+          // A soldier reaches his death through his own path (the burn death's rule).
+          if (soldierDamage) soldierFatal = true;
+        } else if (o.done) {
+          zap = null; zapOut = null;
+        } else {
+          zapOut = o;
+          think = { ...think, target: null, halt: true, fire: false, weaponUp: false, attack: null, contact: false, faceHeading: null };
+          // A statue holds the variant it died in, with no tremor and a stopped clock.
+          zapPoseCfg = { t: zap.phase === 'statue' ? 0 : zap.t, seed: zapSeed, amp: o.pose, variant: o.variant, tremor: o.tremor, star: zapTier.star };
+        }
+      }
+      if (zapDied) {
+        think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+        signals.forcedCollapse = true;
       }
       // Burned to death: no agenda, and the collapse is forced every frame until it is down.
       if (burnDied) {
@@ -2166,6 +2223,7 @@ export function createZombieActor(opts: {
       // A burning soldier must never fire, whatever the mind or the injury
       // path computed above (the panic override is the last word).
       if ((burnPanic && !doomed) || burnDied) signals.fire = false;
+      if (zap || zapDied) signals.fire = false;
       if (softKilled) {
         // A STAGGER stays up for dyingT, reeling, and may clench the trigger:
         // one round every 70 ms, sprayed high (see the onFire site).
@@ -2265,6 +2323,7 @@ export function createZombieActor(opts: {
           // A physics-death body (the zombie) burned to death plays its burn fall, not the ragdoll.
           ...(burnFell() && !softTarget ? { authoredDeath: true } : {}),
           ...(burnFlail ? { burnFlail } : {}),
+          ...(zapPoseCfg ? { zapPose: zapPoseCfg } : {}),
           ...(fallWalled ? { releaseFall: true } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
@@ -3210,6 +3269,7 @@ export function createZombieActor(opts: {
     endTear: () => {
       tear = null; tearPlan = null; tearPrimRegion = null; doomed = false;
       burnDied = false; burnPanic = null; burningOn = false; burnPhaseNow = 'none'; burnFlail = null; burnCruiseScale = 1;
+      zap = null; zapArc = false; zapOut = null; zapChar = 0; zapDied = false; zapPoseCfg = null;
       // Restore the ordinary packed-bone layout for a body returned to play
       // (a reset mid-window). A retired body keeps its view hidden either way.
       view.setBonesBare(false);
@@ -3276,6 +3336,20 @@ export function createZombieActor(opts: {
       }
     },
     burnPhase: () => burnPhaseNow,
+    beginZap: () => {
+      if (zap) return zap.phase !== 'statue';
+      if (zapDied || melt || doomed || downOtherwise() || (tear !== null && tear.age < tearTuning.sec)) return false;
+      // A downed soldier (alive on the floor) is not stood back up into the star.
+      if (soldierDamage && soldierInjury(current, soldierWounds, injuryTuning).downed) return false;
+      zap = createZap(zapSeed, zapTier);
+      return true;
+    },
+    setArc: (on: boolean) => { zapArc = on && zap !== null && zap.phase !== 'statue'; },
+    zapping: () => zap !== null,
+    zapPhase: () => zap?.phase ?? 'none',
+    zapLook: () => (zap && zapOut
+      ? { glow: zapOut.glow, invert: zapOut.invert, char: zapChar }
+      : zapChar > 0 ? { glow: 0, invert: false, char: zapChar } : null),
     mind: () => mind,
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,
@@ -3314,7 +3388,7 @@ export function createZombieActor(opts: {
     step,
     settled: () => !bakePaused && damageRevision === lodRevision && sinceDamage > 2
       && pendingShot === null && pendingWounds.length === 0 && pendingSevered.length === 0 && pendingPelletHits === 0
-      && knockV <= 1e-4 && !doomed && !softKilled && dyingT <= 0 && burnPanic === null && !headPop && pop === null
+      && knockV <= 1e-4 && !doomed && !softKilled && dyingT <= 0 && burnPanic === null && zap === null && !headPop && pop === null
       && tear === null && melt === null && !forceCollapseNext && forcedSwing === null && !(lastFrame?.collapsed ?? false),
     setViewSync(on: boolean, catchUp = true) {
       viewSync = on;
