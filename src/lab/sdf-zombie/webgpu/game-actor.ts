@@ -2155,10 +2155,11 @@ export function createZombieActor(opts: {
         burnCruiseScale = 1;
       }
       // THE ZAP. An override of the mind's verdict, after the burn panic's so a body that is both alight
-      // and under the arc holds the star. Killed by something else mid-zap (or torn apart, statue or
-      // not): the zap ends there, the glow cuts, and the char it had stays.
+      // and under the arc holds the star. Killed by something else mid-zap (torn apart or down, statue
+      // or not): the zap ends there, the glow cuts, and the char it had stays. So only a STANDING statue
+      // ever reaches zapDied.
       zapPoseCfg = null;
-      if (zap && (doomed || (zap.phase !== 'statue' && downOtherwise()))) { zap = null; zapOut = null; zapArc = false; }
+      if (zap && (doomed || downOtherwise())) { zap = null; zapOut = null; zapArc = false; }
       if (zap) {
         const o = stepZap(zap, sdt, zapArc);
         zapChar = Math.max(zapChar, o.char);
@@ -2172,13 +2173,13 @@ export function createZombieActor(opts: {
           zap = null; zapOut = null;
         } else {
           zapOut = o;
-          think = { ...think, target: null, halt: true, fire: false, weaponUp: false, attack: null, contact: false, faceHeading: null };
+          think = { ...think, target: null, halt: true, fire: false, weaponUp: false, attack: null, contact: false, advance: null, faceHeading: null };
           // A statue holds the variant it died in, with no tremor and a stopped clock.
           zapPoseCfg = { t: zap.phase === 'statue' ? 0 : zap.t, seed: zapSeed, amp: o.pose, variant: o.variant, tremor: o.tremor, star: zapTier.star };
         }
       }
       if (zapDied) {
-        think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+        think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false, advance: null };
         signals.forcedCollapse = true;
       }
       // Burned to death: no agenda, and the collapse is forced every frame until it is down.
@@ -2252,7 +2253,7 @@ export function createZombieActor(opts: {
           const seen = pl !== null && (encounterOrder ? encounterOrder.visible : rangedSight(pl));
           const feetY = pl ? pl.y ?? ground!.floorAt(pl.x, pl.z) : NaN;
           floater.step(sdt, { pos: state.wander.pos, seen, player: pl ? { x: pl.x, z: pl.z, feetY } : null });
-          if (floater.mode === 'idle' && !burnPanic) {
+          if (floater.mode === 'idle' && !burnPanic && !zap) {
             const leg = floater.legTarget(state.wander.pos, sdt);
             think = { ...think, target: leg, halt: leg === null };
             if (leg) state = { ...state, wander: { ...state.wander, target: leg, idle: 0 } };
@@ -2423,7 +2424,7 @@ export function createZombieActor(opts: {
       // A panicking burner that is not getting anywhere (it fled into a wall; measured AFTER the
       // furniture and navigation corrections) is told so, and turns (burn-behaviour.ts `blocked`).
       // The first 0.3 s is its turn-and-accelerate, not a wall.
-      if (burnPanic && burnPanic.t > 0.3) {
+      if (burnPanic && burnPanic.t > 0.3 && !zap) {
         const moved = Math.hypot(state.wander.pos[0] - beforeMove[0], state.wander.pos[2] - beforeMove[2]);
         burnStuckT = moved < BURN_STUCK_MPS * sdt ? burnStuckT + sdt : 0;
       } else {
@@ -3337,10 +3338,11 @@ export function createZombieActor(opts: {
     },
     burnPhase: () => burnPhaseNow,
     beginZap: () => {
-      if (zap) return zap.phase !== 'statue';
+      // The refusals come first: a body that died since its last step is refused though its zap is not yet cleared.
       if (zapDied || melt || doomed || downOtherwise() || (tear !== null && tear.age < tearTuning.sec)) return false;
       // A downed soldier (alive on the floor) is not stood back up into the star.
       if (soldierDamage && soldierInjury(current, soldierWounds, injuryTuning).downed) return false;
+      if (zap) return zap.phase !== 'statue';
       zap = createZap(zapSeed, zapTier);
       return true;
     },
