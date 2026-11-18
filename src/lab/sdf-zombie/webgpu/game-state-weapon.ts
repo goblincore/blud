@@ -44,6 +44,7 @@ import type { Projectile } from './game-weapon';
 import type { WeaponSlotState } from './game-weapon-slots';
 import type { RodHarness } from './game-rod';
 import type { MelterHarness } from './game-melter';
+import type { TeslaHarness } from './game-tesla';
 import type { AxeHarness } from './game-axe';
 
 /** `game-main.ts`'s local `TracerView`: a tracer's two billboard quads. */
@@ -102,6 +103,8 @@ export interface WeaponState {
   rod: RodHarness | null;
   /** Slot 8 (the melt-death dev harness, game-melter.ts); null until the aim rig exists. */
   melter: MelterHarness | null;
+  /** Slot 9 (the tesla arc's dev harness, game-tesla.ts); null until the aim rig exists. */
+  tesla: TeslaHarness | null;
   /** Slot 7 (the axe, game-axe.ts); null until the aim rig exists. */
   axe: AxeHarness | null;
   /** Slot 1 (the spike flail, game-flail.ts); null until the aim rig exists. */
@@ -252,6 +255,7 @@ export function makeWeaponState(): WeaponState {
     flare: null,
     rod: null,
     melter: null,
+    tesla: null,
     axe: null,
     flail: null,
     heldLights: null,

@@ -586,6 +586,7 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - fireDt);
   ctx.weapon.flare?.tickCooldown(fireDt);
   ctx.weapon.melter?.tickCooldown(fireDt);
+  ctx.weapon.tesla?.tick(fireDt);   // every tick, whatever the live slot: this is what drops the arc
   ctx.weapon.rod?.tick(fireDt);
   ctx.weapon.axe?.tick(fireDt);
   ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)

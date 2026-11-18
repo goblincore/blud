@@ -32,6 +32,9 @@ export function createFireSeams(ctx: GameContext) {
       .filter(a => zapActor(ctx, a)).length,
     unzapActor: (id?: number) => { for (const a of ctx.world.actors) if (id === undefined || a.id === id) a.setArc(false); },
     zaps: () => zaps(ctx),
+    // Slot 9's verb: hold (true) or release (false) the tesla's fire; and its state (fire held, the arc's body or -1).
+    fireTesla: (on = true) => { ctx.weapon.tesla?.fire(on); },
+    tesla: () => ctx.weapon.tesla?.debug() ?? null,
     melts: () => ctx.world.actors.filter(a => a.melting()).map(a => ({ id: a.id, t: a.meltProgress() })),
     /** A/B: whether a melting body slumps as a ragdoll part-way (default on). Returns the new state. */
     setMeltSlump: (on: boolean) => { setMeltSlump(on); return meltSlumpOn(); },

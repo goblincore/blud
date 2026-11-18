@@ -240,3 +240,71 @@ plain dark bars. At 2.65 m the ribs, spine and pelvis still read by their outlin
   glow the slot held).
 - `game-zap.test.ts` (new): the view lane, the one sync after the last glow, and that a cast rebuild
   (`actors.length = 0`) empties `glowing`, by the prune at the top of `stepZapLook`.
+
+## Task 6: slot 9, the placeholder coil
+
+Key 9 selects `tesla` (`game-weapon-slots.ts`), a dev harness in the melter's mould (`game-tesla.ts`): a
+primitive prop on `aimRig` and one verb. While fire is held, the body under the crosshair is zapped
+(`zapActor`), and it stays zapped while the crosshair is on it or within `TESLA.stickDeg` (8 degrees) of its
+centre (`tesla-stick.ts`). Seams: `__sdfGame.fireTesla(on)`, `__sdfGame.tesla()` (`{ held, target }`).
+
+### Where the code departs from the plan
+
+- **A straight trace, not the slug's.** The plan handed the harness `traceSlugHitFrom`. That is a ballistic
+  march (30 m/s, gravity -6, 240 steps of 1/120 s, bodies with a torso within 20 m): it drops about 0.5 m at
+  12 m, so a re-trace toward a body's centre can pass under a small body, and it has no reach argument. The
+  harness takes `traceMeleeHitFrom` instead (the rod's: one straight segment capped at a reach), with
+  `TESLA.rangeM` (12 m) as the reach. Both traces see bodies only.
+- **Walls.** Neither trace stops at level geometry, so the plan's "line of sight" was "no other body in the
+  way". The harness takes a second dep, `sightBlocked(a, b)`: `ctx.world.colliders` through
+  `segmentHitsBox`, or `sectorHitBetween` on a sector level. It gates acquiring a body and holding one.
+- **The hold rule.** The plan held a target only while the aim was inside 8 degrees of its centre. From 1.2 m
+  a body's arm is 30 degrees off its centre: the arc would land on the arm, drop on the next tick, and land
+  again, every tick. The rule is now: the crosshair is on the target itself (this tick's aim trace names it),
+  OR the aim is inside the stick angle of its centre with the centre in sight.
+- **The centre** is the posed body's torso cluster centre (any live cluster if the torso is gone; 1 m over the
+  feet with none), not `pose().pos + 1.0 m`.
+- **"Can it still be zapped"** is `beginZap()` (true on a body already zapping; false for a statue, a corpse,
+  a melt, a tear, a body going down) plus the pending-gib check, not `zapPhase() !== 'statue' && zapping()`.
+- Refuses under `loopBlocksInput` (dead / done / a sequence) and `ctx.demo.replayActive`; `blur` and
+  `pointerlockchange` listeners clear the held button (the rod's); a `dispose()`; a `debug()`.
+- The copper is metalness 0.45, not 0.9: no envMap on these props (the rod's note), so 0.9 reads black.
+
+### The arc comes off on every exit
+
+`setArc` is sticky, so `tick` re-derives the arc from scratch each tick and calls `setArc(false)` in every
+other case. `tick` runs from `game-tick.ts` beside the melter's cooldown, at the top level of `tick()`: every
+tick, whatever the live slot (the only early return above it is `ctx.demo.simLocked`, under which no body
+steps either). `game-tesla.test.ts` (stub ctx and bodies, 25 tests) covers: fire released; the seam's
+release; the slot starting to lower; another slot live; the aim out of the stick angle; out of range; a wall;
+another body on the line to the centre; the body refusing the zap; queued to gib; gone from
+`ctx.world.actors`; the loop blocking input; a demo replay; window blur; pointer lock lost; dispose.
+
+`shotAlert` is set every held tick. It is a boolean the encounter director reads and the tick clears once a
+tick (`game-tick.ts`), so nothing accumulates.
+
+### The trace (`node scripts/zap-trace.mjs`, the slot 9 scenario; `ZAP_TRACE_TESLA_ONLY=1` runs it alone)
+
+The real slot path: `selectSlot('tesla')` (26 frames to come up), `aimSurface('torso', id)` from 2.6 m,
+`fireTesla(true)`. `*` = `tesla().target` is the body.
+
+| | phases |
+| --- | --- |
+| hold 0.6 s | 0.1 zapped* 0.2 zapped* 0.3 zapped* 0.4 zapped* 0.5 zapped* 0.6 zapped* |
+| release, 1.2 s | 0.1 to 0.6 recovering, 0.7 to 1.2 none (glow 0, char 0) |
+| (a) fire held, aim turned 34 degrees off | zapped* before; 2 frames after: recovering, no target, still held; 8 frames after: recovering |
+| (b) fire held, `selectSlot('shotgun')` | zapped* before; 2 frames after (slot `lowering`): recovering, no target, still held |
+| back to slot 9, fire never released | zapped* again |
+
+Pipelines 125 before, 125 after. One thing the first run of the scenario found: a recovered zombie walks up
+to the player, and `aimSurface` refuses a body inside its 1.5 m standoff, so the scenario stands the player
+2.6 m off before each aim.
+
+### What the frames show
+
+`zap-tesla-01-held.png`: the prop sits low and right of centre, the way the melter's does: a pale grey
+barrel pointing up-screen with five rings round it that read bright orange-yellow (blown out in the
+flashlight), a grey grip below. It does not clip the camera and does not cover the crosshair or the body.
+The blue-white ball on the tip is hidden behind the rings from the eye. Nothing is drawn between the prop and
+the body (plan 2). The HUD reads `[9 TESLA (hold to zap)]`. `zap-tesla-04-switched.png` (slot 2 up, the body
+recovering at glow 0.1) shows the lit brown skeleton through pale flesh for the length of the fade.

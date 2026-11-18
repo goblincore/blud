@@ -264,6 +264,7 @@ export function stepWeaponSlots(ctx: GameContext, dt: number): void {
   // Slot 5: the same one-transform holster travel.
   ctx.weapon.flare?.updateRig();
   ctx.weapon.melter?.updateRig();
+  ctx.weapon.tesla?.updateRig();
   ctx.weapon.rod?.updateRig();
   ctx.weapon.axe?.updateRig();
   // Slot 1: the flail's holster travel (game-flail.ts).

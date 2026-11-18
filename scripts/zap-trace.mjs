@@ -15,7 +15,13 @@
 //     first-spawned one (its view is the crowd type's source, whose uniforms the crowd material copies every
 //     frame), the other body's chest does not turn bluer while the zapped one's does. Bones hidden, so the
 //     chest box is flesh. `ZAP_TRACE_BLEED_ONLY=1` runs this scenario alone;
-//   * the zap compiles NO pipeline: `__sdfGame.pipelineLog().totalPipelines` is the same before and after.
+//   * the zap compiles NO pipeline: `__sdfGame.pipelineLog().totalPipelines` is the same before and after;
+//   * SLOT 9 (Task 6): the real weapon path. Slot 9 selected through `selectSlot('tesla')`, the aim put on the
+//     body's torso (`aimSurface`), fire held through `fireTesla(true)`: the body reads 'zapped' within 0.2 s and
+//     `tesla().target` is its id; on release it reads 'recovering' and ends with no glow and no char. Then, fire
+//     still held, the aim turned well outside the stick angle drops it, and so does starting a switch to
+//     another slot. A frame of the held zap shows the placeholder prop in hand. `ZAP_TRACE_TESLA_ONLY=1` runs
+//     this scenario alone.
 //
 // The harness is scripts/burn-behaviour-trace.mjs's: own vite + headless Chrome on an unused port pair,
 // the real page (/sdf-game.html?level=arena&spawn=zombie), the real renderer, the
@@ -168,6 +174,8 @@ function cropLuma(png, box = CENTRE) {
 const CLOSE_M = 1.1;
 /** The body in the star, 2.6 to 3 m off: head to feet, hands included. */
 const BODY = [0.36, 0.64, 0.10, 0.90];
+/** Where slot 9's placeholder prop sits in the frame (lower right of centre): reported, to compare with slot 2 live. */
+const PROP = [0.55, 0.75, 0.62, 0.92];
 /** Mean absolute difference (0..255, over R, G and B) of two frames in a box, and the share of its pixels that
  *  moved by more than 24 in any channel. */
 function boxDiff(pngA, pngB, box = BODY) {
@@ -354,8 +362,157 @@ async function xrayPair(tag, id) {
 
 const blue = (rgb) => +(rgb[2] - rgb[0]).toFixed(1);
 const BLEED_ONLY = process.env.ZAP_TRACE_BLEED_ONLY === '1';
+const TESLA_ONLY = process.env.ZAP_TRACE_TESLA_ONLY === '1';
+/** Where the slot-9 scenario stands the player from the body (m). */
+const TESLA_STANDOFF_M = 2.6;
+/** Sim frames per slot-9 sample: 6 frames at 1/60 s is 0.1 s. */
+const TESLA_FRAMES = 6;
+
+/**
+ * SLOT 9, HELD (Task 6): the weapon's own path, from the slot select to the release. A fresh boot. Returns the
+ * frames it took (the held zap, with the prop in hand, first).
+ */
+async function teslaScenario() {
+  await bootGame('?level=arena&spawn=zombie');
+  await evaluate('window.__sdfGame.setBloodBlur(false)');
+  await step(30);
+  const id = (await evaluate('window.__sdfGame.actorTrace().map(a => a.id)'))[0];
+  const distance = await frameOn(id);
+  const zapOf = async () => (await evaluate('window.__sdfGame.zaps()')).find((x) => x.id === id) ?? null;
+  const state = async (t) => {
+    const z = await zapOf(), h = await evaluate('window.__sdfGame.tesla()');
+    return { t: +t.toFixed(2), phase: z?.phase ?? 'none', glow: z ? +z.glow.toFixed(3) : 0, char: z ? +z.char.toFixed(3) : 0, held: h.held, target: h.target };
+  };
+  /** Put the crosshair on the body's torso: the reticle home, the view turned onto the torso cluster. The player is
+   *  first stood TESLA_STANDOFF_M from the body where it is NOW (a recovered zombie walks up to the player, and aimSurface
+   *  refuses a body nearer than its 1.5 m standoff). */
+  const aimOn = async () => {
+    const ok = await evaluate(`(() => {
+      const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id});
+      const dx = a.pos[0] - p[0], dz = a.pos[2] - p[2], d = Math.hypot(dx, dz) || 1;
+      g.setPose(a.pos[0] - dx / d * ${TESLA_STANDOFF_M}, a.pos[2] - dz / d * ${TESLA_STANDOFF_M}, Math.atan2(dx, -dz), 0);
+      g.setAimPoint(0, 0);
+      return g.aimSurface('torso', ${id});
+    })()`);
+    if (!ok) fail('aimSurface did not find the body');
+    return ok;
+  };
+  /** Turn the view `rad` to the side of the body, level: far outside the stick angle. */
+  const aimAway = (rad) => evaluate(`(() => {
+    const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id});
+    g.setPose(p[0], p[2], Math.atan2(a.pos[0] - p[0], -(a.pos[2] - p[2])) + ${rad}, 0);
+    return true;
+  })()`);
+  const slotState = () => evaluate('(() => { const d = window.__sdfGame.dynamite(); return { live: d.live, target: d.target, phase: d.phase, ready: d.ready }; })()');
+  const untilReady = async (slot) => {
+    for (let i = 0; i < 60; i++) {
+      const s = await slotState();
+      if (s.ready && s.live === slot) return i * 2;
+      await step(2);
+    }
+    fail(`slot ${slot} never came up: ${JSON.stringify(await slotState())}`);
+  };
+
+  const pipelinesBefore = await evaluate('window.__sdfGame.pipelineLog().totalPipelines');
+  const selected = await evaluate(`window.__sdfGame.selectSlot('tesla')`);
+  const raiseFrames = await untilReady('tesla');
+  const aimed = await aimOn();
+  await step(2);
+  const idle = await state(0);
+  const idleShot = await capture('tesla-00-idle', 'slot 9, fire not held');
+
+  // ---- HOLD 0.6 s, then RELEASE and 1.2 s more ---------------------------------
+  await evaluate('window.__sdfGame.fireTesla(true)');
+  const hold = [], shots = [];
+  for (let i = 1; i <= 6; i++) {
+    await step(TESLA_FRAMES);
+    hold.push(await state(i * TESLA_FRAMES * DT));
+    if (i === 3) shots.push(await capture('tesla-01-held', 'slot 9 held: zapped, prop in hand'));
+  }
+  await evaluate('window.__sdfGame.fireTesla(false)');
+  const release = [];
+  for (let i = 1; i <= 12; i++) {
+    await step(TESLA_FRAMES);
+    release.push(await state(i * TESLA_FRAMES * DT));
+    if (i === 1) shots.push(await capture('tesla-02-released', 'slot 9 released: recovering'));
+  }
+
+  // ---- (a) STILL HELD, THE AIM TURNED AWAY ------------------------------------
+  await aimOn();
+  await evaluate('window.__sdfGame.fireTesla(true)');
+  await step(TESLA_FRAMES * 2);
+  const awayBefore = await state(0);
+  await aimAway(0.6);   // 34 degrees
+  await step(2);
+  const awayAfter = await state(2 * DT);
+  shots.push(await capture('tesla-03-aim-away', 'held, aim 34 deg off: dropped'));
+  await step(TESLA_FRAMES);
+  const awayLater = await state((2 + TESLA_FRAMES) * DT);
+
+  // ---- (b) STILL HELD, BACK ON THE BODY, THEN A SLOT SWITCH -------------------
+  await aimOn();
+  await step(TESLA_FRAMES * 2);
+  const switchBefore = await state(0);
+  const switched = await evaluate(`window.__sdfGame.selectSlot('shotgun')`);
+  await step(2);
+  const switchAfter = await state(2 * DT);
+  const switchSlot = await slotState();
+  await untilReady('shotgun');
+  await step(TESLA_FRAMES);
+  const switchLater = await state(0);
+  shots.push(await capture('tesla-04-switched', 'held, switched to slot 2: dropped'));
+  // Back to slot 9 with fire never released: the arc comes back on by itself.
+  await evaluate(`window.__sdfGame.selectSlot('tesla')`);
+  await untilReady('tesla');
+  await step(TESLA_FRAMES);
+  const backOn = await state(0);
+  await evaluate('window.__sdfGame.fireTesla(false)');
+  await step(2);
+  const end = await state(0);
+  const pipelinesAfter = await evaluate('window.__sdfGame.pipelineLog().totalPipelines');
+
+  const out = { id, distance, selected, raiseFrames, aimed, idle, hold, release,
+    aimAway: { before: awayBefore, after: awayAfter, later: awayLater },
+    slotSwitch: { before: switchBefore, switched, slot: switchSlot, after: switchAfter, later: switchLater, backOn, end },
+    pipelines: { before: pipelinesBefore, after: pipelinesAfter },
+    propBox: { idle: cropLuma(idleShot.png, PROP), held: cropLuma(shots[0].png, PROP), switched: cropLuma(shots[3].png, PROP) } };
+  report.checks.tesla = out;
+  const line = (xs) => xs.map((s) => `${s.t.toFixed(2)}:${s.phase}${s.target === id ? '*' : ''}`).join(' ');
+  console.log('slot 9:', JSON.stringify({ selected, raiseFrames, aimed, distance, idle }));
+  console.log('  hold    (* = the arc is on it):', line(hold));
+  console.log('  release:', line(release), '| last', JSON.stringify(release[release.length - 1]));
+  console.log('  aim away:', JSON.stringify(out.aimAway));
+  console.log('  slot switch:', JSON.stringify(out.slotSwitch));
+  console.log('  pipelines:', JSON.stringify(out.pipelines), 'prop box:', JSON.stringify(out.propBox));
+
+  if (!selected?.ok) fail(`selectSlot('tesla') refused: ${JSON.stringify(selected)}`);
+  if (idle.phase !== 'none' || idle.target !== -1) fail(`slot 9 zapped the body with fire not held: ${JSON.stringify(idle)}`);
+  const early = hold.filter((s) => s.t <= 0.2 + 1e-6);
+  if (!early.some((s) => s.phase === 'zapped' && s.target === id)) fail(`no sample within 0.2 s of fire is zapped with the arc on the body: ${JSON.stringify(early)}`);
+  if (!hold.every((s) => s.phase === 'zapped' && s.target === id)) fail(`the arc did not stay on the body through the hold: ${line(hold)}`);
+  if (release[0].phase !== 'recovering' || release[0].target !== -1) fail(`the first sample after release is ${JSON.stringify(release[0])}, not recovering with no target`);
+  const last = release[release.length - 1];
+  if (!(last.phase === 'none' && last.glow === 0 && last.char === 0)) fail(`1.2 s after release the body still carries the zap: ${JSON.stringify(last)}`);
+  if (awayBefore.phase !== 'zapped' || awayBefore.target !== id) fail(`(a) the second hold did not zap the body: ${JSON.stringify(awayBefore)}`);
+  if (awayAfter.phase !== 'recovering' || awayAfter.target !== -1 || !awayAfter.held) fail(`(a) with fire held and the aim 34 degrees off, the body is ${JSON.stringify(awayAfter)}, not recovering`);
+  if (awayLater.phase === 'zapped' || awayLater.target !== -1) fail(`(a) the arc came back with the aim still away: ${JSON.stringify(awayLater)}`);
+  if (switchBefore.phase !== 'zapped' || switchBefore.target !== id || !switchBefore.held) fail(`(b) aiming back at the body with fire still held did not zap it: ${JSON.stringify(switchBefore)}`);
+  if (!switched?.ok) fail(`(b) selectSlot('shotgun') refused: ${JSON.stringify(switched)}`);
+  if (switchAfter.phase !== 'recovering' || switchAfter.target !== -1 || !switchAfter.held) fail(`(b) with fire held and the slot switching (${JSON.stringify(switchSlot)}), the body is ${JSON.stringify(switchAfter)}, not recovering`);
+  if (switchLater.phase === 'zapped' || switchLater.target !== -1) fail(`(b) the arc is on the body with slot 2 live: ${JSON.stringify(switchLater)}`);
+  if (backOn.phase !== 'zapped' || backOn.target !== id) fail(`(b) back on slot 9 with fire still held, the body is ${JSON.stringify(backOn)}`);
+  if (end.target !== -1 || end.held) fail(`the scenario ended with the arc on: ${JSON.stringify(end)}`);
+  if (pipelinesAfter !== pipelinesBefore) fail(`slot 9 compiled pipelines: ${pipelinesBefore} -> ${pipelinesAfter}`);
+  return [...shots, idleShot];
+}
 
 try {
+  if (TESLA_ONLY) {
+    await teslaScenario();
+    const errs = consoleErrors.filter((t) => /THREE\.WebGPURenderer.*(pipeline|ShaderModule|fragment error|unresolved value)/i.test(t));
+    if (errs.length > 0) fail(`renderer pipeline error: ${errs[0].slice(0, 300)}`);
+    console.log('\nDONE (slot 9 scenario only)'); shutdown(0); await sleep(5000);
+  }
   // ---- TWO BODIES, ONE ARC (the crowd type's shared uniforms) -----------------
   await bootGame('?level=arena&spawn=zombie');
   report.checks.warmGate = 'ready';
@@ -581,12 +738,16 @@ try {
   if (!split.copies || split.copies.length < 2) fail(`the forced split drew ${split.copies?.length ?? 0} skull copies`);
   if (!(Math.abs(split.zapMin) > 0 && Math.abs(split.zapMax) > 0)) fail(`the split body's bones carry iZap ${split.zapMin}..${split.zapMax}`);
 
+  // ---- SLOT 9, HELD (Task 6) --------------------------------------------------
+  const teslaShots = await teslaScenario();
+
   // ---- CONTACT SHEET: before, then every second sample ---------------------
   const tiles = [...bleedShots.map((s) => ({ label: s.note.replace('two bodies: ', '2: '), b64: s.b64 })), { label: 'before', b64: beforeShot.b64 },
     ...shots.filter((_, i) => i % 2 === 1 || i === 0).map((s) => ({ label: `${s.name.slice(3)} ${s.note}`, b64: s.b64 })),
     { label: afterShot.note, b64: afterShot.b64 },
     ...['glow', 'jolt'].flatMap((k) => (xray[k]?.shots ?? []).map((s) => ({ label: s.note, b64: s.b64 }))),
-    { label: splitShot.note, b64: splitShot.b64 }, { label: closeShot.note, b64: closeShot.b64 }];
+    { label: splitShot.note, b64: splitShot.b64 }, { label: closeShot.note, b64: closeShot.b64 },
+    ...teslaShots.map((s) => ({ label: s.note, b64: s.b64 }))];
   await evaluate('window.__sheet = []');
   for (const t of tiles) await evaluate(`window.__sheet.push(${JSON.stringify(t)})`);
   const dataUrl = await evaluate(`(async () => {

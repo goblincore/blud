@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 27 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 93 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 94 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 64 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 65 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 25 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -413,6 +413,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
 - `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
 - `webgpu/game-telemetry.ts` — Opt-in, bounded live-play recorder (GameTelemetry): frame timings, phase spans, events and snapshots, with no GPU waits.
+- `webgpu/game-tesla.ts` — WEAPON SLOT 9: THE TESLA ARC'S DEV HARNESS (spec 2026-11-17-tesla-arc-design.md).
 - `webgpu/game-tick.ts` — The game tick: one simulation step of the whole game (player, weapons, actors, gibs, dynamite, blood, VFX), still one function.
 - `webgpu/game-tile-playtest.ts` — The opt-in tile-culling playtest controller for the game: owns tile bindings, the enable and ray-cull toggles, and fallback counters.
 - `webgpu/game-train.ts` — THE TRAIN in the game (carriage kit spec §5, §6): window glass becomes the scrolling night scenery (TRAIN_WINDOW, hand-written WGSL), swaying kit…
@@ -729,6 +730,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/surface-readback.ts` — THE ONE FORMAT-AWARE READBACK DECODER for the deferred surface target (hybrid deferred M2, task-6 recovery).
 - `webgpu/temporal-accum.ts` — The PURE half of the temporal accumulation (plan docs/superpowers/plans/2026-09-10-temporal-accumulation.md): the blend rate and the jitter sequence.
 - `webgpu/temporal-start.ts` — TEMPORAL REPROJECTION START for the march (plan docs/superpowers/plans/2026-09-10-temporal-march-start.md).
+- `webgpu/tesla-stick.ts` — THE TESLA'S TARGET STICK (spec 2026-11-17-tesla-arc-design.md), numbers only.
 - `webgpu/tile-bin-compute.ts` — GPU tile binning (perf task 5 step 5 — the compute port).
 - `webgpu/tile-cull.ts` — CPU tile binning for the per-tile primitive lists (raymarcher perf plan, task 5).
 - `webgpu/tube-beam.wgsl.ts` — THE TUBE BEAM (owner, 2026-09-26: "harsh overhead light cone ...
