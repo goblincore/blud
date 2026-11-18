@@ -193,6 +193,47 @@ function boxDiff(pngA, pngB, box = BODY) {
   return { meanAbs: +(s / n).toFixed(2), movedShare: +(moved / n).toFixed(4) };
 }
 
+/** The un-zapped neighbour, with the camera turned to it: its head, chest and arms, wherever it has walked to. */
+const NEIGHBOUR = [0.42, 0.78, 0.38, 0.66];
+/** The luminance (0..255) that `q` of a box's pixels are under: 0.9 is the body's lit flesh (the body is about a fifth of the box), whatever share of the
+ *  box is the dark room or the gun and wherever in the box the body stands. */
+function boxPercentile(png, box, q) {
+  const { w, h, rgba } = decodePng(png);
+  const x0 = Math.round(w * box[0]), x1 = Math.round(w * box[1]), y0 = Math.round(h * box[2]), y1 = Math.round(h * box[3]);
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = (y * w + x) * 4;
+    hist[Math.round(0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2])]++; n++;
+  }
+  let acc = 0;
+  for (let l = 0; l < 256; l++) { acc += hist[l]; if (acc >= q * n) return l; }
+  return 255;
+}
+
+/** The head, with the camera level on the body from 2.6 m: the skull and, on a split head, its turned halves. */
+const HEAD = [0.44, 0.56, 0.43, 0.53];
+/**
+ * THE X-RAY SKULL'S FOOTPRINT in the glow: the pixels of the head box that are at least 60 of 255 darker with the
+ * bones shown than with them hidden (dark bone over bright flesh), as an area, and as a width: the columns with
+ * three or more such pixels. A closed skull is one oval; a split one is the rest and two halves swung apart about
+ * the hinge, clipped along the fracture, so it is wider and has bright flesh showing between its pieces.
+ */
+function skullFootprint(pngShown, pngHidden, box = HEAD) {
+  const a = decodePng(pngShown), b = decodePng(pngHidden);
+  const x0 = Math.round(a.w * box[0]), x1 = Math.round(a.w * box[1]), y0 = Math.round(a.h * box[2]), y1 = Math.round(a.h * box[3]);
+  const luma = (d, i) => 0.299 * d.rgba[i] + 0.587 * d.rgba[i + 1] + 0.114 * d.rgba[i + 2];
+  let area = 0, width = 0, first = -1, last = -1;
+  for (let x = x0; x < x1; x++) {
+    let col = 0;
+    for (let y = y0; y < y1; y++) { const i = (y * a.w + x) * 4; if (luma(b, i) - luma(a, i) > 60) col++; }
+    area += col;
+    if (col >= 3) { width++; if (first < 0) first = x; last = x; }
+  }
+  // Gaps: columns between the first and the last skull column that hold no skull (bright flesh between the pieces).
+  return { area, width, span: first < 0 ? 0 : last - first + 1, gaps: first < 0 ? 0 : last - first + 1 - width };
+}
+
 async function waitFor(url, what, tries = 120) {
   for (let i = 0; i < tries; i++) {
     try { const r = await fetch(url); if (r.ok) return; } catch { /* not up */ }
@@ -355,13 +396,72 @@ async function xrayPair(tag, id) {
     drawn,
     skeleton: boxDiff(shown.png, hidden.png), noise: boxDiff(shown.png, again.png),
     bodyLumaShown: cropLuma(shown.png, BODY).mean, bodyLumaHidden: cropLuma(hidden.png, BODY).mean,
+    skull: skullFootprint(shown.png, hidden.png),
   };
   console.log(`  xray ${tag}: ${JSON.stringify(out)}`);
   return { ...out, hiddenChest: { luma: hidden.chestLuma, rgb: hidden.chestRgb }, shots: [shown, hidden] };
 }
 
+/**
+ * A SPLIT HEAD UNDER THE ARC (Task 5). `closedSkull`: the closed head's x-ray footprint from the main series, when
+ * it ran.
+ */
+async function splitScenario(closedSkull) {
+  // The split skull's batches are the ones at the vertex-buffer limit (8: mesh-renderer.ts splitRows), and no
+  // closed head draws them. A fresh boot, the head forced open, then the zap: the split copies must carry the
+  // glow and the renderer must log no pipeline error.
+  await bootGame('?level=arena&spawn=zombie');
+  await evaluate('window.__sdfGame.setBloodBlur(false)');
+  await step(30);
+  const id2 = (await evaluate('window.__sdfGame.actorTrace().map(a => a.id)'))[0];
+  await frameOn(id2);
+  const forced = await evaluate(`window.__sdfGame.forceSplit(${id2}, "middle", 0, 0, 1)`);
+  await step(5);
+  const zapped2 = await evaluate(`window.__sdfGame.zapActor(${id2})`);
+  await step(SAMPLE_FRAMES);
+  const splitShot = await capture('xray-split-head', 'split head, zapped');
+  // The same instant with the bones shown and hidden: the x-ray skull's footprint.
+  const splitPair = await xrayPair('split', id2);
+  const split = await evaluate(`(() => {
+    const g = window.__sdfGame, d = g.skullDrawn(${id2}), z = g.boneZap(${id2}), q = g.zaps().find(x => x.id === ${id2});
+    return { copies: d ? d.copies.map(c => ({ material: c.material, piece: c.piece, eye: c.eye })) : null,
+      instances: z ? z.length : 0, zapMin: z && z.length ? Math.min(...z) : null, zapMax: z && z.length ? Math.max(...z) : null,
+      phase: q ? q.phase : 'none', invert: q ? q.invert : null };
+  })()`);
+  // The same body from CLOSE_M away: is the skeleton still in register with the flesh, and does a bone pulled
+  // toward the eye come through the first-person gun? (The sim runs: the render lock holds the camera too.)
+  await evaluate(`(() => {
+    const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
+    const dx = a.pos[0] - p[0], dz = a.pos[2] - p[2], d = Math.hypot(dx, dz);
+    g.setPose(a.pos[0] - dx / d * ${CLOSE_M}, a.pos[2] - dz / d * ${CLOSE_M}, Math.atan2(dx, -dz), 0);
+  })()`);
+  await step(3);
+  const closeShot = await capture('xray-close', `zapped, from ${CLOSE_M} m`);
+  split.closeDistance = await evaluate(`(() => { const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
+    return +Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]).toFixed(2); })()`);
+  split.closeZap = await evaluate(`window.__sdfGame.zaps().find(x => x.id === ${id2}) ?? null`);
+  split.skull = splitPair.skull;
+  split.closedSkull = closedSkull;
+  report.checks.splitHead = { forced, zapped: zapped2, ...split };
+  console.log('split head under the arc:', JSON.stringify(report.checks.splitHead));
+  if (!forced || zapped2 !== 1) fail(`the split check did not set up: forceSplit ${forced}, zapActor ${zapped2}`);
+  if (!split.copies || split.copies.length < 2) fail(`the forced split drew ${split.copies?.length ?? 0} skull copies`);
+  if (!(Math.abs(split.zapMin) > 0 && Math.abs(split.zapMax) > 0)) fail(`the split body's bones carry iZap ${split.zapMin}..${split.zapMax}`);
+  // THE SPLIT SHOWS IN THE X-RAY (second review pass). The split materials clip each copy to its piece at the
+  // bone's TRUE place; clipped at the pulled place both halves were discarded whole and the unclipped rest drew a
+  // closed skull. A split skull's footprint is wider than a closed one's and has flesh showing between its pieces.
+  if (!(split.skull.width >= SPLIT_SKULL_MIN_WIDTH)) fail(`the zapped split head draws a closed skull: its x-ray footprint is ${split.skull.width} columns wide (${JSON.stringify(split.skull)}), under ${SPLIT_SKULL_MIN_WIDTH}`);
+  if (closedSkull && !(split.skull.width > closedSkull.width * 1.15)) fail(`the zapped split skull (${split.skull.width} columns) is no wider than the closed one (${closedSkull.width})`);
+  return { splitShot, closeShot, splitPair };
+}
+
 const blue = (rgb) => +(rgb[2] - rgb[0]).toFixed(1);
 const BLEED_ONLY = process.env.ZAP_TRACE_BLEED_ONLY === '1';
+const SPLIT_ONLY = process.env.ZAP_TRACE_SPLIT_ONLY === '1';
+/** The most the un-zapped body's chest may darken while its neighbour chars (a share of its luminance). */
+const CHAR_FALL_MAX = 0.12;
+/** The least width (columns of the 960 px frame) of a zapped split skull's footprint; a closed skull is narrower. */
+const SPLIT_SKULL_MIN_WIDTH = 57;
 const TESLA_ONLY = process.env.ZAP_TRACE_TESLA_ONLY === '1';
 /** Where the slot-9 scenario stands the player from the body (m). */
 const TESLA_STANDOFF_M = 2.6;
@@ -507,6 +607,7 @@ async function teslaScenario() {
 }
 
 try {
+  if (SPLIT_ONLY) { await splitScenario(null); console.log('\nDONE (split scenario only)'); shutdown(0); await sleep(5000); }
   if (TESLA_ONLY) {
     await teslaScenario();
     const errs = consoleErrors.filter((t) => /THREE\.WebGPURenderer.*(pipeline|ShaderModule|fragment error|unresolved value)/i.test(t));
@@ -553,6 +654,17 @@ try {
   const zapAtB = await evaluate(`window.__sdfGame.zaps()`);
   const aZapped = await look(idA, 'bleed-a-zapped', 'two bodies: the first, zapped');
   const zapAtA = await evaluate(`window.__sdfGame.zaps()`);
+  // THE CHAR (second review pass): hold the arc on the first body until it has cooked (char 0.8, or the statue).
+  // The zap's char must be that body's alone too: the other's chest must not darken as the first one chars.
+  let cooked = null;
+  for (let i = 0; i < 60; i++) {
+    cooked = (await evaluate(`window.__sdfGame.zaps()`)).find((x) => x.id === idA) ?? null;
+    if (cooked && (cooked.char >= 0.8 || cooked.phase === 'statue')) break;
+    await step(4);
+  }
+  const bCooked = await look(idB, 'bleed-b-cooked', 'two bodies: the other, the first charred');
+  const aCooked = await look(idA, 'bleed-a-cooked', 'two bodies: the first, charred');
+  const cookedAt = (await evaluate(`window.__sdfGame.zaps()`)).find((x) => x.id === idA) ?? null;
   await evaluate('window.__sdfGame.meshSkeletonShow({ bones: true, eyes: true })');
   const bleed = {
     crowd, spawned, zapped: zappedA, zapsAtOther: zapAtB, zapsAtFirst: zapAtA,
@@ -560,16 +672,28 @@ try {
       shift: +(blue(aZapped.chestRgb) - blue(aBefore.chestRgb)).toFixed(1) },
     other: { beforeRgb: bBefore.chestRgb, zappedRgb: bZapped.chestRgb, blueMinusRedBefore: blue(bBefore.chestRgb), blueMinusRedZapped: blue(bZapped.chestRgb),
       shift: +(blue(bZapped.chestRgb) - blue(bBefore.chestRgb)).toFixed(1), lumaBefore: bBefore.chestLuma, lumaZapped: bZapped.chestLuma },
+    char: {
+      first: cookedAt ? { phase: cookedAt.phase, char: +cookedAt.char.toFixed(3) } : null,
+      firstLuma: { before: aBefore.chestLuma, cooked: aCooked.chestLuma, rgb: aCooked.chestRgb },
+      // The other body walks toward the player all the while, so its chest box drifts off its chest (reported, not
+      // gated). Its flesh is read as the 90th-percentile luminance of a wide box round it instead.
+      otherChestLuma: { before: bBefore.chestLuma, arcOn: bZapped.chestLuma, cooked: bCooked.chestLuma, rgb: bCooked.chestRgb },
+      otherFlesh: { before: boxPercentile(bBefore.png, NEIGHBOUR, 0.9), arcOn: boxPercentile(bZapped.png, NEIGHBOUR, 0.9), cooked: boxPercentile(bCooked.png, NEIGHBOUR, 0.9) },
+      // The other body's flesh against itself before any char: its fall, as a share.
+      otherFall: +(1 - boxPercentile(bCooked.png, NEIGHBOUR, 0.9) / Math.min(boxPercentile(bBefore.png, NEIGHBOUR, 0.9), boxPercentile(bZapped.png, NEIGHBOUR, 0.9))).toFixed(3),
+    },
   };
   report.checks.bleed = bleed;
   console.log('two bodies, one arc:', JSON.stringify(bleed));
-  const bleedShots = [bBefore, aBefore, bZapped, aZapped];
+  const bleedShots = [bBefore, aBefore, bZapped, aZapped, bCooked, aCooked];
   const srcRow = crowd.rows.find((r) => r.actor === idA), otherRow = crowd.rows.find((r) => r.actor === idB);
   if (!(crowd.program === 'ready' || crowd.program?.state === 'ready')) fail(`the crowd program is not ready (${JSON.stringify(crowd.program)}): the bodies are drawn one view each, which proves nothing about the crowd`);
   if (!crowd.on || !srcRow?.isSource || !otherRow || otherRow.isSource || otherRow.type !== srcRow.type) fail(`the two-body scenario is not arranged: crowd ${JSON.stringify(crowd)}`);
   if (zappedA !== 1 || zapAtB.length !== 1 || zapAtB[0].id !== idA || zapAtB[0].invert || zapAtA[0]?.invert) fail(`the two-body zap is not the first body's alone, un-inverted: ${JSON.stringify([zapAtB, zapAtA])}`);
   if (!(bleed.first.shift > 20)) fail(`the zapped body did not turn bluer: blue - red moved ${bleed.first.shift}`);
   if (!(Math.abs(bleed.other.shift) < 8)) fail(`THE GLOW BLEEDS: the un-zapped body's chest moved ${bleed.other.shift} in blue - red (${bleed.other.blueMinusRedBefore} -> ${bleed.other.blueMinusRedZapped}) with the arc on the other body`);
+  if (!bleed.char.first || !(bleed.char.first.char >= 0.8)) fail(`the first body did not cook: ${JSON.stringify(bleed.char.first)}`);
+  if (!(bleed.char.otherFall < CHAR_FALL_MAX)) fail(`THE CHAR BLEEDS: the un-zapped body's flesh fell ${(bleed.char.otherFall * 100).toFixed(1)}% (${JSON.stringify(bleed.char.otherFlesh)}) as the other body charred`);
   if (BLEED_ONLY) { console.log('\nDONE (bleed scenario only)'); shutdown(0); await sleep(5000); }
 
   await bootGame('?level=arena&spawn=zombie');
@@ -601,6 +725,7 @@ try {
   const samples = [];
   const shots = [];
   const xray = {};
+  let statueBones = null;
   for (let i = 0; i < SAMPLES; i++) {
     await step(SAMPLE_FRAMES);
     const t = +((i + 1) * SAMPLE_FRAMES * DT).toFixed(2);
@@ -617,6 +742,8 @@ try {
     // The skeleton's share, once in the glow and once on a jolt (the sim does not advance while it is taken).
     const which = z?.phase === 'zapped' ? (z.invert ? 'jolt' : 'glow') : null;
     if (which && !xray[which]) xray[which] = { t, ...(await xrayPair(which, id)) };
+    // The statue (glow 0) is out of the exposure set: its bones are not drawn behind its flesh, and none carries a glow.
+    if (z?.phase === 'statue' && !statueBones) statueBones = { t, zap: await evaluate(`window.__sdfGame.boneZap(${id})`) };
   }
   const pipelinesAfter = await evaluate('window.__sdfGame.pipelineLog().totalPipelines');
   const boneZapAfter = await evaluate(`window.__sdfGame.boneZap(${id})`);
@@ -696,47 +823,16 @@ try {
   // Dark bones in the glow (hiding them brightens the box), bright bones on a jolt (hiding them darkens it).
   if (!(xray.glow.bodyLumaShown < xray.glow.bodyLumaHidden)) fail(`in the glow the bones do not darken the body box: ${xray.glow.bodyLumaShown} shown, ${xray.glow.bodyLumaHidden} hidden`);
   if (!(xray.jolt.bodyLumaShown > xray.jolt.bodyLumaHidden)) fail(`on a jolt the bones do not brighten the body box: ${xray.jolt.bodyLumaShown} shown, ${xray.jolt.bodyLumaHidden} hidden`);
+  report.checks.xray.statueBones = statueBones;
+  console.log('statue bones:', JSON.stringify(statueBones));
+  if (!statueBones) fail('no statue sample: its bones were not read');
+  if (statueBones.zap.length > 4 || statueBones.zap.some((v) => v !== 0)) fail(`the statue still draws its skeleton, or carries a glow: iZap ${JSON.stringify(statueBones.zap)}`);
   if ((boneZapBefore ?? []).some((v) => v !== 0)) fail(`a bone instance carries a zap before the zap: ${JSON.stringify(boneZapBefore)}`);
   if ((boneZapAfter ?? []).some((v) => v !== 0)) fail(`a bone instance still carries a zap at the end: ${JSON.stringify(boneZapAfter)}`);
   if (!(c.statueMean < c.before)) fail(`the statue's chest (${c.statueMean}) is not darker than before the zap (${c.before})`);
 
-  // ---- A SPLIT HEAD UNDER THE ARC (Task 5) -----------------------------------
-  // The split skull's batches are the ones at the vertex-buffer limit (8: mesh-renderer.ts splitRows), and no
-  // closed head draws them. A fresh boot, the head forced open, then the zap: the split copies must carry the
-  // glow and the renderer must log no pipeline error.
-  await bootGame('?level=arena&spawn=zombie');
-  await evaluate('window.__sdfGame.setBloodBlur(false)');
-  await step(30);
-  const id2 = (await evaluate('window.__sdfGame.actorTrace().map(a => a.id)'))[0];
-  await frameOn(id2);
-  const forced = await evaluate(`window.__sdfGame.forceSplit(${id2}, "middle", 0, 0, 1)`);
-  await step(5);
-  const zapped2 = await evaluate(`window.__sdfGame.zapActor(${id2})`);
-  await step(SAMPLE_FRAMES);
-  const splitShot = await capture('xray-split-head', 'split head, zapped');
-  const split = await evaluate(`(() => {
-    const g = window.__sdfGame, d = g.skullDrawn(${id2}), z = g.boneZap(${id2}), q = g.zaps().find(x => x.id === ${id2});
-    return { copies: d ? d.copies.map(c => ({ material: c.material, piece: c.piece, eye: c.eye })) : null,
-      instances: z ? z.length : 0, zapMin: z && z.length ? Math.min(...z) : null, zapMax: z && z.length ? Math.max(...z) : null,
-      phase: q ? q.phase : 'none', invert: q ? q.invert : null };
-  })()`);
-  // The same body from CLOSE_M away: is the skeleton still in register with the flesh, and does a bone pulled
-  // toward the eye come through the first-person gun? (The sim runs: the render lock holds the camera too.)
-  await evaluate(`(() => {
-    const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
-    const dx = a.pos[0] - p[0], dz = a.pos[2] - p[2], d = Math.hypot(dx, dz);
-    g.setPose(a.pos[0] - dx / d * ${CLOSE_M}, a.pos[2] - dz / d * ${CLOSE_M}, Math.atan2(dx, -dz), 0);
-  })()`);
-  await step(3);
-  const closeShot = await capture('xray-close', `zapped, from ${CLOSE_M} m`);
-  split.closeDistance = await evaluate(`(() => { const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${id2});
-    return +Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]).toFixed(2); })()`);
-  split.closeZap = await evaluate(`window.__sdfGame.zaps().find(x => x.id === ${id2}) ?? null`);
-  report.checks.splitHead = { forced, zapped: zapped2, ...split };
-  console.log('split head under the arc:', JSON.stringify(report.checks.splitHead));
-  if (!forced || zapped2 !== 1) fail(`the split check did not set up: forceSplit ${forced}, zapActor ${zapped2}`);
-  if (!split.copies || split.copies.length < 2) fail(`the forced split drew ${split.copies?.length ?? 0} skull copies`);
-  if (!(Math.abs(split.zapMin) > 0 && Math.abs(split.zapMax) > 0)) fail(`the split body's bones carry iZap ${split.zapMin}..${split.zapMax}`);
+  const { splitShot, closeShot, splitPair } = await splitScenario(xray.glow?.skull ?? null);
+  xray.split = splitPair;
 
   // ---- SLOT 9, HELD (Task 6) --------------------------------------------------
   const teslaShots = await teslaScenario();
@@ -745,7 +841,7 @@ try {
   const tiles = [...bleedShots.map((s) => ({ label: s.note.replace('two bodies: ', '2: '), b64: s.b64 })), { label: 'before', b64: beforeShot.b64 },
     ...shots.filter((_, i) => i % 2 === 1 || i === 0).map((s) => ({ label: `${s.name.slice(3)} ${s.note}`, b64: s.b64 })),
     { label: afterShot.note, b64: afterShot.b64 },
-    ...['glow', 'jolt'].flatMap((k) => (xray[k]?.shots ?? []).map((s) => ({ label: s.note, b64: s.b64 }))),
+    ...['glow', 'jolt', 'split'].flatMap((k) => (xray[k]?.shots ?? []).map((s) => ({ label: s.note, b64: s.b64 }))),
     { label: splitShot.note, b64: splitShot.b64 }, { label: closeShot.note, b64: closeShot.b64 },
     ...teslaShots.map((s) => ({ label: s.note, b64: s.b64 }))];
   await evaluate('window.__sheet = []');

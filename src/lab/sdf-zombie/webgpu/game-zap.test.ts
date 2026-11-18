@@ -6,7 +6,7 @@ import { stepZapLook, syncZapXray } from './game-zap';
 type Look = { glow: number; invert: boolean; char: number } | null;
 const body = (look: Look) => {
   const cfg = { x: 0, y: 0, z: 0, w: 0 };
-  const a = { look, zapLook: () => a.look, view: { uniforms: { burnCfg: { value: cfg } } } };
+  const a = { look, zapLook: () => a.look, view: { uniforms: { burnCfg: { value: cfg }, zapChar: { value: 0 } } } };
   return a;
 };
 const world = (actors: ReturnType<typeof body>[]) => {
@@ -19,19 +19,32 @@ const world = (actors: ReturnType<typeof body>[]) => {
 };
 
 describe('the zap look in the game', () => {
-  it('writes the signed glow and the char to the view, and clears the glow when the zap ends', () => {
+  it('writes the signed glow to the view and the char to its holding slot, and clears both when the zap ends', () => {
     const a = body({ glow: 0.75, invert: false, char: 0.2 }), b = body(null);
+    a.view.uniforms.burnCfg.value.z = 0.1;   // the burn's own char
     const { ctx } = world([a, b]);
     stepZapLook(ctx);
     expect(a.view.uniforms.burnCfg.value.w).toBe(0.75);
-    expect(a.view.uniforms.burnCfg.value.z).toBe(0.2);
+    // The zap's char is NOT written to burnCfg.z: a crowd type's material takes its source view's burnCfg whole, so
+    // every body of the type would char with it. It rides the holding slot, which only the body's record reads.
+    expect(a.view.uniforms.burnCfg.value.z).toBe(0.1);
+    expect(a.view.uniforms.zapChar.value).toBe(0.2);
     expect(b.view.uniforms.burnCfg.value.w).toBe(0);
+    expect(b.view.uniforms.zapChar.value).toBe(0);
     a.look = { glow: 0.5, invert: true, char: 0.2 };
     stepZapLook(ctx);
     expect(a.view.uniforms.burnCfg.value.w).toBe(-0.5);
+    // A corpse keeps its char with the glow out.
+    a.look = { glow: 0, invert: false, char: 1 };
+    stepZapLook(ctx);
+    expect(a.view.uniforms.burnCfg.value.w).toBe(0);
+    expect(a.view.uniforms.zapChar.value).toBe(1);
+    // No look at all (the actor's endTear reset the zap): the char leaves the body with it.
     a.look = null;
     stepZapLook(ctx);
     expect(a.view.uniforms.burnCfg.value.w).toBe(0);
+    expect(a.view.uniforms.zapChar.value).toBe(0);
+    expect(a.view.uniforms.burnCfg.value.z).toBe(0.1);
   });
 
   it('syncs the skeleton while a body glows and for one frame after, then does no work', () => {

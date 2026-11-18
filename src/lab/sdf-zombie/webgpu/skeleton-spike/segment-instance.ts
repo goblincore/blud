@@ -27,7 +27,7 @@
 
 import * as THREE from 'three/webgpu';
 import type { NodeBuilder, NodeMaterial } from 'three/webgpu';
-import { Fn, attribute, cameraPosition, mat4, normalLocal, positionLocal, transformNormal, wgslFn } from 'three/tsl';
+import { Fn, attribute, cameraPosition, mat4, modelWorldMatrix, normalLocal, positionGeometry, positionLocal, transformNormal, varying, vec4, wgslFn } from 'three/tsl';
 import { ZAP_XRAY_PULL_WGSL } from './zap-xray';
 
 /** The per-instance zap glow (zap-xray.ts): one float, on every geometry a mesh-renderer.ts segment material draws. */
@@ -99,10 +99,23 @@ export const batchInstances = (mesh: SegmentBatchMesh): number => mesh.geometry.
 export const batchMatrixAt = (mesh: SegmentBatchMesh, i: number, out: THREE.Matrix4): THREE.Matrix4 =>
   getSegmentMatrix(ensureSegmentMatrices(mesh.geometry, 0), i, out);
 
+const segmentMatrix = () => mat4(...SEGMENT_MATRIX_ATTRS.map(name => attribute(name, 'vec4')) as [never, never, never, never]);
+/**
+ * THE SURFACE'S OWN WORLD POSITION of a fragment of a segment material: the vertex placed by its instance matrix
+ * and its object's world matrix, WITHOUT the zap x-ray's pull. What a segment material reads where it means "where
+ * this bone is" (the split clip, the wound exposure, the lights): three's `positionWorld` is the pulled place on a
+ * zapped instance, up to 0.6 m off the bone, where a split copy clips to nothing and a wound is somewhere else. On
+ * an instance with no zap the two are the same point by the same arithmetic. A varying of its own, in place of
+ * positionWorld's (which a segment material no longer reads): no vertex buffer.
+ */
+export const segmentWorldPosition = varying(
+  modelWorldMatrix.mul(vec4(segmentMatrix().mul(vec4(positionGeometry, 1.0)).xyz, 1.0)).xyz, 'v_segmentWorld',
+);
+
 /** Three's instancing (Instance.js `instance`), from the named instance-matrix attributes: the position, and the
  *  normal by the matrix's inverse transpose (exact for the head deform's axis scales, as InstancedMesh's was). */
 export const segmentInstance = Fn((builder: NodeBuilder) => {
-  const m = mat4(...SEGMENT_MATRIX_ATTRS.map(name => attribute(name, 'vec4')) as [never, never, never, never]);
+  const m = segmentMatrix();
   const has = (name: string) => (builder as unknown as { hasGeometryAttribute(name: string): boolean }).hasGeometryAttribute(name);
   // THE ZAP X-RAY (zap-xray.ts): a zapped body's bones are pulled toward the eye, clear of its flesh. The skeleton's
   // batches sit under a group that is never moved (mesh-renderer.ts: "the instance matrix IS the world matrix"; its

@@ -15,7 +15,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_CLUSTER_BOUNDS, ROW_GROUP_BOUNDS, ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
-import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_HALF_REV, REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, createCrowdRecords } from './crowd-records';
+import { REC_ANCHOR_BAND, REC_BURN, REC_COUNTS, REC_GORE, REC_HALF_REV, REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, createCrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas } from './crowd-atlas';
 import {
   SPLIT_REOPEN_FRAC, forcedSplit, headFrameOf, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitWarpOf,
@@ -202,6 +202,26 @@ describe('the head split in the view record', () => {
     a.dispose(); b.dispose(); atlas.texture.dispose();
   });
 
+  it('writeViewRecord: the record\'s char is the larger of the burn\'s (burnCfg.z) and the zap\'s holding slot (zapChar)', () => {
+    // The zap's char never touches burnCfg, which a crowd type's material copies whole from its source view.
+    const u = defaultUniforms(blankFaceTexture()), records = createCrowdRecords(2);
+    const char = () => records.floats[1 * REC_VEC4S * 4 + REC_BURN * 4 + 2];
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(char()).toBe(0);
+    u.zapChar.value = 0.75;
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(char()).toBeCloseTo(0.75, 6);
+    expect(u.burnCfg.value.z).toBe(0);
+    u.burnCfg.value.z = 0.9;
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(char()).toBeCloseTo(0.9, 6);
+    u.burnCfg.value.z = 0.25;
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(char()).toBeCloseTo(0.75, 6);
+    u.zapChar.value = 0;
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(char()).toBeCloseTo(0.25, 6);
+  });
   it('writeViewRecord with no split (chunks, the FPV arm) writes zeros over whatever the slot held', () => {
     const records = createCrowdRecords(2);
     const u = defaultUniforms(blankFaceTexture());

@@ -23,21 +23,24 @@ const glowing = new Set<ZombieActor>();
 
 /**
  * Actor zap look -> view uniforms. The glow rides burnCfg.w (signed: negative = bones inverted) and the
- * char rides burnCfg.z, where the burn's own char may already be larger. A body the arc has never
- * touched is skipped after one null check. Call after the burn step, which writes x, y and z.
+ * char rides the view's zapChar holding slot, which writeViewRecord folds into the body's own record with
+ * the burn's char (the larger wins). Neither is read from the view by the march: a crowd type's material
+ * carries its source view's uniforms, so a value read there is every body's of the type. A body with no
+ * zap look (never touched, or reset by endTear) carries no glow and no char. Call after the burn step.
  */
 export function stepZapLook(ctx: GameContext): void {
   // A body that left the world while it glowed (gibbed, culled, a new cast) is not walked below: let it go.
   if (glowing.size > 0) for (const a of glowing) if (!ctx.world.actors.includes(a)) glowing.delete(a);
   for (const a of ctx.world.actors) {
     const z = a.zapLook();
+    const u = a.view.uniforms;
     if (!z) {
-      if (glowing.delete(a)) a.view.uniforms.burnCfg.value.w = 0;
+      if (glowing.delete(a)) u.burnCfg.value.w = 0;
+      if (u.zapChar.value !== 0) u.zapChar.value = 0;
       continue;
     }
-    const v = a.view.uniforms.burnCfg.value;
-    v.w = z.invert ? -z.glow : z.glow;
-    if (z.char > v.z) v.z = z.char;
+    u.burnCfg.value.w = z.invert ? -z.glow : z.glow;
+    u.zapChar.value = z.char;
     if (z.glow > 0) glowing.add(a); else glowing.delete(a);
   }
 }

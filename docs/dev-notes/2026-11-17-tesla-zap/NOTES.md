@@ -308,3 +308,101 @@ flashlight), a grey grip below. It does not clip the camera and does not cover t
 The blue-white ball on the tip is hidden behind the rings from the eye. Nothing is drawn between the prop and
 the body (plan 2). The HUD reads `[9 TESLA (hold to zap)]`. `zap-tesla-04-switched.png` (slot 2 up, the body
 recovering at glow 0.1) shows the lit brown skeleton through pale flesh for the length of the fade.
+
+## Fixes after review, second pass
+
+### A zapped split head drew a closed skull
+
+The split materials clip each copy of the skull to its piece at the fragment's world position, and they read
+three's `positionWorld`, which on a zapped instance is the x-ray's PULLED place (up to 0.6 m toward the eye).
+There the clip's region test fails for both halves: they were discarded whole and the unclipped rest drew an
+intact skull inside flesh that was split open; the eye copies on the halves went too.
+
+Every segment material now reads `segmentWorldPosition` (`segment-instance.ts`): the vertex placed by its
+instance matrix and its object's world matrix, without the pull, as a varying of its own. `mesh-renderer.ts`
+binds its `positionWorld` name to it, so the clip, the wound exposure, the paint's tilt, the plate normal, the
+organ surface and the lights all take the bone's true place. No material reads three's `positionWorld` any
+more (a test walks every material's graph for it), so the varying count is unchanged; no vertex buffer is
+added. With no zap the two are the same point by the same arithmetic.
+
+The trace's split scenario now measures the x-ray skull's footprint: the pixels of a head box (12% x 10% of the
+frame, round the crosshair) that are at least 60 of 255 darker with the bones shown than hidden, as an area
+and as a width (columns holding three or more). It gates the width at 57 columns and at 1.15x the closed
+skull's from the main series. (`ZAP_TRACE_SPLIT_ONLY=1` runs the scenario alone.)
+
+| x-ray skull footprint | width (columns) | area (px) |
+| --- | --- | --- |
+| split head, WITHOUT the fix | **49** | 950 |
+| split head, with the fix | **64 / 67** (two runs) | 1318 / 1604 |
+| closed head (main series, same distance and glow) | 48 | 1884 |
+
+Without the fix the split head's footprint is the closed skull's width. The frames: before, one dark oval
+between the two flared halves of glowing flesh; after, the skull is in two halves opened in a V along the
+split, each inside its half of the flesh, at 2.65 m and at 1.1 m.
+
+### The zap's char bled across a crowd type
+
+Same shape as the glow: the zap's char was written into the view's `burnCfg.z`, the crowd material copies its
+source view's `burnCfg`, and the burn block takes `max(burnCfg.z, record)`. The view now has a holding slot,
+`zapChar` (not bound to the march, like `bodyLights`); `stepZapLook` writes the char there and
+`writeViewRecord` puts `max(burnCfg.z, zapChar)` in the body's own record. `game-burning.ts` writes the burn's
+own char again (still preserving `.w`). The burn block is untouched. A body whose `zapLook()` is null has its
+holding slot cleared, so char no longer stays on a body after `endTear` resets its zap.
+
+The two-body scenario holds the arc on the source body until it has cooked (char 0.949 when read) and reads
+the neighbour's flesh as the 90th-percentile luminance of a wide box round it. (Its chest box is no use: the
+neighbour walks toward the player the whole time and the box drifts onto the gun and the room; the chest
+number fell 18% with the fix in place and the frame showed a clean pale body. It is still reported.)
+
+| neighbour's flesh (P90 luma) | before | arc on, no char | first body charred | fall |
+| --- | --- | --- | --- | --- |
+| WITHOUT the fix | 235 | 243 | **145** | **38.3%** (chest box: 204 -> 122, a dark brown body in the frame) |
+| with the fix | 235 | 243 | **250** | **-6.4%** |
+
+The gate is a fall under 12%.
+
+### Smaller
+
+- `boneExposedActors` adds a body only while it glows (`zapLook().glow > 0`), not through the statue. The
+  trace reads the statue's bones at 2.0 s: 3 instances (the head and its eyes, as any intact body), all at
+  iZap 0; the end-of-run read is `[0, 0, 0]` as before.
+- Guard tests: `segmentInstance` takes `zapXrayPull` only for geometry with `iZap` (its body run against a
+  fake builder); `boneExposedActors` includes a glowing body and excludes the statue and the charred corpse
+  (`game-crowd-queries.test.ts`, new); a skull fragment, a dropped segment, a released plate and an ejected
+  eye each carry a zero `iZap`.
+- Text pin updated: `zombie-gpu-burn.test.ts` pinned `charAmount: u.burnCfg.value.z`; it is now the max with
+  `zapChar`.
+
+### The whole trace, last run
+
+Two bodies: glow shift +7.0 on the neighbour (gate 8; it was -3.9 to +5.8 in other runs, so this gate is
+close to the walking body's own drift) and +40.3 on the zapped one. Glow: skeleton 16.32 of 255 (noise 4.08);
+jolt 18.05 (3.47). Pipelines 126 before, 126 after; slot 9's scenario 125 and 125. No renderer error.
+
+### Boot time (`node scripts/boot-time.mjs`, fresh profile each run, interleaved)
+
+| run | branch `drawOnce` (ms) | `main` `drawOnce` (ms) |
+| --- | --- | --- |
+| 1 | 957.6 | 944.2 |
+| 2 | 1019.8 | 965.9 |
+
+`main` at e8fb57110; the branch now carries Task 6 as well. The branch is 13 and 54 ms over `main` in these
+two pairs. Earlier pairs on the same day had `main` between 944 and 1092, so this is inside what one checkout
+spreads over, but it is the first time the branch is the slower of both pairs.
+
+## Known limits
+
+- A pulled bone writes depth up to 0.6 m in front of its body: anything that close in front of a zapped body
+  (another body, a pillar, a door frame) is drawn over by the skeleton. Not looked at in a frame.
+- Inside about 0.8 m the pull is held to a quarter of the bone's distance, so a very near body's bones stand
+  at a quarter of their distance from the eye.
+- During the fade (glow under 0.25) the lit part of the bone's mix is lit at its true place (the second pass
+  gave that), but it is still a bone drawn in front of flesh it would normally be behind.
+- The split-PLATE pipeline (the anatomical skull's split copies, 8 of 8 vertex buffers) has not been run on a
+  GPU with `iZap`: the arena zombie's skull is the sculpted one, so the trace exercises `skeleton-bone-split`
+  and `skeleton-eye-split` only.
+- The trace's single-body series and the split scenario run on the per-body fallback (they do not wait for the
+  crowd program); only the two-body scenario draws through the crowd material.
+- From 1.1 m the flat skull has no features (sockets, teeth).
+- The burn's own ramp and char have the bleed the zap had (`max(burnCfg, record)` in `burn.wgsl.ts`); out of
+  scope here.

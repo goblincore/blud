@@ -68,7 +68,7 @@ import { meshBoneSource } from './mesh-skull';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, vec2, uv, positionGeometry, positionWorld, normalWorld,
+  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, vec2, uv, positionGeometry, normalWorld,
   cameraPosition, frontFacing, Fn, If,
 } from 'three/tsl';
 import {
@@ -111,8 +111,15 @@ import {
   type SkullHeadFrame, type SkullShotStep, type SkullStrikes,
 } from './skull-split-hit';
 import {
-  SEGMENT_MATRIX_FLOATS, SEGMENT_ZAP_ATTR, ensureSegmentMatrices, instancedShareOf, setSegmentMatrix, useSegmentInstance,
+  SEGMENT_MATRIX_FLOATS, SEGMENT_ZAP_ATTR, ensureSegmentMatrices, instancedShareOf, segmentWorldPosition, setSegmentMatrix,
+  useSegmentInstance,
 } from './segment-instance';
+
+// WHERE THE BONE IS. Every material here reads the fragment's world position as segmentWorldPosition (segment-instance.ts),
+// the surface's own place, never three's positionWorld: on a zapped instance that one is the x-ray's PULLED place, up
+// to 0.6 m toward the eye, where a split copy clips to nothing (a split head drew a closed skull), a wound's exposure
+// sphere is elsewhere and the lights are measured from the wrong point. With no zap the two are the same point.
+const positionWorld = segmentWorldPosition;
 import { ZAP_XRAY_COLOUR_WGSL } from './zap-xray';
 
 const MAX_WOUNDS_TEX = 64;

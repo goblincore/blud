@@ -821,6 +821,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  it is a per-view holding slot that writeViewRecord copies into the
      *  body's record (REC_LIGHTS), like bodyFlash. */
     bodyLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
+    /** THE ZAP'S CHAR (game-zap.ts stepZapLook): how far the tesla arc has cooked this body, 0..1. NOT bound to
+     *  the march: a per-view holding slot, like bodyLights, that writeViewRecord folds into the body's record
+     *  (REC_BURN.z, the larger of this and the burn's own char). It is NOT written to burnCfg.z: a crowd type's
+     *  material copies its source view's burnCfg whole every frame and the burn block takes
+     *  max(burnCfg.z, the record), so the zap's char there charred every body of the type. */
+    zapChar: uniform(0),
     /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
      *  0..1, w = the zap glow, signed (zap.wgsl.ts). Per VIEW, so a single body burns through this; crowd
      *  instances burn through REC_BURN. */
@@ -1868,7 +1874,9 @@ export function writeViewRecord(
     eyeMask: u.faceEyeMask.value.toArray(),
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
-    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z, zap: u.burnCfg.value.w,
+    // The char is the larger of the burn's and the zap's (the zap's rides its holding slot, never burnCfg).
+    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: Math.max(u.burnCfg.value.z, u.zapChar.value),
+    zap: u.burnCfg.value.w,
     // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),

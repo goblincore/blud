@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
 import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
 import { getCurrentStack, positionWorld, setCurrentStack, stack } from 'three/tsl';
+import { segmentWorldPosition } from './segment-instance';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -402,6 +403,44 @@ describe('the zap x-ray (zap-xray.ts): iZap carries the owner\'s signed glow', (
     const versions = attrs.map(z => z.version);
     renderer.syncZap(zapOf);
     expect(attrs.map(z => z.version)).toEqual(versions);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('no segment material reads three\'s positionWorld, which is the PULLED place on a zapped instance', () => {
+    // A split copy clipped at the pulled place is discarded whole (a zapped split head drew a closed skull); wounds
+    // and lights are off by the pull too. Every material reads segmentWorldPosition, the surface's own place.
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    bodyYaw = 0;
+    const w = splitWarpOf(forcedSplit('middle', 0, 0, 1)!, headFrameOf(headShape(applyRig(body, bound, 0))!, headQuatOf(bound, 0) ?? [0, 0, 0, 1]))!;
+    const open = { id: 1 }, shut = { id: 2 };
+    renderer.update([[headSrc], [headSrc]], [open, shut], undefined, undefined, undefined,
+      { warp: o => (o === open ? w : null) });
+    const mats = new Set(batchesOf(renderer).map(m => m.material as MeshBasicNodeMaterial));
+    expect([...mats].map(m => m.name).sort()).toEqual(['skeleton-bone', 'skeleton-bone-split', 'skeleton-eye', 'skeleton-eye-split']);
+    const reach = (roots: Node[]) => {
+      const out = new Set<Node>(), todo = [...roots];
+      while (todo.length) { const n = todo.pop()!; if (out.has(n)) continue; out.add(n); for (const c of n.getChildren()) todo.push(c as Node); }
+      return out;
+    };
+    for (const m of mats) {
+      // A split material's colour is a function: its body is run, and the branch on the clip with it.
+      const fn = (segmentLitColour(m) as unknown as { shaderNode?: { jsFunc(): unknown } }).shaderNode;
+      const roots: Node[] = [m.colorNode!, ...(m.maskNode ? [m.maskNode as Node] : [])];
+      if (fn) {
+        const was = getCurrentStack(), outer = stack();
+        try {
+          setCurrentStack(outer); fn.jsFunc();
+          const nodes = outer.nodes as (Node & { ifNode?: { jsFunc(): unknown } })[];
+          roots.push(...nodes);
+          const branch = nodes.find(n => n.ifNode !== undefined);
+          if (branch) { const inner = stack(); setCurrentStack(inner); branch.ifNode!.jsFunc(); roots.push(...(inner.nodes as Node[])); }
+        } finally { setCurrentStack(was); }
+      }
+      const all = reach(roots);
+      expect(all.has(positionWorld as unknown as Node), m.name).toBe(false);
+      expect(all.has(segmentWorldPosition as unknown as Node), m.name).toBe(true);
+    }
     renderer.dispose();
     cache.dispose();
   });
@@ -927,14 +966,15 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       const graphOf = (m: MeshBasicNodeMaterial) => { const c = colourOf(m); return reach([...c.held, ...c.branch]); };
       /** `input` is the xyz of the clip call `clip`: the point q the fragment has on the closed head. */
       const isClipPoint = (input: Graph & { components?: string }, clip: Call, what: string) => {
-        expect(input, what).not.toBe(positionWorld);
+        expect(input, what).not.toBe(segmentWorldPosition);
         expect(input.components, what).toBe('xyz');
         expect(input.node, what).toBe(clip);
       };
       // The plates: the surface's craters and the rim's fracture are both read at q.
       const plateSplit = graphOf(matOf(renderer, segs(renderer, open)[0]!)), clip = callOf(plateSplit, 'meshSplitClip');
-      // The clip is the one thing taken at the fragment's own world position: it is what turns it back.
-      expect(clip.parameters.pWorld).toBe(positionWorld);
+      // The clip is the one thing taken at the fragment's own world position: it is what turns it back. The SURFACE'S
+      // own (segment-instance.ts), not three's positionWorld, which the zap x-ray pulls toward the eye.
+      expect(clip.parameters.pWorld).toBe(segmentWorldPosition);
       isClipPoint(callOf(plateSplit, 'anatomicalSkullSurface').parameters.pWorld!, clip, 'anatomicalSkullSurface pWorld');
       isClipPoint(callOf(plateSplit, 'meshSplitFracture').parameters.q!, clip, 'meshSplitFracture q');
       // The fracture takes the clip's own record and shape: the rim's edge is the edge that is cut.
@@ -946,7 +986,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       // The extracted bone's split copies read their surface at q as well; the closed materials at the fragment.
       const boneSplit = graphOf(matOf(renderer, segs(renderer, otherOpen)[0]!));
       isClipPoint(callOf(boneSplit, 'meshBoneSurface').parameters.pWorld!, callOf(boneSplit, 'meshSplitClip'), 'meshBoneSurface pWorld');
-      expect(callOf(reach([segmentLitColour(matOf(renderer, segs(renderer, shut)[0]!))]), 'anatomicalSkullSurface').parameters.pWorld).toBe(positionWorld);
+      expect(callOf(reach([segmentLitColour(matOf(renderer, segs(renderer, shut)[0]!))]), 'anatomicalSkullSurface').parameters.pWorld).toBe(segmentWorldPosition);
       renderer.dispose(); cache.dispose();
     });
 
