@@ -6,8 +6,12 @@ import { MARCH_BODY_LIGHT } from '../../light.wgsl';
 import { FOLD_GROUP } from '../../../fields/groups.wgsl';
 
 describe('the zap blocks', () => {
-  it('reads the lane from the view or the record, whichever is larger in size', () => {
-    expect(ZAP_BLOCK).toContain('let zapRaw = select(gInstBurn.w, burnCfg.w, abs(burnCfg.w) > abs(gInstBurn.w));');
+  it('reads the lane from the body\'s own record, never from the view block a crowd type shares', () => {
+    expect(ZAP_BLOCK).toContain('let zapRaw = gInstBurn.w;');
+    // The crowd material's burnCfg is its source view's (copyUniformValues, every frame): one zapped body would
+    // light every body of its type.
+    expect(ZAP_BLOCK.replace(/^\s*\/\/.*$/gm, '')).not.toContain('burnCfg');
+    expect(ZAP_LIGHT_BLOCK).not.toContain('burnCfg');
   });
 
   it('does nothing on a body the arc is not on', () => {

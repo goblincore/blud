@@ -15,6 +15,9 @@ export const ZAP_XRAY = Object.freeze({
   pullM: 0.6,
   /** The least fraction of its distance a pulled point keeps, so a near bone never crosses the eye. */
   minKeep: 0.25,
+  /** The bone's colour mix is |zap| times this: flat from a glow of 0.25 up, so the skeleton holds one colour while
+   *  the glow flickers under the arc (0.56 to 0.97), and still fades over the attack and the recovery. */
+  saturate: 4,
 });
 
 /** `p` pulled toward `eye` when `zap` is not zero. */
@@ -26,10 +29,10 @@ export function xrayPull(p: readonly number[], eye: readonly number[], zap: numb
   return [eye[0]! + d[0]! * keep, eye[1]! + d[1]! * keep, eye[2]! + d[2]! * keep];
 }
 
-/** The bone's colour under a zap of `zap`: its lit colour at 0, the dark bone as |zap| reaches 1, and the
- *  glow instead of the dark on a jolt (zap < 0). */
+/** The bone's colour under a zap of `zap`: its lit colour at 0, the dark bone from |zap| = 1 / saturate up, and
+ *  the glow instead of the dark on a jolt (zap < 0). */
 export function xrayColour(lit: readonly number[], zap: number): number[] {
-  const k = Math.min(1, Math.abs(zap));
+  const k = Math.min(1, Math.abs(zap) * ZAP_XRAY.saturate);
   const to = zap < 0
     ? ZAP_LOOK.core.map(c => c * (ZAP_LOOK.gain + ZAP_LOOK.rim * 0.5))
     : [...ZAP_LOOK.bone];
@@ -49,7 +52,7 @@ export const ZAP_XRAY_PULL_WGSL = /* wgsl */ `fn zapXrayPull(p: vec3<f32>, eye: 
 }`;
 
 export const ZAP_XRAY_COLOUR_WGSL = /* wgsl */ `fn zapXrayColour(lit: vec3<f32>, zap: f32) -> vec3<f32> {
-  let k = min(1.0, abs(zap));
+  let k = min(1.0, abs(zap) * ${f(ZAP_XRAY.saturate)});
   let bright = ${v3(ZAP_LOOK.core)} * ${f(ZAP_LOOK.gain + ZAP_LOOK.rim * 0.5)};
   let dark = ${v3(ZAP_LOOK.bone)};
   return mix(lit, select(dark, bright, zap < 0.0), k);

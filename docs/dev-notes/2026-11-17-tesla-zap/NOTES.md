@@ -182,3 +182,61 @@ two draws of one instant differ by the VHS pass.
 - `xrayColour` is written as WGSL's mix (`c * (1 - k) + to * k`), exact at both ends; the plan's form was off
   by a rounding at k = 1 and failed its own test.
 - The WGSL numbers go through the float formatter, as in `zap.wgsl.ts`.
+
+## Fixes after review
+
+### The glow bled across a crowd type
+
+Every frame the crowd material's uniform block is copied whole from its source view (the first body of the
+type in the room: `copyUniformValues`, `game-main.ts`), `burnCfg` included, and `ZAP_BLOCK` took the larger of
+`burnCfg.w` and the record's `gInstBurn.w`. With the arc on the source body every body of the type glowed and
+inverted with it. `ZAP_BLOCK` now reads the record alone (`let zapRaw = gInstBurn.w;`). Every draw has a
+record: a body's `syncRecord`, a chunk's `syncChunkRecord` and the first-person view all go through
+`writeViewRecord`, which carries `burnCfg.w` as `zap`, and `game-main.ts` syncs each actor's record every
+frame after the tick. The burn and gore blocks, which have the same shape, are untouched.
+
+The trace has a scenario for it (first in the run; `ZAP_TRACE_BLEED_ONLY=1` runs it alone): a second zombie
+spawned 1.4 m beside the arena's own (`spawnDebugCharacter`), the arc on the first, bones hidden, each body's
+chest box read with the camera turned to it. **It only catches the bleed once the crowd program has compiled**
+(`__sdfGame.warmBackground().crowd === 'ready'`): until then the game draws each body through its own view,
+which cannot bleed, and the first attempt at this scenario passed for that reason. The script now waits for it
+and fails if it is not ready. Both bodies are in type `zombie@1`; the zapped one is its source.
+
+| chest blue minus red | before | arc on the first body | shift |
+| --- | --- | --- | --- |
+| un-zapped body, WITHOUT the shader fix | -13.1 | +7.9 | **+21.0** (the frame shows it as a blue-white figure) |
+| un-zapped body, with the fix | -13.4 / -26.6 | -11.6 / -30.5 | **+1.8 / -3.9** (two runs) |
+| zapped body, with the fix | -43.7 / -24.5 | +48.8 / +18.6 | +92.5 / +43.1 |
+
+The gate is |shift| < 8 for the un-zapped body and > 20 for the zapped one. (The run-to-run spread is the
+bodies' positions: they walk while the script waits for the crowd program.)
+
+**The older scenarios still run on the per-body fallback** (they do not wait for the crowd program), so the
+series below is the fallback's picture; the two-body scenario is the one that draws through the crowd material.
+
+### The bones go flat as soon as the arc is on
+
+`zapXrayColour` mixed by |zap|, so under a glow of 0.56 to 0.97 the skeleton was lit brown bone. The mix is
+now |zap| x `ZAP_XRAY.saturate` (4): flat from a glow of 0.25, still fading over the attack and recovery. TS
+and WGSL both. The flesh's mix is unchanged.
+
+| | shown vs hidden (of 255) | noise | body box luma shown / hidden |
+| --- | --- | --- | --- |
+| glow, t = 0.25 s (iZap +0.735) | 16.59 (was 11.49) | 4.04 | 67.66 / 81.81 |
+| jolt, t = 0.75 s (iZap -0.697) | 18.05 (was 17.40) | 3.48 | 75.22 / 59.13 |
+
+The chest box through the zap (bones shown) is now steady: 114, 109, (jolt 182), 116, 108, 113, 108, against
+158, 129, (178), 169, 119, 152, 168 before. Pipelines 125 before, 125 after.
+
+What the frames show: in every zapped sample the skeleton is one flat dark blue-black figure in the bright
+body, with no shading of its own; on the jolt, a flat white one in a dark body. At 1.75 s (glow 0.56, char
+0.83) it is as dark as at 0.5 s. The cost of flat: **from 1.1 m the skull is a featureless dark oval** (the
+eyes are the same flat colour, so there are no sockets, teeth or jaw line), and the ribs and arm bones are
+plain dark bars. At 2.65 m the ribs, spine and pelvis still read by their outline.
+
+### Also
+
+- `crowd-records.test.ts`: `write()` puts `zap`, signed, at `REC_BURN * 4 + 3`, and 0 when absent (over a
+  glow the slot held).
+- `game-zap.test.ts` (new): the view lane, the one sync after the last glow, and that a cast rebuild
+  (`actors.length = 0`) empties `glowing`, by the prune at the top of `stepZapLook`.

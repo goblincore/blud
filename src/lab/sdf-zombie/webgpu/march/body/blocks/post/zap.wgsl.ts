@@ -6,9 +6,12 @@
 //   ZAP_BLOCK        in the post-hit material (trace.wgsl.ts, after BURN_BLOCK): gathers the terms into
 //                    the private gZap = (glow, invert, nearBone, 1);
 //   ZAP_LIGHT_BLOCK  at the end of the lighting tail (light.wgsl.ts): mixes the lit colour toward the glow.
-// The lane is burnCfg.w per view and gInstBurn.w per crowd instance (crowd-records.ts REC_BURN): the
-// glow 0..1, NEGATIVE while the bones are inverted (a jolt). Zero on every body the arc is not on, so no
-// other pixel pays for either block.
+// The lane is the body's own record, gInstBurn.w (crowd-records.ts REC_BURN): the glow 0..1, NEGATIVE
+// while the bones are inverted (a jolt). Zero on every body the arc is not on, so no other pixel pays
+// for either block. The game writes it to the view's burnCfg.w, and writeViewRecord carries that to the
+// record of every draw (a body, a chunk, the first-person view: each is a record slot). The shader does
+// NOT read burnCfg.w: a crowd type's one burnCfg is copied every frame from its source view (the first
+// body of the type in the room), so reading it lit the whole type when the arc was on that one body.
 //
 // The skeleton of a mesh-skeleton body is drawn by its bone meshes (skeleton-spike/zap-xray.ts): such a
 // body packs no bone rows, the probe below is skipped and nearBone stays 0. A body that DOES pack bone
@@ -30,9 +33,9 @@ export const ZAP_LOOK = Object.freeze({
 const f = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 const v3 = (c: readonly [number, number, number]) => `vec3<f32>(${f(c[0])}, ${f(c[1])}, ${f(c[2])})`;
 
-export const ZAP_BLOCK = /* wgsl */ `  // THE ZAP. burnCfg.w is the per-view lane and gInstBurn.w the per-instance one; the larger in size
-  // wins, sign and all, so one shader serves single and crowd draws.
-  let zapRaw = select(gInstBurn.w, burnCfg.w, abs(burnCfg.w) > abs(gInstBurn.w));
+export const ZAP_BLOCK = /* wgsl */ `  // THE ZAP. The body's own record alone (signed). Not burnCfg.w, which in a crowd draw is the type's
+  // source view's.
+  let zapRaw = gInstBurn.w;
   if (zapRaw != 0.0) {
     var zapBone = 0.0;
     if (gInstCounts2.x > 0.0) {

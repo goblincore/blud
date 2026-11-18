@@ -11,6 +11,10 @@
 //     is drawn again with the bone meshes hidden (`meshSkeletonShow`, under `setRenderLock`), and the mean
 //     absolute difference over the body's box is the skeleton's share of the picture. A third draw with the
 //     bones shown again is the noise floor. `boneZap(id)` reads the glow the bone instances carry;
+//   * the glow is one body's (the review of Task 4): with TWO zombies in the arena room and the arc on the
+//     first-spawned one (its view is the crowd type's source, whose uniforms the crowd material copies every
+//     frame), the other body's chest does not turn bluer while the zapped one's does. Bones hidden, so the
+//     chest box is flesh. `ZAP_TRACE_BLEED_ONLY=1` runs this scenario alone;
 //   * the zap compiles NO pipeline: `__sdfGame.pipelineLog().totalPipelines` is the same before and after.
 //
 // The harness is scripts/burn-behaviour-trace.mjs's: own vite + headless Chrome on an unused port pair,
@@ -348,9 +352,70 @@ async function xrayPair(tag, id) {
   return { ...out, hiddenChest: { luma: hidden.chestLuma, rgb: hidden.chestRgb }, shots: [shown, hidden] };
 }
 
+const blue = (rgb) => +(rgb[2] - rgb[0]).toFixed(1);
+const BLEED_ONLY = process.env.ZAP_TRACE_BLEED_ONLY === '1';
+
 try {
+  // ---- TWO BODIES, ONE ARC (the crowd type's shared uniforms) -----------------
   await bootGame('?level=arena&spawn=zombie');
   report.checks.warmGate = 'ready';
+  await evaluate('window.__sdfGame.setBloodBlur(false)');
+  await step(30);
+  const idA = (await evaluate('window.__sdfGame.actorTrace().map(a => a.id)'))[0];
+  await frameOn(idA);
+  // The bodies must be drawn by the CROWD material (one per type, its uniforms copied from the source view): until
+  // its program is compiled in the background the game draws each body through its own view, which cannot bleed.
+  let crowdJob = null;
+  for (let i = 0; i < 480; i++) {
+    crowdJob = await evaluate('window.__sdfGame.warmBackground().crowd ?? null');
+    if (crowdJob === 'ready' || crowdJob?.state === 'ready' || crowdJob === 'failed' || crowdJob?.state === 'failed') break;
+    await step(1); await sleep(500);
+  }
+  console.log('crowd program:', JSON.stringify(crowdJob));
+  // A second zombie beside the first, the same distance from the player, 1.4 m to its side.
+  const spawned = await evaluate(`(() => {
+    const g = window.__sdfGame, p = g.playerPos(), a = g.actorTrace().find(x => x.id === ${idA});
+    const dx = a.pos[0] - p[0], dz = a.pos[2] - p[2], d = Math.hypot(dx, dz);
+    return g.spawnDebugCharacter('zombie', [a.pos[0] - dz / d * 1.4, a.pos[1], a.pos[2] + dx / d * 1.4]);
+  })()`);
+  const idB = spawned.id;
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: false, eyes: false })');
+  await step(20);
+  const crowd = await evaluate(`(() => {
+    const g = window.__sdfGame, dump = g.crowdSlotDump();
+    return { on: g.crowdInfo().on, program: g.warmBackground().crowd, bodies: g.actorTrace().length,
+      rows: Object.entries(dump).flatMap(([type, rows]) => rows.map(r => ({ type, actor: r.actor, slot: r.slot, isSource: r.isSource, room: r.room }))) };
+  })()`);
+  /** Aim at `id` and take the frame: its chest is the CHEST box. */
+  const look = async (id, name, note) => { await frameOn(id); await step(2); return capture(name, note); };
+  const bBefore = await look(idB, 'bleed-b-before', 'two bodies: the other, before');
+  const aBefore = await look(idA, 'bleed-a-before', 'two bodies: the first, before');
+  const zappedA = await evaluate(`window.__sdfGame.zapActor(${idA})`);
+  await step(SAMPLE_FRAMES - 4);
+  const bZapped = await look(idB, 'bleed-b-zapped', 'two bodies: the other, arc on the first');
+  const zapAtB = await evaluate(`window.__sdfGame.zaps()`);
+  const aZapped = await look(idA, 'bleed-a-zapped', 'two bodies: the first, zapped');
+  const zapAtA = await evaluate(`window.__sdfGame.zaps()`);
+  await evaluate('window.__sdfGame.meshSkeletonShow({ bones: true, eyes: true })');
+  const bleed = {
+    crowd, spawned, zapped: zappedA, zapsAtOther: zapAtB, zapsAtFirst: zapAtA,
+    first: { beforeRgb: aBefore.chestRgb, zappedRgb: aZapped.chestRgb, blueMinusRedBefore: blue(aBefore.chestRgb), blueMinusRedZapped: blue(aZapped.chestRgb),
+      shift: +(blue(aZapped.chestRgb) - blue(aBefore.chestRgb)).toFixed(1) },
+    other: { beforeRgb: bBefore.chestRgb, zappedRgb: bZapped.chestRgb, blueMinusRedBefore: blue(bBefore.chestRgb), blueMinusRedZapped: blue(bZapped.chestRgb),
+      shift: +(blue(bZapped.chestRgb) - blue(bBefore.chestRgb)).toFixed(1), lumaBefore: bBefore.chestLuma, lumaZapped: bZapped.chestLuma },
+  };
+  report.checks.bleed = bleed;
+  console.log('two bodies, one arc:', JSON.stringify(bleed));
+  const bleedShots = [bBefore, aBefore, bZapped, aZapped];
+  const srcRow = crowd.rows.find((r) => r.actor === idA), otherRow = crowd.rows.find((r) => r.actor === idB);
+  if (!(crowd.program === 'ready' || crowd.program?.state === 'ready')) fail(`the crowd program is not ready (${JSON.stringify(crowd.program)}): the bodies are drawn one view each, which proves nothing about the crowd`);
+  if (!crowd.on || !srcRow?.isSource || !otherRow || otherRow.isSource || otherRow.type !== srcRow.type) fail(`the two-body scenario is not arranged: crowd ${JSON.stringify(crowd)}`);
+  if (zappedA !== 1 || zapAtB.length !== 1 || zapAtB[0].id !== idA || zapAtB[0].invert || zapAtA[0]?.invert) fail(`the two-body zap is not the first body's alone, un-inverted: ${JSON.stringify([zapAtB, zapAtA])}`);
+  if (!(bleed.first.shift > 20)) fail(`the zapped body did not turn bluer: blue - red moved ${bleed.first.shift}`);
+  if (!(Math.abs(bleed.other.shift) < 8)) fail(`THE GLOW BLEEDS: the un-zapped body's chest moved ${bleed.other.shift} in blue - red (${bleed.other.blueMinusRedBefore} -> ${bleed.other.blueMinusRedZapped}) with the arc on the other body`);
+  if (BLEED_ONLY) { console.log('\nDONE (bleed scenario only)'); shutdown(0); await sleep(5000); }
+
+  await bootGame('?level=arena&spawn=zombie');
 
   await evaluate('window.__sdfGame.setBloodBlur(false)');
   await step(30);
@@ -412,7 +477,6 @@ try {
   const jolts = samples.filter((s) => s.phase === 'zapped' && s.invert);
   const statues = samples.filter((s) => s.phase === 'statue');
   const last = samples[samples.length - 1];
-  const blue = (rgb) => +(rgb[2] - rgb[0]).toFixed(1);
   report.samples = samples;
   report.checks.pipelines = { before: pipelinesBefore, after: pipelinesAfter };
   report.checks.luma = {
@@ -518,7 +582,7 @@ try {
   if (!(Math.abs(split.zapMin) > 0 && Math.abs(split.zapMax) > 0)) fail(`the split body's bones carry iZap ${split.zapMin}..${split.zapMax}`);
 
   // ---- CONTACT SHEET: before, then every second sample ---------------------
-  const tiles = [{ label: 'before', b64: beforeShot.b64 },
+  const tiles = [...bleedShots.map((s) => ({ label: s.note.replace('two bodies: ', '2: '), b64: s.b64 })), { label: 'before', b64: beforeShot.b64 },
     ...shots.filter((_, i) => i % 2 === 1 || i === 0).map((s) => ({ label: `${s.name.slice(3)} ${s.note}`, b64: s.b64 })),
     { label: afterShot.note, b64: afterShot.b64 },
     ...['glow', 'jolt'].flatMap((k) => (xray[k]?.shots ?? []).map((s) => ({ label: s.note, b64: s.b64 }))),

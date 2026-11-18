@@ -41,7 +41,17 @@ describe('the skeleton x-ray', () => {
     expect(xrayColour(lit, 1)).toEqual([...ZAP_LOOK.bone]);
     const jolt = xrayColour(lit, -1);
     expect(jolt[2]!).toBeGreaterThan(1);
-    const half = xrayColour(lit, 0.5);
+  });
+
+  it('goes flat early: the mix saturates at a glow of 1 / saturate, and fades below it', () => {
+    const lit = [0.4, 0.35, 0.3];
+    expect(ZAP_XRAY.saturate).toBe(4);
+    // The glow flickers between about 0.56 and 0.97 while the arc is on: the bone is the flat colour through all of it.
+    expect(xrayColour(lit, 0.56)).toEqual([...ZAP_LOOK.bone]);
+    expect(xrayColour(lit, 0.25)).toEqual([...ZAP_LOOK.bone]);
+    expect(xrayColour(lit, -0.56)).toEqual(xrayColour(lit, -1));
+    // Half way at 0.125: the attack and the recovery still fade.
+    const half = xrayColour(lit, 0.125);
     expect(half[0]!).toBeCloseTo((lit[0]! + ZAP_LOOK.bone[0]) / 2, 6);
   });
 
@@ -50,5 +60,6 @@ describe('the skeleton x-ray', () => {
     expect(ZAP_XRAY_PULL_WGSL).toContain(`${ZAP_XRAY.pullM}`);
     expect(ZAP_XRAY_PULL_WGSL).toContain(`${ZAP_XRAY.minKeep}`);
     expect(ZAP_XRAY_COLOUR_WGSL).toContain('fn zapXrayColour(lit: vec3<f32>, zap: f32) -> vec3<f32>');
+    expect(ZAP_XRAY_COLOUR_WGSL).toContain('let k = min(1.0, abs(zap) * 4.0);');
   });
 });
