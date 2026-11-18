@@ -201,6 +201,8 @@ it('persists owned eye loss through revision and actor reorder, and clears debri
   expect(new Set(renderer.drawn.filter(d => d.eye).map(d => d.owner))).toEqual(new Set([b]));
   expect(renderer.eyeState(a).missing).toEqual([0, 1]);
   const debris = renderer.object.children.find(m => m.name === 'skeleton-ejected-eye')!;
+  // An ejected eye is a plain mesh on the eye material: it carries the zap x-ray's attribute, at 0 (no pull).
+  expect(Array.from((debris as unknown as { geometry: { getAttribute(n: string): { array: ArrayLike<number> } } }).geometry.getAttribute('iZap').array)).toEqual([0]);
   const before = debris.position.clone(); renderer.stepDebris(0.05);
   expect(debris.position.distanceTo(before)).toBeGreaterThan(0);
   renderer.update([[source]], [b]);

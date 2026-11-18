@@ -47,6 +47,7 @@
 //
 import { soldierFallPose } from './soldier-fall';
 import { burnFlailPose, solveElbow } from './burn-flail';
+import { zapPose } from './zap-pose';
 import { canDeathFall, corpseHoldStep, DEATH_FALL, deathFallPose, deathFallPull, type CorpseHold, type DeathFallChoice } from './death-fall';
 import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
@@ -515,6 +516,10 @@ export interface MotionConfig {
    *  it. `t` is seconds since ignite, `amp` 0..1, `fold` 0..1 across the falter. ABSENT on every unburnt
    *  frame: the zombie path is pinned on the key being absent. */
   burnFlail?: { t: number; seed: number; amp: number; fold: number };
+  /** THE ZAP (zap-pose.ts): while present and the body stands, the star pose replaces the burn flail on
+   *  the same path (arm solve, trunk pitch and sway, head toss) and opens the jaw. ABSENT on every frame
+   *  a body is not under the tesla arc: the zombie path is pinned on the key being absent. */
+  zapPose?: { t: number; seed: number; amp: number; variant: number; tremor: number; star: boolean };
   /** This death is AUTHORED whatever the profile says: a physics-death body (the zombie) plays the fall
    *  `deathFall` returns. Set for a burn death. Soft targets and bodies that fail canDeathFall ignore it. */
   authoredDeath?: boolean;
@@ -1088,8 +1093,10 @@ export function stepMotion(
   // A body without the humanoid arm joints takes no overlay at all, trunk and head included (the spec).
   const burnArms = idx.shoulderL !== undefined && idx.shoulderR !== undefined && idx.elbowL !== undefined
     && idx.elbowR !== undefined && idx.handL !== undefined && idx.handR !== undefined;
-  const burnPose = cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed && burnArms
-    ? burnFlailPose(cfg.burnFlail.t, cfg.burnFlail.seed, cfg.burnFlail.amp, cfg.burnFlail.fold) : null;
+  // The zap takes the flail's path and wins over it: a burning body under the arc holds the star.
+  const zapP = cfg.zapPose && cfg.zapPose.amp > 0 && !collapsed && burnArms ? zapPose(cfg.zapPose) : null;
+  const burnPose = zapP ?? (cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed && burnArms
+    ? burnFlailPose(cfg.burnFlail.t, cfg.burnFlail.seed, cfg.burnFlail.amp, cfg.burnFlail.fold) : null);
   const torsoLeanBase = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
   const torsoLean = burnPose ? torsoLeanBase + burnPose.pitch : torsoLeanBase;
   /** The flail's side sway: a roll about the body's forward axis, applied after the pitch. Shared with the
@@ -1661,7 +1668,7 @@ export function stepMotion(
       ? jawGapeAt(cfg.attack.phase, cfg.attack.variant)
       : attack && cfg.attack && isHoundVariant(cfg.attack.variant) ? houndGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
     // The expression layer's gape (expression.ts) opens the jaw too; whichever is wider wins.
-    jawGape = Math.max(swingGape, cfg.jawGape ?? 0);
+    jawGape = Math.max(swingGape, cfg.jawGape ?? 0, zapP?.jaw ?? 0);
     const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
     const dir = clampDir(normalize(sub(at(idx.head), at(idx.neck))), rotateYaw(joints.jaw.restDir, bodyYaw),
       IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
@@ -1719,6 +1726,7 @@ export function stepMotion(
       const l1 = len(sub(joints.base[iE]!, joints.base[iS]!)), l2 = len(sub(joints.base[iH]!, joints.base[iE]!));
       const out = joints.base[iS]![0] >= midX ? 1 : -1;
       const h = side === 'L' ? burnPose.handL : burnPose.handR;
+      if (!h) continue;   // a zap on a body that takes no star: the arms are left where they are
       const S = targets[iS]!;
       const want = add(S, scale(rotateYaw([h[0] * out, h[1], h[2]], bodyYaw), l1 + l2));
       // Elbows out and down, a little behind: the bend a raised human arm takes.

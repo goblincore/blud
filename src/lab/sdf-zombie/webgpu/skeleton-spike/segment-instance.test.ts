@@ -9,9 +9,10 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 // @ts-expect-error three ships no types for its internal modules
 import RenderObject from 'three/src/renderers/common/RenderObject.js';
+import { getCurrentStack, setCurrentStack, stack } from 'three/tsl';
 import {
-  SEGMENT_MATRIX_ATTRS, SEGMENT_MATRIX_FLOATS, ensureSegmentMatrices, getSegmentMatrix, instancedShareOf,
-  setSegmentMatrix, useSegmentInstance,
+  SEGMENT_MATRIX_ATTRS, SEGMENT_MATRIX_FLOATS, SEGMENT_ZAP_ATTR, ensureSegmentMatrices, getSegmentMatrix, instancedShareOf,
+  segmentInstance, setSegmentMatrix, useSegmentInstance,
 } from './segment-instance';
 
 /** The render object's cache key three keys a node build by (NodeManager.getForRenderCacheKey: initialCacheKey). */
@@ -95,5 +96,32 @@ describe('instance rows', () => {
     expect(Object.keys(g.attributes).sort()).toEqual(['meshFeature', 'normal', 'position', 'uv']);
     for (const name of Object.keys(g.attributes)) expect(g.getAttribute(name)).toBe(base.getAttribute(name));
     expect(g.userData.sculptPaint).toBe(2);
+  });
+});
+
+describe('the zap x-ray pull (zap-xray.ts) is taken only by geometry that carries iZap', () => {
+  type Graph = THREE.Node & { functionNode?: { code: string } };
+  /** segmentInstance's body run for a geometry with (or without) `iZap`: every node its statements reach. */
+  const built = (hasZap: boolean) => {
+    const builder = { hasGeometryAttribute: (name: string) => name === 'normal' || (hasZap && name === SEGMENT_ZAP_ATTR) };
+    const was = getCurrentStack(), outer = stack();
+    try {
+      setCurrentStack(outer);
+      (segmentInstance as unknown as { shaderNode: { jsFunc(b: unknown): unknown } }).shaderNode.jsFunc(builder);
+      const seen = new Set<THREE.Node>(), todo = [...(outer.nodes as THREE.Node[])];
+      while (todo.length) { const n = todo.pop()!; if (seen.has(n)) continue; seen.add(n); for (const c of n.getChildren()) todo.push(c as THREE.Node); }
+      expect(outer.nodes.length).toBeGreaterThan(0);
+      return { nodes: [...seen] as Graph[] };
+    } finally { setCurrentStack(was); }
+  };
+  const pulls = (nodes: readonly Graph[]) => nodes.some(n => n.functionNode?.code.includes('fn zapXrayPull'));
+  it('a skeleton batch (iZap on its geometry) places the vertex through zapXrayPull', () => {
+    const g = built(true);
+    expect(pulls(g.nodes)).toBe(true);
+  });
+  it('a level batch or a shotgun casing (no iZap) takes the plain placement: no pull, no iZap read', () => {
+    const g = built(false);
+    expect(pulls(g.nodes)).toBe(false);
+    expect(g.nodes.some(n => (n as unknown as { _attributeName?: string })._attributeName === SEGMENT_ZAP_ATTR)).toBe(false);
   });
 });

@@ -47,6 +47,8 @@ describe('offline anatomical skull asset',()=> {
     expect(renderer.skullState(a).pieces).toHaveLength(1);
     expect(renderer.skullState(b).missing).toBe(0);
     expect(debris).toHaveLength(1);
+    // A released plate is a plain mesh on the plate material: it carries the zap x-ray's attribute, at 0.
+    expect(Array.from(((debris[0]!.children[0] as THREE.Mesh).geometry.getAttribute('iZap')).array)).toEqual([0]);
     renderer.update([[head],[head]],[a,b]);
     expect(bones(a)).toHaveLength(13);
     expect(bones(b)).toHaveLength(1);

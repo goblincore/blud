@@ -1,0 +1,949 @@
+{
+  "branch": "claude/electric-arc-weapon-effect-63ed31",
+  "checks": {
+    "warmGate": "ready",
+    "bleed": {
+      "crowd": {
+        "on": true,
+        "program": "ready",
+        "bodies": 2,
+        "rows": [
+          {
+            "type": "zombie@1",
+            "actor": 1,
+            "slot": 0,
+            "isSource": true,
+            "room": 1
+          },
+          {
+            "type": "zombie@1",
+            "actor": 2,
+            "slot": 1,
+            "isSource": false,
+            "room": 1
+          }
+        ]
+      },
+      "spawned": {
+        "id": 2,
+        "room": 1,
+        "errors": []
+      },
+      "zapped": 1,
+      "zapsAtOther": [
+        {
+          "id": 1,
+          "phase": "zapped",
+          "glow": 0.9913699579087812,
+          "invert": false,
+          "char": 0
+        }
+      ],
+      "zapsAtFirst": [
+        {
+          "id": 1,
+          "phase": "zapped",
+          "glow": 0.7348845829251126,
+          "invert": false,
+          "char": 0
+        }
+      ],
+      "first": {
+        "beforeRgb": [
+          193.9,
+          176.7,
+          163.6
+        ],
+        "zappedRgb": [
+          200.6,
+          215.1,
+          218.6
+        ],
+        "blueMinusRedBefore": -30.3,
+        "blueMinusRedZapped": 18,
+        "shift": 48.3
+      },
+      "other": {
+        "beforeRgb": [
+          215.8,
+          201.4,
+          188.6
+        ],
+        "zappedRgb": [
+          205.2,
+          193,
+          181
+        ],
+        "blueMinusRedBefore": -27.2,
+        "blueMinusRedZapped": -24.2,
+        "shift": 3,
+        "lumaBefore": 204.24,
+        "lumaZapped": 195.27
+      },
+      "char": {
+        "first": {
+          "phase": "zapped",
+          "char": 0.949
+        },
+        "firstLuma": {
+          "before": 180.38,
+          "cooked": 53.67,
+          "rgb": [
+            56.6,
+            53.2,
+            48.7
+          ]
+        },
+        "otherChestLuma": {
+          "before": 204.24,
+          "arcOn": 195.27,
+          "cooked": 159.37,
+          "rgb": [
+            160.1,
+            160.9,
+            149.5
+          ]
+        },
+        "otherFlesh": {
+          "before": 235,
+          "arcOn": 243,
+          "cooked": 250
+        },
+        "otherFall": -0.064
+      }
+    },
+    "actors": [
+      {
+        "id": 1,
+        "kind": "zombie",
+        "pos": [
+          0.36371484253550224,
+          0,
+          -5.577989221092326
+        ]
+      }
+    ],
+    "distance": 2.6,
+    "pipelines": {
+      "before": 126,
+      "after": 126
+    },
+    "luma": {
+      "centre": {
+        "before": 74.72,
+        "series": [
+          57.99,
+          54.66,
+          75.66,
+          70.14,
+          65.63,
+          61.51,
+          59.03,
+          59.97,
+          61.03,
+          62.22,
+          60.89,
+          47.01,
+          32.48,
+          25.32,
+          25.25,
+          25.31
+        ],
+        "zappedMean": 61.49,
+        "zappedOverBefore": 0.82,
+        "last": 25.31
+      },
+      "chest": {
+        "before": 194.1,
+        "beforeRgb": [
+          201.7,
+          192.7,
+          181.6
+        ],
+        "beforeBlueMinusRed": -20.1,
+        "series": [
+          113.12,
+          107.37,
+          181.4,
+          116.39,
+          108.37,
+          111.75,
+          107.46,
+          152.26,
+          154.63,
+          158.56,
+          154.62,
+          114.31,
+          78.07,
+          24.9,
+          24.86,
+          25.04
+        ],
+        "zappedMean": 110.74,
+        "zappedMin": 107.37,
+        "zappedOverBefore": 0.57,
+        "zappedBlueMinusRed": 31.4,
+        "joltMean": 181.4,
+        "statueMean": 155.02,
+        "last": 25.04
+      },
+      "fleshChest": {
+        "luma": 223.42,
+        "rgb": [
+          210.7,
+          228.5,
+          230.8
+        ]
+      }
+    },
+    "xray": {
+      "glow": {
+        "t": 0.25,
+        "boneZap": {
+          "instances": 22,
+          "min": 0.7348845601081848,
+          "max": 0.7348845601081848
+        },
+        "drawn": {
+          "segments": 22,
+          "hidden": 2
+        },
+        "skeleton": {
+          "meanAbs": 16.32,
+          "movedShare": 0.1721
+        },
+        "noise": {
+          "meanAbs": 4.08,
+          "movedShare": 0.1317
+        },
+        "bodyLumaShown": 67.59,
+        "bodyLumaHidden": 81.69,
+        "skull": {
+          "area": 1884,
+          "width": 48,
+          "span": 48,
+          "gaps": 0
+        },
+        "hiddenChest": {
+          "luma": 223.42,
+          "rgb": [
+            210.7,
+            228.5,
+            230.8
+          ]
+        }
+      },
+      "jolt": {
+        "t": 0.75,
+        "boneZap": {
+          "instances": 22,
+          "min": -0.6967968344688416,
+          "max": -0.6967968344688416
+        },
+        "drawn": {
+          "segments": 22,
+          "hidden": 2
+        },
+        "skeleton": {
+          "meanAbs": 18.05,
+          "movedShare": 0.1594
+        },
+        "noise": {
+          "meanAbs": 3.47,
+          "movedShare": 0.0998
+        },
+        "bodyLumaShown": 75.2,
+        "bodyLumaHidden": 59.11,
+        "skull": {
+          "area": 0,
+          "width": 0,
+          "span": 0,
+          "gaps": 0
+        },
+        "hiddenChest": {
+          "luma": 75.8,
+          "rgb": [
+            73.9,
+            77.2,
+            73.7
+          ]
+        }
+      },
+      "boneZapBefore": [
+        0,
+        0,
+        0
+      ],
+      "boneZapAfter": [
+        0,
+        0,
+        0
+      ],
+      "statueBones": {
+        "t": 2,
+        "zap": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "splitHead": {
+      "forced": true,
+      "zapped": 1,
+      "copies": [
+        {
+          "material": "skeleton-bone-split",
+          "piece": 0,
+          "eye": false
+        },
+        {
+          "material": "skeleton-bone-split",
+          "piece": 1,
+          "eye": false
+        },
+        {
+          "material": "skeleton-bone-split",
+          "piece": 2,
+          "eye": false
+        },
+        {
+          "material": "skeleton-eye-split",
+          "piece": 2,
+          "eye": true
+        },
+        {
+          "material": "skeleton-eye-split",
+          "piece": 1,
+          "eye": true
+        }
+      ],
+      "instances": 24,
+      "zapMin": 0.7348845601081848,
+      "zapMax": 0.7348845601081848,
+      "phase": "zapped",
+      "invert": false,
+      "closeDistance": 1.12,
+      "closeZap": {
+        "id": 1,
+        "phase": "zapped",
+        "glow": 0.5891069709981501,
+        "invert": false,
+        "char": 0
+      },
+      "skull": {
+        "area": 1604,
+        "width": 67,
+        "span": 67,
+        "gaps": 0
+      },
+      "closedSkull": {
+        "area": 1884,
+        "width": 48,
+        "span": 48,
+        "gaps": 0
+      }
+    },
+    "tesla": {
+      "id": 1,
+      "distance": 2.6,
+      "selected": {
+        "ok": true,
+        "live": "shotgun",
+        "target": "tesla",
+        "phase": "lowering"
+      },
+      "raiseFrames": 26,
+      "aimed": true,
+      "idle": {
+        "t": 0,
+        "phase": "none",
+        "glow": 0,
+        "char": 0,
+        "held": false,
+        "target": -1
+      },
+      "hold": [
+        {
+          "t": 0.1,
+          "phase": "zapped",
+          "glow": 0.825,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        {
+          "t": 0.2,
+          "phase": "zapped",
+          "glow": 0.738,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        {
+          "t": 0.3,
+          "phase": "zapped",
+          "glow": 0.904,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        {
+          "t": 0.4,
+          "phase": "zapped",
+          "glow": 0.901,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        {
+          "t": 0.5,
+          "phase": "zapped",
+          "glow": 0.649,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        {
+          "t": 0.6,
+          "phase": "zapped",
+          "glow": 0.618,
+          "char": 0,
+          "held": true,
+          "target": 1
+        }
+      ],
+      "release": [
+        {
+          "t": 0.1,
+          "phase": "recovering",
+          "glow": 0.689,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.2,
+          "phase": "recovering",
+          "glow": 0.522,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.3,
+          "phase": "recovering",
+          "glow": 0.318,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.4,
+          "phase": "recovering",
+          "glow": 0.273,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.5,
+          "phase": "recovering",
+          "glow": 0.187,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.6,
+          "phase": "recovering",
+          "glow": 0.024,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.7,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.8,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 0.9,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 1,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 1.1,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        },
+        {
+          "t": 1.2,
+          "phase": "none",
+          "glow": 0,
+          "char": 0,
+          "held": false,
+          "target": -1
+        }
+      ],
+      "aimAway": {
+        "before": {
+          "t": 0,
+          "phase": "zapped",
+          "glow": 0.738,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        "after": {
+          "t": 0.03,
+          "phase": "recovering",
+          "glow": 0.964,
+          "char": 0,
+          "held": true,
+          "target": -1
+        },
+        "later": {
+          "t": 0.13,
+          "phase": "recovering",
+          "glow": 0.66,
+          "char": 0,
+          "held": true,
+          "target": -1
+        }
+      },
+      "slotSwitch": {
+        "before": {
+          "t": 0,
+          "phase": "zapped",
+          "glow": 0.766,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        "switched": {
+          "ok": true,
+          "live": "tesla",
+          "target": "shotgun",
+          "phase": "lowering"
+        },
+        "slot": {
+          "live": "tesla",
+          "target": "shotgun",
+          "phase": "lowering",
+          "ready": false
+        },
+        "after": {
+          "t": 0.03,
+          "phase": "recovering",
+          "glow": 0.72,
+          "char": 0,
+          "held": true,
+          "target": -1
+        },
+        "later": {
+          "t": 0,
+          "phase": "recovering",
+          "glow": 0.096,
+          "char": 0,
+          "held": true,
+          "target": -1
+        },
+        "backOn": {
+          "t": 0,
+          "phase": "zapped",
+          "glow": 0.825,
+          "char": 0,
+          "held": true,
+          "target": 1
+        },
+        "end": {
+          "t": 0,
+          "phase": "recovering",
+          "glow": 0.812,
+          "char": 0,
+          "held": false,
+          "target": -1
+        }
+      },
+      "pipelines": {
+        "before": 125,
+        "after": 125
+      },
+      "propBox": {
+        "idle": {
+          "mean": 90.94,
+          "rgb": [
+            91.9,
+            92.4,
+            81.2
+          ]
+        },
+        "held": {
+          "mean": 95.66,
+          "rgb": [
+            95.9,
+            97.3,
+            86.7
+          ]
+        },
+        "switched": {
+          "mean": 80.66,
+          "rgb": [
+            77.7,
+            82.8,
+            77.5
+          ]
+        }
+      }
+    }
+  },
+  "consoleErrors": [],
+  "samples": [
+    {
+      "t": 0.25,
+      "phase": "zapped",
+      "glow": 0.735,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 57.99,
+      "chestLuma": 113.12,
+      "chestRgb": [
+        100.7,
+        116.9,
+        126.1
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 0.5,
+      "phase": "zapped",
+      "glow": 0.931,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 54.66,
+      "chestLuma": 107.37,
+      "chestRgb": [
+        87.5,
+        114.6,
+        122.4
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 0.75,
+      "phase": "zapped",
+      "glow": 0.697,
+      "invert": true,
+      "char": 0,
+      "centreLuma": 75.66,
+      "chestLuma": 181.4,
+      "chestRgb": [
+        184.3,
+        178.7,
+        187.5
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1,
+      "phase": "zapped",
+      "glow": 0.638,
+      "invert": false,
+      "char": 0,
+      "centreLuma": 70.14,
+      "chestLuma": 116.39,
+      "chestRgb": [
+        103.1,
+        120.4,
+        130.6
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.25,
+      "phase": "zapped",
+      "glow": 0.969,
+      "invert": false,
+      "char": 0.026,
+      "centreLuma": 65.63,
+      "chestLuma": 108.37,
+      "chestRgb": [
+        90.1,
+        114.9,
+        122.5
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.5,
+      "phase": "zapped",
+      "glow": 0.789,
+      "invert": false,
+      "char": 0.376,
+      "centreLuma": 61.51,
+      "chestLuma": 111.75,
+      "chestRgb": [
+        92.7,
+        118.6,
+        126.1
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 1.75,
+      "phase": "zapped",
+      "glow": 0.559,
+      "invert": false,
+      "char": 0.828,
+      "centreLuma": 59.03,
+      "chestLuma": 107.46,
+      "chestRgb": [
+        87.5,
+        114.7,
+        122.5
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 59.97,
+      "chestLuma": 152.26,
+      "chestRgb": [
+        159.8,
+        151.6,
+        135.8
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.25,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 61.03,
+      "chestLuma": 154.63,
+      "chestRgb": [
+        161.3,
+        154,
+        140.5
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.5,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 62.22,
+      "chestLuma": 158.56,
+      "chestRgb": [
+        166,
+        157.6,
+        144
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 2.75,
+      "phase": "statue",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 60.89,
+      "chestLuma": 154.62,
+      "chestRgb": [
+        161.8,
+        154.1,
+        138.7
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 1.15
+    },
+    {
+      "t": 3,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 47.01,
+      "chestLuma": 114.31,
+      "chestRgb": [
+        123.6,
+        112.1,
+        101.5
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.25,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 32.48,
+      "chestLuma": 78.07,
+      "chestRgb": [
+        88.8,
+        74.8,
+        66.6
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.5,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.32,
+      "chestLuma": 24.9,
+      "chestRgb": [
+        21.6,
+        26.3,
+        26.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 0
+    },
+    {
+      "t": 3.75,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.25,
+      "chestLuma": 24.86,
+      "chestRgb": [
+        21.5,
+        26.3,
+        26.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 0
+    },
+    {
+      "t": 4,
+      "phase": "none",
+      "glow": 0,
+      "invert": false,
+      "char": 1,
+      "centreLuma": 25.31,
+      "chestLuma": 25.04,
+      "chestRgb": [
+        21.9,
+        26.4,
+        26.2
+      ],
+      "pos": [
+        0.36,
+        0,
+        -5.54
+      ],
+      "speed": 0
+    }
+  ]
+}

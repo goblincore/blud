@@ -313,6 +313,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createMelterHarness } from './game-melter';
+import { createTeslaHarness } from './game-tesla';
 import { createRodHarness } from './game-rod';
 import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
@@ -364,7 +365,7 @@ import { crowdTypeFor } from './game-crowd-types';
 import { pushProbeWeight } from './game-probe-weight';
 import { aimFrustum } from './game-weapon-rig';
 import { takePropForThrow } from './game-dynamite-throw';
-import { bodiesOnScreen, traceMeleeHitFrom, traceSlugHitFrom } from './game-hit-trace';
+import { bodiesOnScreen, sectorHitBetween, traceMeleeHitFrom, traceSlugHitFrom } from './game-hit-trace';
 import { captureTelemetryScene } from './game-telemetry-scene';
 import { demoScenarioOf } from './game-demo-record';
 import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickFrame } from './game-chunk-bake';
@@ -427,6 +428,7 @@ import { applyWoundTuning } from './game-wound-tuning';
 import { DemoReplayOpts, applyDemoQuery, demoSynthesize, runDemoReplay } from './game-demo-replay';
 import { applyRig } from './game-ambient-rig';
 import { boneExposedActors, nearestCrowdBody } from './game-crowd-queries';
+import { syncZapXray } from './game-zap';
 import { ENGAGED_RADIUS, FORE_HAND_REST, GRIP_HAND_REST, GUN_REST, SPRITE_TRAIL_ID_BASE, Y_UP, _tmpV, tick } from './game-tick';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
@@ -2257,6 +2259,11 @@ async function main() {
         ctx.render.segMeshRenderer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
         if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights, ownerFill);
       }
+      // The zap x-ray (game-zap.ts): each bone instance's owner's glow. Not the light list's: it runs with it off.
+      // Not on a half-rate hold frame: the flesh drawn is the last frame's and the bones' pose is held with it
+      // (meshHold, above), so their glow, inversion and pull hold too. The sync, and the one clearing pass after the
+      // last glow, run on the next live frame: game-zap.ts keeps that owed until it is called.
+      if (!meshHold) syncZapXray(ctx);
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
       // the carved library build their OWN instances (they need their own
@@ -3375,6 +3382,8 @@ async function main() {
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
     // SLOT 8 (the melter): left click only, deferred to the tick like the flare.
     if (ctx.weapon.melter?.onMouseDown(e.button)) return;
+    // SLOT 9 (the tesla): held; the tick finds and holds the target.
+    if (ctx.weapon.tesla?.onMouseDown(e.button)) return;
     // SLOT 6 (the rod): hold + sweep; the cut lands on release.
     if (ctx.weapon.rod?.onMouseDown(e.button)) return;
     // SLOT 7 (the axe): a click starts the combo's next chop.
@@ -3399,6 +3408,8 @@ async function main() {
   window.addEventListener('mouseup', (e) => ctx.weapon.flail?.onMouseUp(e.button));
   // The rod's release: likewise unlocked, so letting go anywhere ends the sweep.
   window.addEventListener('mouseup', (e) => ctx.weapon.rod?.onMouseUp(e.button));
+  // The tesla's release: likewise unlocked, so letting go anywhere drops the arc.
+  window.addEventListener('mouseup', (e) => ctx.weapon.tesla?.onMouseUp(e.button));
   window.addEventListener('mouseup', (e) => ctx.weapon.axe?.onMouseUp(e.button));
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
@@ -3406,7 +3417,7 @@ async function main() {
   // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
   // the anchor's ride height below is scaled with the rest of the rig rather
   // than surviving as an unscaled camera-space offset. Every weapon slot
-  // (flail, shotgun, dynamite, launcher, flare, rod, axe) is a descendant, so this is
+  // (flail, shotgun, dynamite, launcher, flare, rod, axe, melter, tesla) is a descendant, so this is
   // one transform for all of them.
   ctx.weapon.fovRig = new THREE.Group();
   ctx.weapon.fovRig.name = 'view-model-fov-rig';
@@ -3434,6 +3445,12 @@ async function main() {
   // WEAPON SLOT 8 (the melt-death dev harness, game-melter.ts): its own rig on aimRig.
   ctx.weapon.melter = createMelterHarness(ctx, {
     traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+  });
+  // WEAPON SLOT 9 (the tesla arc's dev harness, game-tesla.ts): its own rig on aimRig. A straight trace (an arc does
+  // not drop like a slug), and the level's boxes and sector walls for its line of sight.
+  ctx.weapon.tesla = createTeslaHarness(ctx, {
+    trace: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    sightBlocked: (a, b) => ctx.world.colliders.some(box => segmentHitsBox(a, b, box)) || sectorHitBetween(ctx, a, b) !== null,
   });
   // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
   ctx.weapon.rod = createRodHarness(ctx, {

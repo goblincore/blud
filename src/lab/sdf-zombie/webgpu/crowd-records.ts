@@ -40,10 +40,10 @@ export const REC_HALF_REV = 13;     // bodyHalf.xyz, w = damageRevision
  *  its gore without ramping the whole type; the ramp has to ride the record.
  *  Slot 14 was the first free vec4. */
 export const REC_GORE = 14;         // x = goreStrength, y/z = eye L/R glow OFF, w = eye disc radius (uv)
-/** BURNING BODY: x = burn 0..1, y = seconds alight, z = char 0..1, w spare.
+/** BURNING BODY: x = burn 0..1, y = seconds alight, z = char 0..1, w = zap glow (signed).
  *  Per-body and not per-view for the same reason as REC_GORE above: the crowd
  *  shares one material, so a single burning body needs its own ramp. */
-export const REC_BURN = 15;        // burn, burnSec, char, spare
+export const REC_BURN = 15;        // burn, burnSec, char, zap
 /** SHARED LIGHT LIST (spec §4): slot 16 is the body's light picks -- four
  *  packed floats, `index + weight` (weight in [0, 0.999], the CPU's absolute
  *  per-body strength for that light), -1 = empty, slot 0 the dominant light.
@@ -85,6 +85,8 @@ export interface RecordSource {
   burn: number;
   burnSec: number;
   charAmount: number;
+  /** THE ZAP (zap.wgsl.ts): the glow 0..1, negative while the bones are inverted. Absent = 0. */
+  zap?: number;
   /** Four packed light picks (`index + weight`, -1 empty). Omitted = none. */
   lights?: readonly number[];
   /** The head split of the posed body this record draws (`posed.split`). Omitted or null = closed. */
@@ -135,7 +137,7 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       put4(b + REC_HALF_REV * 4, s.bodyHalf, s.damageRevision);
       const em = s.eyeMask;
       put4(b + REC_GORE * 4, [s.gore, em ? 1 - (em[0] ?? 1) : 0, em ? 1 - (em[1] ?? 1) : 0, em ? (em[2] ?? 0) : 0]);
-      put4(b + REC_BURN * 4, [s.burn, s.burnSec, s.charAmount, 0]);
+      put4(b + REC_BURN * 4, [s.burn, s.burnSec, s.charAmount, s.zap ?? 0]);
       put4(b + REC_NMAP_ORIGIN * 4, s.nmapOrigin ?? [0, 0, 0], 0);
       const l = s.lights;
       const lo = b + REC_LIGHTS * 4;

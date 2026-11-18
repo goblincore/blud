@@ -111,6 +111,28 @@ describe('crowd records', () => {
     expect(r.floats[base + REC_BURN * 4 + 3]).toBe(0);
   });
 
+  it('carries the zap glow, signed, in REC_BURN.w, and 0 for a source with none', () => {
+    // The march reads the zap from the record alone (zap.wgsl.ts): the crowd's one burnCfg is its source view's.
+    const src = {
+      counts: [0, 0, 0, 0], counts2: [0, 0, 0, 0], woundBound: [0, 0, 0, 1e9],
+      bodyAnchor: [0, 0, 0], windDrift: [0, 0, 0], meltCfg: [0, 0, 0, 0], bodyFlash: [0, 0, 0, 0],
+      noiseShift: [0, 0, 0], bodyYaw: 0, headCentre: [0, 0, 0], woundCount: 0,
+      headQuat: [0, 0, 0, 1], volumePose0: [0, 0, 0, 0], volumePose1: [0, 0, 0, 0],
+      bodyCentre: [0, 0, 0], variantSeed: 0, bodyHalf: [0, 0, 0], damageRevision: 0, gore: 0,
+      burn: 0, burnSec: 0, charAmount: 0,
+    } as Parameters<ReturnType<typeof createCrowdRecords>['write']>[1];
+    const r = createCrowdRecords(3);
+    r.write(1, { ...src, zap: 0.75 });
+    r.write(2, { ...src, zap: -0.5 });
+    const at = (slot: number) => r.floats[slot * REC_VEC4S * 4 + REC_BURN * 4 + 3];
+    expect(at(1)).toBeCloseTo(0.75, 6);
+    expect(at(2)).toBeCloseTo(-0.5, 6);
+    // Absent: 0, over a glow the slot held.
+    r.write(1, src);
+    expect(at(1)).toBe(0);
+    expect(at(0)).toBe(0);
+  });
+
   describe('light picks (REC_LIGHTS, slot 16)', () => {
     const minimalSource: RecordSource = {
       counts: [0, 0, 0, 0], counts2: [0, 0, 0, 0], woundBound: [0, 0, 0, 1e9],

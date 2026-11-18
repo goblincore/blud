@@ -30,6 +30,11 @@ export function boneExposedActors(ctx: GameContext, c: typeof ctx): Set<unknown>
     if (a.melting()) { out.add(a); continue; }
     // The bare-skeleton debug view (__sdfGame.bareSkeleton): every body's bones show.
     if (c.render.bareSkeleton) { out.add(a); continue; }
+    // A body GLOWING under the tesla arc shows its whole skeleton through the glow (skeleton-spike/zap-xray.ts): its
+    // bones have to be in the batches for the x-ray to pull them clear of the flesh. Not the statue (zapping, glow
+    // 0): its bones would be posed and drawn behind opaque flesh for nothing. (Its organs stay as they were: one is
+    // drawn only where a wound reaches it.)
+    if ((a.zapLook()?.glow ?? 0) > 0) { out.add(a); continue; }
     if ((c.render.skeletonSources.get(a) as { severed?: boolean } | undefined)?.severed || a.visualWounds().some(w => !w.decal)) out.add(a);
   }
   return out;

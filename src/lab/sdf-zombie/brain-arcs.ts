@@ -93,7 +93,7 @@ function randomDir(rng: () => number): Vec3 {
 
 /** Midpoint displacement between `a` and `b`, kinking each halving by `rough` x its span, over `base` (a polyline of
  *  ARC_POINTS points it bows along). */
-function jag(base: Vec3[], rough: number, rng: () => number): Vec3[] {
+export function jag(base: Vec3[], rough: number, rng: () => number): Vec3[] {
   const pts = base.map(p => [...p] as Vec3);
   let step = (ARC_POINTS - 1) / 2;
   while (step >= 1) {

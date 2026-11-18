@@ -46,6 +46,7 @@ import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepMelts } from './game-melter';
+import { stepZapLook } from './game-zap';
 import { igniteExplosionLight } from './game-dynamite-throw';
 import { scaleBurstVisual } from './game-wound-vfx';
 import { stepPendingGibImpulses } from './game-gib-spawn';
@@ -70,6 +71,7 @@ import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
 import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
 import { carryFreshShots, expired, GRAPESHOT, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { shotFixEnabled, traceField } from '../body-field';
+import { prewarmZapFx } from './game-zap-fx';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, prewarmTracer, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -585,6 +587,7 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - fireDt);
   ctx.weapon.flare?.tickCooldown(fireDt);
   ctx.weapon.melter?.tickCooldown(fireDt);
+  ctx.weapon.tesla?.tick(fireDt);   // every tick, whatever the live slot: this is what drops the arc
   ctx.weapon.rod?.tick(fireDt);
   ctx.weapon.axe?.tick(fireDt);
   ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)
@@ -1353,6 +1356,8 @@ export function tick(ctx: GameContext, dt: number) {
     // Melting bodies (game-melter.ts): their own clock, since a melting body no longer steps; bone groups let go
     // here, before the chunk step, like the gibs above.
     stepMelts(ctx, dt);
+    // The zap's look (game-zap.ts): after the burn step, which owns the rest of burnCfg.
+    stepZapLook(ctx, dt);
     // The staged release's due impulses, BEFORE the chunk step, so a piece
     // that goes this frame integrates at its launch velocity for the whole
     // frame rather than a frame late.
@@ -1411,7 +1416,9 @@ export function tick(ctx: GameContext, dt: number) {
     const kitBuilt = ctx.boot.kitPrewarm?.step() ?? false;
     // The pellet tracers' pipelines (game-weapon-rig.ts prewarmTracer), on a step the kit warm built nothing.
     const tracerBuilt = !kitBuilt && shotFixEnabled() && prewarmTracer(ctx);
-    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt);
+    // The zap's crawl arcs and halo (game-zap-fx.ts prewarmZapFx), likewise on a step nothing else built.
+    const zapFxBuilt = !kitBuilt && !tracerBuilt && prewarmZapFx(ctx);
+    ctx.boot.levelPrewarm?.step(!kitBuilt && !tracerBuilt && !zapFxBuilt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
-import { createSegmentMeshRenderer } from './mesh-renderer';
+import { createSegmentMeshRenderer, segmentLitColour } from './mesh-renderer';
 import { BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL } from '../bone-instancer';
 import { BODY_LIGHTS } from '../march/body-lights.wgsl';
 import { AnatomicalSkullKit } from './anatomical-skull';
@@ -161,7 +161,7 @@ describe('the default skull is pinned: the sculpted skull, full', () => {
       const batch = renderer.object.children.find(c => batchDraws(c, cache.get(head).geometry)) as THREE.Mesh;
       const material = batch.material as MeshBasicNodeMaterial;
       expect([material.name, material.userData.sculptPaint]).toEqual(['skeleton-bone', 2]);
-      return { material, code: wgslReached(material.colorNode!) };
+      return { material, code: wgslReached(segmentLitColour(material)) };
     });
     // One material for both heads, and what it reaches is the same text whichever head asks.
     expect(received[1]!.material).toBe(received[0]!.material);

@@ -36,6 +36,25 @@ const bonesOf = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: object)
 const eyesOf = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: object) => r.drawn.filter(d => d.owner === owner && d.eye);
 
 describe('explodeSkull on a sculpted head', () => {
+  it('every debris geometry carries a zero iZap beside its iFill (zap-xray.ts): a skull fragment and a dropped segment', () => {
+    // Each is a plain mesh on a segment material, whose one node build reads iZap: without the attribute the build
+    // that came first decides for all of them.
+    const { renderer, thrown } = setup();
+    const a = {}, b = {};
+    renderer.update([[head], [head]], [a, b]);
+    expect(renderer.explodeSkull(a, [head], [0, 0, -1])).toBe(SCULPT_FRAGMENT_IDS.length);
+    const fragments = thrown.length;
+    expect(renderer.dropSegments(b, [head], [0, 0, 0])).toBe(1);
+    expect(thrown.length).toBe(fragments + 1);
+    for (const t of thrown) {
+      const g = (t.object.children[0] as THREE.Mesh).geometry;
+      const z = g.getAttribute('iZap') as THREE.InstancedBufferAttribute;
+      expect(z, t.object.name).toBeDefined();
+      expect(z.isInstancedBufferAttribute, t.object.name).toBe(true);
+      expect([z.itemSize, z.count, z.getX(0)], t.object.name).toEqual([1, g.getAttribute('iFill').count, 0]);
+    }
+    renderer.dispose();
+  });
   it('throws the ten named fragments, once, and the head and its eyes stop being drawn in the same call', () => {
     const { renderer, thrown } = setup();
     const a = {}, b = {};

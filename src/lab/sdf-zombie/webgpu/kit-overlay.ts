@@ -75,6 +75,10 @@ import { kitBoneKey } from '../rig-frames';
  * a mirror of a room that is not the game's room. Around 0.7 keeps a little
  * diffuse so the form still reads in shadow.
  */
+/** THE ZAP'S FLASH on a kit (KitOverlay.zap): the emissive colour and gain on the positive frame, and what is left
+ *  of the albedo on the negative. The colour is the flesh glow's (zap.wgsl.ts ZAP_LOOK.core). */
+const KIT_ZAP = { glow: [0.62, 0.8, 1.0] as const, intensity: 3, negative: 0.03 };
+
 const LOOK: Record<string, {
   metalness: number; roughness: number; envIntensity: number;
   /**
@@ -337,6 +341,9 @@ export interface KitOverlay {
    *  look (status-lights.ts output; 1 = authored). coreRgb recolours the
    *  core (amber, red when enraged). No-op on a kit without them. */
   glow(levels: { led: number; core: number; coreRgb?: readonly [number, number, number] }): void;
+  /** THE ZAP'S FLASH (game-zap-fx.ts, look spike 2026-11-18): the kit takes the body's strobe. +1: every material
+   *  glows the zap's blue-white; -1: blacked out (the negative frame); 0: as authored again. Uniforms only. */
+  zap(state: number): void;
   dispose(): void;
 }
 
@@ -503,6 +510,9 @@ export async function loadKit(
 
   const bones = new Map<string, THREE.Bone>();
   const skinned: THREE.SkinnedMesh[] = [];
+  /** The zap's flash (zap below): its state, and every material as it was when the flash began. */
+  let zapState = 0;
+  const zapBase: { mat: THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
   /** PULSED materials and their authored emissive intensity, for glow(). */
   const pulsed: { name: string; mat: THREE.MeshStandardMaterial; base: number }[] = [];
   gltf.scene.traverse(o => {
@@ -612,9 +622,42 @@ export async function loadKit(
       };
     },
     glow(levels) {
+      // Under the zap's flash the kit's emissive is the flash's (zap below), until it is released.
+      if (zapState !== 0) return;
       for (const p of pulsed) {
         p.mat.emissiveIntensity = p.base * (p.name === 'led' ? levels.led : levels.core);
         if (p.name === 'core' && levels.coreRgb) p.mat.emissive.setRGB(...levels.coreRgb);
+      }
+    },
+    zap(state) {
+      if (state === zapState) return;
+      if (zapState === 0) {
+        // Entering: remember every standard material as authored (and as glow() last left it).
+        zapBase.length = 0;
+        object.traverse(o => {
+          const m = (o as THREE.Mesh).material;
+          for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+            const std = mat as THREE.MeshStandardMaterial;
+            if (!std.color || !std.emissive || zapBase.some(b => b.mat === std)) continue;
+            zapBase.push({ mat: std, color: std.color.clone(), emissive: std.emissive.clone(), intensity: std.emissiveIntensity });
+          }
+        });
+      }
+      zapState = state;
+      for (const b of zapBase) {
+        if (state > 0) {
+          b.mat.color.copy(b.color);
+          b.mat.emissive.setRGB(...KIT_ZAP.glow);
+          b.mat.emissiveIntensity = KIT_ZAP.intensity;
+        } else if (state < 0) {
+          b.mat.color.copy(b.color).multiplyScalar(KIT_ZAP.negative);
+          b.mat.emissive.setRGB(0, 0, 0);
+          b.mat.emissiveIntensity = 0;
+        } else {
+          b.mat.color.copy(b.color);
+          b.mat.emissive.copy(b.emissive);
+          b.mat.emissiveIntensity = b.intensity;
+        }
       }
     },
     dispose() {

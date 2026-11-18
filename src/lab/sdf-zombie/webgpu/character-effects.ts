@@ -105,7 +105,7 @@ export function createArmorSparks(capacity=32) {
 /** BRAIN ARCS (brain-arcs.ts): electricity crawling over a seizing brain. A fixed pool of jagged arcs drawn as two
  *  crossed additive ribbons each (a white-hot core and a wide blue glow), so they read from any side without facing
  *  the camera, drawn over everything (no depth test). Re-struck ~25 times a second with fresh paths: real arcs never hold still. No GPU allocation per strike. */
-export function createBrainArcs(maxArcs = 14) {
+export function createBrainArcs(maxArcs = 14, widthScale = 1, depthTest = false) {
   const object = new THREE.Group(); object.name = 'BrainArcs'; object.visible = false;
   const segs = ARC_POINTS - 1, vertsPerArc = segs * 2 * 6, cap = maxArcs * vertsPerArc;
   const layer = (width: number, color: [number, number, number]) => {
@@ -117,14 +117,14 @@ export function createBrainArcs(maxArcs = 14) {
     // depthTest OFF, like the muzzle flash: the arcs ride a few cm over the brain and the SDF's depth swallowed them
     // (arena look, 2026-11-09). The ones behind the brain then glow through it, an aura; the Doom-era read.
     const material = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
-      depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      depthTest, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, material);
     mesh.frustumCulled = false;
     object.add(mesh);
     return { pos, col, geo, material, width, color };
   };
-  const core = layer(0.018, [5.0, 5.6, 8.0]);
-  const glow = layer(0.11, [0.35, 0.6, 2.0]);
+  const core = layer(0.018 * widthScale, [5.0, 5.6, 8.0]);
+  const glow = layer(0.11 * widthScale, [0.35, 0.6, 2.0]);
   let clock = 0, next = 0, seed = 1;
   const write = (L: ReturnType<typeof layer>, arcs: Vec3[][], bright: number[]) => {
     let v = 0;
@@ -170,6 +170,15 @@ export function createBrainArcs(maxArcs = 14) {
       const bright = arcs.map((_, k) => Math.min(1.4, drive.level * 1.3) * (0.35 + 0.65 * (((seed * 31 + k * 17) % 13) / 12)));
       write(core, arcs, bright);
       write(glow, arcs, bright);
+    },
+    /** Draw these paths as they are, with no strike of this pool's own (the zap's crawl arcs, game-zap-fx.ts).
+     *  No paths: dark. */
+    show(arcs: Vec3[][], bright: number[]) {
+      if (arcs.length === 0) { object.visible = false; return; }
+      object.visible = true;
+      const drawn = arcs.slice(0, maxArcs);
+      write(core, drawn, bright);
+      write(glow, drawn, bright);
     },
     reset() { object.visible = false; clock = 0; next = 0; },
     get visible() { return object.visible; },
