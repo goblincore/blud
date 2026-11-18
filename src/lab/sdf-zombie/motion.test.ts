@@ -22,12 +22,14 @@ import { attackPose, ATTACK_TUNING } from './attack';
 import { cross, len, normalize, sub, dot, qRotate } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
-import { compileBlob } from './blob-compile';
+import { compileBlob, compileFace } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import soldierSrc from './characters/soldier.blob?raw';
 import { SOLDIER_PROFILE } from './motion-profile';
 import { CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint } from './carry';
 import { MARCH, RUN, rotateYaw } from './gait';
+import brideSrc from './characters/bride.blob?raw';
+import { ZAP_POSE } from './zap-pose';
 
 const DT = 1 / 60;
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -1819,6 +1821,68 @@ describe('the burning flail overlay', () => {
     const b = stepMotion(cruising(9), j, cfgB, sig, stubPoints(j), BOUNDS, makeRng(9)).frame.restPose;
     expect(d(a[j.index.handL!]!, b[j.index.handL!]!)).toBeLessThan(1e-6);
     expect(d(a[j.index.handR!]!, b[j.index.handR!]!)).toBeGreaterThan(0.2);
+  });
+});
+
+describe('the zap overlay', () => {
+  // A STANDING body (no wander, so no gait swing under the pose), stepped once like the flail tests above.
+  const STAND: MotionConfig = { enabled: true, wander: false };
+  const zap = (variant: number, tremor: number, star = true, t = 0.37) =>
+    ({ t, seed: 5, amp: 1, variant, tremor, star });
+  const stepOnce = (cfg: MotionConfig, j = realJoints()) =>
+    ({ j, ...stepMotion(makeMotionState(9, [0, 0, 0]), j, cfg, NO_SIGNALS(), stubPoints(j), BOUNDS, makeRng(9)) });
+  const d = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const arm = (j: MotionJoints, pose: readonly Vec3[], side: 'L' | 'R') => ({
+    S: pose[j.index[`shoulder${side}`]!]!, E: pose[j.index[`elbow${side}`]!]!, H: pose[j.index[`hand${side}`]!]!,
+  });
+
+  it('the star puts both hands above and outboard of the shoulders, no segment stretched', () => {
+    const { j, frame } = stepOnce({ ...STAND, zapPose: zap(0, 0) });
+    const midX = frame.restPose[j.index.pelvis]![0];
+    for (const side of ['L', 'R'] as const) {
+      const { S, E, H } = arm(j, frame.restPose, side), b = arm(j, j.base, side);
+      expect(H[1]).toBeGreaterThan(S[1]);
+      expect(Math.abs(H[0] - midX)).toBeGreaterThan(Math.abs(S[0] - midX));
+      expect(Math.abs(d(S, E) - d(b.S, b.E))).toBeLessThan(1e-9);
+      expect(Math.abs(d(E, H) - d(b.E, b.H))).toBeLessThan(1e-9);
+    }
+  });
+  it('left and right are mirrored', () => {
+    const { j, frame } = stepOnce({ ...STAND, zapPose: zap(0, 0) });
+    const L = arm(j, frame.restPose, 'L'), R = arm(j, frame.restPose, 'R');
+    const oL = sub(L.H, L.S), oR = sub(R.H, R.S);
+    expect(oL[0] * oR[0]).toBeLessThan(0);
+    expect(Math.abs(oL[0] + oR[0])).toBeLessThan(0.03);
+    expect(Math.abs(oL[1] - oR[1])).toBeLessThan(0.03);
+  });
+  it('throws the head back', () => {
+    const base = stepOnce(STAND), { j, frame } = stepOnce({ ...STAND, zapPose: zap(0, 0) });
+    const back = (pose: readonly Vec3[]) => pose[j.index.head!]![2] - pose[j.index.neck!]![2];
+    expect(back(frame.restPose)).toBeLessThan(back(base.frame.restPose));
+  });
+  it('opens the jaw on a body that has one', () => {
+    const doc = parseBlob(brideSrc);
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    const j = makeMotionJoints(body, bindRig(body).rig.restPose);
+    if (!j) throw new Error('the bride has no motion joints');
+    expect(j.jaw).toBeDefined();
+    expect(stepOnce(STAND, j).frame.jawGape).toBe(0);
+    expect(stepOnce({ ...STAND, zapPose: zap(0, 0) }, j).frame.jawGape).toBe(ZAP_POSE.jaw);
+  });
+  it('without the star the arms stay where they were and only the trunk shakes', () => {
+    const base = stepOnce(STAND), { j, frame } = stepOnce({ ...STAND, zapPose: zap(0, 1, false) });
+    for (const side of ['L', 'R'] as const) {
+      const a = arm(j, frame.restPose, side), b = arm(j, base.frame.restPose, side);
+      expect(d(sub(a.E, a.S), sub(b.E, b.S))).toBeLessThan(1e-9);
+      expect(d(sub(a.H, a.S), sub(b.H, b.S))).toBeLessThan(1e-9);
+    }
+    expect(d(frame.restPose[j.index.neck!]!, base.frame.restPose[j.index.neck!]!)).toBeGreaterThan(1e-4);
+  });
+  it('wins over the burning flail', () => {
+    const alone = stepOnce({ ...STAND, zapPose: zap(0, 1) });
+    const both = stepOnce({ ...STAND, zapPose: zap(0, 1), burnFlail: { t: 1, seed: 5, amp: 1, fold: 0.5 } });
+    expect(both.frame.restPose).toEqual(alone.frame.restPose);
+    expect(both.frame.jawGape).toBe(alone.frame.jawGape);
   });
 });
 
