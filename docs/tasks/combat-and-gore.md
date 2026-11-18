@@ -2,6 +2,30 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The tesla arc — 2026-11-17
+
+Branch `claude/electric-arc-weapon-effect-63ed31`. Spec
+[2026-11-17-tesla-arc-design.md](../superpowers/specs/2026-11-17-tesla-arc-design.md). Three plans; the first is built.
+
+- [~] **1 The zap state** ([plan](../superpowers/plans/2026-11-17-tesla-1-zap-state.md) ·
+  [notes](../dev-notes/2026-11-17-tesla-zap/NOTES.md)): `zap.ts` (the clock), `zap-pose.ts` (the star),
+  `ZombieActor.beginZap / setArc / zapPhase / zapLook` (game-actor.ts), `game-zap.ts`. Hold the arc on a body and it
+  goes rigid in the star with a trembling trunk, glows blue-white with its mesh skeleton dark inside the glow (bright
+  on a jolt), chars from a cook of 0.6, and on a full cook (1.6 to 2.2 s) stands 0.8 s as a charred statue and dies
+  its ordinary death. Released early it recovers and keeps its char. Tests: `zap.test.ts`, `game-actor-zap.test.ts`;
+  trace `node scripts/zap-trace.mjs`.
+- [~] **Slot 9, the coil:** placeholder primitive prop, one verb (hold fire to zap the body under the crosshair;
+  straight 12 m trace, walls block it, it holds within 8 degrees of the body's centre). Nothing is drawn between the
+  prop and the body. Console: `__sdfGame.zapActor(id?)`, `unzapActor(id?)`, `zaps()`, `fireTesla(on)`, `tesla()`,
+  `boneZap(id?)`.
+- [~] **Owner look pending; stills only.** Zombie in the arena only: not seen in motion, on any other character, with
+  the procedural skeleton, in bullet time, on Night Train or a sector level. For the owner to judge: the bones nearly
+  fill the body, so the glow reads as a rim; up close the skull is a flat dark oval; the statue is glossy dark brown,
+  not ash; tapping the trigger still cooks most bodies. Known limit: the x-ray's bones draw over anything within
+  0.6 m in front of a zapped body. Every number is a first guess.
+- [ ] **2 The arc**: the bolt, forks, crawl arcs and light. No plan yet.
+- [ ] **3 The ash death**: statue, then crumble to an ash heap. No plan yet.
+
 ## Melt death in the game — 2026-11-14
 
 Branch `claude/melting-dying-animation-6cffdd`. The lab's zombie melt (X5.melt, 2026-09-03) checked, repaired and brought

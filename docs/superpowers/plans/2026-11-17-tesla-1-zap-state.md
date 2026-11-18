@@ -1,5 +1,7 @@
 # Tesla 1: The Zap State Implementation Plan
 
+> Status: executed 2026-11-17. The code departs from this plan in places; the spec and docs/dev-notes/2026-11-17-tesla-zap/NOTES.md record what was built.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Holding fire on slot 9 puts the body under the crosshair into the zap: rigid star pose with a tremor, blue-white x-ray glow with its skeleton showing, charring late, and dying when fully cooked.

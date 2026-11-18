@@ -1,6 +1,96 @@
 # Tesla arc: the zap state — build notes
 
-2026-11-17. Plan: `docs/superpowers/plans/2026-11-17-tesla-1-zap-state.md`.
+2026-11-17. Plan: `docs/superpowers/plans/2026-11-17-tesla-1-zap-state.md`. Spec:
+`docs/superpowers/specs/2026-11-17-tesla-arc-design.md` (brought in line with what was built).
+
+## Summary
+
+Plan 1 of 3 is built: the zap state on a body, fired from a placeholder on slot 9. Holding fire on a body puts it
+in a rigid star pose with a trembling trunk, glowing blue-white with its mesh skeleton showing dark inside the
+glow (bright on a jolt). The flesh chars from a cook of 0.6. On a full cook (1.6 to 2.2 s by default, rolled per
+body) the body stands as a charred statue for 0.8 s (`ZAP.statueSec`) and then dies its ordinary death. Releasing
+before that lets it recover over 0.6 s; the char it had stays. No arc is drawn between the prop and the body (plan
+2), and there is no ash death (plan 3). Neither plan is written.
+
+New modules (all paths under `src/lab/sdf-zombie/`):
+
+- `zap.ts`: the zap clock. Cook, the glow's envelope and flicker, jolts, char, the statue's time. Pure.
+- `zap-pose.ts`: the star pose (three arm variants) and the tremor, as hand targets and trunk angles. Pure.
+- `webgpu/game-zap.ts`: starts a zap on a body (`zapActor`), copies each body's zap look to its view each tick
+  (`stepZapLook`), hands each bone instance its owner's glow (`syncZapXray`), and the `zaps()` readout.
+- `webgpu/game-tesla.ts`: slot 9's harness. The placeholder prop and the one verb: find, hold or drop the target,
+  re-derived every tick.
+- `webgpu/tesla-stick.ts`: the reach (12 m) and the stick angle (8 degrees), numbers only.
+- `webgpu/skeleton-spike/zap-xray.ts`: the bone pull toward the eye and the flat bone colour, in TS and WGSL.
+- `webgpu/march/body/blocks/post/zap.wgsl.ts`: `ZAP_BLOCK` (the terms, beside the burn block), `ZAP_LIGHT_BLOCK`
+  (the flesh colour, at the end of the lighting tail) and `ZAP_LOOK`.
+- `scripts/zap-trace.mjs`: the headless trace every number below comes from.
+
+Edited to carry it: `motion-profile.ts` (`ZapTier`; the gorehound and the gutcrawler set `star: false`),
+`motion.ts` (`cfg.zapPose`), `webgpu/game-actor.ts` (the zap slot and override), `webgpu/crowd-records.ts` and
+`webgpu/zombie-gpu.ts` (the record's zap lane, the view's `zapChar`), `skeleton-spike/mesh-renderer.ts` and
+`segment-instance.ts` (`iZap`, the un-pulled world position), `webgpu/game-crowd-queries.ts` (a glowing body's
+whole skeleton is drawn), `webgpu/game-weapon-slots.ts` (key 9).
+
+To try it: `npm run dev:arena`, wait for the warm-up, key `9`, hold fire on the body. `-` and `=` cycle characters,
+`` ` `` respawns.
+
+Console seams, all on `__sdfGame`:
+
+- `zapActor(id?)`: put the arc on one body, or on every body; returns how many started.
+- `unzapActor(id?)`: take the arc off.
+- `zaps()`: `{ id, phase, glow, invert, char }` for every body the arc has touched.
+- `fireTesla(on)`: hold or release slot 9's fire. `tesla()`: `{ held, target }` (target -1 with no body).
+- `boneZap(id?)`: the `iZap` of one body's drawn bone and eye instances.
+
+## Not verified
+
+- The look in motion. Every judgement below is from stills of headless captures; nobody has played it.
+- Any character but the zombie in a capture. The `star: false` bodies (gorehound, gutcrawler) are covered by
+  `zap-pose.test.ts` only. No character sets `dies: false`, so a tier that does not die is covered by
+  `zap.test.ts` only.
+- The procedural-skeleton bone probe (`?skeleton=procedural`). Not run.
+- Bullet time.
+- Night Train, and any sector level.
+- Slot 9's wall test in a real level. `game-tesla.test.ts` stubs `sightBlocked`; the arena trace has no wall
+  between the player and the body.
+- A zapped body with a wall, a pillar or another body within 0.6 m in front of it (the pull puts the bones in
+  front of anything that close). The arena is empty.
+- A wounded body with organs showing, under the zap.
+- A burning body under the zap, and a soldier's death by the zap, in a capture. The actor tests cover the burning
+  body; the soldier has no zap test.
+- Two of the actor rules added in review have no test of their own: the floater's suppressed idle drift and the
+  downed soldier's refusal.
+- The split-PLATE pipeline (the anatomical skull's split copies, 8 of 8 vertex buffers) on a GPU with `iZap`. The
+  arena zombie's skull is the sculpted one, so the trace exercises `skeleton-bone-split` and `skeleton-eye-split`
+  only.
+- The crowd draw, beyond the two-body scenario. The trace's single-body series and its split scenario run on the
+  per-body fallback (they do not wait for the crowd program).
+- The two-body glow gate has little margin: +7.0 on the neighbour against a gate of 8 in the last run, because
+  the neighbour walks while it is measured.
+
+## Known limits
+
+- A pulled bone writes depth up to 0.6 m in front of its body: anything that close in front of a zapped body
+  (another body, a pillar, a door frame) is drawn over by the skeleton. Plan 2's arc ends on the chest, inside
+  that range.
+- Inside about 0.8 m the pull is held to a quarter of the bone's distance, so a very near body's bones stand
+  at a quarter of their distance from the eye.
+- During the fade (glow under 0.25) the lit part of the bone's mix is lit at its true place (the second review
+  pass gave that), but it is still a bone drawn in front of flesh it would normally be behind.
+- The bones nearly fill the flesh, so the glow shows as a rim round the skeleton, not as a body with bones in it.
+- From 1.1 m the flat skull is a featureless dark oval (no sockets, teeth or jaw line).
+- The statue is a glossy dark brown figure with bright highlights (the burn block's char look), not matte ash.
+- The jolts land 0.33 to 0.78 s apart, start to start, not the spec's first 0.25 to 0.7 s: the gap timer
+  (`ZAP.joltGapSec`, 0.25 to 0.7 s) does not run during the 0.08 s jolt.
+- Cook rises at 1 / `cookSec` and falls at 0.5 a second, so a body whose roll is under 2.0 s still cooks through
+  under an arc that is on half the time: tapping the trigger does not save it.
+- A tier that does not die holds at a full cook, which is a char of 1: it recovers fully charred.
+- A statue still takes hits; killed another way it drops its zap and takes that death.
+- The split batches have no vertex buffer left (8 of 8): the next per-instance value there has to ride an
+  existing buffer.
+- The burn's own ramp and char have the bleed the zap had (`max(burnCfg, record)` in `burn.wgsl.ts`); out of
+  scope here.
 
 ## Task 4: the glow on the flesh
 
@@ -389,20 +479,3 @@ jolt 18.05 (3.47). Pipelines 126 before, 126 after; slot 9's scenario 125 and 12
 `main` at e8fb57110; the branch now carries Task 6 as well. The branch is 13 and 54 ms over `main` in these
 two pairs. Earlier pairs on the same day had `main` between 944 and 1092, so this is inside what one checkout
 spreads over, but it is the first time the branch is the slower of both pairs.
-
-## Known limits
-
-- A pulled bone writes depth up to 0.6 m in front of its body: anything that close in front of a zapped body
-  (another body, a pillar, a door frame) is drawn over by the skeleton. Not looked at in a frame.
-- Inside about 0.8 m the pull is held to a quarter of the bone's distance, so a very near body's bones stand
-  at a quarter of their distance from the eye.
-- During the fade (glow under 0.25) the lit part of the bone's mix is lit at its true place (the second pass
-  gave that), but it is still a bone drawn in front of flesh it would normally be behind.
-- The split-PLATE pipeline (the anatomical skull's split copies, 8 of 8 vertex buffers) has not been run on a
-  GPU with `iZap`: the arena zombie's skull is the sculpted one, so the trace exercises `skeleton-bone-split`
-  and `skeleton-eye-split` only.
-- The trace's single-body series and the split scenario run on the per-body fallback (they do not wait for the
-  crowd program); only the two-body scenario draws through the crowd material.
-- From 1.1 m the flat skull has no features (sockets, teeth).
-- The burn's own ramp and char have the bleed the zap had (`max(burnCfg, record)` in `burn.wgsl.ts`); out of
-  scope here.
