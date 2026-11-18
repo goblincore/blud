@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 32 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 33 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -940,3 +940,4 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…
 - `wound-grid.ts` — THE CRATER GRID, pure half (`?woundgrid`; docs/superpowers/specs/2026-11-11-wound-crater-grid-design.md, stages 1 and 2).
 - `wound-volume-stamp.ts` — THE BAKED WOUND VOLUME, pure half (`?woundvol`; docs/superpowers/specs/2026-11-11-baked-wound-volume-design.md, "Revision 2").
+- `zap.ts` — THE ZAP CLOCK (spec 2026-11-17-tesla-arc-design.md).

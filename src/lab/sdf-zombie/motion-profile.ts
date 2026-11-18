@@ -141,6 +141,8 @@ export interface MotionProfile {
   physicsDeath?: boolean;
   /** HOW THIS BODY BURNS (burn-behaviour.ts): absent fields take BURN_TIER_DEFAULT. */
   burn?: Partial<BurnTier>;
+  /** HOW THIS BODY TAKES THE TESLA ARC (zap.ts): absent fields take ZAP_TIER_DEFAULT. */
+  zap?: Partial<ZapTier>;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */
@@ -162,6 +164,10 @@ export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | nul
 
 export function resolveBurnTier(profile: Pick<MotionProfile, 'burn'> | null | undefined): BurnTier {
   return { ...BURN_TIER_DEFAULT, ...(profile?.burn ?? {}) };
+}
+
+export function resolveZapTier(profile: Pick<MotionProfile, 'zap'> | null | undefined): ZapTier {
+  return { ...ZAP_TIER_DEFAULT, ...(profile?.zap ?? {}) };
 }
 
 /**
@@ -219,6 +225,19 @@ export interface BurnTier {
   fall: boolean;
 }
 export const BURN_TIER_DEFAULT: BurnTier = Object.freeze({ panicSec: [3, 6] as const, speed: 1.3, flail: 1, dies: true, fall: true });
+
+/** How a character takes the tesla arc: how long it cooks, whether that kills it, and how it stands. */
+export interface ZapTier {
+  /** Seconds of arc to a full cook, rolled per body. */
+  cookSec: readonly [number, number];
+  /** A full cook kills this body. False: it holds at full cook while the arc stays, then recovers. */
+  dies: boolean;
+  /** Seconds the glow, tremor and pose take to leave once the arc does. */
+  recoverSec: number;
+  /** It takes the star pose. False (a non-biped rig, the gorehound): tremor only, arms left alone. */
+  star: boolean;
+}
+export const ZAP_TIER_DEFAULT: ZapTier = Object.freeze({ cookSec: [1.6, 2.2] as const, dies: true, recoverSec: 0.6, star: true });
 
 const BURN_SOLDIER: Partial<BurnTier> = { panicSec: [2.5, 4.5], speed: 1.4 };
 const BURN_HEAVY: Partial<BurnTier> = { panicSec: [5, 8], speed: 1.1, flail: 0.6, dies: false };
@@ -536,6 +555,7 @@ export const GOREHOUND_PROFILE: MotionProfile = {
   physicsDeath: false,
   name: 'gorehound',
   burn: BURN_BEAST,
+  zap: { star: false },
   gait: { walk: GOREHOUND, run: GOREHOUND },
   runBand: { from: Infinity, to: Infinity },
   cruise: 1.3,
@@ -553,6 +573,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
   physicsDeath: false,
   name: 'gutcrawler',
   burn: BURN_BEAST,
+  zap: { star: false },
   gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
   runBand: { from: Infinity, to: Infinity },
   cruise: 0.75,
