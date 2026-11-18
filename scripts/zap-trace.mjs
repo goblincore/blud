@@ -323,6 +323,8 @@ await send('Emulation.setDeviceMetricsOverride', { width: 960, height: 600, devi
 async function bootGame(query = '') {
   const q = new URLSearchParams(query.replace(/^\?/, ''));
   if (!q.has('seed')) q.set('seed', '20261117');
+  // This trace's gates were written against the baseline look; the game now starts in look c.
+  if (!q.has('zapLook')) q.set('zapLook', 'a');
   await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?${q.toString()}` });
   let ok = false;
   for (let i = 0; i < 240 && !ok; i++) {

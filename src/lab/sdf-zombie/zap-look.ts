@@ -46,8 +46,10 @@ export const ZAP_LOOKS: Readonly<Record<ZapLookId, ZapLookDef>> = Object.freeze(
 export const ZAP_LOOK_IDS = Object.freeze(Object.keys(ZAP_LOOKS) as ZapLookId[]);
 export const isZapLookId = (v: unknown): v is ZapLookId => typeof v === 'string' && (ZAP_LOOK_IDS as readonly string[]).includes(v);
 
+/** The look the game starts in: c, the owner's pick after playing all three (2026-11-18). */
+export const ZAP_LOOK_DEFAULT: ZapLookId = 'c';
 /** The live variant. Plain module state: a dev A/B switch, read by the actor's zap step and the renderer glue. */
-let live: ZapLookId = 'a';
+let live: ZapLookId = ZAP_LOOK_DEFAULT;
 export const zapLook = (): ZapLookDef => ZAP_LOOKS[live];
 /** Set the live variant; anything that is not a variant's name leaves it as it was. Returns the live id. */
 export function setZapLook(id: unknown): ZapLookId {

@@ -1,8 +1,8 @@
 // src/lab/sdf-zombie/webgpu/game-zap.test.ts
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameContext } from './game-context';
 import { stepZapLook, syncZapXray, zapLookSeam } from './game-zap';
-import { decodeZapLane, setZapLook } from '../zap-look';
+import { ZAP_LOOK_DEFAULT, decodeZapLane, setZapLook } from '../zap-look';
 
 type Look = { glow: number; invert: boolean; char: number } | null;
 const body = (look: Look) => {
@@ -20,6 +20,9 @@ const world = (actors: ReturnType<typeof body>[]) => {
 };
 
 describe('the zap look in the game', () => {
+  // These cases read the baseline's lane (the signed glow); the game's default look is another variant.
+  beforeEach(() => { setZapLook('a'); });
+  afterEach(() => { setZapLook(ZAP_LOOK_DEFAULT); });
   it('writes the signed glow to the view and the char to its holding slot, and clears both when the zap ends', () => {
     const a = body({ glow: 0.75, invert: false, char: 0.2 }), b = body(null);
     a.view.uniforms.burnCfg.value.z = 0.1;   // the burn's own char
@@ -93,7 +96,6 @@ describe('the zap look in the game', () => {
   });
 
   describe('the look variants (zap-look.ts)', () => {
-    afterEach(() => { setZapLook('a'); });
 
     it('the baseline look writes the signed glow; a variant\'s code rides the lane with it', () => {
       const a = body({ glow: 0.75, invert: true, char: 0 });

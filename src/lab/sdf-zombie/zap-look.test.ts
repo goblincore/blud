@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/zap-look.test.ts
 import { afterEach, describe, expect, it } from 'vitest';
 import { createZap, stepZap, ZAP } from './zap';
-import { ZAP_LOOKS, ZAP_LOOK_IDS, decodeZapLane, encodeZapLane, setZapLook, strobeRate, zapLook, type ZapLookId } from './zap-look';
+import { ZAP_LOOKS, ZAP_LOOK_DEFAULT, ZAP_LOOK_IDS, decodeZapLane, encodeZapLane, setZapLook, strobeRate, zapLook, type ZapLookId } from './zap-look';
 
 const DT = 1 / 60;
 const TIER = { cookSec: [50, 60] as [number, number], dies: false, recoverSec: 0.6, star: true, xray: true };
@@ -21,10 +21,11 @@ const strobe = (id: ZapLookId, seed: number, sec = 10) => {
 };
 
 describe('the zap look variants', () => {
-  afterEach(() => { setZapLook('a'); });
+  afterEach(() => { setZapLook(ZAP_LOOK_DEFAULT); });
 
-  it('the baseline is the default, with code 0 and the 2026-11-17 strobe', () => {
-    expect(zapLook().id).toBe('a');
+  it('the game starts in look c; the baseline keeps code 0 and the 2026-11-17 strobe', () => {
+    expect(ZAP_LOOK_DEFAULT).toBe('c');
+    expect(zapLook().id).toBe('c');
     expect(ZAP_LOOKS.a.code).toBe(0);
     expect(ZAP_LOOKS.a.strobe.joltSec).toEqual([ZAP.joltSec, ZAP.joltSec]);
     expect(ZAP_LOOKS.a.strobe.gapSec).toEqual([...ZAP.joltGapSec]);
