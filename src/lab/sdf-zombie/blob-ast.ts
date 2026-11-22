@@ -52,6 +52,13 @@ export interface BlobBone {
    */
   hinge?: number;
   side: number;
+  /** `vec=(x,y,z)`: an explicit world direction, replacing dir/pitch/tilt (generated skeletons). */
+  vec?: [number, number, number];
+  /** `vecR=`: the `.r` copy's direction inside a mirror block (asymmetric pose). */
+  vecR?: [number, number, number];
+  /** `off=(x,y,z)`: head offset from the parent's tail; `offR=` the `.r` copy's. */
+  off?: [number, number, number];
+  offR?: [number, number, number];
   mirror: boolean;
   at: number | null;
   src: BlobLine;
@@ -138,6 +145,10 @@ export interface BlobPart {
    *  For garments that hang off a bone past its joints (a floor-length robe
    *  on the pelvis would otherwise pin its hem to an ankle). */
   rigid: boolean;
+  /** The bare word `skinned` (with `rigid`): an end that lies past the bone's own end rides the neighbouring bone
+   *  across that joint, and a prim on a non-skull bone never joins the rigid head. For FITTED bodies (gargoyle-hd),
+   *  where many capsules span joints; opt-in so the authored cast poses exactly as before. */
+  skinned: boolean;
   /** `when=alive` / `when=dead`: this prim exists only while the character
    *  lives, or only once it has died (a hood that falls back off the head).
    *  Null = always. See PrimDef.when. */

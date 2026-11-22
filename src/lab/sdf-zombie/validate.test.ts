@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, BASE_PRIM_STRIDE, BONE_SEG_MAX, primStride, bodyPrimStride, type Body } from './validate';
+import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, MAX_GROUP_PRIMS, BASE_PRIM_STRIDE, BONE_SEG_MAX, primStride, bodyPrimStride, type Body } from './validate';
+import { packBody } from './pack';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -13,7 +14,8 @@ import { MAX_WOUNDS } from './damage';
 
 describe('shader caps', () => {
   it('bakes the same ceilings into the GLSL that the CPU side enforces', () => {
-    expect(FRAG).toContain(`#define MAX_PRIMS ${MAX_PRIMS}`);
+    // The WebGL lab keeps its uniform arrays at 256 (march.glsl.ts); the WebGPU ceiling above it is a texture width.
+    expect(FRAG).toContain(`#define MAX_PRIMS ${Math.min(MAX_PRIMS, 256)}`);
     expect(FRAG).toContain(`#define MAX_CLUSTERS ${MAX_CLUSTERS}`);
   });
 
@@ -44,8 +46,9 @@ describe('shader caps', () => {
 // texture is only as wide as its own total needs, so the shipped cast (all
 // <= 128 flesh + bone) keeps the 128-wide textures and their upload cost.
 describe('per-body data texture width', () => {
-  it('raises the ceiling to 256 without widening the base texture', () => {
-    expect(MAX_PRIMS).toBe(256);
+  it('raises the ceiling to 2048 without widening the base texture', () => {
+    // 2048 (gargoyle-hd): ~1000 fitted flesh prims plus their derived bones. Only a ceiling — textures are per-body.
+    expect(MAX_PRIMS).toBe(2048);
     expect(BASE_PRIM_STRIDE).toBe(128);
   });
 
@@ -57,8 +60,9 @@ describe('per-body data texture width', () => {
     expect(primStride(192)).toBe(192);
     expect(primStride(193)).toBe(256);
     expect(primStride(256)).toBe(256);
+    expect(primStride(400)).toBe(448);
     // Over the ceiling is a validateBody error; the width still clamps.
-    expect(primStride(400)).toBe(MAX_PRIMS);
+    expect(primStride(MAX_PRIMS + 500)).toBe(MAX_PRIMS);
   });
 
   it('keeps the cluster-bounds and wound columns inside the base width', () => {
@@ -169,15 +173,21 @@ describe('validateBody', () => {
     expect(validateBody(ok, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 }).join(' ')).not.toMatch(/exceeds shader ceiling/);
   });
 
-  // Regression: the total can sit well under MAX_PRIMS while ONE cluster runs
-  // past the shader's 64-iteration fold. Before MAX_CLUSTER_PRIMS this passed
-  // validation and the surface silently lost every primitive past the 64th.
-  it('fails when a single cluster exceeds the per-cluster fold ceiling', () => {
+  // Regression, REVISED (gargoyle-hd, 2026-11-17): the shader's 64-iteration loop is per GROUP, and pack.ts now
+  // splits a group at MAX_GROUP_PRIMS (64), so one cluster may hold far more than 64 prims (up to
+  // MAX_CLUSTER_GROUPS groups). A cluster past the old 64 must validate clean AND pack into several groups, none
+  // over the fold — before the cap it silently lost every primitive past the 64th.
+  it('splits a cluster past the 64-prim fold into groups instead of rejecting it', () => {
     const fat = Array.from({ length: MAX_CLUSTER_PRIMS + 1 }, (_, i) =>
       prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
-    expect(fat.length).toBeLessThanOrEqual(MAX_PRIMS); // total is legal…
-    const errs = validateBody(assignClusters(fat), { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
-    expect(errs.join(' ')).toMatch(/per-cluster shader ceiling/i); // …the cluster is not
+    const body = assignClusters(fat);
+    const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).not.toMatch(/per-cluster shader ceiling/i);
+    const packed = packBody({ ...body, bonePrims: [] } as never);
+    const counts = Array.from({ length: packed.groupCount }, (_, g) => packed.groupRange[g * 4 + 1]!);
+    expect(counts.length).toBeGreaterThan(1);
+    expect(Math.max(...counts)).toBeLessThanOrEqual(MAX_GROUP_PRIMS);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(fat.length);
   });
 
   it('fails when a cluster is not contiguous in the primitive array', () => {

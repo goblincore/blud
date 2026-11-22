@@ -28,7 +28,7 @@ export const GLSL_MAX_WOUNDS = 16;
 export const FRAG = /* glsl */ `
 precision highp float;
 
-#define MAX_PRIMS ${MAX_PRIMS}
+#define MAX_PRIMS ${Math.min(MAX_PRIMS, 256)}
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
 #define MAX_WOUNDS ${GLSL_MAX_WOUNDS}
 uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius

@@ -18,8 +18,8 @@ export const RAY_CULL_SLACK = '0.07';
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
 
-/** Rows a body's band takes. The crater grid (`?woundgrid`, wound-grid-flag.ts) adds its own after the 26. */
-export const DATA_ROWS = 26 + (WOUND_GRID ? WG_ROWS : 0);
+/** Rows a body's band takes. The crater grid (`?woundgrid`, wound-grid-flag.ts) adds its own after the 28. */
+export const DATA_ROWS = 28 + (WOUND_GRID ? WG_ROWS : 0);
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -124,6 +124,11 @@ export const ROW_PREV_QUAT = 24;
  *  ROW_WOUND is (midpoint, half-length), ROW_WOUND_CAP is (inward unit, depth), and ROW_WOUND_META.w carries the
  *  cut's sag (m: how far the skin falls away under the chord) instead of the crater rim offset scale. */
 export const ROW_WOUND_CUT = 25;
+/** The rest->posed rotation of a `rigid` prim's bone (pack.ts primFrame, Primitive.skinQuat); zeros = unwritten.
+ *  Read only by the residual layer's rest point (fields/carves.wgsl.ts restPointSkin). */
+export const ROW_PRIM_FRAME = 26;
+/** A joint-spanning prim's endpoint-B frame (pack.ts primFrameB, Primitive.skinQuatB); zeros = single frame. */
+export const ROW_PRIM_FRAME_B = 27;
 
 /**
  * Sphere-trace step multiplier inside applyWounds' nearWound zone.

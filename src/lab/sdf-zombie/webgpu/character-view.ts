@@ -23,6 +23,7 @@
 // caller for now: the lab wears ONE sheet across the hero AND the crowd, and
 // that fan-out is lab plumbing this pass leaves alone — the lab calls
 // compileCharacterSheet() for the data and keeps the GL half.
+import { applyResidualUniforms, residualTexture } from './residual-volume';
 import * as THREE from 'three/webgpu';
 import { characterEntry, type CharacterEntry, type FaceSheet } from '../character-registry';
 import { parseBlob } from '../blob-parse';
@@ -697,7 +698,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const body = buildCharacterBody(
     entry, opts.start, opts.errors, opts.face, opts.override, out, opts.boneRatio,
   );
-  const gpu = createZombieGpuView(body, typeof opts.gpu === 'function' ? opts.gpu(body) : opts.gpu);
+  const gpuOpts = typeof opts.gpu === 'function' ? opts.gpu(body) : opts.gpu;
+  const gpu = createZombieGpuView(body, entry.residual ? { ...gpuOpts, volumeTex: residualTexture(entry.residual) } : gpuOpts);
+  if (entry.residual) applyResidualUniforms(gpu.uniforms, entry.residual.manifest, opts.start);
 
   // The character's polygon kit and held prop, on the DEFAULT layer with the
   // floor and the reference cube — NOT SDF_LAYER. That is what puts them in

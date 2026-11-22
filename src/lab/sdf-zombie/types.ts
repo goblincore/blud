@@ -119,6 +119,16 @@ export interface BoneDef {
   lengthR?: number;
   /** Lateral (x) offset of this bone's head from its parent's tail. Negated on the mirrored side. */
   side?: number;
+  /**
+   * Full 3D offset of this bone's head from its parent's tail (`.blob` `off=`), added on top of `side`. Lets a
+   * generated skeleton (gargoyle-hd, fitted to a posed mesh) put a joint exactly where the mesh has it. Mirrored:
+   * x-negated on the `.r` copy unless `offsetR` is given.
+   */
+  offset?: Vec3;
+  /** Mirrored bones only (`vecR=`): the `.r` copy's direction, for an ASYMMETRIC pose. Absent = `dir` x-negated. */
+  dirR?: Vec3;
+  /** Mirrored bones only (`offR=`): the `.r` copy's head offset. Absent = `offset` x-negated. */
+  offsetR?: Vec3;
   /** When true, expands into `<name>.l` and `<name>.r`. */
   mirror?: boolean;
   /** The `jaw` bone only: the jaw's hinge as a fraction along the skull bone (jaw.ts). Absent = JAW_HINGE.at. */
@@ -305,6 +315,8 @@ export interface PrimDef {
    * would otherwise bind the hem end to an ankle and stretch with one leg.
    */
   rigid?: boolean;
+  /** See BlobPart.skinned: joint-crossing ends and no rigid-head capture (rig-bind.ts). */
+  skinned?: boolean;
   /**
    * Life-state gate (cultist hood, 2026-09-24). 'alive': present only until
    * the character dies; 'dead': hidden (dead) until it dies, then shown. The
@@ -446,6 +458,13 @@ export interface Primitive {
    * (a centre-chest slug resolved at the neck root and decapitated, 2026-09-22).
    */
   poseOrient?: boolean;
+  /** The rig's REST-to-POSED rotation of the bone this prim rides rigidly (`rigid` prims; rig-bind applyRig). Packed into
+   *  ROW_PRIM_FRAME so the residual layer (gargoyle-hd) maps a posed point back to rest with the bone's FULL frame:
+   *  restPoint's per-prim swing differs between two prims on one bone, which tore the residual at every flip. */
+  skinQuat?: Quat;
+  /** A JOINT-SPANNING prim's second frame: skinQuat is endpoint A's bone, this is endpoint B's (rig-bind EndpointBind.frame).
+   *  The residual's rest point blends the two along the capsule (ROW_PRIM_FRAME_B; restPointSkin). */
+  skinQuatB?: Quat;
   /** See PrimDef.color. Carried through mirror, resolve and the rig untouched. */
   color?: Vec3;
   /** See PrimDef.gloss. */
@@ -463,6 +482,8 @@ export interface Primitive {
   core?: boolean;
   /** See PrimDef.rigid. */
   rigid?: boolean;
+  /** See PrimDef.skinned. */
+  skinned?: boolean;
   /** See PrimDef.when. */
   when?: 'alive' | 'dead';
   /** See PrimDef.morphs. Carried through mirror and resolve; applyRig reads it, packBody never does. */

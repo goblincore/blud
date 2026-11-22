@@ -21,7 +21,7 @@ import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
 import { startReload, fire } from './game-weapon-rig';
 import { requestSlot, slotForKey } from './game-weapon-slots';
 import { type DemoFrame } from './demo-recorder';
-import { arenaRespawn } from './game-arena';
+import { arenaRespawn, arenaToggleLights } from './game-arena';
 import { toggleBulletTime } from '../bullet-time';
 import { freeAimFor, mouselookTurn, pinLook } from './aim-style';
 
@@ -135,11 +135,12 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     else if (ctx.weapon.slotState.live === 'shotgun' && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
   }
   if (pressed('KeyF')) toggleFlashlight(ctx);          // the flashlight, once the player has it
-  // THE TEST ARENA (game-arena.ts; a level with "arena": true): ` respawns the enemy, - / = step to another character.
+  // THE TEST ARENA (game-arena.ts; a level with "arena": true): ` respawns the enemy, - / = step to another character, L the lamps.
   if (ctx.world.level.def?.arena) {
     if (pressed('Backquote')) arenaRespawn(ctx, 0);
     if (pressed('Minus')) arenaRespawn(ctx, -1);
     if (pressed('Equal')) arenaRespawn(ctx, 1);
+    if (pressed('KeyL')) arenaToggleLights(ctx);
   }
   // BULLET TIME (bullet-time.ts), dev trigger: the world slows to a crawl, the player does not.
   if (pressed('KeyQ')) {

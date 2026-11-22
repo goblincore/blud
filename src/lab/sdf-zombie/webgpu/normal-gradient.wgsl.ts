@@ -10,7 +10,7 @@ import {
   ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
 import { ROW_PRIM_CLIP, ROW_PRIM_SHELL, ROW_PRIM_WARP } from './march/layout';
-import { MAX_PRIMS } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTER_GROUPS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { WOUND_GRID } from './march/wound-grid-flag';
 import { NG_WOUND_ANALYTIC, NG_WOUND_COMPLETE, NG_WOUND_RAGGED, NG_WOUND_RIM } from './march/normal-wound-flag';
@@ -823,7 +823,7 @@ ${TR ? `      if (f32(gTileRef[e] >> 8u) * ${DATA_ROWS}.0 != f32(gBand)) { conti
     let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + gBand), 0);
     let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + gBand), 0);
     let clusterSkipped = length(p - cbounds.xyz) - cbounds.w > (d.x + gInstCounts.w * 4.0) * gspan.z;
-    for (var gi = 0; gi < 64; gi = gi + 1) {
+    for (var gi = 0; gi < ${MAX_CLUSTER_GROUPS}; gi = gi + 1) {
       if (gi >= i32(gspan.y)) { break; }
       let g = i32(gspan.x) + gi;
       let grp = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE} + gBand), 0);

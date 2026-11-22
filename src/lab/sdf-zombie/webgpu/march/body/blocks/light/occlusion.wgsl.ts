@@ -16,6 +16,12 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // one guarded by an explicit flag rather than by its own amplitude, because
   // there is no "AO strength" to turn down.
   var ao = 1.0;
+  // CAVITY (gargoyle-hd residual): where the residual pulled the surface in, darken by depth. Read BEFORE the probes
+  // below overwrite it; volumeInvExtent.y is the residual clamp. Zero for every other body (gResidualOff stays 0).
+  // A SATURATED residual (near -clamp) is not a crease but a mismatch: a prim poking past the sculpt where a joint
+  // bends (the walk's wrists), so the term fades back out there instead of painting the bulge black.
+  let cavIn = clamp(-gResidualOff / max(volumeInvExtent.y, 1e-4), 0.0, 1.0);
+  let cavity = smoothstep(0.05, 0.45, cavIn) * (1.0 - smoothstep(0.6, 0.95, cavIn));
   // Scatter (k = 0) and AO (k = 1) share ONE mapBody call site
   // (cold-compile 2026-09-21): each call site is an inlined copy of the
   // field in the Metal compile. Same probe points, same gates, same math.
@@ -41,6 +47,7 @@ ${PROBE_LEAN ? `      // THE LEAN PROBE (probe-lean-flag.ts): on the tile path t
       }
     }
   }
+  ao = ao * (1.0 - 0.55 * cavity);
 
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24

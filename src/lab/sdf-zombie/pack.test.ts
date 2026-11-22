@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, boundGroups, W_ADD, W_BONE, W_DEAD, W_ORGAN } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, boundGroups, bodyBoundGroups, HERO_GROUPS, W_ADD, W_BONE, W_DEAD, W_ORGAN } from './pack';
+import { TILE_REF_GROUPS } from './webgpu/march/tile-ref-flag';
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
@@ -565,6 +566,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'imp.blob': 2,
     // The two red ember eyes in his slanted sockets.
     'tallow.blob': 2,
+    // The two red eyes in its sockets (gargoyle-hd spike, 2026-11-17).
+    'gargoyle-hd.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
@@ -1266,6 +1269,23 @@ describe('group cluster id (per-limb accumulators, 2026-09-21)', () => {
       const cluster = body.clusters.findIndex(c => start >= c.start && start < c.start + c.count);
       expect(Math.round(((w % 1) + 1e-6) * 32) - 1).toBe(cluster);
       expect(Math.trunc(w + 0.5)).toBe(Math.floor(w));
+    }
+  });
+});
+
+// HERO BODIES (gargoyle-hd perf pass, 2026-11-17): a scan-fitted body regroups coarsely so it fits the crowd path's
+// group index (else it falls back to the per-body fragment march, ~2.5x the cost), and no other character is near the
+// switch, so the rest of the cast keeps its fine groups (pack-golden pins the bytes).
+describe('hero bound groups', () => {
+  const total = (src: string) => bodyBoundGroups(buildBody(compileBlob(parseBlob(src)))).reduce((n, g) => n + g.length, 0);
+  it('gargoyle-hd fits the crowd group index', () => {
+    const n = total(CHARACTERS_RAW['./characters/gargoyle-hd.blob']!);
+    expect(n).toBeLessThanOrEqual(TILE_REF_GROUPS);
+  });
+  it('every other character stays well under the switch', () => {
+    for (const [path, src] of Object.entries(CHARACTERS_RAW)) {
+      if (path.endsWith('gargoyle-hd.blob')) continue;
+      expect(total(src), path).toBeLessThanOrEqual(HERO_GROUPS * 0.75);
     }
   });
 });
