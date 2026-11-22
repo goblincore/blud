@@ -41,8 +41,9 @@ function regionFor(w: Wound, rest: BuildResult): number {
   return (upper ? 0 : 2) + (front ? 0 : 1);
 }
 
-/** Four shared-preset regions; at most eight cutters and MAX_WOUNDS total rows. */
-export function createTorsoWounds() {
+/** Four shared-preset regions; at most eight cutters and `cap` total rows. `cap` must be the wound ring's own
+ *  (character-view WOUND_RING_CAP: 128 under the crater grid): a smaller one hides wounds the ring still holds. */
+export function createTorsoWounds(cap: number = MAX_WOUNDS) {
   const regions: (Region | null)[] = Array(TORSO_REGION_COUNT).fill(null);
   let timeMs = 0;
   let fallback: Wound[] = [];
@@ -52,7 +53,7 @@ export function createTorsoWounds() {
     record(w: Wound, rest: BuildResult, allowPreset = true) {
       const p = rest.prims[w.primIdx];
       if (!allowPreset || w.type === 'burn' || p?.limb !== 'torso' || !alive(w, rest)) {
-        fallback = [...fallback, { ...w }].slice(-MAX_WOUNDS);
+        fallback = [...fallback, { ...w }].slice(-cap);
         return;
       }
       const id = regionFor(w, rest);
@@ -95,7 +96,7 @@ export function createTorsoWounds() {
       }
       // Reserving both cutter slots per live region avoids extra evictions
       // halfway through that region's light-to-heavy blend.
-      return [...fallback.filter(w => alive(w, body)).slice(-(MAX_WOUNDS - reserved)), ...cuts];
+      return [...fallback.filter(w => alive(w, body)).slice(-(cap - reserved)), ...cuts];
     },
     snapshot: () => regions.map(r => r ? { ...r.state } : null),
   };

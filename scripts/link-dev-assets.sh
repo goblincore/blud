@@ -45,6 +45,18 @@ for src in "$primary"/public/assets/*/; do
   linked=$((linked + 1))
 done
 
+# Converted Doom maps (scripts/levels/doom_map.py output, gitignored like the
+# Blood placeholders) live as files inside the TRACKED levels/ dir, so the loop
+# above never sees them. Link each one that is missing here.
+for src in "$primary"/public/assets/levels/doom-*.level.json; do
+  [ -e "$src" ] || continue
+  dest="$here/public/assets/levels/$(basename "$src")"
+  [ -e "$dest" ] || [ -L "$dest" ] && continue
+  ln -s "$src" "$dest"
+  echo "  linked levels/$(basename "$src")"
+  linked=$((linked + 1))
+done
+
 for name in gibs-placeholder audio-placeholder arena-placeholder weapons vfx; do
   [ -e "$here/public/assets/$name" ] || { echo "  STILL MISSING: $name" >&2; missing=$((missing + 1)); }
 done

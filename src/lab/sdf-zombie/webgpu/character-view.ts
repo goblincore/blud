@@ -416,6 +416,10 @@ export interface WoundRing {
   dispose(): void;
 }
 
+/** The most wounds a ring holds (and so the rows a body's wound upload must carry): the crater grid keeps
+ *  WG_MAX_WOUNDS, the list without it MAX_WOUNDS. A render list cut shorter than this hides live wounds. */
+export const WOUND_RING_CAP: number = WOUND_GRID ? WG_MAX_WOUNDS : MAX_WOUNDS;
+
 /** Baked wounds a ring remembers for the rules that read wounds (WoundRing.baked). */
 export const MAX_BAKED_RECORD = 256;
 
