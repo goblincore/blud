@@ -157,7 +157,8 @@ describe('hanging-arm anatomy regressions', () => {
   const arm = body.clusters.find(c => c.limb === 'armL')!;
   const armAdds: number[] = [];
   for (let i = arm.start; i < arm.start + arm.count; i++) {
-    if (body.prims[i]!.op !== 'sub') armAdds.push(i);
+    // Live adds: a far LOD stand-in (PrimDef.lod) is built dead and never joins the chain.
+    if (body.prims[i]!.op !== 'sub' && !body.prims[i]!.dead) armAdds.push(i);
   }
 
   it('chainOrder covers EVERY add prim of the arm, in authored root→tip order', () => {

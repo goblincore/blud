@@ -94,8 +94,10 @@ body
   # A body under DETAIL_MIN_PX (lod.ts, ~2 m) draws these two `lod=far` stand-ins instead: one straight capsule over
   # the four fingers' mean root and tip, flattened across them (wide), and the thumb unbent. Same hand length and
   # hook at a glance, two cheap prims. They are built dead, so hits, hulls and gibs only ever see the fingers.
-  bar  arm on foreArm  from=1.27 to=1.54 r=0.0125 r2=0.0112 wide=3.4 deep=0.9 offset=(0.0018,0.0013,-0.0001) tip=(-0.0009,0.0174,-0.0349) lod=far blend=0.006 mirror
-  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.0455,-0.0074,-0.0115) tip=(-0.0117,0.0091,-0.0265) lod=far blend=0.006 mirror
+  # ~20% BIGGER than the fingers' own mass (owner playtest 2026-11-22: the far hand read "a little small"): radii
+  # and length x1.2 (to= past the fingers', tip x1.2), so at 2+ m, where a finger is 2-3 px, the hand still reads.
+  bar  arm on foreArm  from=1.27 to=1.60 r=0.0150 r2=0.0134 wide=3.4 deep=0.9 offset=(0.0018,0.0013,-0.0001) tip=(-0.0011,0.0209,-0.0419) lod=far blend=0.006 mirror
+  bar  arm on foreArm  from=1.06 to=1.35 r=0.0174 r2=0.0114 offset=(-0.0455,-0.0074,-0.0115) tip=(-0.014,0.0109,-0.0318) lod=far blend=0.006 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis

@@ -74,8 +74,8 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'foreArm',  at: 1.25, capTo: 1.47, radius: 0.0105, radiusB: 0.0072, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0.0336, 0.005, -0.0003], tip: [0.0154, 0.0171, -0.0289], bend: [0.0059, -0.0116, 0.0136], lod: 'near' },
     { bone: 'foreArm',  at: 1.06, capTo: 1.3, radius: 0.0145, radiusB: 0.0095, scale: [1, 1, 1], blendK: 0.006, limb: 'arm', mirror: true, offset: [-0.0455, -0.0074, -0.0115], tip: [-0.0117, 0.0091, -0.0265], bend: [-0.0047, -0.0084, 0.0084], lod: 'near' },
     // The far LOD stand-ins (zombie.blob DISTANCE LOD): built dead, drawn only on a body small on screen.
-    { bone: 'foreArm',  at: 1.27, capTo: 1.54, radius: 0.0125, radiusB: 0.0112, scale: [3.4, 1, 0.9], blendK: 0.006, limb: 'arm', mirror: true, offset: [0.0018, 0.0013, -0.0001], tip: [-0.0009, 0.0174, -0.0349], lod: 'far' },
-    { bone: 'foreArm',  at: 1.06, capTo: 1.3, radius: 0.0145, radiusB: 0.0095, scale: [1, 1, 1], blendK: 0.006, limb: 'arm', mirror: true, offset: [-0.0455, -0.0074, -0.0115], tip: [-0.0117, 0.0091, -0.0265], lod: 'far' },
+    { bone: 'foreArm',  at: 1.27, capTo: 1.6, radius: 0.015, radiusB: 0.0134, scale: [3.4, 1, 0.9], blendK: 0.006, limb: 'arm', mirror: true, offset: [0.0018, 0.0013, -0.0001], tip: [-0.0011, 0.0209, -0.0419], lod: 'far' },
+    { bone: 'foreArm',  at: 1.06, capTo: 1.35, radius: 0.0174, radiusB: 0.0114, scale: [1, 1, 1], blendK: 0.006, limb: 'arm', mirror: true, offset: [-0.0455, -0.0074, -0.0115], tip: [-0.014, 0.0109, -0.0318], lod: 'far' },
 
     // Legs — thigh, shin, ankle, foot (heel + sole down to the floor; see zombie.blob).
     // The thigh starts 0.18 down and tapers (2026-11-05; see zombie.blob): no flesh ball left at the hip.
