@@ -1,0 +1,213 @@
+{
+  "when": "2026-10-27T21:49:07.460Z",
+  "n": 0,
+  "closeD": 1.3,
+  "qs": "",
+  "census": {
+    "close/zombie": {
+      "walk": {
+        "marched": 35804,
+        "hits": 27249,
+        "steps": 133456,
+        "prims": 724746,
+        "hitPrims": 438561
+      },
+      "all": {
+        "marched": 27249,
+        "hits": 27249,
+        "steps": 78925,
+        "prims": 778391,
+        "hitPrims": 778391
+      },
+      "totalPrims": 1064576
+    },
+    "far/zombie": {
+      "walk": {
+        "marched": 1928,
+        "hits": 1373,
+        "steps": 7501,
+        "prims": 39649,
+        "hitPrims": 21371
+      },
+      "all": {
+        "marched": 1373,
+        "hits": 1373,
+        "steps": 3638,
+        "prims": 40974,
+        "hitPrims": 40974
+      },
+      "totalPrims": 59252
+    },
+    "back/zombie": {
+      "walk": {
+        "marched": 33014,
+        "hits": 25563,
+        "steps": 119951,
+        "prims": 589150,
+        "hitPrims": 336327
+      },
+      "all": {
+        "marched": 25563,
+        "hits": 25563,
+        "steps": 69427,
+        "prims": 611672,
+        "hitPrims": 611672
+      },
+      "totalPrims": 864495
+    },
+    "head/zombie": {
+      "walk": {
+        "marched": 21492,
+        "hits": 16661,
+        "steps": 78432,
+        "prims": 402273,
+        "hitPrims": 243361
+      },
+      "all": {
+        "marched": 16661,
+        "hits": 16661,
+        "steps": 47819,
+        "prims": 450494,
+        "hitPrims": 450494
+      },
+      "totalPrims": 609406
+    },
+    "close/cultist": {
+      "walk": {
+        "marched": 45426,
+        "hits": 36975,
+        "steps": 288889,
+        "prims": 6663524,
+        "hitPrims": 4379854
+      },
+      "all": {
+        "marched": 36975,
+        "hits": 36975,
+        "steps": 180827,
+        "prims": 6271232,
+        "hitPrims": 6271232
+      },
+      "totalPrims": 8554902
+    },
+    "far/cultist": {
+      "walk": {
+        "marched": 2700,
+        "hits": 1992,
+        "steps": 14689,
+        "prims": 264068,
+        "hitPrims": 159000
+      },
+      "all": {
+        "marched": 1992,
+        "hits": 1992,
+        "steps": 8127,
+        "prims": 227407,
+        "hitPrims": 227407
+      },
+      "totalPrims": 332475
+    },
+    "back/cultist": {
+      "walk": {
+        "marched": 39690,
+        "hits": 32990,
+        "steps": 232663,
+        "prims": 3757262,
+        "hitPrims": 2240856
+      },
+      "all": {
+        "marched": 32990,
+        "hits": 32990,
+        "steps": 141206,
+        "prims": 3156657,
+        "hitPrims": 3156657
+      },
+      "totalPrims": 4673063
+    },
+    "head/cultist": {
+      "walk": {
+        "marched": 25620,
+        "hits": 19217,
+        "steps": 175396,
+        "prims": 4051858,
+        "hitPrims": 2161592
+      },
+      "all": {
+        "marched": 19217,
+        "hits": 19217,
+        "steps": 94865,
+        "prims": 3167952,
+        "hitPrims": 3167952
+      },
+      "totalPrims": 5058218
+    },
+    "close/cultist+clothonly=1": {
+      "walk": {
+        "marched": 45474,
+        "hits": 34986,
+        "steps": 310825,
+        "prims": 1166734,
+        "hitPrims": 710293
+      },
+      "all": {
+        "marched": 34986,
+        "hits": 34986,
+        "steps": 176607,
+        "prims": 968251,
+        "hitPrims": 968251
+      },
+      "totalPrims": 1424692
+    },
+    "far/cultist+clothonly=1": {
+      "walk": {
+        "marched": 2694,
+        "hits": 1859,
+        "steps": 15741,
+        "prims": 49548,
+        "hitPrims": 27132
+      },
+      "all": {
+        "marched": 1859,
+        "hits": 1859,
+        "steps": 8108,
+        "prims": 37879,
+        "hitPrims": 37879
+      },
+      "totalPrims": 60295
+    },
+    "back/cultist+clothonly=1": {
+      "walk": {
+        "marched": 40508,
+        "hits": 32895,
+        "steps": 237395,
+        "prims": 853533,
+        "hitPrims": 506474
+      },
+      "all": {
+        "marched": 32895,
+        "hits": 32895,
+        "steps": 131668,
+        "prims": 716591,
+        "hitPrims": 716591
+      },
+      "totalPrims": 1063650
+    },
+    "head/cultist+clothonly=1": {
+      "walk": {
+        "marched": 26616,
+        "hits": 16844,
+        "steps": 237386,
+        "prims": 916445,
+        "hitPrims": 423985
+      },
+      "all": {
+        "marched": 16844,
+        "hits": 16844,
+        "steps": 107820,
+        "prims": 585163,
+        "hitPrims": 585163
+      },
+      "totalPrims": 1077623
+    }
+  },
+  "timing": {}
+}
