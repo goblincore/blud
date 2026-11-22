@@ -144,6 +144,9 @@ export interface WorldState {
   soldierCorpses: SoldierCorpseBakes | null;
   /** Every material instance that must ride the flashlight beam. */
   litChunkMaterials: BakedChunkMaterial[];
+  /** Kit parts drawn as FLESH (kit-flesh.ts: the goblin's bony hands): their ONE shared lit chunk material (made on the
+   *  first dressed kit, registered in litChunkMaterials) and every dressed mesh, for the per-mesh light picks. */
+  kitFlesh: { mat: BakedChunkMaterial | null; meshes: THREE.Mesh[] };
   /** Persistent parent every baked corpse mesh is added to. */
   soldierCorpseGroup: THREE.Group;
 }
@@ -190,6 +193,7 @@ export function makeWorldState(): WorldState {
     roomProbes: unbuilt<RoomProbes>(),
     soldierCorpses: null,
     litChunkMaterials: [],
+    kitFlesh: { mat: null, meshes: [] },
     soldierCorpseGroup: unbuilt<THREE.Group>(),
   };
 }
@@ -233,5 +237,6 @@ export const WORLD_BINDINGS = {
   roomProbes: 'world.roomProbes',
   soldierCorpses: 'world.soldierCorpses',
   litChunkMaterials: 'world.litChunkMaterials',
+  kitFlesh: 'world.kitFlesh',
   soldierCorpseGroup: 'world.soldierCorpseGroup',
 } as const;

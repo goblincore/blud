@@ -44,13 +44,13 @@ exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"90ece0d7
 
 exports[`packBody byte pin > gnasher.blob packs the pinned bytes 1`] = `"57026330db1bd6fd"`;
 
-exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"4e4a308e2d3066d8"`;
+exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"11b4723f2edc80be"`;
 
-exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"73582c1d7a565154"`;
+exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"4ffeba07d508977b"`;
 
-exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1`] = `"0e895464be89ab99"`;
+exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1`] = `"ea5d98e20366586c"`;
 
-exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd86a47957784971"`;
+exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"e21e118da1ae23b2"`;
 
 exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"ee09e397f85a38cb"`;
 

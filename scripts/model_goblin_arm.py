@@ -22,6 +22,7 @@ from mathutils import Vector
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_GLB   = os.path.join(REPO_ROOT, "public", "assets", "lab", "goblin-arm.glb")
+KIT_GLB   = os.path.join(REPO_ROOT, "assets-source", "goblin-hands", "goblin-hands.glb")   # merge-kit-hands.ts's source
 NOTES_DIR = os.path.join(REPO_ROOT, "docs", "dev-notes", "2026-09-04-fpv-goblin-arms")
 os.makedirs(NOTES_DIR, exist_ok=True)
 
@@ -40,9 +41,9 @@ UPPER_R0, UPPER_R1, SHOULDER_R = 0.042, 0.052, 0.060
 BRACER_Z0, BRACER_Z1 = 0.075, 0.180
 STRAP_Z = (0.100, 0.155)
 TILE_M   = 0.042          # one tile of the generated skin maps per 42 mm of arm (finer grain, owner)
-TRI_CAP  = 14000
+TRI_CAP  = 16500          # 14000 until the shell-hold hand (a second left hand, ~2.4k tris) joined the asset
 
-REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Wrist_L", "Wrist_R",
+REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Grip_L", "Grip_R", "Wrist_L", "Wrist_R",
                   "Elbow_L", "Elbow_R", "Upper_L", "Upper_R", "Shoulder_L", "Shoulder_R",
                   "Watch_Screen"]
 
@@ -65,6 +66,8 @@ MATS = {
     'Band':      M('Band',      (0.035, 0.035, 0.04, 1), 0.0, 0.60),
     'WatchBody': M('WatchBody', (0.06, 0.06, 0.07, 1),   0.6, 0.35),
     'Screen':    M('Screen',    (0.02, 0.03, 0.04, 1),   0.0, 0.20),
+    # Claw tips: old yellowed horn, glossier than the skin so they catch the torch.
+    'Claw':      M('Claw',      (0.30, 0.25, 0.15, 1),   0.0, 0.28),
 }
 
 # ---- mesh helpers ---------------------------------------------------------
@@ -158,6 +161,158 @@ def locator(name, parent, loc):
     e.location = loc; e.empty_display_size = 0.01; e.parent = parent
     return e
 
+# ---- the hand ---------------------------------------------------------------
+# BONY GOBLIN HAND (owner, 2026-10-24: "not realistic but fits the character
+# ... bony skinny long fingers"), replacing the orb. Stylised, not anatomical:
+# a small flat palm, four long thin digits whose joints are BALLS fatter than
+# the shafts between them (the blob's "a shaft alone reads as a pipe" rule,
+# at finger scale: the knuckle bulge is what reads as bony), a two-joint
+# thumb, and a horn claw on every tip. One static loose-grip curl, round a
+# ~32 mm bar across the palm, which is what the hand does on every weapon.
+#
+# Authored in the UNMIRRORED frame (origin = hand centre, fingers toward -Z,
+# palmar +Y, dorsal -Y, thumb toward +X, the inner side opposite the
+# buckles); every point goes through P() so the left hand is a true mirror.
+# HAND_SIZE scales the finished hand about its centre. Everything below is authored at 1.0; at 1.0 the palm (58 mm)
+# came out narrower than the 72 mm forearm and read small in the reload's shove (owner, 2026-10-24: "his hand looks a
+# bit small"). The orb it replaced was 92 mm across.
+HAND_SIZE = 1.4
+PALM = (0.029, 0.012, 0.030)      # half-extents x (across), y (thick), z (long)
+# (x at the knuckle line, splay deg, segment lengths, curl deg per joint)
+FINGERS = (
+    (+0.0205, +8, (0.035, 0.028, 0.022), (34, 52, 30)),   # index
+    (+0.0068, +2, (0.039, 0.031, 0.024), (38, 55, 32)),   # middle, the longest
+    (-0.0068, -4, (0.036, 0.029, 0.022), (42, 58, 34)),   # ring
+    (-0.0205, -11, (0.029, 0.023, 0.018), (48, 62, 36)),  # little
+)
+# The thumb's three segment directions (grip: swings across the front of the bar and hooks over the curled index).
+THUMB = ((-0.30, 0.62, -0.72), (-0.78, 0.45, -0.43), (-0.90, 0.10, -0.42))
+
+# THE FPV GRIPS (owner, 2026-10-24). FINGERS above is the RELAXED loose curl the third-person kit hands keep
+# (exported apart, KIT_GLB). In first person each hand has a job, so each gets its own pose:
+#  * FIST, the right hand (the shotgun's grip, the axe and flail hafts): a tight curl. The loose one floated a ~45 mm
+#    gap round a 17 mm haft, and the haft read as impaling the palm.
+#  * FORE, the left hand under the fore-end: a cradle, palm up, the fingers wrapping the far (right) side and the THUMB
+#    running forward along the near (left) flank with its claw out -- the one digit the camera sees ("cool to see the
+#    thumbnail claw off the left side of the gun").
+# Each hand's curl centre is exported as a `Grip_<tag>` locator (grip_centre); the runtime seats the held thing there.
+FINGERS_FIST = (
+    (+0.0205, +6, (0.035, 0.028, 0.022), (70, 95, 70)),
+    (+0.0068, +2, (0.039, 0.031, 0.024), (72, 96, 72)),
+    (-0.0068, -3, (0.036, 0.029, 0.022), (75, 98, 74)),
+    (-0.0205, -8, (0.029, 0.023, 0.018), (78, 100, 76)),
+)
+FINGERS_FORE = (   # FLAT under the fore-end, wrapping its far edge: measured in the hand frame the wood is ~14 cm
+    (+0.0205, +2, (0.035, 0.028, 0.022), (6, 18, 55)),    # across and 46 mm thick, so a real curl drove the fingers
+    (+0.0068, +0, (0.039, 0.031, 0.024), (5, 16, 55)),    # into it (clip sweep, 2026-10-25); splay kept small and the
+    (-0.0068, -1, (0.036, 0.029, 0.022), (6, 18, 57)),    # tips wrapped down onto the edge, not standing up past it
+    (-0.0205, -3, (0.029, 0.023, 0.018), (8, 20, 60)),    # ("a little too wide/loose", owner 2026-10-25)
+)
+THUMB_FORE = ((0.70, 0.55, 0.15), (0.80, 0.55, 0.10), (0.80, 0.60, 0.00))   # forward and up the near flank, claw out
+# The FORE pose has no curl to centre on: its Grip_L is where the fore-end's axis sits when the palm lies flat on its
+# underside (authored frame: x 0, palmar, distal; scaled by HAND_SIZE like grip_centre).
+GRIP_FORE = (0.0, 0.0314, -0.0286)
+
+# THE SHELL-HOLD POSE (owner, 2026-10-24): the reload's cover-and-shove (game-viewmodel.ts coverRoll). The fore hand
+# comes up already palm-down over the open tubes, the two fresh cases under it, and shoves them in. So this is a
+# CUPPED open hand that covers the mouths, the fingers draping over the breech. Built as its own mesh, `handhold_L`
+# (the fore hand only), which game-arms.ts shows instead of `hand_L` while the reload is carrying.
+FINGERS_HOLD = (   # a FLAT cup: the fingers lie forward over the barrels, curled only at the tips (more and they
+    (+0.0205, +6, (0.035, 0.028, 0.022), (8, 14, 18)),    # drooped into the bores while it pushed -- playtest 2026-10-25)
+    (+0.0068, +1, (0.039, 0.031, 0.024), (6, 12, 18)),
+    (-0.0068, -5, (0.036, 0.029, 0.022), (8, 14, 20)),
+    (-0.0205, -12, (0.029, 0.023, 0.018), (12, 18, 22)),
+)
+THUMB_HOLD = ((0.35, 0.35, -0.87), (0.05, 0.55, -0.83), (-0.25, 0.60, -0.76))
+# Two stand-in cases cradled in the cup, in the LEFT arm's Blender frame at final size (centre, hull axis), for the
+# evidence render only (cylinders made after the export, never shipped -- see the render block).
+HOLD_CASES = (((0.0, 0.030, -0.0255), (1.0, 0.0, 0.0)),
+              ((0.0, 0.030, 0.0095), (1.0, 0.0, 0.0)))
+CASE_R, CASE_LEN = 0.0172, 0.070        # == game-viewmodel.ts SHELL_RADIUS_M / SHELL_LEN_M
+
+DIGIT_R  = (0.0056, 0.0048, 0.0040, 0.0029)   # shaft radius at base, joint 1, joint 2, tip
+JOINT_R  = (0.0076, 0.0065, 0.0055)           # knuckle balls: MCP, PIP, DIP -- proud of the shafts
+CLAW_LEN, CLAW_CURL = 0.014, 14
+
+def seg_part(p0, p1, r0, r1, name, mat, parent, segs=8):
+    """A tapered shaft from p0 (radius r0) to p1 (radius r1)."""
+    a, b = Vector(p0), Vector(p1)
+    d = b - a
+    rot = Vector((0, 0, 1)).rotation_difference(d.normalized()).to_euler()
+    return put(frustum(r0, r1, d.length, segs), name, mat, parent, loc=(a + b) / 2, rot=rot, uv=True)
+
+def build_hand(sx, tag, root, fingers=FINGERS, thumb=THUMB, name=None):
+    from mathutils import Quaternion
+    P = lambda v: Vector((sx * v[0], v[1], v[2]))
+    parts = []
+    from mathutils import Matrix
+    pm = sphere(1.0, 20, 14)
+    pm.transform(Matrix.Diagonal((PALM[0], PALM[1], PALM[2], 1.0)))
+    palm = put(pm, name or f'hand_{tag}', 'Skin', root, uv=True)
+    i = 0
+    for (kx, splay, lens, curls) in fingers:
+        # The knuckle sits on the palm's distal rim, a touch dorsal so the MCP
+        # ball humps the back of the hand like a bony fist.
+        p = Vector((kx, -0.002, -PALM[2] * 0.86))
+        q = Quaternion((0, 1, 0), math.radians(-splay))      # fan in the palm plane
+        lateral = q @ Vector((1, 0, 0))
+        parts.append(put(sphere(JOINT_R[0], 10, 7), f'k{i}0_{tag}', 'Skin', root, loc=P(p), uv=True))
+        # Metacarpal ridge: a thin bone under the skin from the wrist end of
+        # the palm to this knuckle, on the dorsal face -- the bony back.
+        m0 = Vector((kx * 0.55, -PALM[1] * 0.80, PALM[2] * 0.55))
+        parts.append(seg_part(P(m0), P(p + Vector((0, -0.002, 0))), 0.0034, 0.0046, f'm{i}_{tag}', 'Skin', root, segs=6))
+        for j, (ln, c) in enumerate(zip(lens, curls)):
+            q = Quaternion(lateral, math.radians(c)) @ q      # curl toward the palm (+Y)
+            nxt = p + q @ Vector((0, 0, -ln))
+            parts.append(seg_part(P(p), P(nxt), DIGIT_R[j], DIGIT_R[j + 1], f'f{i}{j}_{tag}', 'Skin', root))
+            if j < 2:
+                parts.append(put(sphere(JOINT_R[j + 1], 8, 6), f'k{i}{j + 1}_{tag}', 'Skin', root, loc=P(nxt), uv=True))
+            p = nxt
+        q = Quaternion(lateral, math.radians(CLAW_CURL)) @ q
+        tip = p + q @ Vector((0, 0, -CLAW_LEN))
+        parts.append(seg_part(P(p), P(tip), DIGIT_R[3] * 0.95, 0.0005, f'c{i}_{tag}', 'Claw', root, segs=8))
+        i += 1
+    # THUMB: rooted low on the palmar side at the thumbward edge, it swings
+    # across the front of the grip and hooks over the curled index.
+    t0 = Vector((PALM[0] * 0.80, 0.007, 0.006))
+    t1 = t0 + Vector(thumb[0]).normalized() * 0.030
+    t2 = t1 + Vector(thumb[1]).normalized() * 0.024
+    t3 = t2 + Vector(thumb[2]).normalized() * CLAW_LEN
+    parts.append(put(sphere(0.0095, 10, 8), f't0_{tag}', 'Skin', root, loc=P(t0), uv=True))
+    parts.append(seg_part(P(t0), P(t1), 0.0078, 0.0062, f't1_{tag}', 'Skin', root))
+    parts.append(put(sphere(JOINT_R[1], 10, 8), f'tk_{tag}', 'Skin', root, loc=P(t1), uv=True))
+    parts.append(seg_part(P(t1), P(t2), 0.0062, DIGIT_R[3], f't2_{tag}', 'Skin', root))
+    parts.append(seg_part(P(t2), P(t3), DIGIT_R[3] * 0.95, 0.0005, f'tc_{tag}', 'Claw', root, segs=8))
+    # One mesh (`hand_<tag>`, or the pose's own name): the verify gate and the runtime see one fist.
+    with bpy.context.temp_override(active_object=palm, object=palm,
+                                   selected_objects=[palm] + parts,
+                                   selected_editable_objects=[palm] + parts):
+        bpy.ops.object.join()
+    # Scale the joined hand about its centre, and its UVs by the same factor so the skin grain keeps its size per metre
+    # (cyl_uv ran on the unscaled parts).
+    from mathutils import Matrix as _M
+    palm.data.transform(_M.Scale(HAND_SIZE, 4))
+    for loop_uv in palm.data.uv_layers.active.data:
+        loop_uv.uv = (loop_uv.uv[0], loop_uv.uv[1] * HAND_SIZE)
+    return palm
+
+def grip_centre(fingers):
+    """The centre of a pose's finger curl, in the authored hand frame at HAND_SIZE (x 0: the curl runs across the
+    palm). A least-squares circle through every finger joint in the (palmar, distal) plane -- the same chain build_hand
+    walks -- which is where a held bar's axis sits."""
+    import numpy as np
+    pts = []
+    for (kx, splay, lens, curls) in fingers:
+        y, z, ang = -0.002, -PALM[2] * 0.86, 0.0
+        pts.append((y, z))
+        for ln, c in zip(lens, curls):
+            ang += math.radians(c)
+            y += math.sin(ang) * ln; z -= math.cos(ang) * ln
+            pts.append((y, z))
+    P = np.array(pts)
+    c = np.linalg.lstsq(np.c_[2 * P, np.ones(len(P))], (P ** 2).sum(1), rcond=None)[0]
+    return (0.0, float(c[0]) * HAND_SIZE, float(c[1]) * HAND_SIZE)
+
 # ---- the arm ----------------------------------------------------------------
 def fore_r(z):
     """Forearm radius at height z: a taper from the wrist to the elbow."""
@@ -169,9 +324,13 @@ def build_arm(sx, tag, watch):
 
     # SKIN. Ball joints on purpose (the blob's stylisation: "a shaft alone
     # reads as a pipe"), radii up from the blob's 0.028 shaft per the owner.
-    put(sphere(HAND_R, 24, 16), f'hand_{tag}', 'Skin', root, uv=True)
-    # No knuckle nubs: three lumps on the back of the fist read as warts, not
-    # knuckles (owner, 2026-09-05), so the fist is the plain orb the blob has.
+    # The hand was the blob's plain orb until 2026-10-24; now the bony hand.
+    pose = (FINGERS_FORE, THUMB_FORE) if watch else (FINGERS_FIST, THUMB)   # watch == the fore (left) arm
+    build_hand(sx, tag, root, *pose)
+    grip = tuple(c * HAND_SIZE for c in GRIP_FORE) if watch else grip_centre(pose[0])
+    locator(f'Grip_{tag}', root, grip)
+    if watch:   # the fore (left) arm carries the shells in the reload
+        build_hand(sx, tag, root, FINGERS_HOLD, THUMB_HOLD, name=f'handhold_{tag}')
     put(sphere(WRIST_R, 16, 12), f'wrist_{tag}', 'Skin', root, loc=(0, 0, WRIST_Z), uv=True)
     put(frustum(FORE_R0, FORE_R1, ELBOW_Z - WRIST_Z, 24), f'forearm_{tag}', 'Skin', root,
         loc=(0, 0, (WRIST_Z + ELBOW_Z) / 2), uv=True)
@@ -294,6 +453,24 @@ def verify_glb(path):
 
 size = export_glb(OUT_GLB)
 info = verify_glb(OUT_GLB)
+
+# THE KIT HANDS: the relaxed pose (FINGERS/THUMB) for the third-person goblin, as `kithand_L`/`kithand_R` in their
+# own glb that scripts/merge-kit-hands.ts reads. Not a runtime asset, so it lives in assets-source.
+for o in [o for o in bpy.data.objects if o not in set(col.objects)]:
+    bpy.data.objects.remove(o, do_unlink=True)          # the verify re-import
+kit_roots = []
+for sx, tag in ((-1, 'L'), (+1, 'R')):
+    kr = bpy.data.objects.new(f'KitArm_{tag}', None); col.objects.link(kr); kit_roots.append(kr)
+    build_hand(sx, tag, kr, name=f'kithand_{tag}')
+bpy.ops.object.select_all(action='DESELECT')
+kit_objs = [o for o in col.objects if o in kit_roots or o.parent in kit_roots]
+for o in kit_objs: o.select_set(True)
+os.makedirs(os.path.dirname(KIT_GLB), exist_ok=True)
+bpy.ops.export_scene.gltf(filepath=KIT_GLB, export_format='GLB', export_apply=True, export_yup=True,
+                          export_extras=False, use_selection=True)
+print(f"[goblin-arm] kit hands -> {KIT_GLB}")
+for o in kit_objs:
+    bpy.data.objects.remove(o, do_unlink=True)
 print(f"[goblin-arm] exported {OUT_GLB} ({size} bytes)")
 print(f"[goblin-arm] verify: {info}")
 ok = True
@@ -306,9 +483,17 @@ if info['missing_nodes']:
 if info['skin_without_uv']:
     print(f"[goblin-arm] FAIL: skin meshes without UVs {info['skin_without_uv']} -- "
           f"they would sample one texel and read flat", file=sys.stderr); ok = False
-if info['hand_dim'] is None or abs(info['hand_dim'] - 2 * HAND_R) > 0.002:
-    print(f"[goblin-arm] FAIL: hand diameter {info['hand_dim']} != {2 * HAND_R} "
-          f"(GOBLIN_SKIN.handRadius; loadHold depends on it)", file=sys.stderr); ok = False
+# The fist must stay inside the old orb's reach: loadHold() still places the
+# shells by GOBLIN_SKIN.handRadius, so a hand much bigger than the orb would
+# swallow them and a much smaller one would leave them floating.
+# (The upper bound is loose since HAND_SIZE: a bigger fist covering more of the two cases during the shove is the
+# point -- loadHold's own comment says the hand doing it should hide them.)
+# 4.2x since the fore cradle went FLAT under the fore-end (183 mm, fingers straight). hand_L is no longer the hand that
+# carries the shells (handhold_L is), so this is a sanity bound now, not loadHold's.
+if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 4.2 * HAND_R):
+    print(f"[goblin-arm] FAIL: hand extent {info['hand_dim']} outside "
+          f"[{1.2 * HAND_R}, {4.2 * HAND_R}] (a sanity bound on the FPV hand's size)",
+          file=sys.stderr); ok = False
 if not info['screen_under_arm_l']:
     print("[goblin-arm] FAIL: Watch_Screen is not under Arm_L", file=sys.stderr); ok = False
 
@@ -332,12 +517,35 @@ bpy.context.scene.camera = cam
 sc = bpy.context.scene; sc.render.engine = 'BLENDER_EEVEE'
 sc.eevee.taa_render_samples = 64
 sc.render.resolution_x = 860; sc.render.resolution_y = 640
+HOLD_L = next(o for o in col.objects if o.name == 'handhold_L')
+HOLD_L.hide_render = True   # the turntable shows the grip hand; the hold renders below swap them
 ctr = Vector((0, 0, 0.12)); R = 0.55
 for n, (az, el) in enumerate(((-90, 10), (-30, 20), (40, 15), (150, 25))):
     a = math.radians(az); e = math.radians(el)
     cam.location = ctr + Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e))) * R
     cam.rotation_euler = (ctr - cam.location).to_track_quat('-Z', 'Y').to_euler()
     sc.render.filepath = os.path.join(NOTES_DIR, f'turntable-{n}.png')
+    bpy.ops.render.render(write_still=True)
+# Hand close-ups (the bony hand, 2026-10-24): back, side, palm.
+ctr = Vector((0, 0, -0.050)); R = 0.26
+for n, (az, el) in enumerate(((0, 15), (-90, 10), (180, 20))):
+    a = math.radians(az); e = math.radians(el)
+    cam.location = ctr + Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e))) * R
+    cam.rotation_euler = (ctr - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    sc.render.filepath = os.path.join(NOTES_DIR, f'hand-{n}.png')
+    bpy.ops.render.render(write_still=True)
+# The shell-hold hand with the two cases where the game puts them (HOLD_CASES; brass stand-ins, render only).
+HAND_L = next(o for o in col.objects if o.name == 'hand_L')
+HAND_L.hide_render = True; HOLD_L.hide_render = False
+for k, (c, ax) in enumerate(HOLD_CASES):
+    cyl = put(frustum(CASE_R, CASE_R, CASE_LEN, 20), f'case{k}', 'Brass', ARM_L, loc=c,
+              rot=Vector((0, 0, 1)).rotation_difference(Vector(ax).normalized()).to_euler())
+ctr = Vector((0.0, 0.02, -0.01)); R = 0.30
+for n, (az, el) in enumerate(((180, 20), (120, 15), (-90, 10), (0, 25))):   # palm side first
+    a = math.radians(az); e = math.radians(el)
+    cam.location = ctr + Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e))) * R
+    cam.rotation_euler = (ctr - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    sc.render.filepath = os.path.join(NOTES_DIR, f'hold-{n}.png')
     bpy.ops.render.render(write_still=True)
 
 if not ok:

@@ -54,6 +54,7 @@ describe('armMaterialKind', () => {
     expect(armMaterialKind('Band')).toBe('band');
     expect(armMaterialKind('WatchBody')).toBe('watchBody');
     expect(armMaterialKind('Screen')).toBe('screen');
+    expect(armMaterialKind('Claw')).toBe('claw');
   });
   it('is null for anything else, so the loader can be loud about it', () => {
     expect(armMaterialKind('Wood')).toBeNull();
@@ -62,11 +63,12 @@ describe('armMaterialKind', () => {
 });
 
 describe('ARM_NODES', () => {
-  it('names both arms, four locators each, the upper-arm nodes, and the screen', () => {
+  it('names both arms, four locators each, the upper-arm nodes, the screen, and the fore hand\'s two poses', () => {
     expect([...ARM_NODES].sort()).toEqual([
       'Arm_L', 'Arm_R', 'Elbow_L', 'Elbow_R', 'Hand_L', 'Hand_R',
       'Shoulder_L', 'Shoulder_R', 'Upper_L', 'Upper_R', 'Watch_Screen', 'Wrist_L', 'Wrist_R',
-    ]);
+      'hand_L', 'handhold_L', 'Grip_L', 'Grip_R',
+    ].sort());
   });
 });
 

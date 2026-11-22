@@ -61,6 +61,8 @@ import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-
 import { type GpuViewOpts } from './zombie-gpu';
 import { spawnMeltBone, spawnMeltDrip, spawnMeltGob } from './game-melter';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
+import { dressKitFlesh } from './kit-flesh';
+import { kitFleshMaterial } from './game-chunk-bake';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
 // game-march-accept.ts beside the accept law, so a lab page can run the game's march without importing the game; re-exported here.
@@ -242,6 +244,11 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     // bones block, later).
     ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
     gpu: (built) => ({ ...viewGpuOpts, ...crowdViewOptsFor(built) }),
+    // Kit FLESH (the goblin's bony hands) in the flesh shader's lighting, wearing the same flesh the body does (below).
+    dressKitFlesh: (root, palette) => {
+      const flesh = name !== 'zombie' ? palette ?? ctx.vfx.flesh : ctx.vfx.flesh;
+      ctx.world.kitFlesh.meshes.push(...dressKitFlesh(root, kitFleshMaterial(ctx).material, flesh));
+    },
   });
   const placed = character.body;
   const view = character.gpu;

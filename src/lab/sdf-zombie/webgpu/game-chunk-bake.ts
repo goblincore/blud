@@ -34,7 +34,7 @@ export function registerLitChunkMaterial<T extends BakedChunkMaterial>(ctx: Game
 }
 
 /** Where a drawn gib mesh came from (the seam reports it). */
-export type ChunkMeshSource = 'bake' | 'corpse' | 'sprite' | 'showcase';
+export type ChunkMeshSource = 'bake' | 'corpse' | 'sprite' | 'showcase' | 'kit';
 
 /** EVERY MESH DRAWN WITH A LIT BAKED-CHUNK MATERIAL, at its own position (shared light list,
  *  Task 12 review). One mesh is one piece for every source, so this is the pick granularity:
@@ -44,7 +44,9 @@ export type ChunkMeshSource = 'bake' | 'corpse' | 'sprite' | 'showcase';
  *     bounding-sphere centre;
  *   - sprite-set pieces drawn as meshes (carved, asset and asset-head materials): one mesh per
  *     piece, at the chunk state's `pos` (billboards use their own unlit materials: skipped);
- *   - the gore showcase (gorePartMat): one mesh per part, at its world position.
+ *   - the gore showcase (gorePartMat): one mesh per part, at its world position;
+ *   - kit FLESH parts (kit-flesh.ts, ctx.world.kitFlesh): one skinned mesh per dressed kit primitive, at its
+ *     per-frame skinned bounds' centre (kit-bounds.ts). A kit that was disposed drops out here.
  *  `visit` gets the mesh and its position; nothing is allocated per piece. */
 const _wp = new THREE.Vector3();
 export function forEachDrawnChunkMesh(
@@ -85,6 +87,27 @@ export function forEachDrawnChunkMesh(
       visit(m, _wp.x, _wp.y, _wp.z, 'showcase');
     }
   }
+  const kits = ctx.world.kitFlesh.meshes;
+  for (let i = kits.length - 1; i >= 0; i--) {
+    const m = kits[i]!;
+    if (!m.parent) { kits.splice(i, 1); continue; }               // its kit was disposed (despawn, retired equipment)
+    if (!m.visible) continue;
+    const c = (m as THREE.SkinnedMesh).boundingSphere?.center;
+    if (c) visit(m, c.x, c.y, c.z, 'kit');
+  }
+}
+
+/** The ONE lit material every kit flesh part draws with (kit-flesh.ts), made and registered on first use. Built as the
+ *  settled bake's is (flesh response, the level's light list; the surface producer in deferred mode), minus baked AO,
+ *  which a kit part does not carry. */
+export function kitFleshMaterial(ctx: GameContext): BakedChunkMaterial {
+  if (!ctx.world.kitFlesh.mat) {
+    ctx.world.kitFlesh.mat = registerLitChunkMaterial(ctx, createBakedChunkMaterial(ctx.boot.deferredMode
+      ? { output: 'surface', shadowReceiver: 'level-only' }
+      : { fleshResponse: true, lightList: ctx.world.light?.list?.node }));
+    ctx.bake.seed?.(ctx.world.kitFlesh.mat);
+  }
+  return ctx.world.kitFlesh.mat;
 }
 
 /** One frame's inputs to the per-piece pick, filled by the game in a reused object. `amb` off
@@ -102,14 +125,18 @@ const scratchPick: Pick = { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed:
 let pickCtx: GameContext | null = null;
 let pickFrame: ChunkPickFrame | null = null;
 let pickCount = 0;
-function pickVisit(m: THREE.Mesh, x: number, y: number, z: number): void {
+/** The trim on a kit FLESH part's list terms (kit-flesh.ts), in place of the gib trim (CHUNK_LIST_GAIN): the part
+ *  stands on a live marched body and has to match IT, not a settled gib (measured against the wrist beside it). */
+export let KIT_LIST_GAIN = 1.0;
+export function setKitListGain(g: number): number { KIT_LIST_GAIN = g; return g; }
+function pickVisit(m: THREE.Mesh, x: number, y: number, z: number, source: ChunkMeshSource): void {
   const ctx = pickCtx!, f = pickFrame!;
   const room = roomIdAt(ctx, x, z);
   scratchPos[0] = x; scratchPos[1] = y; scratchPos[2] = z;
   const pk = pickChunk(f.list, scratchPos, room, scratchBody, scratchPick).packed;
   const r = chunkObjectLight(m);
   r.picks.set(pk[0], pk[1], pk[2], pk[3]);
-  r.cfg.set(1, f.gain, f.amb ? 1 : 0, 0);
+  r.cfg.set(1, source === 'kit' ? KIT_LIST_GAIN : f.gain, f.amb ? 1 : 0, 0);
   if (f.amb) {
     const rt = ctx.world.light;
     const cf = rt ? fillFactorOf(rt.roomLight.get(room) ?? 1) : 1;

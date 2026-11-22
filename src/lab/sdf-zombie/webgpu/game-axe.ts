@@ -26,7 +26,7 @@ import { stampCut, unwarpCutSeg } from '../cut-wound';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput } from './game-loop';
 import { BEND_R_VIEW } from './game-weapon-rig';
-import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
+import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, seatOnBar } from './game-arms';
 import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type AxeSwing } from './axe-swing';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
 import { chopHead, chopKick, chopOnHead, chopOpenFrac, headChopCut, makeAxeHead, type AxeHeadState } from './axe-head';
@@ -133,7 +133,8 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       haft.add(hand);
     }).catch((e) => console.warn('[sdf-game] axe hand: goblin-arm.glb failed', e));
   }
-  const _sh = new THREE.Vector3(), _bend = new THREE.Vector3();
+  const _sh = new THREE.Vector3(), _bend = new THREE.Vector3(), _shHand = new THREE.Vector3();
+  const HAFT_GRIP = new THREE.Vector3(0, 0, 0), HAFT_UP = new THREE.Vector3(0, 1, 0);
   function aimHand(): void {
     if (!hand) return;
     const view = ctx.weapon.viewModelAnchor;
@@ -143,8 +144,13 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     haft.worldToLocal(_sh); haft.worldToLocal(_bend);
     _bend.sub(_sh).normalize();
     // aimArm solves with the arm's unscaled bone lengths: solve against the shoulder offset / handScale (game-flail.ts).
-    _sh.sub(hand.position).divideScalar(AXE_LOOK.handScale).add(hand.position);
-    aimArm(hand, _sh, _bend);
+    // SEATED ON THE HAFT (seatOnBar): the fist's curl round the haft at its grip (the haft's origin, the haft along
+    // its +Y), the thumb toward the head -- not the hand's centre on the haft, which ran it through the palm.
+    const h = hand;
+    seatOnBar(h, HAFT_GRIP, HAFT_UP, 1, (dorsal) => {
+      _shHand.copy(_sh).sub(h.position).divideScalar(AXE_LOOK.handScale).add(h.position);
+      aimArm(h, _shHand, _bend, null, dorsal);
+    });
   }
 
   // --- the swing and the input (the rod's armed gate).

@@ -58,8 +58,13 @@ const samples = (p: Primitive, n = 8) => Array.from({ length: n + 1 }, (_, i) =>
   return { q: [p.a[0] + (p.b[0] - p.a[0]) * f, p.a[1] + (p.b[1] - p.a[1]) * f, p.a[2] + (p.b[2] - p.a[2]) * f] as Vec3,
     r: rr * Math.max(p.scale[0], p.scale[2]), ry: rr * p.scale[1], rMin: rr * Math.min(...p.scale) };
 });
+/** The bone's BIGGEST prim. On the hand bone that is the at-home ORB: since 2026-10-24 goblin.blob's own hand is a small
+ *  wrist knob (the bony hands are kit), and goblin-home's marked block carries the orb back after it, so the first
+ *  hand prim is the knob (characters/goblin-poses.test.ts handOrb, the same rule). */
+const biggest = (ps: Primitive[], bone: string): Primitive =>
+  ps.filter(p => p.bone === bone).reduce((m, p) => (p.radius > m.radius ? p : m));
 const ball = (ps: Primitive[], bone: string) => {
-  const h = ps.find(p => p.bone === bone)!;
+  const h = biggest(ps, bone);
   return { c: [(h.a[0] + h.b[0]) / 2, (h.a[1] + h.b[1]) / 2, (h.a[2] + h.b[2]) / 2] as Vec3, r: h.radius, ry: h.radius * h.scale[1], rMin: h.radius * Math.min(...h.scale) };
 };
 
@@ -477,7 +482,7 @@ describe('the hands (the owner, 2026-10-13: "the hands clip into the floor a bit
       const j = jointsAt(t), b = posedBody(j), ps = fleshOf(j);
       const noArms = { ...b, prims: b.prims.map(p => (/^(upperarm|forearm|hand)\.[lr]$/.test(p.bone ?? '') ? { ...p, dead: true } : p)) };
       for (const s of ['l', 'r'] as const) {
-        const h = ps.find(p => p.bone === `hand.${s}`)!, c = ball(ps, `hand.${s}`).c;
+        const h = biggest(ps, `hand.${s}`), c = ball(ps, `hand.${s}`).c;
         // the least distance from the ball's surface (the hand prim's radius and scale) to the body's field without the arms (the ball is joined to its own forearm)
         let g = Infinity;
         for (let i = 0; i <= 12; i++) for (let k = 0; k < 24; k++) {

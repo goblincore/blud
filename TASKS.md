@@ -10,6 +10,17 @@
 
 ## In flight / next
 
+- [~] **Goblin hands** (owner, 2026-10-24..26; branch `claude/character-hand-design-a5dcee`, PR goblincore/blud#75) — the orb hands became bony,
+  long-fingered goblin hands: FPV per-job poses (right fist seated on hafts, left flat cradle under the fore-end with the thumb claw out, cupped
+  cover pose) via `Grip_` locators and `seatOnBar`; the shotgun reload reworked (pouch beat, over the top, cover-and-shove, lift before the snap),
+  clipping measured per frame (<= 9 vertices during the push, 0 at rest). The third-person goblin wears the same hands as kit, lit by the flesh
+  shader (`kit-flesh.ts`), and they leave with a shot-off arm (`kitSheds`); kits are parsed once and share geometry across actors. Owner playtest
+  2026-11-22: FPV hands fine. Detail: [characters](docs/tasks/characters.md#goblin-refinement-pass-body-kit-weapons-rig-animation--phase-1-body-done-2026-10-01).
+  Next: other weapons' grips; idle grip fidgets (needs articulated fingers).
+- [ ] **Zombie kit hands** (pulled from PR goblincore/blud#75, owner playtest 2026-11-22): mesh grabber hands on a wrist knob were rejected —
+  the fat SDF wrist against a tiny mesh hand reads wrong, the mesh does not match the flesh lighting, and the game felt slower with them. The work
+  is in that branch's history (`assets-source/zombie-kit/make_hands.py`, `zombie-kit.gltf`, the wrist knob in `zombie.blob`); a redo also needs the
+  skeleton kit's hand piece, the zombie gibs and the body normal map rebuilt against the new wrist.
 - [~] **Burn flail and burn death** (2026-11-16; branch `claude/burning-body-effect-optimization-4795c0`): a lit body panic-runs with an arm flail, then dies on an authored burn fall; per-character tiers. Built and tested, **owner look pending**. Next: the fire's render cost. [Combat and gore](docs/tasks/combat-and-gore.md) · [notes](docs/dev-notes/2026-11-16-burn-flail/NOTES.md)
 - [~] **Melt death in the game** (2026-11-14; branch `claude/melting-dying-animation-6cffdd`): the lab melt repaired (off-origin, ballooning pool), `beginMelt` on the game actor, slot 8 placeholder melter. Open: the look on the game's zombie (pale), kit/prop, crowd path. [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Sector levels (Doom E1M1 experiment):** sectors, pools + light, enemies, materials, (2026-10-25, plan 3b) debris on sector floors + exploding barrels, barrel grime pass, emissive screens/light panels part A and B1 (they light the room: baked coloured bounce, cheap coloured lights), two Doom-style teratoma floaters, a start-room goo pit and (2026-10-28) sci-fi split doors that open on approach for the player and enemies, the zone/portal cull + update LOD, level batching (pickups/barrels/casings, `?batch=0`) and (2026-10-29) the shot-frame pass (pellet trace + wound probes fold less, tracer pipelines pre-warmed; E1M1 hit path ~31 → ~12 ms CPU, 2 → 0 shot pipelines; `?shotfix=0`) and the gore-spread pass (first-blood warm at boot, gun gore one tick after the hit; E1M1 first-volley worst frame 30 → 23 ms CPU; `?gorespread=0`) and the meat-pool / seed-band-upload pass (torn meat verified intact after gore spread; `?meatpool=0`, `?seedupload=0`) built; next emitters part B2 (light shafts, dust). Play `npm run dev:doom`. Detail: [levels](docs/tasks/levels.md) "Sector levels" items 5b, 5c.
