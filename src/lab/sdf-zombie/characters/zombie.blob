@@ -46,7 +46,7 @@ body
   # pelvis drawn with tip=: that stretched the pelvis piece 13x (gib-asset-deform-regression.test.ts).
   blob torso on pelvis at=0.95 offset=(0.11,0,0) r=0.070 blend=0.03 both rigid
 
-  # Arms — shoulder blob, then upper and forearm capsules, then a fist.
+  # Arms — shoulder blob, then upper and forearm capsules, then a hand (HANDS below).
   # THE SHOULDER IS ONE MOUND (owner playtest 2026-11-05: the shoulder "seems to pop out visually"). The shoulder
   # ball rides the shoulder POINT, so the arm never turns it, and it was blended into the upper arm over 7-10 mm: a
   # raised arm came up out of a ball that stayed put, with a crease round its root and the ball hanging out under
@@ -56,8 +56,34 @@ body
   # surface the wounds land on, so 30 slugs no longer took the shoulder while 40 pellets did.
   blob arm on clavicle at=0.90 r=0.072 blend=0.030 mirror
   bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.015 mirror
-  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
-  blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
+  # HANDS (owner playtest 2026-11-22, the second try). The first try put mesh grabber hands (a kit, kit-flesh.ts) on a
+  # small wrist knob, and the owner turned it down three ways: the fat SDF wrist beside a tiny mesh hand read wrong,
+  # the mesh never matched the marched flesh's light, and the game felt slower. So the hand is FLESH again, marched
+  # with the arm (one field, one light, no kit draw), but a hand now rather than the r 0.062 fist orb.
+  # No hand bone: everything rides foreArm, past its tail (from/to > 1), so the bind gives it the forearm's frame
+  # (rig-bind.ts armFrame) and the hand turns with the arm as the orb did, without a new rig point for gait.ts.
+  # THE WRIST TAPERS (r 0.048 -> 0.034, 9.6 -> 6.8 cm across): the hand reads as a hand only if the wrist is narrower
+  # than the palm. Wrist ~0.84 (the bar's end); the palm is 10 cm across (z) and 5 cm thick (x), as a big man's is.
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 r2=0.034 blend=0.007 mirror
+  # Palm: an ellipsoid hung 4 cm below the wrist (at 1.14 of the 0.30 forearm), palm toward the thigh (thin in x),
+  # the width across the body's front-back axis (z), the thumb forward. Blended over the orb's 12.5 mm into the wrist.
+  blob arm on foreArm  at=1.14 r=0.040 wide=0.50 tall=1.20 deep=1.22 blend=0.0125 mirror
+  # Knuckles: one capsule across the knuckle line on the back of the hand (+x, away from the thigh), so the back reads
+  # bony and squared off where an ellipsoid alone is a soft ball (CPU close-ups, 2026-11-22).
+  blob arm on foreArm  at=1.27 r=0.0105 offset=(0.004,0,0.032) tip=(0.000,0.004,-0.064) blend=0.012 mirror
+  # Four fingers off the knuckle line (1.27, ~8 cm below the wrist), index forward (+z), ~21 mm apart. Each tapers
+  # 12 -> 8 mm and HOOKS toward the palm (tip -x, 4-5 cm in): the grabber of the look-dev
+  # (docs/dev-notes/2026-10-26-zombie-hands-lookdev, concept A), curled, never a flat paddle. THE CURL IS CONCAVE
+  # (owner, 2026-11-22: a hand about to curl): `bend` puts each finger's Bezier control point on the BACK of the hand
+  # (+x) and down, under the knuckle, so the finger leaves the knuckle straight down and turns in toward its tip, the
+  # back of the finger the convex side. Bent toward the palm (-x) it bowed the other way. Blend 4 mm: wider webs the
+  # four into a mitt (they are a few mm apart at the root).
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,0.031) bend=(0.019,-0.020,0.002) tip=(-0.046,0.030,0.008) blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.57 r=0.0125 r2=0.0085 offset=(0,0,0.009) bend=(0.021,-0.022,0.000) tip=(-0.050,0.032,0.002) blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,-0.013) bend=(0.020,-0.021,-0.001) tip=(-0.048,0.031,-0.004) blend=0.004 mirror
+  bar  arm on foreArm  from=1.25 to=1.47 r=0.0105 r2=0.0072 offset=(0,0,-0.034) bend=(0.016,-0.016,-0.002) tip=(-0.038,0.024,-0.010) blend=0.004 mirror
+  # Thumb: off the palm's front edge near the wrist, down and forward, its tip turned in toward the fingers.
+  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.012,0,0.046) bend=(0.008,-0.008,0.006) tip=(-0.026,0.012,0.010) blend=0.006 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis

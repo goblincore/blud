@@ -61,12 +61,19 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [0.11, 0, 0], rigid: true },
     { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [-0.11, 0, 0], rigid: true },
 
-    // Arms — shoulder blob, then upper and forearm capsules, then a fist. Blended wide, so the shoulder reads as one
-    // mound with the arm and torso (2026-11-05; see zombie.blob).
+    // Arms — shoulder blob, then upper and forearm capsules, then a hand. Blended wide, so the shoulder reads as one
+    // mound with the arm and torso (2026-11-05; see zombie.blob). The HANDS (2026-11-22; zombie.blob's HANDS block): a
+    // tapered wrist, a palm, a knuckle ridge, four hooked fingers and a thumb, all on foreArm past its tail.
     { bone: 'clavicle', at: 0.90, radius: 0.072, scale: [1, 1, 1], blendK: 0.030, limb: 'arm', mirror: true },
     { bone: 'upperArm', at: 0.02, capTo: 0.95, radius: 0.055, scale: [1, 1, 1], blendK: 0.015, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 1.00, radius: 0.062, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, radiusB: 0.034, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 1.14, radius: 0.040, scale: [0.50, 1.20, 1.22], blendK: 0.0125, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 1.27, radius: 0.0105, scale: [1, 1, 1], blendK: 0.012, limb: 'arm', mirror: true, offset: [0.004, 0, 0.032], tip: [0, 0.004, -0.064] },
+    { bone: 'foreArm',  at: 1.27, capTo: 1.55, radius: 0.012, radiusB: 0.008, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0, 0, 0.031], tip: [-0.046, 0.03, 0.008], bend: [0.019, -0.02, 0.002] },
+    { bone: 'foreArm',  at: 1.27, capTo: 1.57, radius: 0.0125, radiusB: 0.0085, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0, 0, 0.009], tip: [-0.05, 0.032, 0.002], bend: [0.021, -0.022, 0] },
+    { bone: 'foreArm',  at: 1.27, capTo: 1.55, radius: 0.012, radiusB: 0.008, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0, 0, -0.013], tip: [-0.048, 0.031, -0.004], bend: [0.02, -0.021, -0.001] },
+    { bone: 'foreArm',  at: 1.25, capTo: 1.47, radius: 0.0105, radiusB: 0.0072, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0, 0, -0.034], tip: [-0.038, 0.024, -0.01], bend: [0.016, -0.016, -0.002] },
+    { bone: 'foreArm',  at: 1.06, capTo: 1.30, radius: 0.0145, radiusB: 0.0095, scale: [1, 1, 1], blendK: 0.006, limb: 'arm', mirror: true, offset: [-0.012, 0, 0.046], tip: [-0.026, 0.012, 0.01], bend: [0.008, -0.008, 0.006] },
 
     // Legs — thigh, shin, ankle, foot (heel + sole down to the floor; see zombie.blob).
     // The thigh starts 0.18 down and tapers (2026-11-05; see zombie.blob): no flesh ball left at the hip.
