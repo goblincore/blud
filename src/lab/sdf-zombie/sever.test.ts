@@ -104,7 +104,8 @@ describe('gibAllPieces', () => {
       const pieces = chunks.filter(g => g.limb === cl.limb);
       const addPrims = body2.prims
         .slice(cl.start, cl.start + cl.count)
-        .filter(p => p.op !== 'sub');
+        // Live adds: a far LOD stand-in (PrimDef.lod) is built dead and never becomes a piece.
+        .filter(p => p.op !== 'sub' && !p.dead);
       if (cl.limb === 'head') {
         expect(pieces).toHaveLength(1); // head stays whole (face carves)
       } else {
@@ -116,7 +117,7 @@ describe('gibAllPieces', () => {
 
   it('pieces exactly partition each split cluster (no prim lost or doubled)', () => {
     const { chunks } = gibAllPieces(body2, torso.center);
-    const armPrims = body2.prims.filter(p => p.limb === 'armL' && p.op !== 'sub');
+    const armPrims = body2.prims.filter(p => p.limb === 'armL' && p.op !== 'sub' && !p.dead);
     const pieces = chunks.filter(g => g.limb === 'armL').flatMap(g => g.prims);
     expect(pieces).toHaveLength(armPrims.length);
     for (const p of armPrims) expect(pieces).toContain(p);

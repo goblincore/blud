@@ -471,7 +471,7 @@ def build_hand():
         pts = flesh_curve(digit)
         root = pts[0]
         k0 = w + d * 0.030 + (root - w - d * (root - w).dot(d)) * 0.55
-        s.add(*loft([k0, root], [0.0034, 0.0040], sides=5, beef=BEEF['hand']))                                            # metacarpal
+        s.add(*loft([k0, root], [0.0028, 0.0030], sides=5, beef=BEEF['hand']))                                            # metacarpal
         tip = pts[-1] + (pts[-2] - pts[-1]).normalized() * digit[3] * 0.55   # stop short of the flesh's rounded tip
         s.add(*loft(pts[:-1] + [tip], [0.0040, 0.0036, 0.0033, 0.0030, 0.0027, 0.0024], sides=5, beef=BEEF['hand']))   # phalanges
     pts = flesh_curve(HAND_THUMB)

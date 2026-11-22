@@ -48,9 +48,13 @@ const pos: string[] = [];
 let torsoAxisArg: string | null = null;
 let torsoR0: number | null = null;
 let forceCpu = false;
+// --lod-far: bake the `lod=far` set as the plain skin and the `lod=near` set as the detail (regions.ts lodSet), for a
+// character the game always draws far (CharacterEntry.lodAlways).
+let lodFar = false;
 let shards = 1, shardK = 0, shardN = 1, shardOut: string | null = null;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--cpu') forceCpu = true;
+  else if (argv[i] === '--lod-far') lodFar = true;
   else if (argv[i] === '--shards') shards = Math.max(1, Number(argv[++i]));
   else if (argv[i] === '--shard') [shardK, shardN] = argv[++i]!.split('/').map(Number) as [number, number];
   else if (argv[i] === '--shard-out') shardOut = argv[++i]!;
@@ -72,7 +76,7 @@ const detailSrc = readFileSync(detailPath, 'utf8');
 
 let bodies: ReturnType<typeof bakeBodies>, layout: ReturnType<typeof buildRegions>;
 try {
-  bodies = bakeBodies(blobSrc, detailSrc, name);
+  bodies = bakeBodies(blobSrc, detailSrc, name, { lodFar });
   layout = buildRegions(bodies.base, { torsoRows: H, torsoAxis: torsoAxisArg, torsoR0, limbs: limbArgs, torsoSegs: segArgs });
 } catch (e) { console.error((e as Error).message); process.exit(2); }
 const { base, detail } = bodies;

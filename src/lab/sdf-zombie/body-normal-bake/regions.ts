@@ -40,12 +40,14 @@ export function withDetail(src: string, detail: string, name: string): string {
 export function buildFromBlob(src: string): Body { const doc = parseBlob(src); return buildBody(compileBlob(doc, compileFace(doc))); }
 
 /** The plain body and the detailed body, both at rest. */
-export function bakeBodies(blobSrc: string, detailSrc: string, name: string): { base: Body; detail: Body } {
+export function bakeBodies(blobSrc: string, detailSrc: string, name: string, opts: { lodFar?: boolean } = {}): { base: Body; detail: Body } {
+  if (!opts.lodFar) return { base: buildFromBlob(blobSrc), detail: buildFromBlob(withDetail(blobSrc, detailSrc, name)) };
   return { base: lodSet(buildFromBlob(blobSrc), 'far'), detail: lodSet(buildFromBlob(withDetail(blobSrc, detailSrc, name)), 'near') };
 }
 
 /**
- * DISTANCE LOD IN THE BAKE (PrimDef.lod; the zombie's mitten hand, 2026-11-22). The plain skin is the `lod=far` set
+ * DISTANCE LOD IN THE BAKE (PrimDef.lod; the zombie's mitten trial, 2026-11-22; bake-body-normal.ts --lod-far, for a
+ * character the game always draws far: CharacterEntry.lodAlways). The plain skin is the `lod=far` set
  * (the cheap stand-in the game draws), the detailed skin the `lod=near` set (the fingers): each texel's ray meets the
  * mitten and the nearest finger, so the map shades the grooves between fingers onto the mitten. A body with no lod
  * prims is returned as built.

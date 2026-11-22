@@ -71,9 +71,11 @@ body
   # axis (-x -> -z, +z -> -x; wide and deep swapped): hanging, the palm faces back and the thumb the
   # thigh; reaching forward, the palm faces the floor and the thumb points in, parallel to it, the fingers hooking down.
   bar  arm on foreArm  from=0.05 to=0.90 r=0.048 r2=0.034 blend=0.007 mirror
-  # Palm: an ellipsoid hung 4 cm below the wrist (at 1.14 of the 0.30 forearm), palm facing back (thin in z), the
-  # width across the body (x), the thumb toward the thigh. Blended over the orb's 12.5 mm into the wrist.
-  blob arm on foreArm  at=1.14 r=0.040 wide=1.22 deep=0.50 tall=1.20 blend=0.0125 mirror
+  # Palm: an ellipsoid hung 3 cm below the wrist (at 1.10 of the 0.30 forearm), palm facing back (thin in z), the
+  # width across the body (x), the thumb toward the thigh. Blended over the orb's 12.5 mm into the wrist. 1.10, not
+  # 1.14: the SHADOW hull's palm sphere (sized by its thinnest axis, 2.3 cm) stood 1 cm off the wrist's, so each hand
+  # cast a shadow apart from its arm; at 1.10 the two overlap (occluder-hull.test.ts, one connected figure).
+  blob arm on foreArm  at=1.10 r=0.040 wide=1.22 deep=0.50 tall=1.20 blend=0.0125 mirror
   # Four fingers off the knuckle line (1.27, ~8 cm below the wrist), index toward the thigh (-x), ~21 mm apart. Each
   # tapers 12 -> 8 mm and HOOKS toward the palm (tip -z, ~3.5 cm in) and fans out a little (tip x): the grabber of the look-dev
   # (docs/dev-notes/2026-10-26-zombie-hands-lookdev, concept A), curled, never a flat paddle. THE CURL IS CONCAVE

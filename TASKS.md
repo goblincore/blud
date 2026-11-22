@@ -21,7 +21,8 @@
   `claude/zombie-hands-redo`): the hand is marched flesh again (no kit), a tapered wrist, palm, knuckle ridge, four concave-curled
   fingers and a thumb on `foreArm` past its tail; the hand severs as one piece (`Primitive.extremity`). Skeleton kit hand, gibs, body
   normal map and pack-golden rebuilt. The curled fingers are `lod=near` (new grammar word, distance LOD: a zombie farther than ~2 m
-  draws a cheap two-prim stand-in instead). **Owner playtest pending.** Next if it needs more read: a baked residual detail layer
+  draws a cheap two-prim stand-in instead). Owner playtest 2026-11-22: "generally not bad"; palms now down in the reach, far
+  stand-in 20% bigger. A mitten-only trial (fingers in the normal map, `lodAlways`) read weaker and is off. **PR open, owner re-check pending.** Next if it needs more read: a baked residual detail layer
   (knuckles, nails, tendons) on PR goblincore/blud#133's mechanism.
 - [~] **Burn flail and burn death** (2026-11-16; branch `claude/burning-body-effect-optimization-4795c0`): a lit body panic-runs with an arm flail, then dies on an authored burn fall; per-character tiers. Built and tested, **owner look pending**. Next: the fire's render cost. [Combat and gore](docs/tasks/combat-and-gore.md) · [notes](docs/dev-notes/2026-11-16-burn-flail/NOTES.md)
 - [~] **Melt death in the game** (2026-11-14; branch `claude/melting-dying-animation-6cffdd`): the lab melt repaired (off-origin, ballooning pool), `beginMelt` on the game actor, slot 8 placeholder melter. Open: the look on the game's zombie (pale), kit/prop, crowd path. [combat and gore](docs/tasks/combat-and-gore.md)

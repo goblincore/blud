@@ -67,7 +67,7 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'clavicle', at: 0.90, radius: 0.072, scale: [1, 1, 1], blendK: 0.030, limb: 'arm', mirror: true },
     { bone: 'upperArm', at: 0.02, capTo: 0.95, radius: 0.055, scale: [1, 1, 1], blendK: 0.015, limb: 'arm', mirror: true },
     { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, radiusB: 0.034, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 1.14, radius: 0.04, scale: [1.22, 1.2, 0.5], blendK: 0.0125, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 1.10, radius: 0.04, scale: [1.22, 1.2, 0.5], blendK: 0.0125, limb: 'arm', mirror: true },
     { bone: 'foreArm',  at: 1.27, capTo: 1.55, radius: 0.012, radiusB: 0.008, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [-0.0307, -0.0046, 0.0003], tip: [-0.0189, 0.0157, -0.0348], bend: [-0.0015, -0.0156, 0.0168], lod: 'near' },
     { bone: 'foreArm',  at: 1.27, capTo: 1.57, radius: 0.0125, radiusB: 0.0085, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [-0.0089, -0.0013, 0.0001], tip: [-0.0072, 0.0183, -0.0379], bend: [0.0016, -0.0161, 0.0178], lod: 'near' },
     { bone: 'foreArm',  at: 1.27, capTo: 1.55, radius: 0.012, radiusB: 0.008, scale: [1, 1, 1], blendK: 0.004, limb: 'arm', mirror: true, offset: [0.0129, 0.0019, -0.0001], tip: [0.0048, 0.0192, -0.036], bend: [0.0044, -0.0147, 0.0167], lod: 'near' },

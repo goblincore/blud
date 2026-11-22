@@ -172,10 +172,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
     // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.
     bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
-    // The MITTEN hand (owner, 2026-11-22: "try the mitten hand with a normal map"): the zombie always draws its
-    // lod=far hand -- palm, one finger-mass capsule, thumb -- and its curled lod=near fingers live only in the normal
-    // map (the foreArm region runs over the hand; scripts/zombie-detail-gen.ts has the bake command).
-    lodAlways: 'far',
+    // The hand is curl + distance LOD (zombie.blob HANDS). A MITTEN trial (2026-11-22: lodAlways 'far', the curled
+    // fingers baked into the normal map with bake-body-normal.ts --lod-far and the foreArm region run to t 1.70) read
+    // as a mitt with faint streaks in the game's light; it stays one flag away.
     profile: ZOMBIE_PROFILE,
   },
   goblin: {
