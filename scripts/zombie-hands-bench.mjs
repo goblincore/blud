@@ -11,8 +11,10 @@
 // held and no shots: the fenced frame, every GPU pass by label and the CPU's tick/draw phases.
 //
 //   node scripts/zombie-hands-bench.mjs <cdpPort> <name>@<vitePort> <name>@<vitePort> ...
-// Env: ROUNDS (4), CROWD (12), SPACING (1.1), DIST (3.2: player to the crowd's near edge), OUT (.lab-tmp/hands-bench)
+// Env: ROUNDS (4), CROWD (12), SPACING (1.1), DIST (3.2: player to the crowd's near edge), OUT (.lab-tmp/hands-bench),
+//   LOAD_MAX (6: each leg waits for the 1-minute load average to fall to it; the row records it before and after)
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import { connectGame, bootCloseupPage, sleep } from './lib/sdf-closeup-stage.mjs';
 
 const CDP = Number(process.argv[2]);
@@ -22,6 +24,7 @@ const CROWD = Number(process.env.CROWD ?? 12);
 const SPACING = Number(process.env.SPACING ?? 1.1);
 const DIST = Number(process.env.DIST ?? 3.2);
 const OUT = process.env.OUT ?? '.lab-tmp/hands-bench';
+const LOAD_MAX = Number(process.env.LOAD_MAX ?? 6);
 mkdirSync(OUT, { recursive: true });
 const fail = (m) => { console.error(`FAIL: ${m}`); process.exit(1); };
 if (!CDP || LEGS.length < 1) fail('usage: node scripts/zombie-hands-bench.mjs <cdpPort> name@port ...');
@@ -31,6 +34,9 @@ const median = (v) => { const s = [...v].sort((a, b) => a - b); return s.length 
 const { send, evaluate } = await connectGame({ vite: LEGS[0].port, cdp: CDP, width: 1280, height: 800, onFail: fail });
 
 async function runLeg(leg, round) {
+  // LOAD GATE: other work on this machine swings a leg by 2x; wait (at most 10 min) for the 1-minute load to settle.
+  for (const t0 = Date.now(); loadavg()[0] > LOAD_MAX && Date.now() - t0 < 600000;) await sleep(5000);
+  const load0 = loadavg()[0];
   const t0 = Date.now();
   await bootCloseupPage({ send, evaluate, fail, url: `http://localhost:${leg.port}/sdf-game.html?level=arena&spawn=zombie&seed=1` });
   for (let i = 0; i < 600; i++) {
@@ -56,7 +62,7 @@ async function runLeg(leg, round) {
   const passes = {};
   // Exclusive ms per GPU pass label and the CPU phases ('cpu:*'), means over the leg (game-bench PassSegmentSummary).
   for (const [k, v] of Object.entries(r.passes?.overall?.labels ?? {})) passes[k] = v.mean;
-  const row = { round, leg: leg.name, bootSec, staged, frameP50: r.overall.p50, frameP95: r.overall.p95, gpuSpan: r.passes?.overall?.span?.mean, passes };
+  const row = { round, leg: leg.name, load0, load1: loadavg()[0], bootSec, staged, frameP50: r.overall.p50, frameP95: r.overall.p95, gpuSpan: r.passes?.overall?.span?.mean, passes };
   appendFileSync(`${OUT}/rows.jsonl`, JSON.stringify(row) + '\n');
   console.log(`r${round} ${leg.name.padEnd(10)} boot ${bootSec.toFixed(1)} s  bodies ${staged.actors}  frame p50 ${r.overall.p50.toFixed(2)} p95 ${r.overall.p95.toFixed(2)} ms`);
   return row;
