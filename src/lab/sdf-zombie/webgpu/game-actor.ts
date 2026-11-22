@@ -1163,7 +1163,7 @@ export function createZombieActor(opts: {
     if (prim && soldierInjury(current, soldierWounds, injuryTuning).missing[prim.limb as keyof MissingLimbs]) return;
     if (prim && !prim.dead && current.clusters.find(c => c.limb === prim.limb)?.alive) soldierWounds.push(w);
   }
-  const torsoWounds = opts.boundedWounds ? createTorsoWounds() : null;
+  const torsoWounds = opts.boundedWounds ? createTorsoWounds(WOUND_RING_CAP) : null;
   if (torsoWounds) for (const w of woundRing.all()) torsoWounds.record(w, body);
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
