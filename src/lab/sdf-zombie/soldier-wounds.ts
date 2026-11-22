@@ -16,15 +16,17 @@ let raggedCraters = true;
 export const setRaggedCraters = (on: boolean) => { raggedCraters = on; };
 export const raggedCratersOn = () => raggedCraters;
 
-/** Render-only secondary cuts. They never enter the gameplay ring or injury ledger. */
-export function soldierVisualWounds(wounds: readonly Wound[]): Wound[] {
-  const real=wounds.slice(-MAX_WOUNDS).map(w=>({...w,local:[...w.local] as [number,number,number]}));
+/** Render-only secondary cuts. They never enter the gameplay ring or injury ledger. `cap`: the rows the body's
+ *  upload holds, which must be the ring's own cap (the crater grid's WG_MAX_WOUNDS when it is on). A smaller cap
+ *  hides the oldest wounds while the ring still holds them (2026-11-22: slug craters vanished after pellet volleys). */
+export function soldierVisualWounds(wounds: readonly Wound[], cap: number = MAX_WOUNDS): Wound[] {
+  const real=wounds.slice(-cap).map(w=>({...w,local:[...w.local] as [number,number,number]}));
   if(raggedCraters) return real.map(w=>w.injuryIgnored||w.type==='burn'?w:{...w,ragged:RAGGED_AMOUNT});
   const out=[...real];
-  for(let i=0;i<real.length && out.length<MAX_WOUNDS;i++) {
+  for(let i=0;i<real.length && out.length<cap;i++) {
     const w=real[i]!;
     if(w.injuryIgnored||w.type==='burn'||w.shape==='cut') continue;   // a cut is a slot: crater lobes would bowl it
-    for(let lobe=0;lobe<3 && out.length<MAX_WOUNDS;lobe++) {
+    for(let lobe=0;lobe<3 && out.length<cap;lobe++) {
       const h=((w.primIdx+1)*1103515245+(Math.round(w.local[0]*1000)+4096)*12345+lobe*2654435761)>>>0;
       const angle=(h%6283)/1000, offset=w.radius*(.72+(h%11)/100);
       const n=w.carveN??[0,0,1], ref=Math.abs(n[2])<.8?[0,0,1] as const:[0,1,0] as const;

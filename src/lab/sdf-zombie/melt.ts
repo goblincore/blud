@@ -298,6 +298,16 @@ export function meltInitBody(
   return meltInit(endpointHeights(prims), floorY, tuning);
 }
 
+/** The melt (0..1) of prim `i`'s two endpoints as applyMelt schedules them, before its stretch limit: the drip
+ *  (each prim's hashed lead on the front, and a little more for whichever end hangs lower). Their mean is the
+ *  prim's own melt, which its scalars (radius, crush, fuse) follow. */
+export function primEndProgress(s: MeltState, i: number, body: MeltBodyTuning = MELT_TUNING_BODY): [number, number] {
+  if (s.t <= 0) return [0, 0];
+  const lead = body.stagger * meltHash(i + 71 + (body.seed ?? 0));
+  const ha = s.heights[i * 2] ?? 0, hb = s.heights[i * 2 + 1] ?? 0;
+  return [progressAt(s, ha - lead - (ha < hb ? body.stretch : 0)), progressAt(s, hb - lead - (hb < ha ? body.stretch : 0))];
+}
+
 /**
  * Rest flesh prims in, melted flesh prims out. Never mutates the input, never
  * reorders (the fold order is load-bearing — see BuiltBody.prims), and never
@@ -318,11 +328,7 @@ export function applyMelt(
   if (s.t <= 0) return prims.map(p => p);
   const seed = body.seed ?? 0;
   return prims.map((p, i) => {
-    // Drip: this prim's lead on the front, and a little more for whichever of its ends hangs lower.
-    const lead = body.stagger * meltHash(i + 71 + seed);
-    const ha = s.heights[i * 2] ?? 0, hb = s.heights[i * 2 + 1] ?? 0;
-    let ua = progressAt(s, ha - lead - (ha < hb ? body.stretch : 0));
-    let ub = progressAt(s, hb - lead - (hb < ha ? body.stretch : 0));
+    let [ua, ub] = primEndProgress(s, i, body);
     const u = (ua + ub) / 2;   // before the stretch limit below: the scalars follow the front, not the pull
     // Thinnest half-way through its own melt, back to full width as it pools.
     const neck = 1 - body.neck * Math.sin(Math.PI * u) * (1 - u);

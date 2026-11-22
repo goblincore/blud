@@ -32,6 +32,22 @@ describe('bounded torso visual state', () => {
     for (const hit of hits) expect(Math.min(...centres.map(c => Math.hypot(...c.map((v, i) => v - hit[i]!))))).toBeLessThan(.02);
   });
 
+  it('keeps every stock wound up to the cap it is given (the crater grid holds 128, not 32)', () => {
+    // 2026-11-22: like the soldier's list, the preview cut its stock wounds to MAX_WOUNDS while the ring holds
+    // WOUND_RING_CAP, so the oldest limb wounds stopped being drawn past 32.
+    const a = createTorsoWounds(128);
+    for (let i = 0; i < 60; i++) a.record({ ...wound(arm), ageSec: i }, body);
+    regionWounds().forEach(w => a.record(w, body));
+    a.advance(.4);
+    const result = a.visual(body);
+    expect(result.filter(w => !w.presetCut)).toHaveLength(60);
+    expect(result.filter(w => w.presetCut)).toHaveLength(4);
+    expect(createTorsoWounds().visual(body)).toHaveLength(0);
+    const capped = createTorsoWounds();
+    for (let i = 0; i < 60; i++) capped.record(wound(arm), body);
+    expect(capped.visual(body)).toHaveLength(MAX_WOUNDS);   // without the grid the cap is still MAX_WOUNDS
+  });
+
   it('classifies a turned body hit against the rest body into the same region', () => {
     const a = createTorsoWounds(), first = regionWounds()[0]!;
     a.record(first, body); a.advance(.4);

@@ -60,7 +60,7 @@ Each line is the first sentence of the module's header comment.
 | [SDF march renderer](#sdf-march-renderer) | 64 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 40 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
-| [Damage, wounds and heads](#damage-wounds-and-heads) | 25 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
+| [Damage, wounds and heads](#damage-wounds-and-heads) | 26 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 14 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
@@ -833,6 +833,7 @@ Wound fields, severing, head damage and the head split, death states, melting, b
 - `humanoid-target.ts` — Task 10 — click-to-shoot targeting.
 - `humanoid-verlet.ts` — Task 3 — the humanoid's verlet recoil layer.
 - `melt-bones.ts` — MELT / BONES — the skeleton falls out of the goo.
+- `melt-wounds.ts` — CRATERS THROUGH A MELT (2026-11-22).
 - `melt.ts` — MELT — the zombie liquefies where it stands.
 - `player-hit-feedback.ts` — What an enemy melee hit DOES to the player while the game has no player health (game-actor.ts: "the game intentionally has no health"): a red flash,…
 - `sever.ts` — Severing and gibbing: splits a body into the remaining body plus chunk groups for a limb, a chain cut, or the whole body.
