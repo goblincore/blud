@@ -463,6 +463,12 @@ export interface Primitive {
   core?: boolean;
   /** See PrimDef.rigid. */
   rigid?: boolean;
+  /**
+   * Set by placePrims: the prim lies wholly past the tail of a LEAF bone (from/at > 1 on a bone nothing hangs off),
+   * i.e. it is part of what hangs off the limb's end -- the zombie's hand on its forearm (2026-11-22). cutChains
+   * cuts no joint past the first one, so such a hand severs as one piece and a finger wound cannot split it.
+   */
+  extremity?: boolean;
   /** See PrimDef.when. */
   when?: 'alive' | 'dead';
   /** See PrimDef.morphs. Carried through mirror and resolve; applyRig reads it, packBody never does. */

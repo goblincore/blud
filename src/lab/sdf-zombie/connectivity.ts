@@ -275,8 +275,12 @@ export function cutChains(
     if (order.length < 2) continue;
     const prims = body.prims.slice(c.start, c.start + c.count);
 
-    // First (most proximal) cut joint wins: everything past it detaches.
+    // First (most proximal) cut joint wins: everything past it detaches. The joints stop at the limb's EXTREMITY
+    // (Primitive.extremity): the joint INTO its first prim is the wrist, and nothing past it is a joint -- the
+    // zombie's fingers sit side by side, so "the joint" between two of them was a cut that took every digit
+    // authored after the one shot.
     for (let j = 0; j + 1 < order.length; j++) {
+      if (body.prims[order[j]!]!.extremity) break;
       const prox = body.prims[order[j]!]!;
       const distal = body.prims[order[j + 1]!]!;
       const joint = jointPoint(prox, distal);

@@ -24,17 +24,23 @@ function chain(limb: LimbId): number[] {
   return chainOrder(body, body.clusters.find(c => c.limb === limb)!);
 }
 
+/** The limb's tip mass: its extremity's first prim (the zombie's palm, 2026-11-22; its digits come after it in
+ *  authored order), else the chain's last prim. */
+function tipPrim(o: number[]): number {
+  return o.find(i => body.prims[i]!.extremity) ?? o[o.length - 1]!;
+}
+
 /** Where along the limb, root ball centre (0) to tip ball centre (1). */
 function along(limb: LimbId, t: number): Vec3 {
   const o = chain(limb);
-  const a = body.prims[o[0]!]!.a, b = body.prims[o[o.length - 1]!]!.b;
+  const a = body.prims[o[0]!]!.a, b = body.prims[tipPrim(o)]!.b;
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
 /** The arm's elbow / the leg's knee, as a fraction along the limb. */
 function midT(limb: LimbId): number {
   const o = chain(limb);
-  const a = body.prims[o[0]!]!.a, b = body.prims[o[o.length - 1]!]!.b;
+  const a = body.prims[o[0]!]!.a, b = body.prims[tipPrim(o)]!.b;
   const j = o.findIndex((_, k) => k > 0 && jointClass(limb, body.prims[o[k - 1]!]!, body.prims[o[k]!]!) === 'mid');
   const m = body.prims[o[j]!]!.a;
   const d = (p: Vec3, q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
