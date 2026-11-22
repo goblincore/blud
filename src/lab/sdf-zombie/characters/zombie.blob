@@ -46,9 +46,7 @@ body
   # pelvis drawn with tip=: that stretched the pelvis piece 13x (gib-asset-deform-regression.test.ts).
   blob torso on pelvis at=0.95 offset=(0.11,0,0) r=0.070 blend=0.03 both rigid
 
-  # Arms — shoulder blob, then upper and forearm capsules, then a WRIST knob. The fist orb (r 0.062 at 1.00) is now the
-  # grabber HANDS, polygon kit on the forearm (assets-source/zombie-kit/make_hands.py, owner 2026-10-26), drawn in this
-  # body's own flesh with the flesh shader's lighting (kit-flesh.ts); the knob is what the hand's palm sits into.
+  # Arms — shoulder blob, then upper and forearm capsules, then a fist.
   # THE SHOULDER IS ONE MOUND (owner playtest 2026-11-05: the shoulder "seems to pop out visually"). The shoulder
   # ball rides the shoulder POINT, so the arm never turns it, and it was blended into the upper arm over 7-10 mm: a
   # raised arm came up out of a ball that stayed put, with a crease round its root and the ball hanging out under
@@ -59,7 +57,7 @@ body
   blob arm on clavicle at=0.90 r=0.072 blend=0.030 mirror
   bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.015 mirror
   bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
-  blob arm on foreArm  at=0.97 r=0.045 blend=0.0125 mirror
+  blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis

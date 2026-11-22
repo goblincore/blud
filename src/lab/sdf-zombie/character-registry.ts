@@ -162,12 +162,8 @@ function bakedFace(file: string): FaceSheet {
  * the whole reason the turntable exists.
  */
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
-  // The grabber HANDS are its kit (assets-source/zombie-kit/make_hands.py): polygon flesh on each forearm, drawn in the
-  // game with the flesh shader's lighting (kit-flesh.ts). The .blob keeps a wrist knob where the fist orb was.
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
-    kit: '/assets/lab/zombie-kit.gltf',
-    kitSheds: true, // a shot-off forearm takes its hand
     // Sutures along the seams the body was sewn together at: shoulders, neck, waist, hips (characters/zombie.detail
     // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
     // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.

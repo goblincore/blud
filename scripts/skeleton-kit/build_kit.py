@@ -433,9 +433,7 @@ def build_forearm():
 
 
 def build_hand():
-    """The wrist: carpals and the metacarpal bases. The flesh there is a 4.5 cm WRIST KNOB at 0.97 down the forearm
-    (zombie.blob, 2026-10-26): the hand past it is polygon kit (assets-source/zombie-kit/make_hands.py), not flesh, so
-    the fingers of the old loose fist (sized for the 6 cm fist ball) stood out of the body. Everything stays inside it."""
+    """A loose fist: the flesh hand is a 6 cm ball on the wrist joint, and the bones stay inside it."""
     s = Shells()
     w = J[9]
     d = (J[9] - J[7]).normalized()               # down the forearm
@@ -443,12 +441,17 @@ def build_hand():
     kz = d.cross(pm).normalized()
     if kz.z < 0:
         kz = -kz
-    s.add(*ellipsoid(w - d * 0.020, (0.012, 0.012, 0.020), segs=8, rings=4, axes=(pm, d, kz)))           # carpals
-    for o in (-0.014, -0.005, 0.005, 0.014):
-        k0, k1 = w - d * 0.012 + kz * o, w + d * 0.008 + kz * (o * 1.1)
-        s.add(*loft([k0, k1], [0.0048, 0.0050], sides=5, beef=BEEF['hand']))                                                 # metacarpal base
-    t0 = w - d * 0.016 + kz * 0.018
-    s.add(*loft([t0, t0 + d * 0.010 + kz * 0.008 + pm * 0.004], [0.005, 0.0046], sides=5, beef=BEEF['hand']))              # thumb base
+    s.add(*ellipsoid(w - d * 0.020, (0.012, 0.012, 0.022), segs=8, rings=4, axes=(pm, d, kz)))           # carpals
+    for o in (-0.018, -0.006, 0.006, 0.018):
+        k0, k1 = w - d * 0.012 + kz * o, w + d * 0.018 + kz * (o * 1.2)
+        s.add(*loft([k0, k1], [0.0048, 0.0052], sides=5, beef=BEEF['hand']))                                                 # metacarpal
+        p1 = k1 + d * 0.016 + pm * 0.010
+        s.add(*loft([k1, p1], [0.0046, 0.004], sides=5, beef=BEEF['hand']))                                                  # finger, two bones
+        s.add(*loft([p1, p1 + d * 0.002 + pm * 0.013], [0.0038, 0.003], sides=5, beef=BEEF['hand']))
+    t0 = w - d * 0.016 + kz * 0.022
+    t1 = t0 + d * 0.012 + kz * 0.014 + pm * 0.008
+    s.add(*loft([t0, t1], [0.005, 0.0048], sides=5, beef=BEEF['hand']))                                                      # thumb
+    s.add(*loft([t1, t1 + d * 0.012 + pm * 0.010 - kz * 0.004], [0.0044, 0.0034], sides=5, beef=BEEF['hand']))
     return s
 
 

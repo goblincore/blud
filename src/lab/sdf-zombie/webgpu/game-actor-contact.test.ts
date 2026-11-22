@@ -84,12 +84,9 @@ describe('a thrown corpse meets the world', () => {
     }
   });
 
-  // SEEDS: a ragdoll is chaotic in the seed, and these two tests fail a few seeds in 40 on any zombie (2026-11-22 sweep
-  // of 100-139: 7 on main, 10 with the wrist knob that replaced the fist). 107 became one of them when the fist went
-  // (goblincore/blud#75); 108 stands in for it.
   // Owner playtest 2026-11-12: "a thrown body cant like knock or displace another body" (game-actor.ts BODY_KNOCK).
   it('strikes the body standing where it is shot dead toward, on arrival, not while it presses on it: ragdoll and authored fall', () => {
-    for (const authored of [false, true]) for (const seed of [108, 135]) {
+    for (const authored of [false, true]) for (const seed of [107, 135]) {
       setDeathFall({ on: authored });
       const standing: BodyObstacle = { id: 2, kind: 'upright', x: 1, z: 0, r: CORPSE_CONTACT.uprightR, y0: 0.35, y1: 1.8 };
       const a = createZombieActor({
@@ -137,7 +134,7 @@ describe('a thrown corpse meets the world', () => {
   // fall stopped by a wall went on pulling its pose into it: crushed flat against the face, it thrashed for good
   // (shoulders at 12-15 m/s nine seconds on; game-actor.ts THE FALL GOES LIMP). It lets go and lies down asleep.
   it('a body shot dead beside a sector wall line stays on its side of it, lies down and falls asleep', () => {
-    for (const authored of [true, false]) for (const seed of [108, 135]) {
+    for (const authored of [true, false]) for (const seed of [107, 135]) {
       setDeathFall({ on: authored });
       // One wall along z at x = 0.8, any height; a flat floor.
       const ground = { floorAt: () => 0, ceilAt: () => Infinity, blockingNear: () => [{ ax: 0.8, az: -5, bx: 0.8, bz: 5 }] };

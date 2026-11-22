@@ -21,7 +21,7 @@ import type { Vec3 } from '../types';
 import { gibLookFromMaterial, gibSurfaceFromMaterial } from './gib-asset-archetypes';
 
 /** Kit material names whose parts are FLESH (kit-overlay.ts LOOK carries their standard-material fallback). */
-export const KIT_FLESH_MATERIALS: ReadonlySet<string> = new Set(['goblinskin', 'zombieskin']);
+export const KIT_FLESH_MATERIALS: ReadonlySet<string> = new Set(['goblinskin']);
 
 /** Intact skin: no wound, no torn end, flesh everywhere -- bakeChunkAlbedo's skin branch. */
 const INTACT: ChunkFieldEvals = {

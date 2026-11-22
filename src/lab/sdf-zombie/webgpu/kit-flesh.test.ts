@@ -49,8 +49,7 @@ describe('dressKitFlesh', () => {
     expect(claw.material).not.toBe(lit);
     expect(claw.geometry.getAttribute('bakeColor')).toBeUndefined();
   });
-  it('knows the goblin and zombie skins', () => {
+  it('knows the goblin skin', () => {
     expect(KIT_FLESH_MATERIALS.has('goblinskin')).toBe(true);
-    expect(KIT_FLESH_MATERIALS.has('zombieskin')).toBe(true);
   });
 });

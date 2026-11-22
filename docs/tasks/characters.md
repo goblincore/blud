@@ -352,7 +352,9 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     goblin-cinematic kits; `.blob` hand is a wrist knob (at=0.25, inside the orb); at-home goblins keep the orb in their marked block — anything that
     needs "the hand ball" takes the BIGGEST prim on the hand bone.
   - Kit flesh (`kit-flesh.ts`): flesh-named kit parts drawn with the settled-gib material (flesh shader lighting), `KIT_LIST_GAIN` 1.0.
-  - Open: other weapons' grips; idle grip fidgets (articulated fingers); kit sever handling.
+  - The hand kit leaves with a shot-off arm (`kitSheds`, from main). Owner playtest 2026-11-22: FPV hands fine. The zombie's kit hands built
+    alongside were pulled from the PR (wrist/hand proportions, lighting, speed); see TASKS.md "Zombie kit hands".
+  - Open: other weapons' grips; idle grip fidgets (articulated fingers).
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

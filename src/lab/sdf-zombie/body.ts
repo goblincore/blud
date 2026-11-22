@@ -61,13 +61,12 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [0.11, 0, 0], rigid: true },
     { bone: 'pelvis', at: 0.95, radius: 0.070, scale: [1, 1, 1], blendK: 0.03, limb: 'torso', offset: [-0.11, 0, 0], rigid: true },
 
-    // Arms — shoulder blob, then upper and forearm capsules, then a WRIST knob (the fist orb became the grabber hands,
-    // polygon kit on the forearm: zombie.blob, 2026-10-26). Blended wide, so the shoulder reads as one mound with the
-    // arm and torso (2026-11-05; see zombie.blob).
+    // Arms — shoulder blob, then upper and forearm capsules, then a fist. Blended wide, so the shoulder reads as one
+    // mound with the arm and torso (2026-11-05; see zombie.blob).
     { bone: 'clavicle', at: 0.90, radius: 0.072, scale: [1, 1, 1], blendK: 0.030, limb: 'arm', mirror: true },
     { bone: 'upperArm', at: 0.02, capTo: 0.95, radius: 0.055, scale: [1, 1, 1], blendK: 0.015, limb: 'arm', mirror: true },
     { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 0.97, radius: 0.045, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 1.00, radius: 0.062, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
 
     // Legs — thigh, shin, ankle, foot (heel + sole down to the floor; see zombie.blob).
     // The thigh starts 0.18 down and tapers (2026-11-05; see zombie.blob): no flesh ball left at the hip.
