@@ -127,6 +127,9 @@ export function placePrims(
       // (death-state.ts). `dead` is the same switch severing uses.
       ...(p.when ? { when: p.when } : {}),
       ...(p.when === 'dead' ? { dead: true } : {}),
+      // A far LOD stand-in is never part of the body the CPU sees (PrimDef.lod): dead, until packBody revives it.
+      ...(p.lod ? { lod: p.lod } : {}),
+      ...(p.lod === 'far' ? { dead: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
       ...(p.box === undefined ? {} : { box: p.box }),
       // The strand bundle rides through placement exactly like paint and

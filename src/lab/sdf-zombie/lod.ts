@@ -193,3 +193,21 @@ export function pickLodSticky(
   if (next < previous && screenPx < boundary + band) return previous;
   return next;
 }
+
+/**
+ * DISTANCE LOD FOR DETAIL PRIMS (PrimDef.lod; zombie hands, 2026-11-22). A body draws its `lod=near` detail (the
+ * zombie's curled fingers, ~1.2 cm thick: 0.7% of its height) only while it stands at least this many px tall:
+ * below it a finger is under ~3 px at the page's output size, and less in the march's own (upscaled) target. The
+ * detail is costly where it is invisible: 12 zombies at 3-5 m paid +4.4 ms of march for fingers 1-2 px wide
+ * (scripts/zombie-hands-bench.mjs, 2026-11-22). ~2 m on a 75-degree, 800 px tall view.
+ */
+export const DETAIL_MIN_PX = 450;
+
+/**
+ * Whether a body draws its far LOD stand-ins this frame, sticky by LOD_HYSTERESIS round DETAIL_MIN_PX so a body
+ * hovering at the threshold does not swap its fingers every frame. `previousFar` is last frame's answer.
+ */
+export function detailFarSticky(screenPx: number, previousFar: boolean, minPx = DETAIL_MIN_PX): boolean {
+  const band = minPx * LOD_HYSTERESIS;
+  return previousFar ? screenPx < minPx + band : screenPx < minPx - band;
+}

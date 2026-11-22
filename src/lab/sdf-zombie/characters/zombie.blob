@@ -77,12 +77,19 @@ body
   # four into a mitt (they are a few mm apart at the root). OPEN, NOT A FIST: hooked 5 cm in, the in-game reach pose
   # read the hands as two small fists at 2 m (captures 2026-11-22); hooked 3.5 cm and fanned they read as a claw.
   # No knuckle ridge: one prim fewer in the hand's march group (perf, 2026-11-22), and the noise covers the back.
-  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,0.031) bend=(0.016,-0.016,0.004) tip=(-0.034,0.020,0.016) blend=0.004 mirror
-  bar  arm on foreArm  from=1.27 to=1.57 r=0.0125 r2=0.0085 offset=(0,0,0.009) bend=(0.017,-0.017,0.001) tip=(-0.037,0.021,0.004) blend=0.004 mirror
-  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,-0.013) bend=(0.016,-0.016,-0.002) tip=(-0.035,0.020,-0.008) blend=0.004 mirror
-  bar  arm on foreArm  from=1.25 to=1.47 r=0.0105 r2=0.0072 offset=(0,0,-0.034) bend=(0.013,-0.013,-0.004) tip=(-0.028,0.016,-0.018) blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,0.031) bend=(0.016,-0.016,0.004) tip=(-0.034,0.020,0.016) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.57 r=0.0125 r2=0.0085 offset=(0,0,0.009) bend=(0.017,-0.017,0.001) tip=(-0.037,0.021,0.004) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0,0,-0.013) bend=(0.016,-0.016,-0.002) tip=(-0.035,0.020,-0.008) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.25 to=1.47 r=0.0105 r2=0.0072 offset=(0,0,-0.034) bend=(0.013,-0.013,-0.004) tip=(-0.028,0.016,-0.018) lod=near blend=0.004 mirror
   # Thumb: off the palm's front edge near the wrist, down and forward, its tip turned in toward the fingers.
-  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.012,0,0.046) bend=(0.008,-0.008,0.006) tip=(-0.026,0.012,0.010) blend=0.006 mirror
+  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.012,0,0.046) bend=(0.008,-0.008,0.006) tip=(-0.026,0.012,0.010) lod=near blend=0.006 mirror
+  # DISTANCE LOD (lod=, PrimDef.lod; 2026-11-22). The curled digits above are `lod=near`: five bent prims, thin, and
+  # the march paid +4.4 ms for them on a crowd of 12 at 3-5 m, where a finger is 1-2 px (scripts/zombie-hands-bench.mjs).
+  # A body under DETAIL_MIN_PX (lod.ts, ~2 m) draws these two `lod=far` stand-ins instead: one straight capsule over
+  # the four fingers' mean root and tip, flattened across them (deep), and the thumb unbent. Same hand length and
+  # hook at a glance, two cheap prims. They are built dead, so hits, hulls and gibs only ever see the fingers.
+  bar  arm on foreArm  from=1.27 to=1.54 r=0.0125 r2=0.0112 deep=3.4 wide=0.9 offset=(0,0.001,-0.002) tip=(-0.034,0.019,-0.002) lod=far blend=0.006 mirror
+  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.012,0,0.046) tip=(-0.026,0.012,0.010) lod=far blend=0.006 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis
