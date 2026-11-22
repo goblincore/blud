@@ -215,6 +215,10 @@ export interface OuterHullOpts {
   /** CLOTH PROXIES (cloth-proxy.ts): when given, each straight shell prim of a body with a closed head is pushed
    *  here as its round cone, grown by its reach, INSTEAD of a sphere chain. The caller rasterises them. */
   shellProxies?: ProxyCone[];
+  /** DISTANCE LOD (PrimDef.lod): the bodies drawn FAR this frame (PackOpts.lodFar). Given, each body's `lod` prims
+   *  are chained like any prim, for the set it draws: a far body its stand-ins, a near one its detail. Absent (a
+   *  caller that does not know), each cluster's `lod` prims share one sphere that holds both sets. */
+  lodFar?: ReadonlySet<BuiltBody>;
 }
 
 /**
@@ -256,8 +260,12 @@ export function buildOuterHullInstances(
     // fingers alone would leave a far body's stand-in uncovered (a hole), and chains of thin bent fingers were
     // the cost (profile: this update 171 -> 455 ms over 240 steps with 12 zombies). A hand-sized sphere holds both.
     const lodCover = new Map<number, { pts: Vec3[]; reach: number[] }>();
+    // Per-body sets (opts.lodFar given): the far stand-ins this body draws, chained below despite being dead.
+    const isFar = opts.lodFar?.has(body) ?? false;
+    const drawnFar = new Set<number>();
+    if (opts.lodFar) body.prims.forEach((p, pi) => { if (isFar && p.lod === 'far' && lodAnchorAlive(body.prims, pi)) drawnFar.add(pi); });
 
-    body.prims.forEach((p, pi) => {
+    if (!opts.lodFar) body.prims.forEach((p, pi) => {
       if (p.lod === undefined || p.op === 'sub' || p.op === 'groove' || !live.has(p.cluster)) return;
       if (p.lod === 'near' ? p.dead : !lodAnchorAlive(body.prims, pi)) return;
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
@@ -278,10 +286,14 @@ export function buildOuterHullInstances(
       out.push({ centre, radius });
     }
 
-    for (const p of body.prims) {
-      if (p.lod !== undefined) continue; // covered above
-      // Cutters and severed flesh contribute no surface to contain.
-      if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
+    for (let pi = 0; pi < body.prims.length; pi++) {
+      const p = body.prims[pi]!;
+      if (p.lod !== undefined) {
+        if (!opts.lodFar) continue; // one sphere above
+        if (p.lod === 'near' ? isFar : !drawnFar.has(pi)) continue; // not the set this body draws
+      }
+      // Cutters and severed flesh contribute no surface to contain (a drawn far stand-in is dead only to the CPU).
+      if (p.op === 'sub' || p.op === 'groove' || (p.dead && !drawnFar.has(pi))) continue;
       if (!live.has(p.cluster)) continue;
 
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
@@ -290,6 +302,10 @@ export function buildOuterHullInstances(
         rMax * maxScale
         + shellReach(p)
         + blendReach(p.blendK ?? 0, p.blendProfile)
+        // A drawn LOD prim takes a SECOND blend reach: the CHAIN case the header names. The hand's prims all blend
+        // into the palm and each other, and a far body's stand-ins stacked their undercuts 1.6 mm past one reach
+        // at the palm's front edge (lod-prims.test.ts).
+        + (p.lod !== undefined ? blendReach(p.blendK ?? 0, p.blendProfile) : 0)
         + shellAmp
         + margin;
       if (reach < MIN_HULL_RADIUS) continue;

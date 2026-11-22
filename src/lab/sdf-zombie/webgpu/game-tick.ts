@@ -535,7 +535,10 @@ export function tick(ctx: GameContext, dt: number) {
       // — this is what makes the hull "posed" at no extra cost. (Visual-
       // actor cull: an off-screen body's hull instances cannot be seen;
       // its exclusion spheres only ever touched its own hull.)
-      ctx.world.outerHull.update(hullActors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
+      // The hull chains each body's drawn LOD set (OuterHullOpts.lodFar; PrimDef.lod).
+      const posedHull = hullActors.map(a => a.posed());
+      const lodFar = new Set(posedHull.filter((_, i) => lodFarOf.get(hullActors[i]!.id) === true));
+      ctx.world.outerHull.update(posedHull, { shellAmp: shellAmpOf(ctx), lodFar });
     }
     ctx.render.occluderHull.update(
       hullActors.map(a => a.posed()),

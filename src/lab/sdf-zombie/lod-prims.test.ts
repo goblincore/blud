@@ -89,12 +89,16 @@ describe('packBody lodFar', () => {
 });
 
 describe('the outer hull holds both LOD sets', () => {
-  it('every surface point of the near hand AND the far hand sits inside a hull sphere', async () => {
+  it.each([
+    ['no LOD sets given: one sphere holds both', 'both'],
+    ['the body drawn near: its fingers chained', 'near'],
+    ['the body drawn far: its stand-ins chained', 'far'],
+  ])('every surface point of the hand it draws sits inside a hull sphere (%s)', async (_, mode) => {
     const { buildOuterHullInstances } = await import('./webgpu/shell-hull-outer');
-    const hull = buildOuterHullInstances([body]);
+    const hull = buildOuterHullInstances([body], mode === 'both' ? {} : { lodFar: new Set(mode === 'far' ? [body] : []) });
     const inside = (q: readonly number[]) => hull.some(s => Math.hypot(q[0]! - s.centre[0], q[1]! - s.centre[1], q[2]! - s.centre[2]) <= s.radius);
     const far = { ...body, prims: body.prims.map(p => (p.lod === 'far' ? { ...p, dead: false } : p.lod === 'near' ? { ...p, dead: true } : p)) };
-    for (const b of [body, far]) {
+    for (const b of mode === 'both' ? [body, far] : mode === 'far' ? [far] : [body]) {
       const hand = b.prims.filter(p => p.cluster === arm.id && p.extremity && !p.dead);
       let probed = 0;
       for (const p of hand) for (let t = 0; t <= 1; t += 0.1) for (let k = 0; k < 16; k++) {
