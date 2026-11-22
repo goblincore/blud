@@ -2,6 +2,353 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Melt death in the game — 2026-11-14
+
+Branch `claude/melting-dying-animation-6cffdd`. The lab's zombie melt (X5.melt, 2026-09-03) checked, repaired and brought
+into the game.
+
+- [x] **Still worked only on the origin.** The melt spread from the WORLD axis and pooled at the world's y = 0.09: a body
+  that had wandered (or any body in the game) was thrown sideways. `melt.ts` now takes a `MeltFrame` (axis + floor).
+- [x] **The pool was the render proxy's outline.** The march's smin compounds across ~60 prims crushed onto one plane, so
+  the field ran out past a metre and the visible puddle was a square (the proxy box). `meltBlendK`: the fuse peaks while
+  a prim sags and relaxes to `pooledK` as it pools; `remeltClusters` pads for what bulge is left. Pool retuned thinner,
+  wider, uneven edge (`ragged`, `swell`); the skeleton now lies in it.
+- [x] **In the game:** `ZombieActor.beginMelt / stepMelt / melting / meltProgress` (game-actor.ts), `game-melter.ts`
+  (`meltActor`, `stepMelts`, bone groups as bone-only chunk pieces). A melting body is a corpse to every reader, takes no
+  hits, and a set puddle does no per-frame work. Test: `game-actor-melt.test.ts`.
+- [x] **Slot 8, the melter:** placeholder primitive prop, one verb (melt what it hits). Console: `__sdfGame.meltActor(id?)`,
+  `fireMelter()`, `melts()`. Foot bones now group with the shins (they rode in the cage, which then never fell).
+- [~] **Too white, not fleshy (owner, 2026-11-14, in the game).** Measured with a headless arena capture
+  (`.lab-tmp/melt-probe.sh`, scratch) and debug stop 34 (`?afterhit=1`): the albedo was right (80% red by a third of
+  the melt) and the lit frame was tan and white. Cause: highlights. The melt set an absolute wetness of 1.6 on all
+  flesh, and under the torch the white specular sat on top of the red. Now: wetness rides the point's own red
+  (`meltRed`) and goes DOWN on it (`wet.wgsl.ts`), the list lights' highlight drops on the same factor
+  (`light-list.wgsl.ts`), and the red is purer (`MELT_RED_DEPTH` 0.75, `MELT_RED_PURITY` 0.12) so the per-channel
+  highlight shoulder cannot drain it. `MELT_SKIN_KEEP` 1.08, `MELT_SKIN_RED` 0.92. March goldens re-recorded. Owner
+  to judge; the lab melt was not re-shot after this.
+- [~] **The red follows the melt, in streaks** (owner, 2026-11-14: the patches came all at once, "shimmery pixely",
+  before anything melted, and the pattern swam). The red ramp of a point is now its own prim's melt (read in the shader
+  off the radius the rest row still has) plus a slow capped creep (`MELT_RED_FULL_U` 0.3, `MELT_RED_CREEP` 0.5); the
+  patch field is bigger, softer and stretched along the body (`MELT_SKIN_PATCH_FREQ` 3.2, `SOFT` 0.3, `STREAK` 0.22);
+  the rest rows are uploaded UNMELTED so the pattern is pinned to the flesh. Judged on stills only: the swimming fix
+  is not confirmed in motion, and the lab was not re-shot. Open: the chest stays pale late; "more melty" flesh
+  (drips, warp) is geometry work not started.
+- [~] **Meltier shape** (owner, 2026-11-14): `MeltBodyTuning` `stagger` 0.18 (each prim runs ahead of the front by
+  its own amount), `stretch` 0.12 (a prim's lower end leads), `neck` 0.25 (cross-section thins mid-melt, on scale x/z;
+  the radius is left for the shader's melt read). Rate 0.625 to 0.5 (2 s). Arm and torso flesh now sloughs down in
+  hanging runs. Stills only. The gate's "never grows taller" now checks the top and the floor (the lowest bottom
+  wobbles by millimetres as prims pool at different moments).
+- [~] **Playtest round 2 (owner, 2026-11-14/15).** (1) Blotches too fast: the cause was the bare-bone fold, on from
+  the first frame, which re-shades the whole body at once (dark bands on the arms, the skull through the face). It now
+  starts at `MELT_BARE_AT` 0.3; the red ramp's soft edge sits above the threshold and the creep is slower
+  (`MELT_RED_CREEP` 0.35, `MELT_RED_FULL_U` 0.45). The shader's melt read uses the posed radius on the rest row (pose
+  stretch read as melt). (2) Paused before melting: the body now walks into its melt, slowing to a quarter speed, and
+  holds from `MELT_MOTION_UNTIL` 0.3; it reads as a corpse only from there; the melt frame follows it. (3) Flesh ran
+  along the arm: the outward spread starts only past 60% of a point's own melt (down first, out later); six small
+  flesh bits drop early (`MELT_GOB_AT`, `spawnMeltGob`). (4) Kit and prop: handed to `kitRemains` on a gentle launch
+  at progress 0.22 (`dropKit`) instead of retired. Stills only for all four; the kit drop was not seen (the arena
+  soldier showed no kit pieces in the capture), the gobs were not seen in a still, and the skull still pops through
+  the face at 30%. `boneShow` (thin bones until their flesh melts) is in but did not remove the bare-fold bands.
+- [~] **Four additions (owner said yes to all, 2026-11-15).** Stills only, none seen in motion.
+  (a) Melts from the hit: `beginMelt(hitWorld)`; a point's front height is the lesser of its own and
+  `MELT_HIT_LEAD` 0.15 + distance x `MELT_HIT_SPREAD` 2.5 (about 0.4 m round the hit goes early). The melter passes
+  its trace's hit. (b) Drips: `onMeltDrip` to `spawnMeltDrip`, a slowed half-count pellet gout straight down
+  (the full gout sprayed streaks all round). (c) Slump: at `MELT_SLUMP_AT` 0.42 the body is let go as its ragdoll
+  (forced collapse) and steps to progress 1, so what is left sags as one thing while its bone groups drop out.
+  (d) Pool afterlife: `MELT_AFTER`, 2.5 s of 30% more spread easing out; `meltDone()` is the new "nothing left to
+  do". No bubbling. Not checked: the slump on a sector level or against walls, and a non-zombie's authored fall.
+- [~] **Owner's recording, 2026-11-15 (three notes).** (1) Drips too big: now a short pulse of the wound bleed's
+  droplets (`spawnWoundDroplets`, tight and slow), not a gout. (2) "Weird double animation": not pinned down. Best
+  guess from the recording: the flesh pools and THEN the skeleton comes apart as a separate event (the ragdoll slump
+  plus the bone chunks' clatter). `__sdfGame.setMeltSlump(false)` turns the slump off for an A/B; the owner offered a
+  clearer capture. (3) Mesh skull and eyeballs: a melting body now shows its MESH skeleton (`MELT_SDF_BONES` false;
+  game-main keeps its segment sources, each group leaving as it is released, organs with the cage), which also ends
+  the skull popping through the face; two eyeballs (`eyeballPrims`, tag 'eye') tumble out when the skull group goes.
+  The eyeballs were not seen in a still. The lab still uses the SDF bone path.
+- [~] **Bones fall as the mesh** (owner, 2026-11-15: the skeleton started as the textured mesh and turned into the
+  SDF bones as it dropped). `SegmentMeshRenderer.dropSegments(owner, sources, vel)`: each segment of a released group
+  leaves as a loose mesh (same geometry and material, its drawn pose) on the mesh-gib physics, in the skull-plate pool
+  (cap 32; a full skeleton is most of it). `spawnMeltBone` falls back to the SDF bone chunk only with no mesh
+  skeleton. Seen in a still: ribs and long bones lie in the pool textured. Not checked: two bodies melting at once
+  against the pool cap; the support (box corners) makes long bones rest a little high.
+- [~] **Starts where it was shot, and varies** (owner, 2026-11-15). `hitHeight`: the front's height for a point
+  blends its own height with its eased distance from the hit, weighted by how high the hit is (feet: the plain
+  feet-up melt; head: from the head down; the skull, cage and pelvis then hold until the slump). `rollMelt`: each
+  melt rolls its rate (0.8 to 1.25), stagger, stretch, spread, a lean direction (up to 0.22 m), its slump time (one
+  in five slumps late) and which early gobs drop, from the actor's seed and a page-wide melt count. Head shot seen on
+  stills: skull bared first, flesh slides to the belly by 30%, a bare skeleton stands from about 45% to the slump
+  (long). The variance was not seen (each capture is a fresh page, so the same roll).
+- [~] **Flesh lets go instead of drawing into a tube** (owner, 2026-11-15, bullet time: "the arms slough off in one
+  big long tube"). `MeltBodyTuning.maxStretch` 1.5: once a prim's ends are pulled apart past 1.5 times its own length
+  (or width), the upper end follows the lower one down, so the flesh draws out a little and then drops as a lump.
+  Seen on stills (feet-up melt): the forearm flesh comes away at the wrist and the arm bones stand bare. Not seen in motion.
+- [~] **Long flesh gathers into drops** (owner, 2026-11-16, playtest shots: the arm flesh still hung off the bone as
+  straight sleeves; "avoid any long linear tube objects"). `MeltBodyTuning.gather` 0.3 by `gatherBy` 0.4: a prim
+  longer than twice its width draws its upper end down into its lower one as it melts and fattens on its
+  cross-section scale (radius untouched: the shader reads melt off it). Stills (feet and head shots): no sleeves, the
+  arm bones bare early with a lump at the wrist. Not seen in motion. Merged with main the same day (new skeleton kit).
+- [~] **The melt wave** (owner, 2026-11-16: the gathered drops were "still tubes just shorter"; asked for a sine
+  distortion). `mapBody` reads a melting instance at a point pushed about by three sines of its position
+  (`march/melt.ts` `MELT_WAVE_*`: 2.2 cm, a 31 cm wave, full by progress 0.3) and scales its distance by 0.6 so the
+  march does not tunnel. `mapLean` has no wave, so the lean walk stands down for a pixel with a melting slot. Stills:
+  every limb and the trunk come out lumpy and bent, no straight edges, no holes; the unmelted head is bent too (the
+  wave is per body, not per part). Not seen in motion; frame cost with a melting body on screen not measured.
+- [~] **Wave retuned, limbs curl instead** (owner, 2026-11-16: liked the wave but "too intense", the melt "falls
+  through" it (swimming), and wanted more on the arms, less on the body). The field wave is down to 0.8 cm and its
+  phase reads x and z only, so flesh falling straight down keeps its place in it. Limb prims get a per-prim BEND
+  (`Primitive.bend`, `curlArm` 0.9 / `curlLeg` 0.45 of the prim's length, in mid-melt only), which belongs to the
+  prim and rides it down; trunk and head get none. `gather` relaxed to 0.5. Stills: a curled rope at the wrist, calm
+  trunk. Not seen in motion.
+- [~] **Turned prims pool flat** (owner, 2026-11-16, melting a tallow: the puddle was red discs standing on edge with
+  gaps). The crush is on a prim's own y and a rig-turned prim's y points where the limb did. `meltOrient` eases a
+  prim's orientation to upright by 70% of its own melt. Still of a standing tallow: one flat pool. A tallow melted
+  mid-fall or lying down was not shot. Frame cost of a melting body is not measured (owner: later).
+- [x] **Mesh skeleton reads wrong up close** (owner, 2026-11-15; done in its own branch, merged as PR 127): with the flesh gone its parts float (no clavicles,
+  gaps at the joints). Wants a more anatomically correct mesh skeleton; proposed as its own task.
+- [x] **Keeps moving while it melts** (owner, 2026-11-14): a melting body's motion still steps until progress
+  `MELT_MOTION_UNTIL` 0.45 (doomed, so no agenda: it finishes its swing and stands), then holds its last pose.
+- [ ] Not done: kit and held prop vanish at the first frame (no melt for rigid gear); wounds close at the start; `?crowd=1`
+  path untested; the melt of an already-fallen corpse is untested; `npm run melt:shot` (pixel gate) not re-run.
+- [ ] A real weapon that melts: calls `meltActor`; slot 8 then goes.
+
+## Bullet-time hit freakout, thrown bodies through walls — 2026-11-12
+
+Branch `claude/ragdoll-contact-fixes` (draft PR); not played in game, headless actor tests only. Owner look pending.
+
+- [x] **A standing body shot in bullet time whipped about and stretched** (owner clip `jiggle.mov`). Not the jiggle's size:
+  a runaway in the arm keep-outs (`rig.ts` KEEP-OUTS ADD NO SPEED). Each keep-out push moved `prev` with the point even
+  where the bones then undid the push, which left speed INTO the keep-out every pass; a 1/60 s step's rest pull bled it,
+  a bullet-time step's did not, and about a quarter second after a volley a shoulder's speed doubled each step. One
+  10-pellet volley: bones 31-38% out of length at a 1/300 s step before, 2-5% after; 3-10% at 1/60 s, unchanged. Standing
+  bodies only: a corpse keeps the old push (with the settle a lying corpse never fell asleep).
+  Tests: `rig-timestep.test.ts`, `game-actor-bullet-time-hit.test.ts`.
+- [x] **The cultist's throw-back picked its left arm's way round on a hair** (0.0016 rad from a tie; the fix above moved
+  his resting hand 2 cm and flipped it). A tie now goes round the arm's own side (`motion.ts` A TOSS-UP GOES OUTWARD).
+- [x] **A blown-away body went through wall boxes** (`corpse-contact.ts`). A joint the contact had left on a wall's face
+  was not counted as entering it, sank a step in every other step, and from past the middle left by the far face; the
+  body followed (an authored 'blown' fall: 1.5 m past a 30 cm wall). Also a body that died touching a wall, and thin
+  walls. The entry at the face now counts, and a joint goes back out toward where it was last clear
+  (`game-actor.ts` corpseSafe). 27 probe deaths (ragdoll and authored, 10 and 30 cm walls, 1x and 0.2x): no joint past
+  the face; flesh at most 10 cm into it mid-fall, 5 cm at rest. Tests: `corpse-contact.test.ts`, `game-actor-contact.test.ts`.
+- [x] **Sector levels: a corpse now meets the walls** (2026-11-14). A sector level's walls are lines
+  (`LevelGround.blockingNear`), which the corpse contact never read. Each joint is now kept on its side of the lines
+  that block at its own height (`corpse-contact.ts` SECTOR WALLS, `game-actor.ts` corpseContacts): an arm over a ledge
+  hangs down its face, a body thrown onto a ledge lands on it, a shut door's leaves block. 24 probe deaths against a
+  line wall: no joint past it, the same numbers as a box wall.
+- [x] **An authored fall stopped by a wall thrashed for good** (found probing the above; box walls too). The fall
+  carries its pose 1.6-2.4 m along the shot whatever is in the way: every joint ended flat against the wall, the
+  corpse re-anchored to that crushed shape and its bones fought the hold (shoulders at 12-15 m/s nine seconds after
+  the death, never asleep). The fall now lets go when a wall or a body stops it and the body drops as a ragdoll
+  (`game-actor.ts` THE FALL GOES LIMP, `motion.ts` releaseFall): 6 of 6 probe deaths lying down asleep in 2-4 s.
+  This also ends an authored corpse leaning on a standing body. Tests: `corpse-contact.test.ts`,
+  `game-actor-contact.test.ts`.
+- [x] **A quarter of ragdoll corpses never fell asleep** (2026-11-14; 45 of 180 shotgun deaths awake at 10 s, the
+  same on `main`). Two causes. Most went nowhere: a toe, a head or the pelvis lifted a centimetre a step by one pass
+  and dropped by gravity, a leg swung 10 cm to and fro, each faster than the sleep's speed limit. A corpse now also
+  sleeps when every joint has stayed within 12 cm of where it was for 0.75 s (`game-actor.ts` GOING NOWHERE). And two
+  went round on the floor for good (feet tracing 2 m arcs at 1 m/s): the neck's cone turned the head its full 2 cm
+  into the floor every step. A cone now stops where the point it moves meets its floor (`collapse.ts` THE FLOOR
+  STOPS A CONE). After: 1 of 180 awake at 10 s; median asleep 2.6 s after the death, as before.
+  Tests: `game-actor-contact.test.ts`.
+- [ ] **One corpse in 180 still travels** (seed 126, open floor: 90 cm in 4 s, never asleep). Cause not found. The
+  small cycles themselves are still there until the body sleeps (the passes disagree: ankle springs and braces
+  against the rig step's bones, 0.7-1.8 cm a step each way); the sleep ends them, it does not remove them.
+- [x] **A thrown body knocks the standing body it hits, and no longer passes through it** (owner: "a thrown body cant
+  like knock or displace another body"). The body contact is swept (`corpse-contact.ts` SWEPT): a joint stops where its
+  path first meets a standing body's cylinder or a corpse's trunk sphere, instead of leaving by the far side from past
+  the middle. A joint arriving at 3 m/s or more gives the standing body the blast stagger and a root knock along the
+  blow (`game-actor.ts` BODY_KNOCK, wired in `game-tick.ts`): 1-2.4 m/s in the probe, 15-35 cm of travel, one a throw,
+  the same at 60 Hz and in bullet time. No wound, no meter. An authored fall that keeps pulling at a body in its way
+  strikes it once, on arrival. Tests: `corpse-contact.test.ts`, `game-actor-contact.test.ts`.
+- [ ] **Bodies against bodies, what is left.** Limbs are not obstacles (a standing body is one cylinder from the knees
+  up, a corpse three trunk spheres). The knock is one size for every kind (a warbull takes a zombie's corpse as a zombie does): owner's call on the feel
+  and on a per-kind weight.
+
+## Limb toughness, corpse integrity, the neck stub — 2026-11-02
+
+Branch `claude/character-damage-ragdoll-9ca95f` · [spec](../superpowers/specs/2026-11-02-limb-toughness-corpse-integrity-design.md) ·
+[plan](../superpowers/plans/2026-11-02-limb-toughness-corpse-integrity.md). Owner look pending.
+
+- [x] **Arms and legs come off at the elbow or knee; the shoulder and hip resist** (owner: a whole arm "is a long tube").
+  `connectivity.ts JOINT_TOUGHNESS`, read from bone names: shoulder/hip 0.6, elbow/knee 1.7, others 1. Measured (zombie,
+  synthetic hits): a shoulder now survives 12 pellets and 31 of 32 first slugs (was ~1 hit); elbow and knee come off in 1-2 hits
+  as before; half of all mid-upper-arm or mid-thigh hits reach the elbow or knee within 6 pellets (was never). The hip never cuts
+  from the front. In the arena, one slug took a zombie's forearm at the elbow. The soldier family keeps factors of 1 (its own injury
+  budget). Decoration prims that make fake joints are listed in `connectivity-toughness.test.ts` (bride, goblin-home, minotaur legR).
+- [x] **Soldiers too** (owner: the soldier and juggernaut still lost the whole arm). The soldier injury rules severed a whole limb
+  by points; they now cut at the elbow or knee (`midJointCut`). The soldier family has its own, lower factors
+  (`SOLDIER_TOUGHNESS` shoulder 0.3, elbow 0.55, the owner's picks) and two sliders of its own.
+- [x] **A lost forearm counts as a lost arm** (`missingLimbs`): the bride drops her sword when her forearm goes.
+- [x] **Corpses keep their shape** (`collapse.ts` braces, `CORPSE_INTEGRITY` 0.7, per-profile `corpseIntegrity`). Zombie head to
+  pelvis settles at 0.61-0.72 m (rest 0.71; was 0.11, the head in the pelvis). Joints lie at their flesh thickness, the skull lets
+  go of its look cone over the fall, and the fall starts with a lean along the killing shot. Integrity 0 is the old fall exactly.
+  Arena: integrity 0 a crumpled heap, 0.7 and 1 a body lying full length.
+- [x] **A severed head flies without its neck stub** (`severLimb`): unit-tested on zombie, soldier, goblin and clown; not yet seen
+  in the game (the zombie's own decap is the swell-and-pop).
+- [x] **Bullet-time ragdoll loop** (owner capture: corpses floated, balanced and thrashed for seconds at 0.2x). Two causes. The
+  verlet kept velocity as last step's displacement, so a shorter step carried the old speed and every hit's shove (a fixed
+  displacement) was 5x harder at 0.2x: `stepRig` now rescales by `dt / stepDt` and damps per 1/60 s, and `impulseAt` is a
+  60 Hz shove (`rig-timestep.test.ts`). And the corpse braces read their corrections as speed, which fought the floor and pumped
+  a lying body back up to 2 m: they now move `prev` with `pos`. Arena, bullet time, integrity 0.7: down in 0.7 s and stays down.
+- [x] **Blown-away deaths** (owner: "off their feet flying on their back"). `blow-away.ts`: the killing volley (rounds within
+  0.12 s) rolls a chance: explosion 1, slug 0.55, a shotgun group up to 0.6 at 12+ pellets, never a pure leg volley. A throw
+  launches every joint off the floor along the shot, the top faster, at light damping for 0.7 s. Arena, 2.2 m double barrel:
+  flies 2-2.7 m and lands in ~0.8 s at 1x and at 0.2x. Not for the soldier family or the cultist (their own deaths).
+  **By range** (owner: "point blank should happen often, further less"): full chance (shotgun 0.85) inside 2.5 m, gone at 7 m.
+- [x] **Authored deaths** (owner: the free ragdoll still looked unnatural, wanted "a blended solution where we can have control
+  but still some dynamic physics"). `death-fall.ts`: every humanoid but a soft target (the cultist) plays one of five keyed
+  falls the rig springs toward, the soldier family included (a soldier downed alive keeps his writhe): **blown** (thrown
+  along the shot, legs up, onto his back; from the blow-away roll), **backward**, **crumple** (knees, then face down),
+  **spin** (turns, drops on his side), **sit** (sits hard, slumps back). Hit spot weights the pick (legs: crumple/sit/spin).
+  Gravity, the floor and late hits still act; after landing the pull eases so the corpse settles. Arena: blown flies
+  1.7-1.8 m and lands at 0.8 s at 1x and 0.2x; every corpse at rest moves < 3 mm. Bone angles in a key are ABSOLUTE: a
+  knee or elbow bent the wrong way fought the rig's bend limits forever (the arms swung 0.5 m); a test guards it.
+- [x] **Corpse fixes from the owner's playtest of the falls** (2026-11-02):
+  - *Spazzing corpse*: a hit on a landed corpse was sprung back to the authored pose, so the pelvis swung 36 cm. Now
+    `corpseHoldStep` leashes it: limbs move freely within 30 cm for 0.5 s, the trunk slides as one rigid piece, then the
+    body re-anchors where it lies. A double barrel shoves a corpse about 17 cm at half the standing shove.
+  - *Stiff, not lying down*: after the last key the limbs drape onto the floor (hands went from 44 cm to 7 cm off it).
+  - *Midsection orb*: torso flesh turned only with the yaw, so on a lying body each ellipsoid stood up off the belly.
+    Torso prims (spine, pelvis) and hand/foot prims now turn with their bone as the corpse's headFollow lets go
+    (`rig-bind.ts` lieFrame). That also fixed the soldier's hand orb drifting 15 cm off his wrist.
+  - Diagnostics: `__sdfGame.actorRigJoints(id)`, `__sdfGame.actorPrims(id)`.
+- [x] **The zombie keeps the physics death** (owner 2026-11-02: the five falls repeat in a crowd, and blown-back zombies
+  clip through each other). `MotionProfile.physicsDeath` is set on the zombie, so he gets the free ragdoll and its
+  blow-away throw. The bodies built on his profile (butcher, goblin and the rest) set it false and keep the authored
+  falls, as do the soldiers. The lying-flesh fix (`rig-bind.ts` lieFrame) applies to his ragdoll too.
+- [ ] Zombie crowd: thrown corpses pass through other zombies (no body-to-body collision on the rig).
+- [x] Sliders on the wound panel: shoulder/hip cut, elbow/knee cut, soldier shoulder/elbow cut, corpse integrity, blown-away deaths
+  (scales every chance) and one per weapon, blown-away shotgun max range, authored deaths on/off, death pose pull, pull after landing
+  (also `__sdfGame.setWoundTuning`).
+- [x] **Blown-away chance per weapon** (owner 2026-11-06: "make the blown away ragdoll frequency a per weapon config like
+  double shotty"). `blow-away.ts BLOW_AWAY.weapons`: single barrel 0.85, double barrel 0.75 (was the shared 0.85: "maybe a
+  little too high"), slug 0.55, explosion 1; the volley knows a double-barrel pellet. A wound-panel slider per weapon.
+- [x] **Arms out of the thigh tops** (owner 2026-11-06: "still some arm clipping issues with the blown away stuff"). The arm
+  pairs skipped the top third of the thigh; they cover all of it now (`collapse.ts`). 48 blown-away deaths: worst arm
+  overlap 4.5 -> 4.2 cm avg, 14.1 -> 9.8 cm max; sleep and slide unchanged.
+- [ ] **An arm caught under a landing trunk** sits up to ~10 cm inside the back for a few frames (elbow on the floor, the
+  push points down into it). Tried and not a net win: putting a fast limb back as far as it came in a step, and pushing
+  a floored limb sideways from under the trunk or head (each cut the peak, but more frames and rests over 3 cm).
+- [ ] Owner: judge the five falls by eye (only measured, not seen: the browser pane does not draw while hidden); tune the
+  pull sliders and how often a body is blown away.
+- [ ] More falls (a stagger back into a wall, a headshot drop straight down) and the cultist on the same set.
+- [ ] Head splitting for every enemy: soldier done on branch `claude/reverent-blackwell-4b31ca` (its own session), with a roll-out note.
+- Known, not ours: `pack-golden.test.ts` chair and gamer byte pins fail locally on main too.
+
+## Gore at scale and the blast-to-gib link — owner notes 2026-10-29
+
+- [ ] **Gore at scale.** Not urgent now, but rockets and groups of enemies will mean far more blood and gibs at once.
+  Starting points from the 2026-10-29 shot/gore passes (hand-off note `docs/dev-notes/2026-10-24-sector-levels-handoff.md`):
+  the shutter seed raster on the CPU (0.8–2.7 ms a frame on E1M1 while blood flies; a GPU raster would also drop the
+  upload but is not bit-identical, needs a look A/B); GPU compute particles for droplets; pool misses on later volleys.
+- [ ] **The blast → damage → gib sequence doesn't read as connected**, mostly with dynamite, where the explosion is often
+  off the target. A rocket hitting directly would likely be fine. Suspects (owner): partly the explosion effect itself,
+  partly the switch from the live SDF body to the gib body. Ties to the older open item "body-to-gib tearing transition"
+  (section "Dynamite gib appearance" below). Diagnose first with a frame strip of an offset blast.
+  Body side: "Blast-to-gib switch pass" below (owner: better). Explosion side: "Explosion pass" below (playtest pending).
+- [x] **Kit vanishes when a body gibs** (owner, 2026-10-29; done 2026-10-30). The kit now comes apart and is thrown with
+  the gibs, and the held gun (it vanished too) lets go and lands. Toggle `?gibkit=0` restores vanishing. Each piece is a set
+  of vertices re-weighted to one skeleton bone, so the kit's existing skinned draw carries it: no new pipelines, nothing
+  baked (a piece baked as in `kit-damage.ts` is an unskinned draw, which would build on the gib frame). Independent of the
+  mesh: pieces are the kit's islands up to 15k index entries, spare bones permitting (soldier 19), and its bones above that
+  (butcher 13, teratoma 5); a smoothly weighted remake is torn at bone seams. Pure: `kit-burst.ts`; mesh:
+  `webgpu/kit-burst-mesh.ts`; owner after the view retires, capped at 16 bodies and 2.4M indices, oldest first:
+  `webgpu/kit-remains.ts`. Seam: `__sdfGame.debris().kitRemains`. Sheets: `.lab-tmp/gib-kit/s-*.png`. Left: a body's casings
+  still vanish with it; a kit piece shed BEFORE the gib still builds its unskinned pipelines on first shed.
+- [x] **The blast distortion ignores depth** (owner, 2026-10-29; done 2026-11-01). `postAaBlastWarp` warped the final
+  colour in screen space, so walls, the viewmodel and anything in front of the blast bent too. Now a sphere gated on scene
+  depth, in the blit, not a mesh; see the pass below.
+
+- [~] **Explosion pass (2026-11-01)**, the explosion side of "doesn't read as connected" above. Owner playtest pending.
+  Toggle `?blastfx=depth,front,timing` (no param = all three, the new default; `none` = the old look; `all`; any comma
+  list). Code: `blast-fx.ts` (the switch), `blast-refraction.ts` (the gate), `webgpu/post-aa.ts` (`postAaBlastWarp`),
+  `webgpu/explosion-vfx.ts` (`lickEnvelope`, `coreIgnition`). Live seams: `__sdfGame.setBlastFx(param)`,
+  `setBlastDepth(on)`, `setBlastDepthView(1|2)` (the warp's depth as grey / its displacement in red). Sheets and probes:
+  `.lab-tmp/explosion-pass/` (`ab-*.png` the same frozen frame with no warp / old / depth, `abframe.mjs`, `absheet.py`;
+  `s-*.png` none vs all strips, `strip.mjs`, `run.sh`, `full.py`, `nums.py`; `pin.mjs` the reproducible burst; `cost.mjs`).
+  - **depth**: each blast is a sphere, world radius R at view depth w; a pixel at normalised radius rn has its front at
+    `w - R*sqrt(1-rn^2)`, floored at 0.9 m; the warp opens over 0.35 m past the front. A wall, body or gun in front of the
+    shell stays straight, a floor crossing the sphere gets a curved front, what stands behind bends as before. The depth
+    around the warped lookup is checked too (five taps), or FXAA's spread of a silhouette's colour past its depth draws a
+    thin ghost outline one offset from the body. Uniforms only; burn bands keep their look (`shellR` 0).
+    **Depth holds what it needs to**: marched flesh, the kit and the viewmodel are all in `sceneTarget.depthTexture`
+    (depth view: soldier 3.2 m at 3.5 m from the camera, shorty 0.3-0.6 m, floor and sky right). Depth is forward 0..1.
+    Numbers, pixels changed by more than 8 of 255 on the foreground, same frozen frame, no warp vs (old → depth), at
+    100/200/333 ms: soldier + gun in front of a blast 3.4 m behind him 16767/23979/25065 → 1/0/19; E1M1 wall in front of a
+    blast with its edge in frame 13353/19480/23176 → 6/0/2; camera inside the sphere (blast 1.6 m away), gun 25838/25760/23911
+    → 0/0/0. What is behind still bends, a similar amount (arena 15861 → 14199 at 100 ms; E1M1 6086 → 9422).
+    Found on the way: **the old ring is not on the blast**. The band is measured in display space but its centre and radius
+    are frustum coordinates, so the 58/46 lens pulls it toward the screen centre and shrinks it by 1/1.31. A shell slot
+    measures through `fisheyeWarp`, so `depth` also moves and grows the ring onto the sphere; `none` and burn bands keep the
+    old mapping. Band timing checked and kept: R 1.97 m at 100 ms, 2.57 m at 200 ms.
+  - **front**: 6 fire licks in the fire layer's spare slots (14 of 20): no new draw, material or pipeline. 41 billboards for
+    a burst's first 0.24 s, 35 after. Head reach 2.5 half-heights with jitter 0.72-1.12: **1.5-2.3 m at the shipped
+    half-height (0.83 m)**, about 80% out by 50 ms, at full reach by 100 ms (the swap is k6, 100 ms), gone by about 220 ms. Own rng
+    stream, so the burst's own sequence is unchanged. Hugging the ground, 1-13 degrees up; the ring (1.4 half-heights) is
+    untouched. Two rejected first looks: wider licks merged into a low slab (the "wide and low" the ring cut removed), and tails
+    that tore loose hung six little fireballs in the air. Limit: six random azimuths, not aimed, so at 2 m the nearest lick
+    can pass up to about 40 degrees off a body, and one thin tongue at the wrong angle is less of a link than a front would be.
+  - **timing**: 6 of the neck's billboards ignite with no stagger and carry `coreIgnition` until 0.32 s (neutral after).
+    Bright-pixel peak (L > 200, new since the frame before, whole frame, 2.0 m): k7 (117 ms, after the swap) → k4 (67 ms,
+    before it); its size at k2 18500 → 32726. Those billboards give their delay to their span, so they end when they did
+    (fire centre of mass within 2 cm at 0.5 s, smoke, embers and ring identical). All three together peak at k5.
+    On a direct hit the core now covers the body's legs from k2, where before it grew over them by k6.
+  - **`none` is the old look**: a pinned burst (frozen actors, fixed pose) at `blastfx=none` against the commit before this
+    pass differs by no more than two identical boots of either do: mean per-channel max 0.2-0.4 of 255, and the body's
+    shade moves by about a level between boots of the same code either way.
+  - **Cost**: warm volleys (none/all/depth, 3 boots each, 33 frames a volley, GPU timestamps by completion order, machine
+    timer granularity about 0.07 ms): `post:blit` 0.46-0.52 ms in every mode, `effects` 0.39-0.52, step CPU 4.3-4.6.
+    **No measurable cost.** No blast live: the warp returns before its first depth tap. Pipelines: warm volleys 0 new in
+    all three; first-ever volley 8 new `MeshBasicNodeMaterial` in all three including `none`, so none are from this pass
+    (pre-existing cold work, not chased here). Depth binding is part of the blit's one pipeline, built with the first
+    frame. Boot census 128 in all three (one boot read 129, unrelated to the mode).
+  - Fixed on the way: **a second live burst overwrote the first** (each burst wrote fire and smoke from quad 0). This
+    changes a volley's look at every setting, `none` included; one burst at a time is unaffected.
+  - **Not verified**: `?renderer=deferred` (the deferred path's own depth presentation should serve the same depth; blocked
+    by the open deferred pipeline error above); the flail and axe swings' reach against the 0.9 m floor (only the shorty
+    measured); burn bands by capture (code path only: `shellR` 0 keeps the old lines).
+  - Limits: fire, smoke and blood write no depth, so they bend with what stands behind them. A silhouette in front of the
+    shell keeps a sliver of unwarped background beside it, up to the offset's width (about 20 px at the clamp, usually
+    far less), visible as a small step where the ground ring passes behind a leg.
+
+- [x] **White flash before the gib (2026-11-16)** — a body about to gib turned fuzzy grey-white for the whole
+  pre-gib window (owner). Cause: the rupture sets the bare-bones flag (`counts2.y`), and on a mesh-skeleton body,
+  which packs no bone rows, that flag folds nothing and only drops the shading normal off the analytic gradient
+  onto the finite-difference taps (`normal-gradient.wgsl.ts`). The view now writes the flag only when the body packs
+  inside-flesh rows (`crowd-records.ts bareBonesFlag`). Checked in the arena, frame by frame; not checked on the
+  soldier or with `?skeleton=procedural`. Open: why the finite-difference normal reads white at all.
+- [x] **Blast-to-gib switch pass (2026-10-29)** — the switch side of the item above. Toggle
+  `?gibswitch=beat,blood,launch,timing` (no param = all four, the new default; `none` = the old switch; `all`; any
+  comma list). Code: `src/lab/sdf-zombie/gib-switch.ts` (+ `gib-switch.test.ts`). Strips, sheets and per-frame
+  numbers: `.lab-tmp/gib-switch/` (`final/<scenario>-none-vs-all.png`; per step `runs/cmp-*.png`; probe
+  `strip.mjs`/`metrics.py`/`compare.py`/`run.sh`). Arena zombie, dynamite offset 1.5/2.0/2.3 m, direct, survivor at
+  2.5 m, E1M1 soldier at 1.8 m; numbers below at 2.0 m unless stated (none → all).
+  - **beat**: the doomed body takes the survivor's `blast()` reaction (no wounds, no meter; gain 1.3; root knock
+    forced on soldiers too). The rupture follows the moving pose (`TearTuning.followPose`, `regionDrift`) and the
+    release carries the pivots (`carryGibPieces`), so pieces spawn on the drawn body. Body travel in the window
+    0.06 → 0.66 m at k8 (survivor 0.53–0.55, unchanged); E1M1 soldier 0.08 → 0.25 m. A first try that moved the
+    regions themselves (rupture offsets) CLIPPED the body to a sliver (the view's bounds/hull follow the pose, not
+    the offsets): move the pose, not the regions.
+  - **blood**: first spray on the hit frame (k1, was k13) from the torso's blast side, away from the blast + up
+    (1.9 m/s away, 1.1 up); the swap gout from the drawn torso, same direction. Old gout sat AT the blast point
+    (2.3 m from the body) and its `[0,1,0]` dirN made spawnImpactGout spray DOWN (-0.39 m/s).
+  - **launch**: `gibBlastLaunchVelocity` — speed 4.2→10 m/s with falloff, along the blast→body line far out,
+    burst out of the body centre close in, 1.5 m/s up floor. Up/sideways 6.0/3.3 → 2.5/4.6 m/s (1.5 m: 6.3/3.3 →
+    3.6/6.0; 2.3 m: 5.8/3.0 → 2.2/3.9), 9° off the blast line; direct hit: a radial burst (mean 116° off the line)
+    instead of a fountain. Pieces land on the floor (arena and E1M1). Counts unchanged (14 / 13).
+  - **timing**: pre-tear window 0.2 → 0.09 s (explicit `?gibtear=` wins): swap k13 (217 ms) → k6 (100 ms), beside
+    the explosion light's peak (k5). With the beat, the long window was ~100 ms of the body frozen in its lean; now
+    struck k1–k5, burst at k6. Below the old 0.15–0.25 s rupture contract on purpose. Release pop 0.10 → 0.16 m
+    (the body is still moving at release; the pieces continue it).
+  - **shade — NOT DONE, left alone.** Live asset path (`?gibrender=assets`, the owner-approved default). Swap-frame
+    flesh luminance 133 → 85 (all: 111 → 72; E1M1 122 → 66) with the same hue. Not a gain: a per-object colour lift
+    on the baked material (2.2×, fading over 3 frames) only reached 92 and blew out the highlights. The drop is
+    the seams between pieces, cut faces, the bared skeleton and the asset micro-detail, against the live body's
+    soft flesh shading. `?gibrender=march` pieces match the live body much better on that frame, so a real fix is a
+    renderer hand-off (marched for the first frames, then assets) or a dithered crossfade; not forced here.
+  - Gameplay unchanged: same gib decision, damage, AOE radius 3.84 m, piece counts. `explosion-vfx.ts` untouched
+    (next pass: the fire never reaches the body, the fireball peaks 0.5–1.2 s).
+
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
@@ -74,6 +421,10 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     lands; a sever takes a lip only where it would stand in removed flesh. For the owner: a slug's decapitation
     leaves no raised rim at the neck (nothing floats there now); the bonewalker and the described schoolgirl draw no
     mesh eyes again; a pellet decapitation still leaves the neck's base standing.
+  - [~] **Other enemies (spike 2026-11-02, branch `claude/reverent-blackwell-4b31ca`).** The soldier now splits under
+    the zombie's conditions (axe, precise slug, the pop), with a per-head hold for his cap. Every other character is
+    surveyed as works / needs / blocked in the [roll-out note](../../docs/dev-notes/2026-11-02-head-split-roll-out.md).
+    Open: a slug that splits the soldier's head adds no injury to his tally.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
@@ -256,6 +607,22 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 - [x] **Owner playtest feedback pass (2026-09-18/19) — merged to main.** **Handoff: [2026-09-19-burning-fire-handoff](../../docs/dev-notes/2026-09-19-burning-fire-handoff.md)** (state, learnings, open list).
   Volumetric fire is the game default (swept flame sheets, card accents, nearest-4 volume + crossfaded full-card LOD, skin 0.3, rise 0.45, no smoke);
   room fire light; zombie burn panic (soldier OFF); ivory bone; soldier legs burn. Open: cheap smoke, head flame (optional), real flare gun.
+- [~] **Burn flail and burn death (2026-11-16; branch `claude/burning-body-effect-optimization-4795c0`): built, owner look pending.**
+  A lit body stops attacking and panic-runs with an authored arm flail (`burn-flail.ts`), falters, then dies on one of three
+  authored burn falls (`death-fall.ts` `burnKneel` / `burnTopple` / `burnHeap`, the zombie included) and burns down on the corpse.
+  Per character: `MotionProfile.burn` (`BurnTier`: duration, speed, flail, `dies`, `fall`); the heavies panic but do not die.
+  Blocked by a wall it turns and runs along it. Soldier panic is back on. Checked by tests and the headless trace (numbers, not
+  the look). [Spec](../../docs/superpowers/specs/2026-11-16-burn-flail-and-death-design.md) ·
+  [plan](../../docs/superpowers/plans/2026-11-16-burn-flail-and-death.md) ·
+  [notes](../../docs/dev-notes/2026-11-16-burn-flail/NOTES.md) (open items there).
+- [ ] **Fire render cost** (owner ask 2026-11-16): measured, nothing optimised
+  ([notes](../../docs/dev-notes/2026-11-16-fire-cost/NOTES.md)). 23 burning bodies add ~2 ms of frame: flame volume 1.5 ms
+  (4.2 at 8 bodies), fire CPU ~0.5-1.4 ms, burn and char shading ~0 on the body march. Runs were at load ~4: re-run quiet.
+  **Flame march cull fixed (same day):** the cull sphere's lag pad is per capsule, flame march 1.51 -> 0.67 ms at 4 bodies,
+  4.22 -> 0.97 at 8; owner look owed, and `maxBodies` could now rise. Flame default 0.3 / 24 -> **0.5 / 32** (2026-11-17,
+  owner: 0.3 too low-res; 1.72 ms, about the old 0.3's cost). CPU skips built (capsules only for volume
+  bodies, no card work out of view): correct by count, no measurable frame gain; fire's card bookkeeping is ~0.3 ms. Open:
+  `crowd-sdf-inner` reads +0.5-1.5 ms with fire (unreliable at load 4) -> CPU-profile one burning frame on a quiet machine.
 - [x] **Cold-boot compile (2026-09-19):** [census](../../docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](../../docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](../../docs/dev-notes/2026-09-18-march-split/NOTES.md)).

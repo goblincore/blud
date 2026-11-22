@@ -1,0 +1,17 @@
+{
+ "map": "E1M1",
+ "unitsPerM": 32,
+ "note": "Owner edits 2026-10-27 (ours, not WAD data). Format: scripts/levels/doom_overrides.py. Lengths (positions, floor/ceil heights) are metres AT unitsPerM 32 (start = origin, Doom +y = -z): the converter rescales them to its world scale, so they stay on the same Doom spots. The notes below quote metres at 32.",
+ "sectors": [
+  {
+   "note": "The start room's sunken centre (the floor-0.5 pit inside the -0.25 step ring, and its run east to the window sills) filled with toxic goo like the courtyard pool. Lowered 0.125 m so it reads as liquid below the dry step; the sills (0.25) become a 0.875 m climb, which matches Doom's impassable window lines.",
+   "at": [0, -12],
+   "expect": {"floor": -0.5, "zone": 3, "special": "none"},
+   "set": {"glow": "nukage", "special": "hurt", "hurtPerSec": 5, "floor": -0.625}
+  }
+ ],
+ "spawns": [
+  {"note": "Owner 2026-10-27: two teratoma floaters over the courtyard's big nukage pool (sector 0, in the room of sector 1). Floaters hover above the floor under them (doom-style float, floater-move.ts), so the pool does not hurt or trap them.", "id": "o-teratoma-pool-w", "kind": "teratoma", "at": [20, -10], "face": [10, -10], "sector": 0},
+  {"note": "The second pool teratoma, east half of the pool, facing the start room's windows too.", "id": "o-teratoma-pool-e", "kind": "teratoma", "at": [29, -11.5], "face": [10, -10], "sector": 0}
+ ]
+}

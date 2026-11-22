@@ -28,6 +28,12 @@ import { woundWorldPos } from '../damage';
 import { rotateYaw } from '../gait';
 import { mulberry32 } from './game-weapon';
 import type { Vec3 } from '../types';
+import { gibPlan } from '../gib-parts';
+import { CULTIST_PROFILE, GUTCRAWLER_PROFILE, ZOMBIE_PROFILE } from '../motion-profile';
+import cultistSrc from '../characters/cultist.blob?raw';
+import crawlerSrc from '../characters/gutcrawler.blob?raw';
+import { makeSoldierMind } from './enemy-mind';
+import { SMG_TUNING } from '../soldier-brain';
 
 const stubView = () => ({
   setRootShift: () => {},
@@ -214,52 +220,55 @@ describe('pellet hits flow through the existing damage pipeline', () => {
       .toBeLessThan(0.8); // torso-local offset, not a world-fixed hole
   });
 
-  it('a pellet storm on one shoulder takes the arm off and reports a world-placed piece', () => {
-    const { actor, severs } = makeActor(2);
-    // Find which side the arm hangs on from the posed clusters, then pour
-    // pellets into that shoulder joint region until it goes.
-    // Aim at the SHOULDER JOINT — the arm's highest endpoint, where the
-    // attachment neck cutLimbs samples actually runs — and scatter the way
-    // the spread cone does. Measured on the rest body (scratch probe): a
-    // tight ±3 cm cluster never severs (one carve sphere covers one side of
-    // the section disc); the CONE'S NATURAL SPREAD is what cuts — ±9 cm
-    // severs within 14 pellets.
-    const armL = actor.posed().clusters.find(c => c.limb === 'armL')!;
-    let shoulder: Vec3 = [0, 0, 0];
-    let bestY = -Infinity;
-    for (let i = armL.start; i < armL.start + armL.count; i++) {
-      const p = actor.posed().prims[i]!;
+  /** The armL joint to pour pellets into: its highest live endpoint (the
+   *  shoulder) or the upperArm→foreArm joint (the elbow), re-read each shot
+   *  because the body wanders while we pour. */
+  function armJoint(actor: ReturnType<typeof makeActor>['actor'], which: 'shoulder' | 'elbow'): Vec3 {
+    const posed = actor.posed();
+    const cl = posed.clusters.find(c => c.limb === 'armL')!;
+    let best: Vec3 = [0, 0, 0];
+    let y = -Infinity;
+    for (let i = cl.start; i < cl.start + cl.count; i++) {
+      const p = posed.prims[i]!;
       if (p.op === 'sub' || p.dead) continue;
-      for (const e of [p.a, p.b]) {
-        if (e[1] > bestY) { bestY = e[1]; shoulder = [...e] as Vec3; }
+      if (which === 'elbow') {
+        if (p.bone === 'foreArm.l') return [...(p.a[1] > p.b[1] ? p.a : p.b)] as Vec3;
+        continue;
       }
+      for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; best = [...e] as Vec3; }
     }
+    return best;
+  }
+
+  /** 40 point-blank pellets scattered the way the spread cone does (±9 cm;
+   *  a tight ±3 cm cluster only ever carves one side of a joint's section). */
+  function pour(actor: ReturnType<typeof makeActor>['actor'], which: 'shoulder' | 'elbow', until: () => boolean): number {
     const rng = mulberry32(20260826);
     let fired = 0;
-    while (
-      actor.posed().clusters.find(c => c.limb === 'armL')!.alive && fired < 40
-    ) {
-      // Re-aim every shot: the body wanders while we pour.
-      const cl = actor.posed().clusters.find(c => c.limb === 'armL')!;
-      let top: Vec3 = shoulder;
-      let y = -Infinity;
-      for (let i = cl.start; i < cl.start + cl.count; i++) {
-        const p = actor.posed().prims[i]!;
-        if (p.op === 'sub' || p.dead) continue;
-        for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; top = [...e] as Vec3; }
-      }
-      shoulder = top;
-      const j: Vec3 = [
-        shoulder[0] + (rng() - 0.5) * 2 * 0.09,
-        shoulder[1] + (rng() - 0.5) * 2 * 0.09,
-        shoulder[2] + (rng() - 0.5) * 2 * 0.09,
-      ];
-      actor.hit(j, [0, -0.1, -1]);
+    while (!until() && fired < 40) {
+      const at = armJoint(actor, which);
+      actor.hit([at[0] + (rng() - 0.5) * 0.18, at[1] + (rng() - 0.5) * 0.18, at[2] + (rng() - 0.5) * 0.18], [0, -0.1, -1]);
       fired++;
     }
-    const gone = !actor.posed().clusters.find(c => c.limb === 'armL')!.alive;
-    expect(gone, `arm still attached after ${fired} point-blank pellets`).toBe(true);
-    expect(severs.some(s => s.limb === 'armL')).toBe(true);
+    return fired;
+  }
+
+  // JOINT TOUGHNESS (owner, 2026-11-02): a whole arm off the shoulder flies as
+  // a long tube, so the shoulder resists; the arm comes off at the ELBOW and
+  // leaves a broken upper arm on the torso. (Before: this storm took the
+  // whole arm within 14 pellets.)
+  it('a pellet storm on one shoulder leaves the arm on the torso', () => {
+    const { actor } = makeActor(2);
+    pour(actor, 'shoulder', () => false);
+    expect(actor.posed().clusters.find(c => c.limb === 'armL')!.alive).toBe(true);
+  });
+
+  it('a pellet storm on one elbow takes the forearm off and reports a world-placed piece', () => {
+    const { actor, severs } = makeActor(2);
+    const fired = pour(actor, 'elbow', () => severs.some(s => s.limb === 'armL'));
+    expect(severs.some(s => s.limb === 'armL'), `forearm still attached after ${fired} point-blank pellets`).toBe(true);
+    // A distal cut: the upper arm stays on the torso.
+    expect(actor.posed().clusters.find(c => c.limb === 'armL')!.alive).toBe(true);
     const piece = severs.find(s => s.limb === 'armL')!;
     // The piece is placed where the RENDERED arm hung — near the body's own
     // extent, not back at the spawn/origin-space rest pose.
@@ -583,6 +592,26 @@ describe('hit batching (beginHits/endHits)', () => {
     }
     return out;
   }
+  it('setViewSync(false): steps move the body but skip the upload; setViewSync(true) uploads the current pose once', () => {
+    const a = makeCounted(3);
+    const before = a.counts.update;
+    const posed0 = a.actor.posed();
+    a.actor.setViewSync(false);
+    for (let f = 0; f < 30; f++) a.actor.step(1 / 60);
+    expect(a.counts.update).toBe(before);
+    // The sim did not stop: the body was re-posed while its view slept.
+    expect(a.actor.posed()).not.toBe(posed0);
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 1);            // the owed upload, at once
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 1);            // owed only once
+    a.actor.step(1 / 60);
+    expect(a.counts.update).toBe(before + 2);            // and every step uploads again
+    a.actor.setViewSync(false);
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 2);            // nothing skipped, nothing owed
+  });
+
   it('16 pellets in one batch = ONE repack/upload and ONE wound-row rewrite; unbatched = one per pellet', () => {
     const a = makeCounted(1);
     const hits = torsoHits(a.actor, 16);
@@ -620,34 +649,236 @@ function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = 
 }
 
 // ---------------------------------------------------------------------------
-// Burning panic (Task 2): the actor applies the pure burn-behaviour step as an
-// override of its mind, so a burning zombie keeps closing on the player.
+// Burning panic and burn death (2026-11-16): the actor applies the pure burn
+// clock (burn-behaviour.ts) as an override of its mind: the body runs from the
+// player, falters, then dies on an authored burn fall (death-fall.ts).
 // ---------------------------------------------------------------------------
-describe('createZombieActor — burning panic override', () => {
-  it('a burning zombie closes on the player', () => {
+describe('createZombieActor — burning panic and burn death', () => {
+  type Actor = ReturnType<typeof makeTestActor>;
+  const burnFor = (a: Actor, secs: number) => { for (let i = 0; i < secs * 60; i++) a.step(1 / 60); };
+  const BURN_FALLS = ['burnKneel', 'burnTopple', 'burnHeap'];
+  /** The head joint's height above the floor, from the rig the last step solved. */
+  const headY = (a: Actor) => { const j = a.rigJoints(); return j.points[j.names.indexOf('head')]![1]; };
+  /** Max distance between the two bodies' rig joints (m). */
+  const jointGap = (a: Actor, b: Actor) => {
+    const pa = a.rigJoints().points, pb = b.rigJoints().points;
+    return Math.max(...pa.map((p, i) => Math.hypot(p[0] - pb[i]![0], p[1] - pb[i]![1], p[2] - pb[i]![2])));
+  };
+  /** The frame the body's burn phase first reads 'dead' (-1: never, within `secs`). */
+  const deathFrame = (a: Actor, secs: number, at?: (frame: number) => void) => {
+    for (let i = 0; i < secs * 60; i++) { at?.(i); a.step(1 / 60); if (a.burnPhase() === 'dead') return i; }
+    return -1;
+  };
+
+  it('a burning zombie runs AWAY from the player', () => {
     const a = makeTestActor({ start: [0, 0, 0] });
-    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
-    for (let i = 0; i < 60; i++) a.step(1 / 60);
-    const p0 = a.pose().pos;
-    const d0 = Math.hypot(p0[0] - 8, p0[2]);
+    a.setBrainInput({ x: 6, z: 0, room: 1 }, true);
+    burnFor(a, 0.5);
+    const d0 = Math.hypot(a.pose().pos[0] - 6, a.pose().pos[2]);
     a.setBurning(true);
-    for (let i = 0; i < 60; i++) a.step(1 / 60);
-    const p1 = a.pose().pos;
-    const d1 = Math.hypot(p1[0] - 8, p1[2]);
-    expect(d1).toBeLessThan(d0);
+    expect(a.burnPhase()).toBe('panic');
+    burnFor(a, 1.5);
+    const d1 = Math.hypot(a.pose().pos[0] - 6, a.pose().pos[2]);
+    expect(d1).toBeGreaterThan(d0);
   });
 
-  it('setBurning is edge-triggered (repeat calls keep the same panic clock)', () => {
+  it('setBurning is edge-triggered (a repeat call keeps the same clock)', () => {
     const a = makeTestActor({ start: [0, 0, 0] });
-    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
     a.setBurning(true);
-    for (let i = 0; i < 30; i++) a.step(1 / 60);
-    const first = a.pose().pos;
-    a.setBurning(true);   // no-op: must NOT reseed the panic
-    for (let i = 0; i < 30; i++) a.step(1 / 60);
-    const second = a.pose().pos;
-    // The body kept moving in the same direction across the repeat call.
-    expect(Math.hypot(second[0] - first[0], second[2] - first[2])).toBeGreaterThan(0.1);
+    burnFor(a, 7);                       // past any zombie duration (3..6 s)
+    expect(a.burnPhase()).toBe('dead');
+    a.setBurning(true);                  // must NOT restart the panic
+    expect(a.burnPhase()).toBe('dead');
+  });
+
+  it('a repeat setBurning(true) MID-panic does not restart the clock: it dies at the original time', () => {
+    const once = makeTestActor({ start: [0, 0, 0] });
+    once.setBurning(true);
+    const tOnce = deathFrame(once, 8);
+    const twice = makeTestActor({ start: [0, 0, 0] });
+    twice.setBurning(true);
+    const tTwice = deathFrame(twice, 8, i => { if (i === 120) { expect(twice.burnPhase()).toBe('panic'); twice.setBurning(true); } });
+    expect(tOnce).toBeGreaterThan(120);
+    expect(tTwice).toBe(tOnce);
+  });
+
+  it('falters, then dies on a burn fall even though the zombie is a physics-death body', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBurning(true);
+    const seen = new Set<string>();
+    for (let i = 0; i < 8 * 60; i++) { a.step(1 / 60); seen.add(a.burnPhase()); }
+    expect([...seen]).toEqual(expect.arrayContaining(['panic', 'falter', 'dead']));
+    expect(BURN_FALLS).toContain(a.debug().fallKind);
+    // It is down: collapsed, the head near the floor (it stands at ~1.6 m).
+    expect(a.motionFrame()?.collapsed).toBe(true);
+    expect(headY(a)).toBeLessThan(0.4);
+  });
+
+  it('a burn death never rolls the physics-death slump or blow-away: the same fall ends in the same pose across seeds', () => {
+    // The slump is the first draw of a per-seed rng (planSlump, chance 0.4): seeds 1 and 6 roll under it, 7 and 8
+    // over. The burn fall and the burn clock are seeded by the id, so all four play the same fall.
+    const heads = [1, 6, 7, 8].map(seed => {
+      const a = makeTestActor({ start: [0, 0, 0], seed });
+      a.setBurning(true);
+      burnFor(a, 10);
+      expect(a.burnPhase()).toBe('dead');
+      expect(BURN_FALLS).toContain(a.debug().fallKind);
+      return headY(a);
+    });
+    for (const h of heads) expect(Math.abs(h - heads[2]!)).toBeLessThan(0.01);
+  });
+
+  it('shot dead mid-panic, it dies the ordinary death: no burn death later, the same corpse as one put out', () => {
+    // Twin `out` is put out the frame after both are killed; `lit` keeps burning past the end of its clock.
+    const lit = makeTestActor({ start: [0, 0, 0] }), out = makeTestActor({ start: [0, 0, 0] });
+    for (const a of [lit, out]) { a.setBurning(true); burnFor(a, 1); }
+    expect(lit.burnPhase()).toBe('panic');
+    for (const a of [lit, out]) {
+      a.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none', forceCollapse: true });
+      a.step(1 / 60);
+    }
+    out.setBurning(false);
+    for (const a of [lit, out]) burnFor(a, 8);   // well past the clock (3..6 s)
+    expect(lit.motionFrame()?.collapsed).toBe(true);
+    expect(lit.burnPhase()).not.toBe('dead');
+    expect(BURN_FALLS).not.toContain(lit.debug().fallKind);
+    expect(lit.debug().fallKind).toBe(out.debug().fallKind);
+    expect(jointGap(lit, out)).toBeLessThan(0.01);
+  });
+
+  it('a soft target (the cultist) shot dead mid-panic plays its soft death, not cut short by the panic', () => {
+    const doc = parseBlob(cultistSrc);
+    const cBody = buildBody(compileBlob(doc, compileFace(doc)));
+    const cultist = () => createZombieActor({
+      id: 1, room: 1, seed: 42, start: [0, 0, 0],
+      bounds: { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, furniture: [],
+      body: cBody, view: stubView() as never,
+      profile: CULTIST_PROFILE, mind: makeSoldierMind(SMG_TUNING),
+      character: { wounds: undefined, releaseProp: () => {} } as never,
+    });
+    let shotId = 5000;
+    const volley = (a: Actor) => {
+      const p = a.posed().prims.find(q => q.bone === 'hem' && q.shell)!;
+      const m: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      const id = ++shotId;
+      a.beginHits();
+      for (let i = 0; i < 6; i++) a.hit([m[0] + (i - 3) * 0.02, m[1], m[2]], [0, 0, -1], { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+      a.endHits();
+    };
+    const lit = cultist(), out = cultist();
+    for (const a of [lit, out]) { a.setBurning(true); burnFor(a, 0.5); }
+    expect(lit.burnPhase()).toBe('panic');
+    for (const a of [lit, out]) { volley(a); a.step(1 / 60); volley(a); }
+    out.setBurning(false);
+    for (const a of [lit, out]) burnFor(a, 6);   // past the soldier tier's clock (2.5..4.5 s)
+    expect(lit.motionFrame()?.collapsed).toBe(true);
+    expect(lit.burnPhase()).not.toBe('dead');
+    expect(jointGap(lit, out)).toBeLessThan(0.01);
+  });
+
+  it('put out before the clock ends, it goes back to its mind', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBurning(true);
+    burnFor(a, 1);
+    a.setBurning(false);
+    expect(a.burnPhase()).toBe('none');
+    burnFor(a, 8);
+    expect(a.burnPhase()).toBe('none');
+    expect(a.debug().fallKind).toBeNull();
+  });
+
+  it('fleeing into a corner, it turns and keeps running instead of pressing the walls', () => {
+    // The player is diagonally opposite, so the body flees into the corner half a metre away.
+    const a = makeTestActor({
+      start: [3.5, 0, 3.5], bounds: { minX: -4, maxX: 4, minZ: -4, maxZ: 4 },
+      profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [6, 6] } },
+    });
+    a.setBrainInput({ x: -3, z: -3, room: 1 }, true);
+    a.setBurning(true);
+    burnFor(a, 1.5);
+    // Path length over the next 2 s: a body pressing the wall covers almost none.
+    let path = 0, prev = a.pose().pos;
+    for (let i = 0; i < 120; i++) {
+      a.step(1 / 60);
+      const p = a.pose().pos;
+      path += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    expect(path).toBeGreaterThan(1.2);
+  });
+
+  it('in melee range, a burning zombie does not attack while it panics', () => {
+    // The zombie mind never reports contact (its bite is the loop's reach test), so read the swing handed to motion.
+    const run = (burning: boolean) => {
+      const a = makeTestActor({ start: [0, 0, 0], room: 3, profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [6, 6] } } });
+      if (burning) a.setBurning(true);
+      let swings = 0;
+      for (let i = 0; i < 3 * 60; i++) {
+        a.setBrainInput({ x: 0, z: 0.6, room: 3 }, true);
+        a.setRingInput(true, 0);
+        a.step(1 / 60);
+        if (a.debug().attack !== null) swings++;
+      }
+      return { a, swings };
+    };
+    expect(run(false).swings).toBeGreaterThan(0);   // the control swings
+    const lit = run(true);
+    expect(['panic', 'falter']).toContain(lit.a.burnPhase());
+    expect(lit.swings).toBe(0);
+  });
+
+  it('a tier that does not die panics, then resumes and goes back to closing on the player', () => {
+    const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], dies: false } } });
+    const player = { x: 5, z: 0, room: 1 };
+    const dist = () => Math.hypot(a.pose().pos[0] - player.x, a.pose().pos[2] - player.z);
+    a.setBrainInput(player, true);
+    a.setBurning(true);
+    for (let i = 0; i < 2 * 60; i++) { a.setBrainInput(player, true); a.step(1 / 60); }
+    expect(a.burnPhase()).toBe('resumed');
+    expect(a.debug().fallKind).toBeNull();
+    const d0 = dist();
+    for (let i = 0; i < 2 * 60; i++) { a.setBrainInput(player, true); a.step(1 / 60); }
+    expect(dist()).toBeLessThan(d0 - 0.5);
+  });
+
+  it('a tier with no flail still panics and dies, and no flail reaches motion', () => {
+    const flailOf = (flail: number) => {
+      const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], flail } } });
+      a.setBurning(true);
+      let peak = 0;
+      for (let i = 0; i < 3 * 60; i++) { a.step(1 / 60); peak = Math.max(peak, a.debug().burnFlail ?? 0); }
+      return { a, peak };
+    };
+    expect(flailOf(1).peak).toBeGreaterThan(0);   // the control hands motion a flail
+    const { a, peak } = flailOf(0);
+    expect(a.burnPhase()).toBe('dead');
+    expect(peak).toBe(0);
+  });
+
+  it('a tier with fall off (the gorehound, whose rig passes canDeathFall) dies its ordinary death, not a burn fall', () => {
+    const a = makeTestActor({ start: [0, 0, 0], profile: { ...ZOMBIE_PROFILE, burn: { panicSec: [1, 1], fall: false } } });
+    a.setBurning(true);
+    for (let i = 0; i < 4 * 60; i++) a.step(1 / 60);
+    expect(a.burnPhase()).toBe('dead');
+    expect(a.motionFrame()?.collapsed).toBe(true);
+    expect(['burnKneel', 'burnTopple', 'burnHeap']).not.toContain(a.debug().fallKind);
+  });
+
+  it('a body that cannot play the falls (the gutcrawler) panics and dies without a burn fall', () => {
+    // The gutcrawler fails canDeathFall (no hips/knees/feet). (The gorehound does NOT: its rig names its legs
+    // shoulder/elbow/hip/knee/foot, so it passes canDeathFall and plays authored falls on any death.)
+    const crawler = createZombieActor({
+      id: 1, room: 1, seed: 7, start: [0, 0, 0],
+      body: buildBody(compileBlob(parseBlob(crawlerSrc))), view: stubView() as never,
+      bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [], profile: GUTCRAWLER_PROFILE,
+    });
+    crawler.setBurning(true);
+    const seen = new Set<string>();
+    for (let i = 0; i < 6 * 60; i++) { crawler.step(1 / 60); seen.add(crawler.burnPhase()); }
+    expect(seen.has('panic')).toBe(true);
+    expect(crawler.burnPhase()).toBe('dead');
+    expect(crawler.motionFrame()?.collapsed).toBe(true);
+    expect(crawler.debug().fallKind).toBeNull();
   });
 });
 
@@ -1080,7 +1311,9 @@ describe('arms never clip through the torso', () => {
         const q = [0, 1, 2].map(i => p.a[i]! + (p.b[i]! - p.a[i]!) * (k / 8)) as unknown as Vec3;
         let d = Infinity;
         for (const t of torso) d = Math.min(d, sdPrimitive(q, t));
-        worst = Math.max(worst, p.radius - d);
+        // A tapered prim (radiusB) is that thick HERE, not its root's thickness all along.
+        const r = p.radius + ((p.radiusB ?? p.radius) - p.radius) * (k / 8);
+        worst = Math.max(worst, r - d);
       }
     }
     return worst;
@@ -1172,5 +1405,98 @@ describe('head damage engine hooks (melee head damage, task 5)', () => {
     a.step(1 / 60);
     const plain = a.posed().prims.find(q => q.limb === 'head')!;
     expect(Math.abs(plain.a[1] - bare.a[1])).toBeLessThan(lift * 0.2);
+  });
+});
+
+describe('setViewSync: every direct view write settles what is owed (review 2026-10-25)', () => {
+  function makeRecorded() {
+    const doc = parseBlob(zombieBlobSrc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const placed = translateBody(buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS, {}), start);
+    const rec = { update: 0, lastBody: null as unknown, lastHead: null as unknown };
+    const view = {
+      ...stubView(),
+      update: (b: unknown) => { rec.update++; rec.lastBody = b; },
+      setHeadRotation: (q: readonly number[]) => { rec.lastHead = [...q]; },
+      setGoreStrength: () => {}, setBonesBare: () => {}, setFleshHidden: () => {}, setWounds: () => {},
+    };
+    const actor = createZombieActor({
+      id: 5, room: room.id, body: placed, view: view as never, start, seed: 4242,
+      bounds: wanderBounds(room), furniture: [], onSever: () => {},
+    });
+    for (let f = 0; f < 30; f++) actor.step(1 / 60);
+    return { actor, rec };
+  }
+
+  it('catchUp false leaves the upload to the next step: one upload, not two', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    for (let f = 0; f < 5; f++) actor.step(1 / 60);
+    const u = rec.update;
+    actor.setViewSync(true, false);
+    expect(rec.update).toBe(u);
+    actor.step(1 / 60);
+    expect(rec.update).toBe(u + 1);
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u + 1);            // the step settled it
+  });
+
+  it('a corpse bake owns the view: no catch-up while paused, nothing owed after either toggle', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    for (let f = 0; f < 5; f++) actor.step(1 / 60);
+    actor.pauseForBake(true);                  // the baker uploads its head-only partition itself
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);                // never over the partition
+    actor.setViewSync(false);
+    actor.step(1 / 60);                        // paused: step returns before posing
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+    actor.pauseForBake(false);                 // the baker re-uploads the full pose on restore
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+  });
+
+  it('a hit uploads and settles: no second upload on re-entry', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    actor.step(1 / 60);
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    let t = 0, hit: Vec3 | null = null;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [torso[0], torso[1], torso[2] + 4 - t];
+      const d = sdBody(p, actor.posed());
+      if (d < 0.002) { hit = p; break; }
+      t += Math.max(d, 0.002);
+    }
+    expect(hit).not.toBeNull();
+    actor.hit(hit!, [0, 0, -1]);
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+  });
+
+  it('mid-rupture the catch-up reproduces stepTear: the rupture frame and the composed head', () => {
+    const { actor, rec } = makeRecorded();
+    actor.beginTear([0, 1.2, 0.4], 1, gibPlan(actor.posed()));
+    actor.setViewSync(false);
+    // stepTear BEFORE the step this frame: the step's skipped upload is owed after the tear's.
+    actor.stepTear(1 / 60);
+    actor.step(1 / 60);
+    actor.setViewSync(true);
+    const caught = { body: rec.lastBody, head: rec.lastHead };
+    expect(caught.body).toEqual(actor.tearFrame()!.body);
+    actor.stepTear(0);                         // the same tear state uploaded by its own path
+    expect(rec.lastBody).toEqual(caught.body);
+    expect(caught.head).toEqual(rec.lastHead);
+    // stepTear AFTER the step: it settled the frame, nothing more to upload.
+    actor.setViewSync(false);
+    actor.step(1 / 60);
+    actor.stepTear(1 / 60);
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
   });
 });

@@ -139,7 +139,7 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
     const seams = createSkeletonSeams({
       world: { actors: [a] },
       // The cache's mesh for the head is the merged skull.
-      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: { head: () => ({ pieces }) }, get: () => ({ geometry: merged }) }, skeletonSources: new Map([[a, { name: 'zombie', sources: [head] }]]) },
+      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKitOf: () => ({ head: () => ({ pieces }) }), get: () => ({ geometry: merged }) }, skeletonSources: new Map([[a, { name: 'zombie', sources: [head] }]]) },
     } as unknown as GameContext);
     const out = seams.skullDrawn(7)!;
     expect(out.copies.map(c => [c.plate, c.piece, c.material])).toEqual([['mandible', 0, 'skeleton-plate-split'], ['mandible', 2, 'skeleton-plate-split']]);
@@ -158,7 +158,7 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
       .map(([geometry, name, sculptPaint]) => ({ geometry, material: { name, userData: sculptPaint === undefined ? {} : { sculptPaint } } }));
     const seamsOf = (drawn: unknown[]) => createSkeletonSeams({
       world: { actors: [a] },
-      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: null, get: () => ({ geometry: headGeo }) }, skeletonSources: new Map([[a, { name: 'cultist', sources: [head] }]]) },
+      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKitOf: () => null, get: () => ({ geometry: headGeo }) }, skeletonSources: new Map([[a, { name: 'cultist', sources: [head] }]]) },
     } as unknown as GameContext);
     const closed = seamsOf([draw(headGeo, null), draw(limb, null), draw(eye, null)]).skullDrawn(7)!;
     expect(closed.whole.map(c => [c.head, c.paint, c.material])).toEqual([[true, 2, 'skeleton-bone'], [false, 1, 'skeleton-bone'], [false, null, 'skeleton-eye']]);
@@ -177,7 +177,7 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     const asked: unknown[] = [];
     const ctx = (kit: unknown) => ({
       world: { actors: [a, b] },
-      render: { segMeshCache: kit ? { skullKit: kit } : {}, skeletonSources: new Map<unknown, unknown>([[a, { sources: [spine, head] }], [b, { sources: [spine] }]]) },
+      render: { segMeshCache: { skullKitOf: () => kit }, skeletonSources: new Map<unknown, unknown>([[a, { sources: [spine, head] }], [b, { sources: [spine] }]]) },
     }) as unknown as GameContext;
     const seams = createSkeletonSeams(ctx({ head: (s: unknown) => { asked.push(s); return { pieces }; } }));
     expect(seams.skullPlates(7)).toEqual(pieces);

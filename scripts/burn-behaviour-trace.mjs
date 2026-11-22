@@ -5,13 +5,13 @@
 //
 //   * a burning SOLDIER flees the player (distance grows), runs faster than
 //     its unburnt cruise, and never fires;
-//   * a burning ZOMBIE keeps chasing (distance shrinks) and runs faster;
-//   * both STUMBLE at least twice in the 6 s burn window.
+//   * a burning ZOMBIE no longer chases: it runs (along the wall it is spawned beside) and never attacks;
+//   * a burning ZOMBIE's samples show burnPhase 'panic' and later 'dead'.
 //
 // The harness is scripts/flare-ingame-capture.mjs's: own vite + headless
 // Chrome on an unused port pair, the real page, the real renderer, the
 // `window.__warmGate.phase === 'ready'` gate, a flat-frame luma gate and a
-// renderer-pipeline-error guard. It also saves a 4-frame contact sheet.
+// renderer-pipeline-error guard. It also saves a 5-frame contact sheet.
 //
 // Usage: node scripts/burn-behaviour-trace.mjs [vitePort] [cdpPort] [outDir]
 
@@ -28,8 +28,6 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MIN_LUMA_STD = 5;
 const DT = 1 / 30;
-/** Stumble frames the burn-window recorder expects at minimum (2 in 6 s). */
-const MIN_STUMBLES = 2;
 
 const report = {
   branch: (() => { try { return execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })(),
@@ -285,12 +283,11 @@ async function frameOn(ids) {
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 
 /** Split a frame list into per-actor arrays and derive the trace numbers.
- *  Stumbles come from the actor's `stumbles` COUNTER (burnStumbles), not from
- *  pose `staggerKind`: the arm-flail shudder also shows up in staggerKind, so
- *  the counter is the only unambiguous stumble oracle. */
+ *  `panicThenDead` reads the actor's burnPhase() oracle: a 'panic' sample
+ *  followed later by a 'dead' one. */
 function analyse(raw, id) {
-  const speeds = [], dists = [], shots = [], kinds = [];
-  let stumbleMin = Infinity, stumbleMax = -Infinity;
+  const speeds = [], dists = [], shots = [], kinds = [], panicSpeeds = [];
+  let sawPanic = false, panicThenDead = false;
   let holdMax = 0, targetNullFrames = 0;
   const mindStates = {};
   for (const f of raw) {
@@ -300,9 +297,9 @@ function analyse(raw, id) {
     const d = Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]);
     speeds.push(a.speed); dists.push(d); kinds.push(a.staggerKind);
     if (a.firing) shots.push(1);
-    const s = a.stumbles ?? 0;
-    stumbleMin = Math.min(stumbleMin, s);
-    stumbleMax = Math.max(stumbleMax, s);
+    if (a.burnPhase === 'panic' || a.burnPhase === 'falter') panicSpeeds.push(a.speed);
+    if (a.burnPhase === 'panic') sawPanic = true;
+    else if (a.burnPhase === 'dead' && sawPanic) panicThenDead = true;
     holdMax = Math.max(holdMax, a.holdSecs ?? 0);
     if (!a.target) targetNullFrames++;
     mindStates[a.mindState ?? '?'] = (mindStates[a.mindState ?? '?'] ?? 0) + 1;
@@ -313,12 +310,15 @@ function analyse(raw, id) {
   return {
     frames: n,
     meanSpeed: +mean(speeds).toFixed(3),
+    /** Mean speed over the panic + falter frames only (a dead body's zeros would drag meanSpeed down). */
+    panicFrames: panicSpeeds.length,
+    panicMeanSpeed: +(panicSpeeds.length ? mean(panicSpeeds) : 0).toFixed(3),
     maxSpeed: +Math.max(0, ...speeds).toFixed(3),
     meanDistHead: +mean(head).toFixed(3),
     meanDistTail: +mean(tail).toFixed(3),
     distDelta: +(mean(tail) - mean(head)).toFixed(3),
     shots: shots.length,
-    stumbles: Number.isFinite(stumbleMax) ? stumbleMax - stumbleMin : 0,
+    panicThenDead,
     staggerLurches: kinds.filter((k) => k === 'lurch').length,
     shudderFrames: kinds.filter((k) => k === 'shudder').length,
     holdMax: +holdMax.toFixed(4),
@@ -396,10 +396,11 @@ try {
   console.log('igniteActor:', litS, litZ);
   if (!litS || !litZ) fail('igniteActor refused an id');
 
-  // ---- 6 s BURNING, in three 2 s chunks so the sheet frames the motion ----
+  // ---- 8 s BURNING, in four 2 s chunks so the sheet frames the motion: long
+  // enough for the longest zombie clock (6 s) to run out and the fall to start ----
   const burn = [];
   const chunkFrames = [];
-  for (let c = 0; c < 3; c++) {
+  for (let c = 0; c < 4; c++) {
     await frameOn(ids);
     const chunk = await record(60);
     burn.push(...chunk);
@@ -412,6 +413,14 @@ try {
   const sAfter = analyse(burn, soldierId);
   const zBefore = analyse(before, zombieId);
   const zAfter = analyse(burn, zombieId);
+  // Every 15th burning frame of each subject, for reading a run by eye: where it was, where it was
+  // told to go, how far from the player.
+  const samples = (id) => burn.filter((_, i) => i % 15 === 0).map((f) => {
+    const a = f.actors.find((x) => x.id === id);
+    return a ? { phase: a.burnPhase, pos: a.pos.map((v) => +v.toFixed(2)), target: a.target ? a.target.map((v) => +v.toFixed(2)) : null,
+      player: f.player.map((v) => +v.toFixed(2)), speed: +a.speed.toFixed(2), mind: a.mindState } : null;
+  });
+  report.samples = { soldier: samples(soldierId), zombie: samples(zombieId) };
   report.checks.soldier = { before: sBefore, burning: sAfter };
   report.checks.zombie = { before: zBefore, burning: zAfter };
   console.log('soldier:', JSON.stringify(report.checks.soldier));
@@ -426,15 +435,20 @@ try {
   console.log('speed gain vs unburnt:', JSON.stringify(report.checks.speedGain));
 
   if (sAfter.shots !== 0) fail(`burning soldier fired ${sAfter.shots} frame(s)`);
-  if (!(sAfter.distDelta > 0.5)) fail(`soldier did not flee the player (dist delta ${sAfter.distDelta} m)`);
-  if (!(zAfter.distDelta < -0.3)) fail(`zombie did not close on the player (dist delta ${zAfter.distDelta} m)`);
-  if (sAfter.stumbles < MIN_STUMBLES) fail(`soldier stumbled ${sAfter.stumbles} time(s), expected >= ${MIN_STUMBLES}`);
-  if (zAfter.stumbles < MIN_STUMBLES) fail(`zombie stumbled ${zAfter.stumbles} time(s), expected >= ${MIN_STUMBLES}`);
-  if (!(sAfter.meanSpeed > 1.0)) fail(`burning soldier mean speed ${sAfter.meanSpeed} m/s <= 1.0`);
-  if (!(zAfter.meanSpeed > 0.4)) fail(`burning zombie mean speed ${zAfter.meanSpeed} m/s <= 0.4`);
+  // room4 is 8 m across: a fleeing body meets a wall within a second or two and turns along it, so the
+  // distance gained is reported, not asserted. Neither may close in.
+  if (!(sAfter.distDelta > -0.3)) fail(`burning soldier closed on the player (dist delta ${sAfter.distDelta} m)`);
+  // The zombie is spawned about a metre from a wall, so its flee turns ALONG the wall (burn-behaviour.ts
+  // `blocked`): its distance to the player is reported, not asserted (in an 8 m room a run along
+  // the walls can pass him). It must keep RUNNING (below) and must never attack.
+  if ((zAfter.mindStates.attack ?? 0) > 0 || (zAfter.mindStates.swing ?? 0) > 0) fail('burning zombie attacked');
+  if (!zAfter.panicThenDead) fail('burning zombie never went from burnPhase panic to dead');
+  if (!sAfter.panicThenDead) fail('burning soldier never went from burnPhase panic to dead');
+  if (!(sAfter.panicMeanSpeed > 1.0)) fail(`burning soldier panic mean speed ${sAfter.panicMeanSpeed} m/s <= 1.0`);
+  if (!(zAfter.panicMeanSpeed > 0.4)) fail(`burning zombie panic mean speed ${zAfter.panicMeanSpeed} m/s <= 0.4`);
 
   // ---- CONTACT SHEET -----------------------------------------------------
-  const tiles = [beforeShot, ...chunkFrames].map((s, i) => ({ label: ['unburnt', 'burn 2s', 'burn 4s', 'burn 6s'][i], b64: s.b64 }));
+  const tiles = [beforeShot, ...chunkFrames].map((s, i) => ({ label: ['unburnt', 'burn 2s', 'burn 4s', 'burn 6s', 'burn 8s'][i], b64: s.b64 }));
   await evaluate('window.__sheet = []');
   for (const t of tiles) await evaluate(`window.__sheet.push(${JSON.stringify(t)})`);
   const dataUrl = await evaluate(`(async () => {

@@ -9,11 +9,11 @@ import rendererSrc from '../../../../../node_modules/three/src/renderers/common/
 interface FakeMaterial { conservativeDepth?: string }
 interface FakeRO { material: FakeMaterial; pipeline: object | null }
 
-/** The opt-in material the watch tracks (the own property the r186 builder patch keys on). */
+/** The opt-in material the watch tracks (the own property the r187 builder patch keys on). */
 const front = (): FakeMaterial => ({ conservativeDepth: 'greater' });
 
 /**
- * A renderer with three's r186 shape: `_pipelines.getForRender(ro, promises)` always leaves
+ * A renderer with three's r187 shape: `_pipelines.getForRender(ro, promises)` always leaves
  * `ro.pipeline` set (a fresh pipeline per program key, or the cached one), and `backend.get(object)`
  * is the per-object data bag whose `.error` three sets on a failed pipeline.
  */
@@ -43,9 +43,9 @@ function fakeRenderer(onCreate?: (ro: FakeRO, pipeline: object, promises: Promis
   return { renderer, pipelines, backend, calls, ro, fail: (pipeline: object) => { backend.get(pipeline).error = true; } };
 }
 
-describe('three r186 contract the watch relies on', () => {
+describe('three r187 contract the watch relies on', () => {
   it('THREE.REVISION', () => {
-    expect(REVISION, 'patch written for r186: re-verify the pipeline error contract before upgrading').toBe('186');
+    expect(REVISION, 'patch written for r187: re-verify the pipeline error contract before upgrading').toBe('187');
   });
   it('a failed pipeline sets backend.get(pipeline).error on both the sync and the async creation path', () => {
     const marks = pipelineUtilsSrc.split('pipelineData.error = true;').length - 1;
@@ -75,7 +75,7 @@ describe('three r186 contract the watch relies on', () => {
 });
 
 describe('installPipelineWatch', () => {
-  it('refuses a renderer without the r186 shape', () => {
+  it('refuses a renderer without the r187 shape', () => {
     expect(installPipelineWatch(null)).toBeNull();
     expect(installPipelineWatch(undefined)).toBeNull();
     expect(installPipelineWatch({})).toBeNull();

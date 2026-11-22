@@ -30,7 +30,8 @@ describe('upper-bound cull', () => {
   it('the march sets the bound for its own call only, from the last fold and the distance moved', () => {
     expect(MARCH_TRACE_LOOP).toContain('gCullUB = select(1e9, cullFold + 3.0 * abs(t - cullT) + 0.002, i > 0 && cullFold < 1e8);');
     const set = MARCH_TRACE_LOOP.indexOf('gCullUB = select(');
-    const call = MARCH_TRACE_LOOP.indexOf('let dres = mapBody(');
+    const call = MARCH_TRACE_LOOP.indexOf('dres = mapBody(camPos + rd * t, ');
+    expect(call).toBeGreaterThan(-1);
     const reset = MARCH_TRACE_LOOP.indexOf('gCullUB = 1e9;');
     expect(set).toBeLessThan(call);
     expect(reset).toBeGreaterThan(call);

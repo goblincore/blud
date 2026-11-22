@@ -1,0 +1,40 @@
+16:14  up 12 days, 37 mins, 2 users, load averages: 2.81 5.41 11.48
+.scratch/sil/closeup: 800 x 600; reach 1; band 11850 px, inside 165823 px; depth step 0.03
+frame                   all     band   inside   edge texels
+800x600 again       0.00000  0.00000  0.00000   
+400x300 bilinear    0.01623  0.39022  0.01195   
+400x300 bicubic     0.01715  0.39953  0.01226   
+400x300 sil         0.00554  0.06333  0.01151   33692 (7.0 % of the frame; 12051 miss, 164 with no texel on their surface)
+300x225 bilinear    0.02421  0.39870  0.01692   
+300x225 bicubic     0.02529  0.40180  0.01756   
+300x225 sil         0.00698  0.05907  0.01599   57362 (12.0 % of the frame; 18007 miss, 394 with no texel on their surface)
+200x150 bilinear    0.04202  0.40702  0.02806   
+200x150 bicubic     0.04364  0.41060  0.02941   
+200x150 sil         0.01029  0.06606  0.02507   116704 (24.3 % of the frame; 29697 miss, 1724 with no texel on their surface)
+warm s50           0 s  texels differing from the game's frame: 0  errors 0
+warm s50again      0 s  texels differing from the game's frame: 0  errors 0
+warm s375          0 s  texels differing from the game's frame: 0  errors 0
+warm s25           0 s  texels differing from the game's frame: 0  errors 0
+warm edge-s50     27 s  texels differing from the game's frame: 150382  errors 0
+warm edge-s375     0 s  texels differing from the game's frame: 132668  errors 0
+warm edge-s25      0 s  texels differing from the game's frame: 85016  errors 0
+  rep  1  s50 5.25  s50again 5.12  s375 3.13  s25 1.89  edge-s50 2.59  edge-s375 2.89  edge-s25 3.96
+  rep  2  s50 4.75  s50again 4.80  s375 3.23  s25 1.88  edge-s50 2.64  edge-s375 2.93  edge-s25 4.11
+  rep  3  s50 4.86  s50again 4.52  s375 3.25  s25 1.89  edge-s50 2.50  edge-s375 3.11  edge-s25 4.34
+  rep  4  s50 4.83  s50again 4.57  s375 3.38  s25 1.91  edge-s50 2.56  edge-s375 2.96  edge-s25 3.90
+  rep  5  s50 4.77  s50again 4.49  s375 3.33  s25 1.89  edge-s50 2.59  edge-s375 3.12  edge-s25 3.89
+
+ms a pass, and each repeat's difference from the shipped 400 x 300 pass in the same repeat (median 4.83 ms)
+400x300 again (A/A)       4.57    -0.26  (-0.34 .. 0.05)  -5.4 %
+edge rays for s50         2.59    -2.27  (-2.66 .. -2.11)  -47.0 %
+edge rays for s375        2.96    -1.82  (-2.36 .. -1.65)  -37.7 %
+edge rays for s25         3.96    -0.88  (-1.29 .. -0.52)  -18.2 %
+s50 + its edge rays       7.39    +2.59  (2.50 .. 2.64)  53.6 %
+s375 + its edge rays      6.34    +1.50  (0.77 .. 1.68)  31.1 %
+s25 + its edge rays       5.85    +1.01  (0.60 .. 1.37)  20.9 %
+s375 alone                3.25    -1.52  (-2.12 .. -1.44)  -31.5 %
+s25 alone                 1.89    -2.92  (-3.36 .. -2.87)  -60.5 %
+
+wrote .scratch/sil/closeup-silhouette.json
+exit 0
+16:15  up 12 days, 38 mins, 2 users, load averages: 3.72 5.14 10.90

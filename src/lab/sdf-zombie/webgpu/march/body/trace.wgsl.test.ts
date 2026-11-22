@@ -18,7 +18,8 @@ describe('ported features reach the entry point', () => {
     // field relaxed until |d| enters the shell, then the silhouette fbm
     // displaces the stepped distance itself. Same 3.0 scale as mapBody's
     // noise term, so calcNormal's warped normals match the displaced skin.
-    expect(MARCH_BODY).toContain('let dres = mapBody(');
+    // (`dres = mapBody(`, not `let dres`: the walk chooses mapLean or mapBody per pixel, lean-walk-flag.ts.)
+    expect(MARCH_BODY).toContain('dres = mapBody(camPos + rd * t, ');
     expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
     // Restored to the shellAmp-only form in the 2026-09-04 merge: the melt
@@ -52,7 +53,7 @@ describe('ported features reach the entry point', () => {
     // carries anything: y/z/w were the parked melt spike's lanes and are
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(max(gloss, metal), cloth)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
     // The hit's anchor is taken at pS, the hit piece's un-warped point (the head split): p itself off a turned half.
     expect(MARCH_BODY).toContain('let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);');
     expect(MARCH_BODY).not.toContain('restPoint(p, data, hitBest');
@@ -172,7 +173,10 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
     expect(rest).toContain('ambientAt(p, n,');
     expect(rest).toContain('calcNormal(p,');
     // Scatter + AO probes share one call site since 2026-09-21 (cold compile).
-    expect(rest).toContain('mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)');
+    // On the lean field where the pixel is on the tile path (probe-lean-flag.ts, on by default), else mapBody.
+    expect(rest).toContain('let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);');
+    expect(rest).toContain('probeD = mapLean(probeP, data, inst, instCfg).x;');
+    expect(rest).toContain('probeD = mapBody(probeP,');
   });
 });
 

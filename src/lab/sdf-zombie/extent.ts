@@ -120,6 +120,40 @@ export function chunkSupportSpheres(
   return out;
 }
 
+/**
+ * Support spheres from DRAWN geometry (plan 3b Task 15): the vertex furthest along each of the six axes and
+ * `directions` more unit directions (a golden-spiral sphere), as zero-radius spheres, deduplicated. For a piece
+ * drawn as a real mesh (the offline asset gibs) these are the extreme points of what is drawn, so under any orientation the lowest
+ * support point is within a few millimetres of the lowest drawn vertex — the physics rests the MESH on the floor.
+ * The primitive-derived spheres (`chunkSupportSpheres`) describe the SDF the marched path draws and can sit far
+ * from an asset mesh: the torso bone piece's rested 0.3–1.0 m below its mesh, so it drew in mid-air.
+ *
+ * `points` is a flat xyz array in chunk-local space (relative to the chunk origin). Empty in, empty out.
+ * Pure and deterministic: O(directions × vertices), once at spawn.
+ */
+export function supportSpheresFromPoints(points: ArrayLike<number>, directions = 64): SupportSphere[] {
+  const n = Math.floor(points.length / 3);
+  if (n === 0) return [];
+  const best = new Map<number, SupportSphere>();
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const dirs: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (let k = 0; k < directions; k++) {
+    const y = 1 - (2 * (k + 0.5)) / directions, r = Math.sqrt(Math.max(0, 1 - y * y)), t = golden * k;
+    dirs.push([Math.cos(t) * r, y, Math.sin(t) * r]);
+  }
+  for (const [dx, dy, dz] of dirs) {
+    let bi = -1, bd = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = points[i * 3]!, yy = points[i * 3 + 1]!, z = points[i * 3 + 2]!;
+      if (!Number.isFinite(x) || !Number.isFinite(yy) || !Number.isFinite(z)) continue;
+      const d = x * dx + yy * dy + z * dz;
+      if (d > bd) { bd = d; bi = i; }
+    }
+    if (bi >= 0 && !best.has(bi)) best.set(bi, { c: [points[bi * 3]!, points[bi * 3 + 1]!, points[bi * 3 + 2]!] as Vec3, r: 0 });
+  }
+  return [...best.values()];
+}
+
 export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   let r = 0;
   for (const p of prims) {

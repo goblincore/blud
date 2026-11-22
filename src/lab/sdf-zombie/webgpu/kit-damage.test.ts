@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createKitDamage } from './kit-damage';
+import type { DebrisSeat } from '../debris-ground';
 import { JUGGERNAUT_ARMOR } from '../plate-armor';
 import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
@@ -11,7 +12,7 @@ import { worldHitToWound } from '../damage';
 import { rotateYaw } from '../gait';
 import { translateBody } from '../translate';
 
-function fixture() {
+function fixture(material = 'plate', armour = true) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute([
     -.19, 1.33, 0, -.09, 1.33, 0, -.09, 1.43, 0, -.19, 1.43, 0,
@@ -23,11 +24,11 @@ function fixture() {
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(Array.from({length: 8}, ()=>[1,0,0,0]).flat(), 4));
   const l = new THREE.Bone(); l.name='upperarml';
   const r = new THREE.Bone(); r.name='upperarmr';
-  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({name:'plate'}));
+  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({name:material}));
   mesh.bind(new THREE.Skeleton([l,r]));
   const root = new THREE.Group(); root.add(mesh);
   root.updateMatrixWorld(true);
-  return { mesh, l, r, damage:createKitDamage(root) };
+  return { mesh, l, r, damage:createKitDamage(root, armour) };
 }
 const body = () => buildBody(compileBlob(parseBlob(source)));
 
@@ -58,6 +59,42 @@ describe('damaged kit pieces', () => {
     expect(damage.debris.children[0]!.position.x).toBeCloseTo(3-.14,5);
     damage.update(severLimb(b,'armL').body, [], 0, 1/60);
     expect(damage.debris.children).toHaveLength(1);
+    damage.dispose();
+  });
+  it('sector levels: a shed piece starts where the seat puts it, stays under the ceiling and rests on the floor under it', () => {
+    const {damage}=fixture();
+    const b=severLimb(body(),'armL').body;
+    let seen=-1;
+    const seat:DebrisSeat=(at,r)=>{ seen=r; return { pos:[at[0]+.5,at[1],at[2]], floorY:.5 }; };
+    const ground={ floorAt:(x:number)=>(x>-.5?.5:NaN), ceilAt:()=>1.5, bounce:()=>null };
+    damage.update(b,[],0,0,null,ground,seat);
+    expect(seen).toBeCloseTo(Math.hypot(.05,.05),5);                 // the 0.1 m quad's half-diagonal (it tumbles)
+    expect(damage.debris.children[0]!.position.x).toBeCloseTo(-.14+.5,5);
+    let top=-Infinity;
+    for(let i=0;i<240;i++) {
+      damage.update(b,[],0,1/60,null,ground,seat);
+      const m=damage.debris.children[0] as THREE.Mesh; m.updateMatrixWorld(true);
+      top=Math.max(top,m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld).max.y);
+    }
+    expect(top).toBeLessThanOrEqual(1.49+1e-9);
+    const [d]=damage.dropped();
+    expect(d!.resting).toBe(true);
+    expect(d!.minY).toBeCloseTo(.51,5);
+    damage.dispose();
+  });
+  it('sector levels: an armour shed reports where the piece starts (the seated point), not the unseated centre', () => {
+    const {damage}=fixture();
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:1};
+    const second={...wound,local:[...wound.local] as typeof wound.local,eventId:2};
+    const seat:DebrisSeat=(at)=>({ pos:[at[0]+.5,at[1]-.1,at[2]], floorY:0 });
+    const ground={ floorAt:()=>0, bounce:()=>null };
+    const shed=damage.update(b,[wound,second],0,0,null,ground,seat).filter(e=>e.kind==='armor-shed');
+    expect(shed).toHaveLength(1);
+    const m=damage.debris.children[0]!;
+    expect(shed[0]!.point).toEqual([m.position.x,m.position.y,m.position.z]);
+    expect(shed[0]!.point[0]).toBeCloseTo(-.14+.5,5);
     damage.dispose();
   });
   it('reattaches the kit and clears debris on an explicit reset', () => {
@@ -95,6 +132,30 @@ describe('damaged kit pieces', () => {
     damage.update(b,[],0,0);
     expect(damage.debris.children).toHaveLength(0);
     expect(mesh.geometry.index!.count).toBe(12);
+    damage.dispose();
+  });
+  it('knocks out a tooth its crater reaches, at the first hit, and leaves one it misses', () => {
+    const {mesh,damage}=fixture('tooth');
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const miss={...worldHitToWound([b.prims[index]!],[-.14,1.38,.10],.055,'pellet'),primIdx:index,eventId:1};
+    expect(damage.update(b,[miss],0,0)).toEqual([]);
+    expect(mesh.geometry.index!.count).toBe(12);
+    const hit={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:2};
+    expect(damage.update(b,[miss,hit],0,0)).toEqual([]); // no spark: a tooth is not armour
+    expect(damage.debris.children).toHaveLength(1);
+    expect(mesh.geometry.index!.count).toBe(6);
+    damage.dispose();
+  });
+  it('without armour (kitSheds) a plate takes hits without breaking, and still leaves with its limb', () => {
+    const {mesh,damage}=fixture('plate', false);
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const wounds=[1,2,3,4].map(eventId=>({...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId}));
+    expect(damage.update(b,wounds,0,0)).toEqual([]);
+    expect(mesh.geometry.index!.count).toBe(12);
+    expect(damage.update(severLimb(b,'armL').body,wounds,0,0)).toEqual([]); // shed, but no armour event
+    expect(mesh.geometry.index!.count).toBe(6);
     damage.dispose();
   });
   it('detects a fresh hit against the currently posed world-space plate',()=>{

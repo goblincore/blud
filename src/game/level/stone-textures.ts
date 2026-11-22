@@ -41,14 +41,14 @@ export interface StoneMaps {
 
 /** Deterministic hash-noise. Not the prettiest noise; it is reproducible,
  *  which matters more here than beauty — the tests pin generated pixels. */
-function hash2(x: number, y: number, seed: number): number {
+export function hash2(x: number, y: number, seed: number): number {
   let h = x * 374761393 + y * 668265263 + seed * 1274126177;
   h = (h ^ (h >>> 13)) >>> 0;
   h = Math.imul(h, 1274126177) >>> 0;
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
-function smoothNoise(x: number, y: number, seed: number, scale: number): number {
+export function smoothNoise(x: number, y: number, seed: number, scale: number): number {
   const sx = x / scale, sy = y / scale;
   const x0 = Math.floor(sx), y0 = Math.floor(sy);
   const fx = sx - x0, fy = sy - y0;
@@ -58,7 +58,7 @@ function smoothNoise(x: number, y: number, seed: number, scale: number): number 
   return (n00 * (1 - ex) + n10 * ex) * (1 - ey) + (n01 * (1 - ex) + n11 * ex) * ey;
 }
 
-function fbm(x: number, y: number, seed: number, scale: number, octaves = 4): number {
+export function fbm(x: number, y: number, seed: number, scale: number, octaves = 4): number {
   let sum = 0, amp = 0.5, s = scale;
   for (let o = 0; o < octaves; o++) {
     sum += smoothNoise(x, y, seed + o * 101, s) * amp;

@@ -46,8 +46,12 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
-import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
+import { createKitBurst, prepareKitBurst, type KitBurstPieceReport } from './kit-burst-mesh';
+import { createKitDamage, piecesOf, type KitArmorInput, type KitDamageEvent } from './kit-damage';
+import { KIT_BURST } from '../kit-burst';
+import { PLANE_GROUND, type DebrisGround, type DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
+import { addKitOccluders } from './kit-occluder';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -258,6 +262,15 @@ const LOOK: Record<string, {
   ventglow: { metalness: 0.0, roughness: 0.5, envIntensity: 0.2, emissive: [1.0, 0.45, 0.04], emissiveIntensity: 6.0 },
   // Its feed hoses: corrugated dull-red rubber, wet enough to catch the key along each ring.
   hose: { metalness: 0.0, roughness: 0.30, envIntensity: 0.55 },
+  // The imp's (assets-source/imp-kit/): its socket fists, ocular plate and chest spreader are skullmetal, and its hand
+  // and foot talons keratin, under their own names so each can burn orange from the fire it holds
+  // (GLOW_FROM_ATTRIBUTE below). Same looks as skullmetal and horn.
+  impmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
+  impclaw: { metalness: 0.0, roughness: 0.42, envIntensity: 0.45 },
+  // The tallow's (assets-source/tallow-kit/): torn, clotted meat and blood where the metal goes into him (round the
+  // cannon breeches, the boiler, the ports and the mask). Its albedo is the vertex colours (dark clot to fresh red);
+  // wet, so a tight highlight and a little env, and no metal.
+  gore: { metalness: 0.0, roughness: 0.20, envIntensity: 0.60 },
 };
 
 /**
@@ -274,6 +287,10 @@ const GLOW_FROM_ATTRIBUTE: Record<string, { color: [number, number, number]; gai
   // 0.25 bleed onto the sclera, 0 in the pupil). Hot enough to read without bloom, the twinhead's lesson.
   // A deep yolk-orange, not the first pass's pale [1, 0.72, 0.06] x 3, which tone-mapped to cream.
   cacoeye: { color: [1.0, 0.50, 0.02], gain: 2.2 },
+  // The imp's fire: the coal in each hand socket, the furnace in its chest and the embers in its eye sockets light the
+  // metal and talons round them a fire orange, a touch redder than ventglow's core so the source stays the hottest.
+  impmetal: { color: [1.0, 0.32, 0.03], gain: 2.4 },
+  impclaw: { color: [1.0, 0.32, 0.03], gain: 2.0 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`
@@ -300,6 +317,15 @@ export const GOBLIN_KIT_SKIN_TINT: readonly [number, number, number] = [5.6, 5.0
 
 const LOOK_DEFAULT = { metalness: 0.05, roughness: 0.35, envIntensity: 0.9 };
 
+/** A kit whose body is gone (KitOverlay.burst). Its pieces, and any shed earlier, until its holder disposes the kit. */
+export interface KitWreck {
+  /** True while anything still moves. */
+  step(dt: number, ground: DebrisGround | null): boolean;
+  report(): KitBurstPieceReport[];
+  /** Index entries still drawn: what the wreck costs to keep (kit-remains.ts's cap). */
+  readonly indexCount: number;
+}
+
 export interface KitOverlay {
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
   object: THREE.Object3D;
@@ -319,8 +345,18 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null }): KitDamageEvent[];
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: {
+    body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null;
+    /** SECTOR levels (plan 3b): what shed pieces land on, and where they start (kit-damage.ts update). */
+    ground?: DebrisGround | null; seat?: DebrisSeat | null;
+  }): KitDamageEvent[];
   resetDamage(): void;
+  /** The body has gibbed: the kit comes apart where it was last posed (kit-burst.ts) and is stepped by whoever holds the
+   *  result from now on. pose() must not be called again. Null for a kit never posed (it would fly from the origin). */
+  burst(launch: (key: string, centre: Vec3) => Vec3, rolls: (key: string) => readonly [number, number, number],
+    seat?: DebrisSeat | null): KitWreck | null;
+  /** The shed pieces (kit-damage.ts dropped; empty for an unbreakable kit) — the debris seam. */
+  dropped(): { x: number; z: number; minY: number; resting: boolean }[];
   /** Scale the PULSED materials' emissive intensity from their authored
    *  look (status-lights.ts output; 1 = authored). coreRgb recolours the
    *  core (amber, red when enraged). No-op on a kit without them. */
@@ -374,21 +410,6 @@ function loadKitSource(url: string): Promise<GLTF> {
 }
 /** True for geometry or a texture that belongs to a cached kit source (shared by every actor wearing that kit). */
 export const isSharedKitResource = (o: object): boolean => SHARED.has(o);
-
-/** The kit room environment, ONE per renderer (it was built per kit, per actor; it never changes). */
-const KIT_ENV = new WeakMap<object, THREE.RenderTarget>();
-function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.RenderTarget {
-  let rt = KIT_ENV.get(renderer);
-  if (!rt) {
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const room = new RoomEnvironment();
-    rt = pmrem.fromScene(room, 0.04);
-    room.dispose();
-    pmrem.dispose();
-    KIT_ENV.set(renderer, rt);
-  }
-  return rt;
-}
 
 /** Drops (and disposes) every mesh under `root` whose material is not named in `only`. Pure scene-graph work: no renderer.
  *  Geometry and textures shared with a cached kit source are only dropped, never disposed (isSharedKitResource). */
@@ -478,6 +499,29 @@ export function poseKitBones(bones: KitBones, frames: ReadonlyMap<string, { pos:
 }
 
 /**
+ * ONE specular environment per renderer for EVERY kit (teratoma first-sight hitch, 2026-10-28). Each kit used to make its
+ * own PMREM of the same RoomEnvironment, and setMaterialEnvironment puts the texture's identity in the builder key, so
+ * every kit INSTANCE built its own node materials: two teratomas in view = every kit material built twice (~40 ms of CPU
+ * each). One shared texture, identical content, lets every instance of a kit share one build. It is never disposed (a
+ * kit's dispose leaves it): a retired kit can no longer pull the map out from under a survivor, which is the hazard
+ * material-environment.ts guards against.
+ */
+const kitEnvironments = new WeakMap<THREE.WebGPURenderer, THREE.Texture>();
+/** The renderer's one kit environment; held props (held-prop.ts) wear it too, for the same reason. */
+export function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.Texture {
+  let env = kitEnvironments.get(renderer);
+  if (!env) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    env = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    kitEnvironments.set(renderer, env);
+  }
+  return env;
+}
+
+/**
  * Loads a WAM-compiled glTF and returns it ready to place.
  *
  * The .gltf is self-contained — WAM base64s both the buffer and the texture
@@ -492,7 +536,7 @@ export function poseKitBones(bones: KitBones, frames: ReadonlyMap<string, { pos:
  */
 export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
-  breakable = false, opts: KitLoadOpts = {},
+  breakable: false | 'sheds' | 'armour' = false, opts: KitLoadOpts = {},
 ): Promise<KitOverlay> {
   const source = await loadKitSource(url);
   // This actor's kit: its own skeleton and skinned meshes over the SHARED geometry, and its own materials.
@@ -517,7 +561,7 @@ export async function loadKit(
   // reference cube, which are MeshStandardMaterial too, keep the look every
   // previous capture was judged against.
   // (A kit loaded with `only` has already lost its other meshes here: keepKitMaterials above.)
-  const env = kitEnvironment(renderer).texture;
+  const env = kitEnvironment(renderer);
   const object = new THREE.Group();
   object.add(gltf.scene);
   object.position.set(root[0], root[1], root[2]);
@@ -540,6 +584,8 @@ export async function loadKit(
       nm.name = old.name;
       nm.color.copy(old.color);
       nm.vertexColors = old.vertexColors;
+      // A baked normal atlas (scripts/blender-kit.ts): GLTFLoader put it on the old material.
+      if (old.normalMap) { nm.normalMap = old.normalMap; nm.normalScale.copy(old.normalScale); }
       nm.emissiveNode = vec3(...glowSpec.color).mul(attribute('_glow', 'float')).mul(glowSpec.gain);
       (o as THREE.Mesh).material = nm;
       old.dispose();
@@ -561,7 +607,7 @@ export async function loadKit(
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
       const std = mat as THREE.MeshStandardMaterial;
-      const look = breakable && mat.name === 'plate'
+      const look = breakable === 'armour' && mat.name === 'plate'
         ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
         : LOOK[mat.name] ?? LOOK_DEFAULT;
       if (std.isMeshStandardMaterial || (std as unknown as { isMeshStandardNodeMaterial?: boolean }).isMeshStandardNodeMaterial) {
@@ -591,9 +637,18 @@ export async function loadKit(
   if (kitScale !== 1) for (const b of skinBounds) b.pad *= kitScale;
   skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
 
-  const damageView = breakable ? createKitDamage(object) : null;
+  const damageView = breakable ? createKitDamage(object, breakable === 'armour') : null;
   const debris = damageView?.debris ?? new THREE.Group();
+  // Distance twins of the opaque cloth for the march's occT bound (kit-occluder.ts). After createKitDamage, which
+  // clones the geometry the twins must share. Drawn only by pass 1c, and only while it is on.
+  const occluders = addKitOccluders(object);
+  // A kit too big to split into islands on the gib frame has its split by bone worked out here instead (kit-burst.ts),
+  // breakable or not: a sculpted kit's islands (the damage view's) burst in 15-33 ms on the gib frame, by bone in ~0.
+  const kitIndexCount = skinned.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
+  const byBone = kitIndexCount > KIT_BURST.islandIndexLimit ? prepareKitBurst(skinned) : null;
+  let posed = false;
   const pose: KitOverlay['pose'] = (frames, damage) => {
+    posed = true;
     poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
@@ -602,7 +657,9 @@ export async function loadKit(
     // — from the posed bone origins (kit-bounds.ts), NOT computeBoundingSphere,
     // which CPU-skins every vertex (~75 ms/frame for the bride under load).
     skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
-    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
+    occluders.sync();
+    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor,
+      damage.ground, damage.seat) ?? [] : [];
   };
 
   return {
@@ -611,6 +668,27 @@ export async function loadKit(
     bones,
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
+    dropped: () => damageView?.dropped() ?? [],
+    burst(launch, rolls, seat) {
+      if (!posed) return null;
+      // The twins bound the march over a body that is no longer there.
+      occluders.dispose();
+      object.visible = true; // the sight cull's, while there was a body to cull
+      const drawn = skinned.filter(m => m.visible);
+      const indexCount = drawn.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count), 0);
+      // By bone, the shed pieces stay gone: the split draws (and tears) only the index the damage view left.
+      const islands = byBone ? null : damageView?.livePieces()
+        ?? (indexCount <= KIT_BURST.islandIndexLimit ? drawn.flatMap(piecesOf) : null);
+      const pieces = createKitBurst({ meshes: skinned, islands, byBone, launch, rolls, seat });
+      return {
+        step(dt, ground) {
+          damageView?.stepDrops(dt, ground);
+          return pieces.step(dt, ground ?? PLANE_GROUND) || (damageView?.dropped().some(d => !d.resting) ?? false);
+        },
+        report: () => pieces.report(),
+        indexCount,
+      };
+    },
     glow(levels) {
       for (const p of pulsed) {
         p.mat.emissiveIntensity = p.base * (p.name === 'led' ? levels.led : levels.core);
@@ -619,8 +697,10 @@ export async function loadKit(
     },
     dispose() {
       damageView?.dispose();
+      occluders.dispose(); // before the traverse below: the twins share one material across kits
       debris.removeFromParent();
-      // The environment and any geometry still shared with the cached source belong to every actor wearing this kit.
+      // NOT the environment (the renderer's one kit environment, kitEnvironment, shared by every kit), nor geometry
+      // still shared with the cached source (every actor wearing this kit holds it).
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         if (mesh.geometry && !SHARED.has(mesh.geometry)) mesh.geometry.dispose();

@@ -24,3 +24,4 @@ describe('joystickOffset', () => {
     for (const t of [0, 1.1, 2.9]) expect(mag(joystickOffset(t, null, { amp: 0.05, idle: 0 }))).toBe(0);
   });
 });
+

@@ -51,6 +51,9 @@ export interface RegionArgs {
   torsoRows: number;
   /** `hx,hy,hz:tx,ty,tz`, replacing region 0's vertical axis. */
   torsoAxis?: string | null;
+  /** Region 0's ray start radius (m, default 0.6): rays begin this far out from the axis and march in. A torso wider
+   *  than 0.6 m from its axis (the cerebrax's 1.3 m brain) needs more, or its rays start inside the flesh. */
+  torsoR0?: number | null;
   /** `bone:t0:t1:rMax:rows` each. */
   limbs?: string[];
   /** `label:hx,hy,hz:tx,ty,tz:rMax:rows` each. */
@@ -77,9 +80,9 @@ export function buildRegions(base: Body, args: RegionArgs): { regions: Region[];
       const [h, t] = args.torsoAxis.split(':').map(v => v.split(',').map(Number) as V);
       const A = norm(sub(t!, h!));
       if (Math.abs(A[2]) > 0.9995) throw new Error('--torso-axis: tilt it off +-z (the frame needs rest +z off the axis)');
-      regions.push({ label: 'torso', limb: 'torso', head: h!, tail: t!, rMax: 0, rows: H, kind: 0, r0: 0.6, row0: 0 });
+      regions.push({ label: 'torso', limb: 'torso', head: h!, tail: t!, rMax: 0, rows: H, kind: 0, r0: args.torsoR0 ?? 0.6, row0: 0 });
     } else {
-      regions.push({ label: 'torso', limb: 'torso', head: [ax, yMax, az], tail: [ax, yMin, az], rMax: 0, rows: H, kind: 0, r0: 0.6, row0: 0 });
+      regions.push({ label: 'torso', limb: 'torso', head: [ax, yMax, az], tail: [ax, yMin, az], rMax: 0, rows: H, kind: 0, r0: args.torsoR0 ?? 0.6, row0: 0 });
     }
   }
   for (const arg of args.limbs ?? []) {

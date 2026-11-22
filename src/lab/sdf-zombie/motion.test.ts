@@ -4,7 +4,8 @@
 // runs against the REAL zombie body's joint layout where it matters (so the
 // gait↔bindRig ordering contract is pinned), and against stub rig points for
 // the per-frame pipeline — stepMotion never touches the renderer.
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { setDeathFall } from './death-fall';
 import {
   applyFloorContact, FIRE, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion, SUBSTEP_TUNING,
@@ -452,6 +453,9 @@ describe('stepMotion — reach arm pivot (socketed shoulders)', () => {
 });
 
 describe('stepMotion — collapse', () => {
+  // The free-ragdoll collapse (authored deaths off, death-fall.ts).
+  beforeAll(() => setDeathFall({ on: false }));
+  afterAll(() => setDeathFall({ on: true }));
   it('forced collapse: full gravity, rest pull ramps off, ropes appear, root freezes', () => {
     const j = realJoints();
     const sig = (i: number): MotionSignals => ({
@@ -1760,7 +1764,7 @@ describe('soldier impact-driven death', () => {
   it.each([-1, 1])('a lethal side impact throws the body in the incoming direction (%s)', side => {
     const j = soldierJoints();
     const { frame, state } = run(j, makeMotionState(9, [0,0,0]),
-      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 30, i => ({ ...NO_SIGNALS(),
+      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 60, i => ({ ...NO_SIGNALS(),
         fatal: true, forcedCollapse: true,
         shot: i === 0 ? { type:'blast', dirWorld:[side,0,0], woundWorld:[0,1.2,0], torso:true } : null,
       }));
@@ -1768,5 +1772,82 @@ describe('soldier impact-driven death', () => {
     expect(frame.restPose[j.index.pelvis]![1] - j.groundY).toBeLessThan(.5);
     expect(side * (frame.restPose[j.index.pelvis]![0] - j.pelvis[0])).toBeGreaterThan(.6);
     expect(state.fallImpact).toEqual([side,0,0]);
+  });
+});
+
+describe('the burning flail overlay', () => {
+  const stepOnce = (cfg: MotionConfig, state = cruising(9)) => {
+    const j = realJoints();
+    return { j, ...stepMotion(state, j, cfg, NO_SIGNALS(), stubPoints(j), BOUNDS, makeRng(9)) };
+  };
+  const d = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+  it('amp 0 is exactly the frame without the key (the unburnt path is untouched)', () => {
+    const a = stepOnce(CFG_ON), b = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 0, fold: 0.5 } });
+    expect(b.frame).toEqual(a.frame);
+    expect(b.state).toEqual(a.state);
+  });
+  it('raises both hands above the shoulders without stretching either arm', () => {
+    const base = stepOnce(CFG_ON);
+    let above = 0, n = 0;
+    for (let t = 0; t < 4; t += 0.1) {
+      const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t, seed: 5, amp: 1, fold: 0 } });
+      for (const side of ['L', 'R'] as const) {
+        const S = frame.restPose[j.index[`shoulder${side}`]!]!, E = frame.restPose[j.index[`elbow${side}`]!]!, H = frame.restPose[j.index[`hand${side}`]!]!;
+        const bS = j.base[j.index[`shoulder${side}`]!]!, bE = j.base[j.index[`elbow${side}`]!]!, bH = j.base[j.index[`hand${side}`]!]!;
+        expect(d(S, E)).toBeCloseTo(d(bS, bE), 4);
+        expect(d(E, H)).toBeCloseTo(d(bE, bH), 4);
+        if (H[1] > S[1]) above++;
+        n++;
+      }
+    }
+    expect(above / n).toBeGreaterThan(0.6);
+    // And it actually moved the hands off the unburnt frame.
+    const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 1, fold: 0 } });
+    expect(d(frame.restPose[j.index.handL!]!, base.frame.restPose[j.index.handL!]!)).toBeGreaterThan(0.2);
+  });
+  it('amp 0 leaves the arms where the gait put them', () => {
+    const base = stepOnce(CFG_ON);
+    const { j, frame } = stepOnce({ ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 0, fold: 0 } });
+    expect(d(frame.restPose[j.index.handL!]!, base.frame.restPose[j.index.handL!]!)).toBeLessThan(1e-6);
+  });
+  it('skips a missing arm', () => {
+    const j = realJoints();
+    const sig = { ...NO_SIGNALS(), missing: { ...NO_SIGNALS().missing, armL: true } };
+    const cfgB = { ...CFG_ON, burnFlail: { t: 1, seed: 5, amp: 1, fold: 0 } };
+    const a = stepMotion(cruising(9), j, CFG_ON, sig, stubPoints(j), BOUNDS, makeRng(9)).frame.restPose;
+    const b = stepMotion(cruising(9), j, cfgB, sig, stubPoints(j), BOUNDS, makeRng(9)).frame.restPose;
+    expect(d(a[j.index.handL!]!, b[j.index.handL!]!)).toBeLessThan(1e-6);
+    expect(d(a[j.index.handR!]!, b[j.index.handR!]!)).toBeGreaterThan(0.2);
+  });
+});
+
+describe('authoredDeath overrides a physics-death profile', () => {
+  it('a forced collapse on the zombie plays the fall deathFall returns', () => {
+    const j = realJoints();
+    let state = cruising(9), points = stubPoints(j), asked = 0;
+    const cfg: MotionConfig = {
+      ...CFG_ON, authoredDeath: true,
+      deathFall: () => { asked++; return { kind: 'burnKneel', strength: 1, side: 1, impact: [0, 0, 1] }; },
+    };
+    const sig = () => ({ ...NO_SIGNALS(), forcedCollapse: true });
+    for (let i = 0; i < 30; i++) {
+      const r = stepMotion(state, j, cfg, sig(), points, BOUNDS, makeRng(9));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [p[0], p[1], p[2]] as Vec3, prev: p, pinned: false }));
+    }
+    expect(asked).toBe(1);
+    expect(state.fallKind?.kind).toBe('burnKneel');
+  });
+  it('without it the zombie keeps the free ragdoll', () => {
+    const j = realJoints();
+    let state = cruising(9), points = stubPoints(j), asked = 0;
+    const cfg: MotionConfig = { ...CFG_ON, deathFall: () => { asked++; return { kind: 'burnKneel', strength: 1, side: 1 }; } };
+    for (let i = 0; i < 30; i++) {
+      const r = stepMotion(state, j, cfg, { ...NO_SIGNALS(), forcedCollapse: true }, points, BOUNDS, makeRng(9));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [p[0], p[1], p[2]] as Vec3, prev: p, pinned: false }));
+    }
+    expect(asked).toBe(0);
   });
 });

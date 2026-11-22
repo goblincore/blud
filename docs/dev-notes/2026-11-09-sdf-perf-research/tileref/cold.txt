@@ -1,0 +1,16 @@
+== off run 1 nonce 33.331714 22:07:16 load { 3.47 10.13 14.81 }
+compile census: 1 cold boots, fresh profile each, out /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-off-1.json
+run 1/1 @ 2026-11-10T03:07:17.350Z ... phase=ready warmMs=54356 drawOnce=1777.6000000238419 asyncFirst=52312.90000009537 entries=200 bootWall=56094 ms
+wrote /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-off-1.json
+== on run 1 nonce 33.331502 22:10:19 load { 5.69 7.70 12.83 }
+compile census: 1 cold boots, fresh profile each, out /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-on-1.json
+run 1/1 @ 2026-11-10T03:10:20.460Z ... phase=ready warmMs=55207 drawOnce=1925.7999999523163 asyncFirst=53014.200000047684 entries=201 bootWall=56939 ms
+wrote /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-on-1.json
+== off run 2 nonce 33.334507 22:16:41 load { 20.32 13.79 13.51 }
+compile census: 1 cold boots, fresh profile each, out /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-off-2.json
+run 1/1 @ 2026-11-10T03:16:42.610Z ... phase=ready warmMs=48641 drawOnce=1744.3999999761581 asyncFirst=46736.200000047684 entries=201 bootWall=50456 ms
+wrote /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-off-2.json
+== on run 2 nonce 33.335109 22:20:27 load { 9.59 10.01 11.81 }
+compile census: 1 cold boots, fresh profile each, out /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-on-2.json
+run 1/1 @ 2026-11-10T03:20:28.742Z ... phase=ready warmMs=49956 drawOnce=1914.2000000476837 asyncFirst=47812.89999997616 entries=201 bootWall=51760 ms
+wrote /Users/donny/Projects/blud/.claude/worktrees/sdf-rendering-perf-08a089/.scratch/tileref/cold-on-2.json

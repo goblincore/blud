@@ -6,6 +6,9 @@ import {
 } from './gib-chunks';
 import { qRotate, qFromAxisAngle, qIdentity } from './vec';
 import type { Vec3 } from './types';
+import type { DebrisGround } from './debris-ground';
+import type { ChunkColliders } from './gib-chunks';
+import { makeRng } from './wander';
 
 const rng = () => 0.5; // deterministic spawn
 
@@ -367,3 +370,51 @@ describe('orientation-aware support (settled pieces on the floor)', () => {
   });
 });
 
+
+
+const LEDGE: DebrisGround = { floorAt: (x) => (x < 0 ? 1 : 0), bounce: () => null };   // a 1 m ledge for x < 0
+const run = (c: Chunk, s: number, col: ChunkColliders) => { for (let i = 0; i < s * 60; i++) c = stepChunk(c, 1 / 60, col); return c; };
+
+describe('stepChunk on a debris ground (sector levels)', () => {
+  it('settles on the floor under it, not on y = 0', () => {
+    const c = run(makeChunk('armL', [-0.5, 1.6, 0], [0, 0, 0], 0.12, [0, 1, 0], makeRng(3)), 4, { ground: LEDGE });
+    expect(c.floorY).toBe(1);
+    expect(c.pos[1]).toBeCloseTo(1 + chunkSupportOffset(c), 4);
+    expect(chunkSettled(c)).toBe(true);
+  });
+  it('slides off the ledge and lands on the lower floor', () => {
+    const c = run(makeChunk('armL', [-0.3, 1.2, 0], [1.5, 0, 0], 0.12, [0, 1, 0], makeRng(4)), 4, { ground: LEDGE });
+    expect(c.pos[0]).toBeGreaterThan(0);
+    expect(c.floorY).toBe(0);
+    expect(c.pos[1]).toBeCloseTo(chunkSupportOffset(c), 4);
+    expect(chunkSettled(c)).toBe(true);
+  });
+  it('stops at a wall the ground reports, however fast', () => {
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel, r, f) => (prev[0] < 1 && next[0] >= 1
+        ? { pos: [0.99, next[1], next[2]], vel: [-vel[0] * r, vel[1], vel[2] * f], normal: [-1, 0, 0] } : null),
+    };
+    let c = makeChunk('torso', [0, 0.5, 0], [20, 0, 0], 0.12, [0, 1, 0], makeRng(5));
+    for (let i = 0; i < 120; i++) { c = stepChunk(c, 1 / 60, { ground: wall }); expect(c.pos[0]).toBeLessThan(1); }
+  });
+  it('passes its own radius to the ground bounce', () => {
+    const radii: (number | undefined)[] = [];
+    const spy: DebrisGround = { floorAt: () => 0, bounce: (_p, _n, _v, _r, _f, radius) => { radii.push(radius); return null; } };
+    stepChunk(makeChunk('torso', [0, 0.5, 0], [1, 0, 0], 0.17, [0, 1, 0], makeRng(8)), 1 / 60, { ground: spy });
+    expect(radii).toEqual([0.17]);
+  });
+  it('keeps its last floor off the map', () => {
+    const holed: DebrisGround = { floorAt: (x) => (x > 2 ? NaN : 0.5), bounce: () => null };
+    const c = run(makeChunk('torso', [1.5, 0.8, 0], [2, 0, 0], 0.12, [0, 1, 0], makeRng(6)), 3, { ground: holed });
+    expect(c.pos[0]).toBeGreaterThan(2);
+    expect(c.floorY).toBe(0.5);
+    expect(c.pos[1]).toBeGreaterThanOrEqual(0.5);
+  });
+  it('without a ground: no floorY key and the same numbers as before', () => {
+    const a = run(makeChunk('armL', [0, 2, 0], [1, 0, 0.5], 0.12, [0, 1, 0], makeRng(7)), 2, {});
+    const b = run(makeChunk('armL', [0, 2, 0], [1, 0, 0.5], 0.12, [0, 1, 0], makeRng(7)), 2, { boxes: [] });
+    expect('floorY' in a).toBe(false);
+    expect(a).toEqual(b);
+  });
+});

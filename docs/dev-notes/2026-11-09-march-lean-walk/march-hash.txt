@@ -1,0 +1,24 @@
+== base default
+{"room1":"07f628a371205615475a3d8d97d84374b34d704a","room1-repeat":"07f628a371205615475a3d8d97d84374b34d704a","room1-wounded":"9bedb27ca8e6444e74371427817f7f124939bdc3"}
+== base boxes
+{"room1":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-repeat":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-wounded":"97cb53f41e876dc6bf0dcb41495c243844089949"}
+== base perbody
+== head-off default
+{"room1":"07f628a371205615475a3d8d97d84374b34d704a","room1-repeat":"07f628a371205615475a3d8d97d84374b34d704a","room1-wounded":"9bedb27ca8e6444e74371427817f7f124939bdc3"}
+== head-off boxes
+{"room1":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-repeat":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-wounded":"97cb53f41e876dc6bf0dcb41495c243844089949"}
+== head-off perbody
+== head-on default
+{"room1":"07f628a371205615475a3d8d97d84374b34d704a","room1-repeat":"07f628a371205615475a3d8d97d84374b34d704a","room1-wounded":"9bedb27ca8e6444e74371427817f7f124939bdc3"}
+== head-on boxes
+{"room1":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-repeat":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-wounded":"97cb53f41e876dc6bf0dcb41495c243844089949"}
+== head-on perbody
+== base perbody
+PIN NOT ASSERTED (MARCH_HASH_NOPIN): per-body canonical moved: room1=565aaad4c6b937cc27e0e3c447e20f2c022e1677 expected 470ff0b375adfdb48992adecf04e8915e814b3f7
+{"room1":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-repeat":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-wounded":"31996c1a4611aebf3fa0f265500a7bad569d88ea"}
+== head-off perbody
+PIN NOT ASSERTED (MARCH_HASH_NOPIN): per-body canonical moved: room1=565aaad4c6b937cc27e0e3c447e20f2c022e1677 expected 470ff0b375adfdb48992adecf04e8915e814b3f7
+{"room1":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-repeat":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-wounded":"31996c1a4611aebf3fa0f265500a7bad569d88ea"}
+== head-on perbody
+PIN NOT ASSERTED (MARCH_HASH_NOPIN): per-body canonical moved: room1=565aaad4c6b937cc27e0e3c447e20f2c022e1677 expected 470ff0b375adfdb48992adecf04e8915e814b3f7
+{"room1":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-repeat":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-wounded":"31996c1a4611aebf3fa0f265500a7bad569d88ea"}

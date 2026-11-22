@@ -273,5 +273,7 @@ describe('assets and visibility', () => {
     expect(states[0]!.rest).toBe(true);
     expect(states[0]!.settled).toBe(true);
     expect(states[0]!.radius).toBeCloseTo(0.1, 9);
+    expect(states[0]!.support).toBeGreaterThan(0);
+    expect(states[0]!.pos[1] - states[0]!.support).toBeCloseTo(states[0]!.floorY, 3);
   });
 });

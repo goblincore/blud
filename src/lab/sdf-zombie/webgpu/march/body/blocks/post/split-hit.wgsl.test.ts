@@ -36,7 +36,8 @@ describe('the hit keeps its own copy of the winning piece', () => {
   it('the walk copies gHitPiece / gHitSplitF at every sample, next to hitRefold, before anything can call mapBody again', () => {
     expect(MARCH_TRACE_LOOP).toContain('var hitPiece = 0;');
     expect(MARCH_TRACE_LOOP).toContain('var hitSplitF = 0.0;');
-    const call = MARCH_TRACE_LOOP.indexOf('let dres = mapBody(');
+    const call = MARCH_TRACE_LOOP.indexOf('dres = mapBody(camPos + rd * t, ');
+    expect(call).toBeGreaterThan(-1);
     const refold = MARCH_TRACE_LOOP.indexOf('hitRefold = gRefoldWin;');
     const piece = MARCH_TRACE_LOOP.indexOf('hitPiece = gHitPiece;');
     const f = MARCH_TRACE_LOOP.indexOf('hitSplitF = gHitSplitF;');
@@ -124,7 +125,7 @@ describe('who reads the body where', () => {
     expect(MARCH_BODY_LIGHT).toContain('(prev.xyz - pS) * 40.0');
   });
   it('the lighting, the normal\'s taps and the probes stay at the world point', () => {
-    for (const world of ['calcNormal(p,', 'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,', 'mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)',
+    for (const world of ['calcNormal(p,', 'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,', 'let probeP = select(p + n * 0.06, p + L * 0.06, k == 0);',
       'let toLamp = spotPos - p;', 'bodyLights(p, n, -rd,'])
       expect(MARCH_BODY, world).toContain(world);
     // pS is read by what is anchored to the body only: the two motion readers, and the wet film's head-side gate
@@ -148,7 +149,12 @@ describe('finite-difference normals inside an open region', () => {
     // ngValid stays false, so the one calcNormal call below it runs (it differentiates mapBody, the split field).
     const gate = SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && !splitIn) {');
     expect(SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }')).toBeLessThan(gate);
-    expect(SHADING_NORMAL_BLOCK.indexOf('if (!ngValid || debugNormal12) {')).toBeGreaterThan(gate);
+    // (The cheaper fallback, normal-loose-flag.ts, never stands in here: it needs ngBody to have run.)
+    // Near a wound the taps are kept only for a shape the analytic normal does not support (reason 1: a cut, a torn
+    // wound): `?ngwound=8` is the default (normal-wound-flag.ts). No `&& !wvHit`: the baked volume is off under the
+    // crater grid.
+    expect(SHADING_NORMAL_BLOCK).toContain('if (!ngValid && ngRan && (!hitNearWound || ngReason != 1)) {');
+    expect(SHADING_NORMAL_BLOCK.indexOf('if ((!ngValid && !ngLoose) || debugNormal12) {')).toBeGreaterThan(gate);
     expect(noComments(SHADING_NORMAL_BLOCK).match(/ngBody\(/g)).toHaveLength(1);
     expect(SHADING_NORMAL_BLOCK.indexOf('ngBody(')).toBeGreaterThan(gate);
   });

@@ -12,7 +12,7 @@ import * as THREE from 'three/webgpu';
 import {
   EXPLOSION_VFX_LIMITS, EXPLOSION_VFX_TUNING,
   burstAnchor, burstSeed, clamp01, clampTuning, createExplosionLookMaterial,
-  createExplosionVfx, findFreeSlot, fireEnvelope, lightEnvelope,
+  coreIgnition, createExplosionVfx, findFreeSlot, fireEnvelope, lickEnvelope, lightEnvelope,
   makeExplosionLookUniforms, randomInUnitSphere, ringEnvelope, smokeEnvelope,
   smoothstep01, stepEmber,
   CURL_WARP_SAFE_RATIO, curlWarpGain,
@@ -690,5 +690,112 @@ describe('createExplosionVfx', () => {
     expect(vfx.tuning.lifeSec).toBe(10);  // clamped
     expect(vfx.tuning.fireCount).toBe(EXPLOSION_VFX_TUNING.fireCount);
     vfx.dispose();
+  });
+});
+
+describe('the explosion pass (?blastfx=front,timing)', () => {
+  it('a lick reaches its head by about 100 ms at the shipped life, and is gone by about 220 ms', () => {
+    const life = EXPLOSION_VFX_TUNING.lickLifeSec;
+    const at = (sec: number) => lickEnvelope(sec / life, EXPLOSION_VFX_TUNING.lickReachH);
+    // Shipped half-height 0.84 m: the head stands for about 2.1 m, the distance a body gibs within.
+    expect(EXPLOSION_VFX_TUNING.lickReachH * 0.84).toBeCloseTo(2.1, 1);
+    expect(at(0.1).head).toBeGreaterThan(0.98 * EXPLOSION_VFX_TUNING.lickReachH);
+    expect(at(0.05).head).toBeGreaterThan(0.6 * EXPLOSION_VFX_TUNING.lickReachH);
+    expect(at(0.22).intensity).toBeLessThan(0.002);
+    expect(at(0.1).intensity).toBeGreaterThan(0.9);
+    expect(lickEnvelope(1).intensity).toBe(0);
+  });
+
+  it('a lick never outruns its reach, its tail stays behind its head, and it stays thin', () => {
+    for (let u = 0; u <= 1; u += 0.05) {
+      const s = lickEnvelope(u, 2.5);
+      expect(s.head).toBeLessThanOrEqual(2.5 + 1e-9);
+      expect(s.tail).toBeLessThanOrEqual(s.head + 1e-9 + (u < 0.1 ? 1e-3 : 0));
+      expect(s.width).toBeLessThan(0.25);
+    }
+  });
+
+  it('the core is lit within two frames and hands back to the plume by 0.32 s, neutral from there', () => {
+    expect(coreIgnition(0).intensityFloor).toBe(0);
+    expect(coreIgnition(2 / 60).intensityFloor).toBeGreaterThan(0.99);
+    const later = coreIgnition(0.32);
+    expect(later).toEqual({ intensityFloor: 0, radiusFloor: 0, heatGain: 1 });
+    expect(coreIgnition(1)).toEqual(later);
+  });
+
+  it('licks use spare fire slots only: the fire budget per burst cannot grow', () => {
+    const t = clampTuning({ ...EXPLOSION_VFX_TUNING, fireCount: 14, lickCount: 40 });
+    expect(t.lickCount).toBe(EXPLOSION_VFX_LIMITS.maxFirePerBurst - 14);
+    expect(clampTuning({ ...EXPLOSION_VFX_TUNING, fireCount: 20, lickCount: 6 }).lickCount).toBe(0);
+  });
+
+  it('the module default is the old burst: no licks, no core', () => {
+    expect(EXPLOSION_VFX_TUNING.lickCount).toBe(0);
+    expect(EXPLOSION_VFX_TUNING.coreIgnite).toBe(0);
+  });
+
+  const burstAt = (at: [number, number, number]): BurstVisual =>
+    ({ at, kind: 'ground', heightM: 0.84 } as unknown as BurstVisual);
+  const camera = () => {
+    const c = new THREE.PerspectiveCamera(58, 1.6, 0.1, 200);
+    c.position.set(0, 1.6, 6);
+    c.updateMatrixWorld();
+    return c;
+  };
+  const fireCentres = (vfx: ReturnType<typeof createExplosionVfx>) => {
+    const mesh = vfx.object.getObjectByName('ExplosionFire') as THREE.Mesh;
+    return { mesh, pos: mesh.geometry.getAttribute('position').array as Float32Array };
+  };
+
+  it('licks and the core draw no rng from the burst: smoke, embers and the ring are the old burst', () => {
+    const run = (patch: object) => {
+      const vfx = createExplosionVfx();
+      vfx.setTuning(patch);
+      const cam = camera();
+      vfx.spawn(burstAt([0, 0.15, 0]), 1234);
+      for (let i = 0; i < 30; i++) vfx.update(1 / 60, cam);
+      return vfx.layerExtents;
+    };
+    const off = run({ lickCount: 0, coreIgnite: 0 });
+    const on = run({ lickCount: 6, coreIgnite: 6 });
+    expect(on.smoke).toEqual(off.smoke);
+    expect(on.ember).toEqual(off.ember);
+    expect(on.ring).toEqual(off.ring);
+    // 0.5 s: past the core's hand-back and the licks' whole life, so the fire is the same fire, within the local age the
+    // core gained by not waiting for its stagger.
+    expect(on.fire.count).toBe(off.fire.count);
+    expect(Math.abs(on.fire.meanY - off.fire.meanY)).toBeLessThan(0.03);
+    expect(on.lick.count).toBe(0);
+  });
+
+  it('licks reach the gib radius at the swap, then are gone; they stay in the one fire draw', () => {
+    const vfx = createExplosionVfx();
+    vfx.setTuning({ lickCount: 6 });
+    const cam = camera();
+    vfx.spawn(burstAt([0, 0.15, 0]), 1234);
+    for (let i = 0; i < 6; i++) vfx.update(1 / 60, cam);
+    const lick = vfx.layerExtents.lick;
+    expect(lick.count).toBe(6);
+    const far = Math.max(-lick.min[0], lick.max[0], -lick.min[2], lick.max[2]);
+    expect(far).toBeGreaterThan(1.7);
+    expect(far).toBeLessThan(2.5);
+    expect(lick.max[1]).toBeLessThan(0.15 + 0.84);    // hugging the ground
+    expect(fireCentres(vfx).mesh.geometry.drawRange.count).toBe(6 * vfx.layerExtents.fire.count + 6 * 6);
+    for (let i = 0; i < 10; i++) vfx.update(1 / 60, cam);
+    expect(vfx.layerExtents.lick.count).toBe(0);
+  });
+
+  it('a second live burst does not overwrite the first (it used to: every burst wrote from quad 0)', () => {
+    const vfx = createExplosionVfx();
+    const cam = camera();
+    vfx.spawn(burstAt([-20, 0.15, 0]), 1);
+    vfx.spawn(burstAt([20, 0.15, 0]), 2);
+    for (let i = 0; i < 5; i++) vfx.update(1 / 60, cam);
+    const { mesh, pos } = fireCentres(vfx);
+    const verts = mesh.geometry.drawRange.count / 6 * 4;
+    let left = 0, right = 0;
+    for (let v = 0; v < verts; v++) { if (pos[v * 3]! < 0) left++; else right++; }
+    expect(left).toBeGreaterThan(0);
+    expect(right).toBeGreaterThan(0);
   });
 });

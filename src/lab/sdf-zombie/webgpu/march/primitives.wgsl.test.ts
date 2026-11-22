@@ -5,6 +5,7 @@
 // what CAN be checked from text. See march/helpers.test.ts for the parse
 // contract and docs/dev-notes/2026-09-18-march-split/ for the split.
 
+import { WG_ROWS } from '../../wound-grid';
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS,
@@ -207,8 +208,9 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
   it('sdShell is in HELPERS and implements abs(dBase)-thick with the rounded-rim clip', () => {
     expect(HELPERS).toContain(SD_SHELL);
     expect(SD_SHELL).toContain('let d = abs(base) - thick;');
-    // The rim: distance to the sheet/plane intersection curve + rounding.
-    expect(SD_SHELL).toContain('rim - length(vec2(d, dPlane))');
+    // The rim: the rounded intersection (a quarter circle in place of the corner), not the old groove.
+    expect(SD_SHELL).toContain('min(-rim, max(d, dPlane)) + length(max(vec2(d + rim, dPlane + rim), vec2(0.0)))');
+    expect(SD_SHELL).not.toContain('rim - length(');
   });
 
   it('the fold reads the shell rows and wraps the field when profile marks a shell', () => {
@@ -409,7 +411,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // added ROW_WOUND_FLAGS (2026-09-02). The shell cloth spike added
     // ROW_PRIM_WARP and hairlock ROW_PRIM_STRAND (both 2026-09-05 — they
     // collided on index 20 across two branches; see ROW_PRIM_STRAND's doc).
-    expect(DATA_ROWS).toBe(26); // 22 -> 25: ROW_PREV_A/B/QUAT (motion vectors, 2026-09-22); 25 -> 26: ROW_WOUND_CUT (cut wounds, 2026-10-03)
+    expect(DATA_ROWS).toBe(26 + WG_ROWS); // + the crater grid's rows (wound-grid-flag.ts, on by default). 22 -> 25: ROW_PREV_A/B/QUAT (motion vectors, 2026-09-22); 25 -> 26: ROW_WOUND_CUT (cut wounds, 2026-10-03)
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 
@@ -432,7 +434,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(foldGroup).toContain('if (shaped) {');
     // BOTH fold paths call foldGroup with the group texels, so neither can
     // drift from the other's sphere-cull or flag semantics.
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, tileBounds(data, e, band), tRange);');
     expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
     // The carve pass reads the same bitfield, so a tapered carve is a taper in
     // BOTH fields. This one backs click-to-shoot; a divergence here lands

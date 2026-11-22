@@ -1,0 +1,471 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "manifest": "manifest.off.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/closeup-xb1-off",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "manifest": "manifest.off2.json",
+   "swapped": [
+    {
+     "lines": 59,
+     "bytes": [
+      372757,
+      368114
+     ]
+    }
+   ]
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "held",
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "held",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk held xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "walk",
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "shaderFrom": ".scratch/lean/closeup-xb1-walk-on",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "leanwalk",
+    "variant": "on",
+    "prelude": "__sdfGame.setHullExitBound(true); __sdfGame.step(2);"
+   },
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-walk-on]",
+   "manifest": "manifest.walk.json",
+   "swapped": [
+    {
+     "lines": 2,
+     "bytes": [
+      372757,
+      372677
+     ]
+    }
+   ]
+  }
+ ],
+ "baseMedianMs": 16.169999998807906,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 16.169999998807906,
+   "lo": 16.07000000476837,
+   "hi": 16.239999997615815
+  },
+  {
+   "leg": "off2",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-off]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 16.20500000119209,
+   "lo": 16.060000002384186,
+   "hi": 16.27000000476837,
+   "diffMedianMs": 0.04000000357627975,
+   "diffMinMs": -0.03999999761581563,
+   "diffMaxMs": 0.12999999523162842,
+   "diffMedianPct": 0.24737169807809928,
+   "diffMinPct": -0.2473716612168493,
+   "diffMaxPct": 0.8039579173853577
+  },
+  {
+   "leg": "on",
+   "label": "closeup ?leanwalk on xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 13.649999994039536,
+   "lo": 13.579999995231628,
+   "hi": 13.690000009536742,
+   "diffMedianMs": -2.5049999952316284,
+   "diffMinMs": -2.6100000023841865,
+   "diffMaxMs": -2.4100000023841854,
+   "diffMedianPct": -15.491651177590002,
+   "diffMinPct": -16.14100187122203,
+   "diffMaxPct": -14.904143491415317
+  },
+  {
+   "leg": "held",
+   "label": "closeup ?leanwalk held xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "medianMs": 16.464999997615813,
+   "lo": 16.420000004768372,
+   "hi": 16.5,
+   "diffMedianMs": 0.3199999988079085,
+   "diffMinMs": 0.2299999952316263,
+   "diffMaxMs": 0.38000000715255666,
+   "diffMedianPct": 1.9789734003184893,
+   "diffMinPct": 1.422387107288698,
+   "diffMaxPct": 2.3500309658662415
+  },
+  {
+   "leg": "walk",
+   "label": "closeup ?leanwalk on xb1 [frame of .scratch/lean/closeup-xb1-on, program of .scratch/lean/closeup-xb1-walk-on]",
+   "hullExitBound": true,
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "medianMs": 13.860000002384187,
+   "lo": 13.8,
+   "hi": 14.039999997615814,
+   "diffMedianMs": -2.259999990463256,
+   "diffMinMs": -2.439999997615814,
+   "diffMaxMs": -2.1100000023841847,
+   "diffMedianPct": -13.976499632837779,
+   "diffMinPct": -15.089672218897324,
+   "diffMaxPct": -13.048855921705252
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "walk"
+   ],
+   "ms": {
+    "off": 16.2,
+    "off2": 16.220000004768373,
+    "on": 13.629999995231628,
+    "held": 16.489999997615815,
+    "walk": 13.830000007152558
+   },
+   "minMs": {
+    "off": 15.920000004768372,
+    "off2": 16,
+    "on": 13.5,
+    "held": 16.25,
+    "walk": 13.729999995231628
+   },
+   "diff": {
+    "off2": 0.020000004768373714,
+    "on": -2.570000004768371,
+    "held": 0.28999999761581563,
+    "walk": -2.3699999928474416
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "held",
+    "walk",
+    "off"
+   ],
+   "ms": {
+    "off2": 16.210000002384184,
+    "on": 13.689999997615814,
+    "held": 16.5,
+    "walk": 14.039999997615814,
+    "off": 16.15
+   },
+   "minMs": {
+    "off2": 16.089999997615813,
+    "on": 13.579999995231628,
+    "held": 16.310000002384186,
+    "walk": 13.789999997615814,
+    "off": 16.060000002384186
+   },
+   "diff": {
+    "off2": 0.06000000238418579,
+    "on": -2.4600000023841844,
+    "held": 0.3500000000000014,
+    "walk": -2.1100000023841847
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "held",
+    "walk",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 13.669999992847442,
+    "held": 16.460000002384184,
+    "walk": 13.860000002384187,
+    "off": 16.079999995231628,
+    "off2": 16.060000002384186
+   },
+   "minMs": {
+    "on": 13.510000002384185,
+    "held": 16.25,
+    "walk": 13.739999997615815,
+    "off": 15.919999992847442,
+    "off2": 15.919999992847442
+   },
+   "diff": {
+    "off2": -0.019999992847441916,
+    "on": -2.4100000023841854,
+    "held": 0.38000000715255666,
+    "walk": -2.219999992847441
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "held",
+    "walk",
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "held": 16.46999999284744,
+    "walk": 13.8,
+    "off": 16.239999997615815,
+    "off2": 16.2,
+    "on": 13.690000009536742
+   },
+   "minMs": {
+    "held": 16.28000000715256,
+    "walk": 13.7,
+    "off": 16.089999997615813,
+    "off2": 16.029999995231627,
+    "on": 13.560000002384186
+   },
+   "diff": {
+    "off2": -0.03999999761581563,
+    "on": -2.5499999880790725,
+    "held": 0.2299999952316263,
+    "walk": -2.439999997615814
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "walk",
+    "off",
+    "off2",
+    "on",
+    "held"
+   ],
+   "ms": {
+    "walk": 13.860000002384187,
+    "off": 16.07000000476837,
+    "off2": 16.2,
+    "on": 13.629999995231628,
+    "held": 16.420000004768372
+   },
+   "minMs": {
+    "walk": 13.720000004768371,
+    "off": 16,
+    "off2": 16.029999995231627,
+    "on": 13.460000002384186,
+    "held": 16.260000002384185
+   },
+   "diff": {
+    "off2": 0.12999999523162842,
+    "on": -2.4400000095367425,
+    "held": 0.3500000000000014,
+    "walk": -2.2100000023841844
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "off",
+    "off2",
+    "on",
+    "held",
+    "walk"
+   ],
+   "ms": {
+    "off": 16.189999997615814,
+    "off2": 16.27000000476837,
+    "on": 13.579999995231628,
+    "held": 16.42999999523163,
+    "walk": 13.890000009536744
+   },
+   "minMs": {
+    "off": 15.919999992847442,
+    "off2": 16.029999995231627,
+    "on": 13.529999995231629,
+    "held": 16.260000002384185,
+    "walk": 13.7
+   },
+   "diff": {
+    "off2": 0.08000000715255595,
+    "on": -2.6100000023841865,
+    "held": 0.23999999761581492,
+    "walk": -2.2999999880790707
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.477,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.425,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.424,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "held": {
+   "dir": ".scratch/lean/closeup-xb1-held",
+   "warmS": 0.442,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0197561979293823,
+       "g": 1.0091222524642944
+      }
+     }
+    }
+   ],
+   "errors": []
+  },
+  "walk": {
+   "dir": ".scratch/lean/closeup-xb1-on",
+   "warmS": 0.485,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "classes": {
+      "1": {
+       "pixels": 1,
+       "r": 1.0196354389190674,
+       "g": 1.0090888738632202
+      }
+     }
+    }
+   ],
+   "errors": []
+  }
+ }
+}

@@ -26,7 +26,8 @@ function fixture(boundedWounds: boolean) {
 describe('bounded torso game preview', () => {
   it('preserves projectile sever decisions and sever notifications', () => {
     const control = fixture(false), preview = fixture(true);
-    const p = control.actor.posed().prims.find(p => p.limb === 'armL' && p.op === 'add')!;
+    // At the elbow: the shoulder resists a slug since joint toughness (2026-11-02).
+    const p = control.actor.posed().prims.find(p => p.limb === 'armL' && p.op === 'add' && /^fore[aA]rm\./.test(p.bone ?? ''))!;
     const point: Vec3 = [p.a[0], p.a[1], p.a[2] + p.radius];
     for (let i = 0; i < 8; i++) {
       control.actor.hitSlug(point, [0, 0, -1]);
@@ -53,7 +54,9 @@ describe('bounded torso game preview', () => {
   it('keeps gameplay history while uploading only two cutters after saturation', () => {
     const { actor, wound, upload } = fixture(true);
     actor.stampBlast(Array.from({ length: MAX_WOUNDS + 4 }, () => ({ ...wound })));
-    expect(actor.wounds()).toHaveLength(MAX_WOUNDS);
+    // The crater grid (wound-grid-flag.ts, on by default since 2026-11-12) keeps every wound on the list, up to
+    // WG_MAX_WOUNDS: nothing merges at MAX_WOUNDS.
+    expect(actor.wounds()).toHaveLength(MAX_WOUNDS + 4);
     actor.advanceWoundPreview(.4);
     expect(upload().types).toEqual([-1, -1]);
     expect(upload().radii).toEqual([.12, .07]);

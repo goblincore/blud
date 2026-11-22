@@ -18,6 +18,23 @@ export interface RigBendConstraint {
   restPole: Vec3;
   /** Optional forward-fold limit in radians, in [π/2, π); 150° for zombies. */
   maxFlex?: number;
+  /** THE LIVE HINGE (zombie knee spike 2026-11-02): two rig points whose a -> b direction is the joint's hinge axis
+   *  in the body (hipL -> hipR for a knee, shoulderL -> shoulderR for an elbow). Present, the pole is
+   *  `axisSign * cross(upper, axis)`, so it rolls with the trunk. Absent, the pole is restPole carried by the body yaw
+   *  and the upper bone's shortest swing, which ignores a roll: on every face-down free-ragdoll corpse it pointed
+   *  130-165° from the true back, so the stop let the knee fold the wrong way and blocked the right one. */
+  axis?: readonly [number, number];
+  /** +1 or -1: fixes the cross product's sign so the live pole matches restPole at rest. */
+  axisSign?: number;
+  /** With `axis`: how far (rad) the lower bone may leave the hinge plane. The rig has no twist, so this stands in for
+   *  the hip's (shoulder's) rotation; absent = no plane limit (only the half-plane stops). */
+  planeSlack?: number;
+  /** The end may be planted (a foot, collapse.ts plantFeet): a pinned end moves the mid instead (plantedKnee) and
+   *  lets go when it cannot. Absent, a pinned end skips the stop (a held hand). */
+  plants?: boolean;
+  /** Use `axis` only while the body is down (RigState.collapsed): an elbow's stop rolls with a corpse's chest, and a
+   *  live arm keeps the stop its swings were tuned on. */
+  axisWhenDown?: boolean;
 }
 
 /** A limb segment (two rig points) the head capsule keeps out. */
@@ -56,11 +73,23 @@ export interface RigState {
   restPose: Vec3[];
   /** Animated weight-bearing joints that must not spring away from contact. */
   posePins?: readonly number[];
+  /** Most one bend-stop pass moves a bone's end (m); absent, the stop puts it straight back in range. A corpse sets
+   *  it (game-actor.ts CORPSE_BEND_STEP_M): see constrainRigBends. */
+  bendStepCap?: number;
+  /** The body is down (a corpse): the bends marked axisWhenDown use their live hinge. */
+  collapsed?: boolean;
   bends?: RigBendConstraint[];
   /** Heading of the authored body frame; independent of flinch/rest targets. */
   bodyYaw?: number;
   /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
   headFollowsRig?: boolean;
+  /** The dt of the last stepRig (s). Verlet keeps velocity as last step's displacement, so the next step
+   *  rescales it by dt / stepDt, and impulseAt reads it to turn a 60 Hz shove into this step's
+   *  displacement. Absent = 1/60. Without it a bullet-time step (0.2x) carried 5x the speed. */
+  stepDt?: number;
+  /** A corpse's skull letting go of its look cone (0..1, MotionFrame.headFollow):
+   *  0 clamps it as standing, 1 lies it with the neck. headFollowsRig wins. */
+  headFollow?: number;
   /** THE JAW's gape (rad, jaw.ts), from MotionFrame.jawGape: rig-bind opens
    *  the `on jaw` prims by it. Absent = shut. An explicit scalar rather than
    *  a read of the jaw point: the pivot moves ~2.5 cm a step at a walk, and
@@ -110,26 +139,52 @@ export interface RigGuardLimb {
  * length and permitted recoil. The wrist slides to the allowed boundaries;
  * shoulder and elbow remain where physics put them.
  * Pure so both the impulse path and post-integration callers can use it.
+ * `floorY` is the floor fallback's plane; `floorAt` (sector levels) replaces it with the floor
+ * under the wrist (`from`: the wrist before this stop, for the caller to judge its rise), so a forearm over a ledge hangs down it instead of being held level.
  */
-export function constrainRigBends(state: RigState, floorY?: number): RigState {
+export function constrainRigBends(
+  state: RigState, floorY?: number, floorAt?: (x: number, z: number, from: Vec3) => number,
+): RigState {
   let points = state.points;
   for (const bend of state.bends ?? []) {
     const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
-    if (end.pinned) continue;
+    if (end.pinned && !(bend.plants && bend.axis)) continue;
     const upper = sub(mid.pos, root.pos), fore = sub(end.pos, mid.pos);
     const foreLength = len(fore);
     if (len(upper) < 1e-8 || foreLength < 1e-8) continue;
     // Recoil can move the animation target itself through the wrong side.
     // The stop belongs to the authored arm, never to that transient target.
     // Carry its pole through body yaw and then the upper arm's residual swing.
-    const yaw = qFromAxisAngle([0, 1, 0], state.bodyYaw ?? 0);
-    const restUpper = qRotate(yaw, bend.restUpper);
-    const restPole = qRotate(yaw, bend.restPole);
-    const pole = normalize(qRotate(qFromTo(restUpper, normalize(upper)), restPole));
+    const pole = livePole(points, bend, upper, state.collapsed) ?? (() => {
+      const yaw = qFromAxisAngle([0, 1, 0], state.bodyYaw ?? 0);
+      return normalize(qRotate(qFromTo(qRotate(yaw, bend.restUpper), normalize(upper)), qRotate(yaw, bend.restPole)));
+    })();
     const normals = [pole];
     if (bend.maxFlex !== undefined) normals.push(sub(scale(normalize(upper), Math.sin(bend.maxFlex)),
       scale(pole, Math.cos(bend.maxFlex))));
-    if (normals.every(n => dot(fore, n) >= -1e-9)) continue;
+    // The hinge plane holds upper and pole; `hinge` is its normal. The BEND (the lower bone's share off the upper's
+    // line) may point within planeSlack of the plane: measured on the whole bone instead, a 20° slack let a knee
+    // bent under 20° point straight sideways, the buckle that read as broken.
+    const hinge = bend.axis && bend.planeSlack !== undefined ? normalize(cross(normalize(upper), pole)) : null;
+    const uHat = normalize(upper);
+    const offPlane = (d: Vec3) => hinge
+      ? Math.abs(dot(d, hinge)) - Math.sin(bend.planeSlack!) * len(sub(d, scale(uHat, dot(d, uHat)))) : -1;
+    if (normals.every(n => dot(fore, n) >= -1e-9) && offPlane(fore) <= 1e-9) continue;
+    if (end.pinned) {
+      // A planted foot (collapse.ts plantFeet) stays put: the knee goes where the bones allow. A knee that would go
+      // under the floor (the body has come down past the foot) cannot be held there: the floor threw it back up
+      // and launched the corpse 0.6 m. The foot lets go and the stop below swings it as for any free end.
+      const knee = plantedKnee(points, bend, state.bendStepCap);
+      const kneeFloor = !knee ? undefined : floorAt ? floorAt(knee.pos[0], knee.pos[2], mid.pos) : floorY;
+      if (knee && (kneeFloor === undefined || knee.pos[1] >= kneeFloor)) {
+        if (points === state.points) points = points.slice();
+        points[bend.mid] = knee;
+        continue;
+      }
+      if (!bend.axis) continue;
+      if (points === state.points) points = points.slice();
+      points[bend.end] = { ...end, pinned: false, prev: end.pos };
+    }
     let dir = normalize(fore);
     // Project onto extension first, then maximum flexion. For our 150°
     // flexion limit the inward normals have positive dot product, so the
@@ -140,8 +195,20 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
       const tangent = sub(dir, scale(normal, forbidden));
       dir = len(tangent) < 1e-8 ? normalize(upper) : normalize(tangent);
     }
+    // Then the hinge plane: turn the bend about the upper bone to within planeSlack of the pole side, keeping the
+    // fold angle. The stops above have already put the bend on the pole side, and a bigger pole share only moves
+    // the bone further inside both of them.
+    let planeSide = 0;
+    if (hinge && offPlane(dir) > 1e-9) {
+      planeSide = Math.sign(dot(dir, hinge));
+      const along = dot(dir, uHat), bendLen = len(sub(dir, scale(uHat, along)));
+      dir = normalize(add(scale(uHat, along), scale(add(scale(pole, Math.cos(bend.planeSlack!)),
+        scale(hinge, planeSide * Math.sin(bend.planeSlack!))), bendLen)));
+    }
     let pos = add(mid.pos, scale(dir, foreLength));
-    if (floorY !== undefined && pos[1] < floorY && mid.pos[1] >= floorY) {
+    const fy = floorAt ? floorAt(pos[0], pos[2], end.pos) : floorY;
+    // A capped stop (state.bendStepCap) skips the floor fallback below: the floor contact lifts the end next step.
+    if (state.bendStepCap === undefined && fy !== undefined && pos[1] < fy && mid.pos[1] >= fy) {
       // Floor contact already positioned the elbow above ground. A horizontal
       // forearm in the allowed half-plane satisfies BOTH constraints without
       // shortening the segment or undoing contact by pushing the wrist down.
@@ -163,8 +230,41 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
         candidates.sort((a, b) => dot(b, dir) - dot(a, dir));
         if (candidates[0]) horizontal = candidates[0];
       }
+      // A live hinge lays the bone flat IN its plane (the plane's horizontal line), not wherever is flat: the floor
+      // turned a buckling knee 77° sideways the frame its foot landed. A level plane (a knee lying on its side)
+      // has no such line and keeps the choice above.
+      const level = hinge ? cross(hinge, [0, 1, 0]) : null;
+      if (level && len(level) > 1e-3 && offPlane(horizontal) > 1e-9) {
+        // Ranked on the wanted `dir` with a pull toward where the bone already points: on `dir` alone a near tie
+        // could flip a resting foot to the far side of its knee in one frame.
+        const cur = normalize(sub(end.pos, mid.pos));
+        const rank = (v: Vec3) => dot(v, dir) + 0.5 * dot(v, cur);
+        const ok = [normalize(level), scale(normalize(level), -1)].filter(v => normals.every(n => dot(v, n) >= -1e-9));
+        // A bone already lying straight stays straight: the stops' edge sits on a flat line, and a hair across it
+        // turned the straight fallback below into that line, a snap of the foot past 90 deg.
+        if (dot(cur, uHat) > 0.97) ok.push(uHat);
+        ok.sort((a, b) => rank(b) - rank(a));
+        // No flat line in the plane clears the stops (a face-up leg whose knee sits below its hip: its back of knee
+        // faces the floor): lie it straight in the plane rather than turning the shin sideways (which read as a
+        // broken knee). SPIKE OPEN ISSUE: the end can sit up to ~4 cm under the floor plane at the end of the frame.
+        // Tried and worse: holding the end on the floor short of its length (2 of 8 seeds never settled), lifting
+        // the knee with it (every corpse crept ~2 mm a frame), the flat direction nearest the plane (knees sideways).
+        horizontal = ok[0] ?? normalize(upper);
+      }
       dir = normalize(horizontal);
       pos = add(mid.pos, scale(dir, foreLength));
+    }
+    // THE CAPPED STOP (corpse legs, owner playtest 2026-11-03: legs that "slide out flat", a still corpse that kicked a
+    // leg up to vertical). Put straight back in range, a shin far out of it (the pole turns with the trunk, the hip
+    // cones and the floor move the knee) teleported the foot across the knee, up to 1.3 m in one 1/60 s step, and
+    // the floor fallback above laid every folded leg flat or straight. The bones then dragged the shin and toe after
+    // the foot, which is the kick. Capped, the stop swings the bone back over a few steps.
+    if (state.bendStepCap !== undefined) {
+      const move = sub(pos, end.pos), d = len(move);
+      if (d > state.bendStepCap) {
+        dir = normalize(sub(add(end.pos, scale(move, state.bendStepCap / d)), mid.pos));
+        pos = add(mid.pos, scale(dir, foreLength));
+      }
     }
     // Moving pos without prev would inject another impulse. Keep allowed
     // velocity, remove only the relative velocity driving through the stop.
@@ -174,10 +274,53 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
       const intoStop = dot(sub(velocity, sub(mid.pos, mid.prev)), normal);
       if (intoStop < 0) velocity = sub(velocity, scale(normal, intoStop));
     }
+    if (hinge && planeSide !== 0) {
+      const outward = dot(sub(velocity, sub(mid.pos, mid.prev)), hinge) * planeSide;
+      if (outward > 0) velocity = sub(velocity, scale(hinge, outward * planeSide));
+    }
     if (points === state.points) points = points.slice();
-    points[bend.end] = { ...end, pos, prev: sub(pos, velocity) };
+    points[bend.end] = { ...end, pinned: false, pos, prev: sub(pos, velocity) };
   }
   return points === state.points ? state : { ...state, points };
+}
+
+/**
+ * THE PLANTED KNEE. The stop above fixes a bend by swinging the END, right for a hand in the air; a corpse's planted
+ * foot (collapse.ts plantFeet, pinned) must not move, so the KNEE goes where the two bone lengths put it between hip
+ * and foot, on the forward side of that line in the hinge plane: a sinking hip folds the knee forward, as a body
+ * kneels. Moved with its prev (no speed added). Null when it cannot (no hinge, a span the bones cannot make, a
+ * degenerate frame): the knee stays where physics put it.
+ */
+function plantedKnee(points: readonly RigPoint[], bend: RigBendConstraint, stepCap?: number): RigPoint | null {
+  if (!bend.axis) return null;
+  const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
+  const a = points[bend.axis[0]], b = points[bend.axis[1]];
+  if (mid.pinned || !a || !b) return null;
+  const l1 = len(sub(mid.pos, root.pos)), l2 = len(sub(end.pos, mid.pos));
+  const span = sub(end.pos, root.pos), d = len(span);
+  if (d < 1e-6 || d >= l1 + l2 || d <= Math.abs(l1 - l2)) return null;
+  const u = scale(span, 1 / d);
+  // Forward: opposite the pole the stop builds for a straight leg (livePole with the span as the upper bone).
+  const back = scale(cross(u, sub(b.pos, a.pos)), bend.axisSign ?? 1);
+  if (len(back) < 1e-6) return null;
+  const w = scale(normalize(back), -1);
+  const x = (l1 * l1 - l2 * l2 + d * d) / (2 * d), r = Math.sqrt(Math.max(0, l1 * l1 - x * x));
+  let pos = add(root.pos, add(scale(u, x), scale(w, r)));
+  // Capped like the stop (RigState.bendStepCap): a knee pushed off its hinge plane (a corpse's legs pressed together)
+  // was put back in ONE step, a 40-90 cm snap that the next verlet step carried on as speed (2026-11-03).
+  const move = sub(pos, mid.pos), dm = len(move);
+  if (stepCap !== undefined && dm > stepCap) pos = add(mid.pos, scale(move, stepCap / dm));
+  return { ...mid, pos, prev: add(mid.prev, sub(pos, mid.pos)) };
+}
+
+/** The pole from the live hinge axis (RigBendConstraint.axis), or null without one (or when it is degenerate: the
+ *  upper bone along the axis). */
+function livePole(points: readonly RigPoint[], bend: RigBendConstraint, upper: Vec3, collapsed?: boolean): Vec3 | null {
+  if (!bend.axis || (bend.axisWhenDown && !collapsed)) return null;
+  const a = points[bend.axis[0]], b = points[bend.axis[1]];
+  if (!a || !b) return null;
+  const pole = scale(cross(upper, sub(b.pos, a.pos)), bend.axisSign ?? 1);
+  return len(pole) < 1e-8 ? null : normalize(pole);
 }
 
 /** Closest points between segments p1-q1 and p2-q2 (Ericson, Real-Time
@@ -219,7 +362,7 @@ export function headCapsule(points: readonly RigPoint[], ko: RigHeadKeepOut): [V
  * them so the correction injects no velocity (a limb pressed against the head
  * slides along it instead of bouncing off). Pinned points do not move.
  */
-export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefined): RigPoint[] {
+export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefined, pushed?: Vec3[]): RigPoint[] {
   if (!ko || ko.limbs.length === 0) return points;
   const cap = headCapsule(points, ko);
   if (!cap) return points;
@@ -252,16 +395,27 @@ export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefi
     const denom = wA * wA + wB * wB;
     if (denom < 1e-9) continue;
     if (out === points) out = points.slice();
-    if (wA > 0) { const d = scale(n, (push * wA) / denom); out[limb.a] = { ...A, pos: add(A.pos, d), prev: add(A.prev, d) }; }
-    if (wB > 0) { const d = scale(n, (push * wB) / denom); out[limb.b] = { ...B, pos: add(B.pos, d), prev: add(B.prev, d) }; }
+    if (wA > 0) out[limb.a] = keptOut(A, scale(n, (push * wA) / denom), limb.a, pushed);
+    if (wB > 0) out[limb.b] = keptOut(B, scale(n, (push * wB) / denom), limb.b, pushed);
   }
   return out;
+}
+
+/** One keep-out push on one point. Alone (no `pushed`), `prev` moves with it, so the push adds no speed. Inside
+ *  stepRig's solve (`pushed`: the push each point has had this step) only the position moves, and stepRig settles
+ *  the speed once at the end (KEEP-OUTS ADD NO SPEED). */
+function keptOut(p: RigPoint, d: Vec3, i: number, pushed: Vec3[] | undefined): RigPoint {
+  if (!pushed) return { ...p, pos: add(p.pos, d), prev: add(p.prev, d) };
+  pushed[i] = add(pushed[i] ?? [0, 0, 0], d);
+  return { ...p, pos: add(p.pos, d) };
 }
 
 /** Push limb segments out of the guard spheres. Same position-based scheme as the
  *  head capsule (applyHeadKeepOut): ends move by their share, `prev` moves with
  *  them so no velocity is injected, pinned ends stay. */
-export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardSphere[] | undefined, bodyYaw = 0): RigPoint[] {
+export function applyGuardSpheres(
+  points: RigPoint[], guards: readonly RigGuardSphere[] | undefined, bodyYaw = 0, pushed?: Vec3[],
+): RigPoint[] {
   if (!guards || guards.length === 0) return points;
   const cy = Math.cos(bodyYaw), sy = Math.sin(bodyYaw);
   let out = points;
@@ -290,8 +444,8 @@ export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardS
         const denom = wA * wA + wB * wB;
         if (denom < 1e-9) continue;
         if (out === points) out = points.slice();
-        if (wA > 0) { const d = scale(n, (push * wA) / denom); out[limb.a] = { ...A, pos: add(A.pos, d), prev: add(A.prev, d) }; }
-        if (wB > 0) { const d = scale(n, (push * wB) / denom); out[limb.b] = { ...B, pos: add(B.pos, d), prev: add(B.prev, d) }; }
+        if (wA > 0) out[limb.a] = keptOut(A, scale(n, (push * wA) / denom), limb.a, pushed);
+        if (wB > 0) out[limb.b] = keptOut(B, scale(n, (push * wB) / denom), limb.b, pushed);
       }
     }
   }
@@ -300,7 +454,7 @@ export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardS
 
 export interface StepOpts {
   gravity: Vec3;
-  /** Velocity bleed per step, 0..1. */
+  /** Velocity bleed per 1/60 s, 0..1 (scaled to the step like restStiffness). */
   damping: number;
   iterations: number;
   /**
@@ -337,15 +491,34 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
     return k === undefined || k === 1 ? st : 1 - Math.pow(1 - opts.restStiffness * k, frames);
   };
 
+  // TIME-CORRECTED VERLET: last step's displacement is velocity × the last dt; carry the velocity, not the
+  // displacement, into this step (a slow-motion step is shorter, so it moves less), and bleed per 1/60 s.
+  const carry = (state.stepDt ? Math.min(20, Math.max(0.05, dt / state.stepDt)) : 1)
+    * Math.pow(1 - opts.damping, frames);
+  // KEEP-OUTS ADD NO SPEED. A keep-out push used to move `prev` with the point, each pass. Where the bones then pulled
+  // the point back in (an arm's shoulder end sits at the torso by design), the position ended where it began and
+  // `prev` kept the shove: every pass of every step left the limb moving INTO the keep-out by the push. The rest pull
+  // bleeds that at a 1/60 s step; at a bullet-time step it bleeds a fifth as much and the speed doubled each step
+  // (owner clip 2026-11-12: a standing zombie under shotgun fire whips its head and arms about; 116 m/s and bones
+  // 29% out of length at 0.2x, 18 m/s and 3% at full speed). So the passes move positions only, and one settle at
+  // the end moves `prev` by the share of the push the solve let stand (`free`: where each point was before it).
+  // A corpse (state.collapsed) keeps the old push: it steps a fixed 1/60 s (game-actor.ts FIXED CORPSE STEPS), where
+  // the rest of its stack was tuned on it, and with the settle a lying corpse kept one joint stirring and never fell
+  // asleep (game-actor-corpse-steps.test.ts).
+  const keepOuts = !!(state.headKeepOut || state.torsoGuards) && !state.collapsed;
+  const pushed: Vec3[] | undefined = keepOuts ? [] : undefined;
+  const free: Vec3[] = [];
   let points = state.points.map((p, i) => {
     if (state.posePins?.includes(i)) return { pos: state.restPose[i]!, prev: state.restPose[i]!, pinned: true };
     if (p.pinned) return { ...p, prev: p.pos };
-    const vel = scale(sub(p.pos, p.prev), 1 - opts.damping);
+    const vel = scale(sub(p.pos, p.prev), carry);
     let next = add(add(p.pos, vel), scale(opts.gravity, dt * dt));
     if (state.clothForce && (state.restScale?.[i] ?? 1) < 1) next = add(next, scale(state.clothForce, dt * dt));
     const sti = stOf(i);
     if (sti > 0) next = lerp(next, state.restPose[i]!, sti);
-    return { pos: sanitize(next, p.pos), prev: p.pos, pinned: false };
+    next = sanitize(next, p.pos);
+    if (keepOuts) free[i] = next;
+    return { pos: next, prev: p.pos, pinned: false };
   });
 
   for (let it = 0; it < opts.iterations; it++) {
@@ -358,22 +531,42 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
       if (!pa.pinned) pa.pos = add(pa.pos, correction);
       if (!pb.pinned) pb.pos = sub(pb.pos, correction);
     }
-    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0);
+    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut, pushed), state.torsoGuards, state.bodyYaw ?? 0, pushed);
     points = constrainRigBends({ ...state, points }).points;
   }
 
   // One more keep-out pass, THEN the elbow stop as the last word: the anatomical
   // limit outranks the clearance (the keep-outs are 1.5 cm generous, so the stop's
   // sub-millimetre correction cannot put an arm back inside).
-  const result = constrainRigBends({
-    ...state,
-    points: state.headKeepOut || state.torsoGuards
-      ? applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0)
-      : points,
-  });
+  if (state.headKeepOut || state.torsoGuards) {
+    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut, pushed), state.torsoGuards, state.bodyYaw ?? 0, pushed);
+    if (pushed) points = settleKeptOut(points, pushed, free);
+  }
+  const result = constrainRigBends({ ...state, stepDt: dt, points });
   if (!state.posePins?.length) return result;
   return { ...result, points: result.points.map((p, i) => state.posePins!.includes(i)
     ? { ...p, pinned: state.points[i]!.pinned } : p) };
+}
+
+/** The end of a step's keep-out passes (stepRig KEEP-OUTS ADD NO SPEED). `pushed` is the push each point had over
+ *  the step's passes, `free` where it was before the solve. `prev` moves by the share of the push that STOOD: how
+ *  far the solve moved the point along its push, no more than the push and no less than nothing. A push the bones let
+ *  stand adds no speed, as before; one they undid leaves `prev` alone (it used to move by the whole push, which was
+ *  the speed into the keep-out); and what the bones give the point on top of the push (a flail's whip) is its own. */
+function settleKeptOut(points: RigPoint[], pushed: readonly (Vec3 | undefined)[], free: readonly (Vec3 | undefined)[]): RigPoint[] {
+  let out = points;
+  pushed.forEach((push, i) => {
+    const p = out[i], was = free[i];
+    if (!push || !p || !was || p.pinned) return;
+    const l = len(push);
+    if (l < 1e-9) return;
+    const n = scale(push, 1 / l);
+    const stood = Math.min(l, dot(sub(p.pos, was), n));
+    if (stood <= 0) return;
+    if (out === points) out = points.slice();
+    out[i] = { ...p, prev: add(p.prev, scale(n, stood)) };
+  });
+  return out;
 }
 
 /** Guards against NaN/Infinity poisoning the whole rig after an extreme impulse. */

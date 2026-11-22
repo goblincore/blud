@@ -45,10 +45,20 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   // 1.6, the wound-wetness precedent: 2.2 was the first guess and the
   // near-level capture showed the whole grazing-angle puddle clipping to
   // paper white — wet, yes; blown out, no.
+  // 2026-11-14, from the game (owner: "way too white", "it should just look like the normal flesh" with red
+  // patches appearing; captures in the arena under the torch):
+  //  - The flesh's share rides meltRed (melt.wgsl.ts), the point's OWN crossover, not the body's progress: intact
+  //    skin keeps the wetness it had. On the body's progress every pixel changed on the first frame of a melt.
+  //  - Red flesh is LESS wet than skin, not more. The highlight is white light on top of the red; the absolute 1.6
+  //    above turned 80% of the body (red by albedo, debug stop 34) tan and white. light-list.wgsl.ts drops the list
+  //    lights' highlight on the same factor.
   if (bonePaleU > 0.0) {
-    wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU);
+    if (isBone) { wet = mix(wet, 0.45, bonePaleU); } else { wet = mix(wet, wet * 0.12, meltRed); }
   }
   // The legacy shine exponent, named so the lighting tail and the deferred
   // surface output share one definition: the surface's roughness inverts the
   // shared light pass's exponent mapping against exactly this value.
+  // CLOTH is matte: its wet highlight drops to 12%, except inside a hole (the reveal ramp of PAINT_CHAR), where
+  // the flesh under it keeps its own.
+  if (cloth > 0.0) { wet = wet * mix(1.0, 0.12, cloth * (1.0 - smoothstep(0.30, 0.42, wm))); }
   let specPow = mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss);`;

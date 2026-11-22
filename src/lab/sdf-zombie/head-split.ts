@@ -50,7 +50,7 @@ export interface SplitPreset {
   maxBoth: number; maxOne: number;
 }
 
-/** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + holdFrac x HeadFrame.radius)
+/** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + holdFrac x HeadFrame.radius x hold)
  *  holds all the moved material. Also the floor of the region shell bound C, which caps the field in open air near
  *  the region sphere, so it must be at least the AO probe distance: occlusion.wgsl.ts reads
  *  clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1), and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48
@@ -69,7 +69,8 @@ export const HEAD_SPLIT = {
   maxOffsetFrac: 0.4, bothFrac: 0.15,
   /** The face plane's offset range, as shares of the head radius (back, front). */
   faceOffsetFrac: [-0.3, 0.5],
-  /** `rho` = |centre - h| + `holdFrac` * radius: the ball about the hinge that holds the moved head. */
+  /** `rho` = |centre - h| + `holdFrac` * radius * the head's hold (SPLIT_HEADS): the ball about the hinge that holds the
+   *  moved head. */
   holdFrac: 1.25,
   /** A hit on an open head is on the OUTER skin when the closed head's field there is within this of zero; deeper, it
    *  is on a cut face (or the hinge-plane face), which un-warps to the inside of the closed head. */
@@ -125,6 +126,24 @@ export const HEAD_SPLIT = {
     rim: { color: [0.72, 0.5, 0.4], width: 0.004 },
   },
 } as const;
+
+/** THE HEADS THE PRESETS FIT, by CHARACTER (character-registry.ts names), never by motion profile: thirteen characters
+ *  move on the zombie's profile and their heads are not the zombie's. The presets' hinges are metres in the head's
+ *  frame, measured on the zombie, so a head is on this list when its flesh above the hinge plane lies inside the hold
+ *  ball for every preset (nothing stays behind and tears) and none of its body does (nothing rides off with a half):
+ *  head-split-fit.test.ts measures both on every head here, at rest.
+ *  `hold`: the hold ball's scale for this head (HeadFrame.hold). The soldier's cap rises past 1.25 x his largest
+ *  semi-axis (0.103 m against the zombie's 0.137): at 1 its crown, 0.4% of the head that turns, stayed behind as two
+ *  floating chips over the open head. 1.1 holds all of it; 1.2 is the margin, and nothing of his body rides off up to
+ *  1.6. Who asks: the split leaf (game-head-split.ts canSplit, skullOf), the slug's head shot (game-head-shot.ts) and
+ *  the pop's wiring (game-spawn.ts onHeadPop). Every other character: docs/dev-notes/2026-11-02-head-split-roll-out.md. */
+export const SPLIT_HEADS: ReadonlyMap<string, { readonly hold: number }> = new Map([
+  ['zombie', { hold: 1 }],
+  ['soldier', { hold: 1.2 }],
+]);
+export const splitsHead = (character: string): boolean => SPLIT_HEADS.has(character);
+/** The hold ball's scale for `character`'s head (SPLIT_HEADS hold; 1 for a head not on the list). */
+export const splitHold = (character: string): number => SPLIT_HEADS.get(character)?.hold ?? 1;
 
 /** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts derives the gate
  *  and the depth, blocks/post/cut-face.wgsl.ts holds the look). A piece cap is the surface where it holds the split
@@ -379,8 +398,10 @@ export function forcedSplit(
   return { ...makeSplitState(), preset, sides, offset, angle, target: angle, stage: angle };
 }
 
-/** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). */
-export interface HeadFrame { centre: Vec3; quat: Quat; radius: number }
+/** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). `hold`
+ *  scales the hold ball alone (rho, splitWarpOf), not what else is measured off the radius (the cut faces): a head whose
+ *  flesh reaches further than the zombie's (SPLIT_HEADS hold). Absent: 1. */
+export interface HeadFrame { centre: Vec3; quat: Quat; radius: number; hold?: number }
 
 /** The frame of a skull (flame-anchors.ts headShape: its centre and semi-axes) turned by `quat`. The radius is the
  *  skull's LARGEST semi-axis, because rho = |centre - h| + holdFrac x radius must hold all the head flesh above the
@@ -388,8 +409,8 @@ export interface HeadFrame { centre: Vec3; quat: Quat; radius: number }
  *  of any hinge. Measured on the zombie (semi-axes 0.090, 0.137, 0.105): that flesh reaches 0.152 m from the centre
  *  (the jaw, under the face preset's low hinge) against 1.25 x 0.137 = 0.171. With the half-width (0.090) the crown
  *  (0.137 up) lay outside rho, stayed behind and tore. */
-export function headFrameOf(skull: { centre: Vec3; axes: Vec3 }, quat: Quat): HeadFrame {
-  return { centre: skull.centre, quat, radius: Math.max(skull.axes[0], skull.axes[1], skull.axes[2]) };
+export function headFrameOf(skull: { centre: Vec3; axes: Vec3 }, quat: Quat, hold = 1): HeadFrame {
+  return { centre: skull.centre, quat, radius: Math.max(skull.axes[0], skull.axes[1], skull.axes[2]), ...(hold !== 1 ? { hold } : {}) };
 }
 
 const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
@@ -442,7 +463,7 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
     n, d0, h, a,
     thetaP: st.sides >= 0 ? st.angle + st.wobP : 0,
     thetaM: st.sides <= 0 ? -(st.angle + st.wobM) : 0,
-    r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
+    r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac * (f.hold ?? 1) + REGION_MARGIN,
     full: splitMaxAngle(st), stage: st.stage,
   };
 }

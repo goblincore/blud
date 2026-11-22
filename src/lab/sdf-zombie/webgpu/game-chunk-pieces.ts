@@ -18,6 +18,7 @@ import { type Primitive, type Vec3 } from '../types';
 import { type Quat } from '../vec';
 import { BakedChunk, ChunkTemplate, cancelChunkBake, freeBaked } from './game-chunk-bake';
 import { applyChunkKindLook, primsLongAxis } from './game-gib-spawn';
+import { seatChunkSpawn } from './game-hit-trace';
 import { rngStreams } from './rng';
 import { SDF_LAYER } from './sdf-layer';
 import { createChunkGpuView, type ChunkGpuView, type MarchUniforms } from './zombie-gpu';
@@ -51,7 +52,7 @@ export function gibChunkMeat(ctx: GameContext, template: ChunkTemplate, at: Vec3
         scale: [1, 1, 1], blendK: 0.008,
       } as unknown as Primitive],
       tornAt: [], bones: [],
-    }, template);
+    }, template, undefined, at);   // sector levels: clamped from the piece that was hit
   }
   if (ctx.vfx.bleedEnabled) {
     // One-shot gib gout: a fresh emitter stream so it never fuses with a
@@ -77,6 +78,9 @@ export function spawnChunkPiece(ctx: GameContext,
   },
   template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
   initialVelocity?: Vec3,
+  /** SECTOR levels (plan 3b): the body centre the piece came from — the spawn is clamped inside the level from it and
+   *  its floor seeds the piece's floorY (game-hit-trace seatChunkSpawn). Ignored on room levels. */
+  from?: Vec3 | null,
 ) {
   // A FLESH BIT (flesh-bits.ts) draws its throwaway launch and tumble from its own stream, so flesh on or
   // off leaves rngStreams.misc — every other piece's sequence — untouched.
@@ -144,6 +148,13 @@ export function spawnChunkPiece(ctx: GameContext,
     const view = createPieceView(ctx, state, piece.prims,
       piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template, kind, boneOnly);
     ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly, ...(tag ? { tag } : {}) });
+  }
+  // SECTOR LEVELS: seat the piece inside the level AFTER the view recentred its prims on the spawn origin (a new
+  // state object, so a later re-pack from the view's stored reset args keeps that origin). Room levels: the same
+  // object, untouched.
+  if (ctx.world?.level?.def?.sectors) {
+    const live = ctx.bake.liveChunks[ctx.bake.liveChunks.length - 1]!;
+    live.state = seatChunkSpawn(ctx, live.state, from);
   }
 }
 

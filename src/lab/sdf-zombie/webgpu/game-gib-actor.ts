@@ -12,14 +12,16 @@ import { EXPLOSION_LAUNCH, EXPLOSION_STANDARD } from '../../../game/gibs/tuning'
 import { spawnImpactGout } from '../blood-sim';
 import { type BuildResult } from '../build-body';
 import { concussionVelocity } from '../explosion-aoe';
-import { gibLaunchVelocity } from '../gib-launch';
-import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
+import { gibBlastLaunchVelocity, gibLaunchVelocity } from '../gib-launch';
+import { GIB_SWITCH_BLOOD, blastBloodPlacement } from '../gib-switch';
+import { carryGibPieces, displaceGibPieces, gibTierPlan, retargetGibPieces, type GibPiece } from '../gib-parts';
 import { gibAll, gibAllPieces } from '../sever';
 import { type Vec3 } from '../types';
 import { type ZombieActor } from './game-actor';
 import { spawnChunkPiece } from './game-chunk-pieces';
 import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gib-pieces';
 import { ensureCarvedLibrary, gibAllowance, gibAssetArchetypeOf, gibBudget, gibDebit, retireActor, spawnCarvedPiece } from './game-gib-spawn';
+import { actorSpawnCentre, seatBloodSpawn } from './game-hit-trace';
 import { rngStreams } from './rng';
 
 
@@ -64,7 +66,7 @@ export function spawnScheduledGibs(ctx: GameContext, dt: number): number {
     const planned = {
       pieces: frame
         ? displaceGibPieces(
-            retargetGibPieces(q.plan.pieces, frame.deformedPrims, frame.deformedBones),
+            carryGibPieces(retargetGibPieces(q.plan.pieces, frame.deformedPrims, frame.deformedBones), frame.drift),
             frame.offsets, frame.quats, frame.angVels)
         : q.plan.pieces,
       body: frame?.body ?? q.actor.posed(),
@@ -198,9 +200,14 @@ export function gibActor(ctx: GameContext,
     at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale);
   // `?giblaunch=radial` is the labelled CONTROL: the old per-piece radial
   // shove, kept only so a normal-speed A/B can be captured side by side.
+  // `?gibswitch=launch`: the shared shove is shaped by the blast instead (gib-launch.ts gibBlastLaunchVelocity) —
+  // away along the blast line far out, a burst out of the body point-blank, low up floor.
+  const blastShaped = ctx.gibs.switchSteps.has('launch') && ctx.gibs.launchMode !== 'radial';
   const launchFor = (key: string, origin: Vec3): Vec3 => ctx.gibs.launchMode === 'radial'
     ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale)
-    : gibLaunchVelocity({ key, seed: ctx.demo.seed, bodyVel: coherentVel });
+    : blastShaped
+      ? gibBlastLaunchVelocity({ key, seed: ctx.demo.seed, at, torso: torsoC, origin, falloff })
+      : gibLaunchVelocity({ key, seed: ctx.demo.seed, bodyVel: coherentVel });
   // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
   // explosion starts moving first, so the blast reads as ripping outward
   // through the body. It no longer decides what survives — the budget was
@@ -275,6 +282,9 @@ export function gibActor(ctx: GameContext,
   const perFrame = Math.max(1, Math.ceil(spawning.length / ctx.gibs.staggerFrames));
   const boneOnly = (g: GibPiece) => g.prims.length === 0 && g.bones.length > 0;
   let spawned = 0, boneSpawned = 0;
+  // SECTOR LEVELS (plan 3b): every piece is clamped inside the level from the body centre and seeded with the body's
+  // floor. Null on room levels (nothing changes there).
+  const from = actorSpawnCentre(ctx, a);
   // ——— CARVE: THE WHOLE BODY, FROM THE ARCHETYPE LIBRARY —————————————————
   // The piece set here is NOT `spawning` (the body's authored split) but the
   // library's carved regions, which cover the whole body including its
@@ -298,7 +308,7 @@ export function gibActor(ctx: GameContext,
       const o: Vec3 = [wx, wy, wz];
       const vel = launchFor(`carve#${i}`, o);
       const delay = 1 + Math.min(ctx.gibs.staggerFrames - 1, Math.floor(i / perFrameCarve));
-      if (spawnCarvedPiece(ctx, p, o, 'limb', vel, delay)) spawned++;
+      if (spawnCarvedPiece(ctx, p, o, 'limb', vel, delay, from)) spawned++;
     }
   }
   for (let i = 0; i < spawning.length && !carveMode; i++) {
@@ -317,7 +327,7 @@ export function gibActor(ctx: GameContext,
       // EXTENT and identity from it — the geometry itself never touches the
       // GPU, which is the trade the owner accepted ("sure you trade 3d but its
       // not important in this case").
-      if (spawnSpriteGibPiece(ctx, g, vel, delay)) {
+      if (spawnSpriteGibPiece(ctx, g, vel, delay, from)) {
         spawned++;
         if (boneOnly(g)) boneSpawned++;
       }
@@ -329,7 +339,7 @@ export function gibActor(ctx: GameContext,
       // part, damaged source set) the SAME piece falls through to the marched
       // path below, so damage is never silently lost. The deform subtracts
       // `g.origin` — the same pivot `makeChunk` places the piece at.
-      if (spawnAssetGibPiece(ctx, a, g, vel, delay)) {
+      if (spawnAssetGibPiece(ctx, a, g, vel, delay, from)) {
         spawned++;
         if (boneOnly(g)) boneSpawned++;
         continue;
@@ -342,7 +352,7 @@ export function gibActor(ctx: GameContext,
       // `makeChunk` overrides its random tumble with these, so the release has
       // no orientation reset and no second angular kick.
       spinQuat: g.spinQuat, spinAngVel: g.spinAngVel,
-    }, template, [0, 0, 0]); // AT REST: see the doc block, point 2
+    }, template, [0, 0, 0], from); // AT REST: see the doc block, point 2
     const made = ctx.bake.liveChunks[ctx.bake.liveChunks.length - 1];
     if (made) {
       ctx.gibs.pendingGibImpulses.push({ id: made.id, vel, delay });
@@ -353,8 +363,24 @@ export function gibActor(ctx: GameContext,
   // Gore: the blast opens the body, so one gout at the epicentre. `spawnImpactGout`
   // takes the SIM directly (its droplets are rendered by bloodView.sync), and
   // 'slug' is the heaviest profile BleedKind has — there is no 'blast' one.
-  if (ctx.vfx.bleedEnabled) {
-    spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+  if (ctx.vfx.bleedEnabled && ctx.gibs.switchSteps.has('blood')) {
+    // `?gibswitch=blood`: the gout leaves the BODY (as drawn, so a beaten body's shoved torso) on its blast side,
+    // carried away from the blast and up with the pieces, instead of sitting at the blast point. Sector levels
+    // keep seatBloodSpawn's clamp from the body centre and its floor.
+    const b = blastBloodPlacement(torsoC, at);
+    const seat = seatBloodSpawn(ctx, a, b.anchor);
+    spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, b.dirN, rngStreams.bleed, ctx.boot.nextEmitterStream++,
+      { speedMul: GIB_SWITCH_BLOOD.swapSpeedMul }, seat.floorY);
+  } else if (ctx.vfx.bleedEnabled) {
+    const seat = seatBloodSpawn(ctx, a, at);   // sector levels: inside the level, on the body's floor (plan 3b)
+    spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+      undefined, seat.floorY);
+  }
+  // THE KIT AND THE GUN GO WITH THE GIBS (`?gibkit=0`: they vanish), on the same launch as the pieces. Out of the view
+  // before retireActor below disposes what the view still holds.
+  if (ctx.gibs.kitDebris) {
+    const left = a.character?.surrenderEquipment(launchFor, torsoC, ctx.demo.seed ^ a.id);
+    if (left) ctx.gibs.kitRemains.add(left);
   }
   retireActor(ctx, a);
   ctx.telemetry.telemetry.event('dynamite-gib', {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { cutChains, cutLimbs } from './connectivity';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { cutChains, cutLimbs, JOINT_TOUGHNESS, setJointToughness } from './connectivity';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { worldHitToWound, woundWorldPos } from './damage';
@@ -215,6 +215,12 @@ describe('hanging-arm anatomy regressions', () => {
 // basis the implementation uses (u/v ⟂ the proximal→distal axis), so the
 // flanking hits sit in the disc plane by construction.
 describe('union-of-wounds severing', () => {
+  // These pin the UNION GEOMETRY, so they run with neutral joint toughness
+  // (factor 1 everywhere); the toughness factors have their own suite,
+  // connectivity-toughness.test.ts.
+  const shipped = { ...JOINT_TOUGHNESS };
+  beforeAll(() => setJointToughness({ root: 1, mid: 1 }));
+  afterAll(() => setJointToughness(shipped));
   // The knee again: legL's fattest joint, near-vertical chain, so the disc
   // plane is (almost exactly) the world x-z plane.
   const leg = body.clusters.find(c => c.limb === 'legL')!;

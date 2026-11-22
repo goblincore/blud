@@ -7,11 +7,14 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { FLOAT_TUNING } from './floater-move';
 import { setChunkListGain } from './chunk-light-pick';
 import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
 import { forEachDrawnChunkMesh, setKitListGain, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
+import { setEmitterLightGain, setSectorLightConfig, type SectorLightPatch } from './game-sector-light';
+import { sectorInteriorPoint } from './sector-geometry';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundDirToWorld, woundWorldPos } from '../damage';
@@ -33,6 +36,7 @@ const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } }
 };
 const refoldMode = (z: number) => z % 8;
 import { HULL_SHRINK, buildHullInstances } from './occluder-hull';
+import { simTimeMs } from './sim-clock';
 
 export function createWorldSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;
@@ -142,6 +146,8 @@ export function createWorldSeams(ctx: GameContext) {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
         hit: a.hit, hitSlug: a.hitSlug,
+        /** Sever a limb outright, or from that chain position (game-actor debugSever): the shot-off-arm repro. */
+        sever: a.debugSever,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
         visualWoundList: () => [...a.visualWounds()],
@@ -502,6 +508,13 @@ export function createWorldSeams(ctx: GameContext) {
      *  this is safe to poll between stepped frames. */
     /** Life-state prims (`when=`, death-state.ts) of one actor: index,
      *  when, dead — for checking the hood swap from a driver. */
+    /** Diagnostic: one actor's rig joints (world) by name. */
+    actorRigJoints: (id: number) => ctx.world.actors.find(q => q.id === id)?.rigJoints() ?? null,
+    /** Diagnostic: one actor's posed prims (limb, ends, radius, op, bone, dead). */
+    actorPrims: (id: number) => ctx.world.actors.find(q => q.id === id)?.posed().prims.map((p, i) => ({
+      i, limb: p.limb, op: p.op, bone: (p as { bone?: string }).bone ?? null, dead: !!p.dead,
+      a: p.a.map(v => Math.round(v * 100) / 100), b: p.b.map(v => Math.round(v * 100) / 100), r: Math.round(p.radius * 1000) / 1000,
+    })) ?? null,
     actorLifePrims: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id);
       return a ? a.posed().prims.flatMap((p, i) => p.when ? [{ i, when: p.when, dead: !!p.dead }] : []) : null;
@@ -529,6 +542,18 @@ export function createWorldSeams(ctx: GameContext) {
       }
       return { feet: [feet[0], feet[1], feet[2]], bodyLowest: body, hullLowest: hull, hullSpheres: hullN };
     },
+    /** Floaters (floater-move.ts): each one's id, feet (rig floor) position, float state and the real
+     *  floor / ceiling under it. [] when none. */
+    /** Read or tune the floaters' height behaviour live (floater-move.ts FLOAT_TUNING): cruiseFrac,
+     *  cruiseMaxM, engageM, closeM, descendMps, ... Returns the values now in force. */
+    floatTuning: (patch?: Partial<typeof FLOAT_TUNING>) => ({ ...Object.assign(FLOAT_TUNING, patch ?? {}) }),
+    floaters: () => ctx.world.actors.flatMap(a => {
+      const f = a.floatState();
+      if (!f) return [];
+      const p = a.pose().pos;
+      return [{ id: a.id, pos: [p[0], p[1], p[2]], ...f,
+        floor: ctx.world.level.ground.floorAt(p[0], p[2]), ceil: ctx.world.level.ground.ceilAt(p[0], p[2]) }];
+    }),
     actorLimbCentre: (id: number, limb: string) => {
       const a = ctx.world.actors.find(q => q.id === id);
       const ps = a?.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub') ?? [];
@@ -667,7 +692,54 @@ export function createWorldSeams(ctx: GameContext) {
       openGates: [...ctx.world.openGates],
       requires: ctx.world.level.def?.requires ?? [],
       windows: ctx.world.level.surfaces.windows.map(w => w.id),
+      geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
+    /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle, the pool glowGain and the glow bounceGain. */
+    sectorLight: (patch?: SectorLightPatch & { emitLightGain?: number }) =>
+      ctx.world.sectorFx ? { ...setSectorLightConfig(ctx.world.sectorFx, patch ?? {}),
+        emitLightGain: setEmitterLightGain(ctx.world.light?.lamps ?? [], patch?.emitLightGain, new URLSearchParams(location.search)) } : null,
+    /** The sector meshes' baked bounces (item 2g B1): triangles, and per attribute the max and the mean
+     *  over vertices (glowBounce RGB; emitScreen RGB; emitFS fluoro, sign). */
+    sectorBake: () => {
+      const acc: Record<string, { max: number[]; sum: number[] }> = {};
+      let tris = 0, verts = 0;
+      for (const o of ctx.world.levelGroup.children) {
+        const g = (o as { geometry?: { attributes: Record<string, { array: ArrayLike<number>; itemSize: number }> } }).geometry;
+        if (!o.name.startsWith('sector-') || !g) continue;
+        const n = g.attributes.position!.array.length / 3;
+        tris += n / 3; verts += n;
+        for (const k of ['glowBounce', 'emitScreen', 'emitFS']) {
+          const a = g.attributes[k];
+          if (!a) continue;
+          const e = (acc[k] ??= { max: new Array(a.itemSize).fill(0), sum: new Array(a.itemSize).fill(0) });
+          for (let i = 0; i < a.array.length; i++) { const c = i % a.itemSize; e.max[c] = Math.max(e.max[c]!, a.array[i]!); e.sum[c]! += a.array[i]!; }
+        }
+      }
+      return { tris, verts, ...Object.fromEntries(Object.entries(acc).map(([k, e]) => [k, { max: e.max, mean: e.sum.map(s => s / Math.max(1, verts)) }])) };
+    },
+    /** The sector level's level-group meshes by name (sector-<role>[-<kind>]-zone-<n>), or [] on a room level. */
+    sectorMeshes: () => ctx.world.levelGroup.children.filter(o => o.name.startsWith('sector-')).map(o => o.name),
+    /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */
+    hazardPoint: () => {
+      const map = ctx.world.level.def?.sectors;
+      if (!map) return null;
+      for (let s = 0; s < map.sectors.length; s++) {
+        const sec = map.sectors[s]!;
+        if (sec.special !== 'hurt') continue;
+        const p = sectorInteriorPoint(map, s);
+        if (p) return { sector: s, pos: [p[0], sec.floor, p[1]] as [number, number, number], glow: sec.glow, hurtPerSec: sec.hurtPerSec };
+      }
+      return null;
+    },
+    /** The player's health, or null before the loop exists. */
+    health: () => ctx.world.loop?.vitals.health ?? null,
+    /** Simulated seconds since boot (sim-clock.ts: advanced by every tick's dt, the same dt the loop's hurt floor
+     *  steps by). Under load the dt clamp makes this run behind the wall clock: time sim-rule checks on it. */
+    simTime: () => simTimeMs() / 1000,
+    /** The player's last hits that took health ({amount, kind, health, t: sim s}), oldest first; [] before the loop. */
+    hurtLog: () => ctx.world.loop?.hurts.map(h => ({ ...h })) ?? [],
+    /** The ground under (x, z): floor and ceiling heights (NaN outside every sector). */
+    ground: (x: number, z: number) => ({ floor: ctx.world.level.ground.floorAt(x, z), ceil: ctx.world.level.ground.ceilAt(x, z) }),
     /** Open an authored level's gate by id (false if unknown or already open). */
     openGate: (id: string) => openGate(ctx, id),
     /** Mesh key: what the level's art placed (null without art). */

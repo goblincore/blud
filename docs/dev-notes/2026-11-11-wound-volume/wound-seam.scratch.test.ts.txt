@@ -1,0 +1,63 @@
+import { it } from 'vitest';
+import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
+import { makeZombie } from './body';
+import { DEFAULT_FACE } from './face';
+import { restSpacePoint, sdBody, sdPrimitive } from './validate';
+import type { Vec3 } from './types';
+import type { Quat } from './vec';
+import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
+
+const rest = buildBody(makeZombie({ ...DEFAULT_FACE }), DEFAULT_BUILD_OPTS);
+const dom = (p: Vec3, body: BuildResult, c: { start: number; count: number }) => {
+  let best = Infinity, idx = -1;
+  for (let i = c.start; i < c.start + c.count; i++) {
+    const pr = body.prims[i]!;
+    if (pr.op === 'sub' || pr.op === 'bone' || pr.op === 'organ' || pr.dead) continue;
+    const sd = sdPrimitive(p, pr); if (sd < best) { best = sd; idx = i; }
+  }
+  return idx;
+};
+let seed = 7; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+const q = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return (f: number) => s[Math.min(s.length - 1, Math.floor(f * s.length))]!; };
+
+it('rest mapping disagreement inside a crater', () => {
+  console.log('clusters', rest.clusters.map(c => `${c.limb}:${c.count}`).join(' '), 'prims', rest.prims.length);
+  for (const [name, twistDeg, bendDeg] of [['small', 8, 10], ['medium', 20, 30], ['large', 45, 70]] as const) {
+    for (const c of rest.clusters) {
+      // the cluster's main axis: first to last prim midpoint
+      const prims = rest.prims.slice(c.start, c.start + c.count).filter(p => p.op !== 'sub' && p.op !== 'bone' && p.op !== 'organ' && !p.dead);
+      if (prims.length < 2) continue;
+      let lo: Vec3 = [1e9, 1e9, 1e9], hi: Vec3 = [-1e9, -1e9, -1e9];
+      for (const p of prims) for (const e of [p.a, p.b]) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, e[k]! - p.radius); hi[k] = Math.max(hi[k]!, e[k]! + p.radius); }
+      const pivot: Vec3 = [(lo[0]! + hi[0]!) / 2, hi[1]!, (lo[2]! + hi[2]!) / 2];
+      const ext = sub(hi, lo); const k = ext[0]! > ext[1]! ? 0 : 1;
+      const axis: Vec3 = k === 0 ? [1, 0, 0] : [0, 1, 0];
+      const R: Quat = qMul(qFromAxisAngle([0, 0, 1], bendDeg * Math.PI / 180), qFromAxisAngle(axis, twistDeg * Math.PI / 180));
+      const Ri: Quat = [-R[0], -R[1], -R[2], R[3]];
+      const fwd = (v: Vec3): Vec3 => add(qRotate(R, sub(v, pivot)), pivot);
+      const back = (v: Vec3): Vec3 => add(qRotate(Ri, sub(v, pivot)), pivot);
+      const posed: BuildResult = { ...rest, prims: rest.prims.map((p, i) => i >= c.start && i < c.start + c.count ? { ...p, a: fwd(p.a), b: fwd(p.b) } : p) };
+      // surface points of this cluster in rest, their posed images, and the mapping error
+      const pts: { e: Vec3; d: number; r: Vec3 }[] = [];
+      for (let n = 0; n < 60000 && pts.length < 1500; n++) {
+        const r: Vec3 = [lo[0]! + rnd() * ext[0]!, lo[1]! + rnd() * ext[1]!, lo[2]! + rnd() * ext[2]!];
+        if (Math.abs(sdBody(r, rest)) > 0.008) continue;
+        const d = dom(r, rest, c); if (d < 0) continue;
+        const p = fwd(r);
+        // the mapping through THIS cluster's dominant prim (what the shader's fold would pick on this limb)
+        const one: BuildResult = { ...posed, clusters: [c] } as BuildResult;
+        const m = restSpacePoint(p, one, { ...rest, clusters: [c] } as BuildResult);
+        pts.push({ e: sub(m, back(p)), d, r });
+      }
+      const self = pts.map(x => len(x.e));
+      const tear: number[] = []; let pairs = 0;
+      for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i]!, b = pts[j]!;
+        if (a.d === b.d) continue; const dist = len(sub(a.r, b.r)); if (dist > 0.03) continue;
+        pairs++; tear.push(len(sub(a.e, b.e)));
+      }
+      const qs = q(self), qt = q(tear.length ? tear : [0]);
+      console.log(`${name} twist ${twistDeg} bend ${bendDeg} ${c.limb.padEnd(8)} prims ${String(prims.length).padStart(2)} pts ${pts.length}  point error cm med ${(qs(.5) * 100).toFixed(1)} p90 ${(qs(.9) * 100).toFixed(1)} max ${(qs(.999) * 100).toFixed(1)}  | step across a prim boundary (pairs < 3 cm apart, ${pairs}) cm med ${(qt(.5) * 100).toFixed(1)} p90 ${(qt(.9) * 100).toFixed(1)} max ${(qt(.999) * 100).toFixed(1)}`);
+    }
+  }
+}, 600000);

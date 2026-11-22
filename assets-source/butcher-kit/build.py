@@ -56,11 +56,17 @@ print('PARTS', sorted(o.name for o in mech.all_objects))
 print('TRIS', sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in mech.all_objects if o.type == 'MESH'))
 
 if export:
+    # Parts with baked normal tiles (kit_sculpt.py bake_normal): pack them into <kit>-normal.png + .json, which
+    # scripts/blender-kit.ts reads beside the .glb.
+    if any(o.get('nrm') for o in mech.all_objects):
+        s = G['pack_normal_atlas'](list(mech.all_objects), os.path.join(KIT, f'{KIT_NAME}-normal.png'), os.path.join(KIT, f'{KIT_NAME}-normal.json'))
+        print('NORMAL ATLAS', f'{KIT_NAME}-normal.png', 'tile scale', round(s, 3))
     for o in bpy.context.view_layer.objects: o.select_set(False)
     for o in mech.all_objects: o.hide_set(False); o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(KIT, f'{KIT_NAME}-parts.glb'), use_selection=True, export_format='GLB',
-                              export_vertex_color='ACTIVE', export_attributes=True, export_apply=True)
+                              export_vertex_color='ACTIVE', export_attributes=True, export_apply=True, export_tangents=True)
     print('EXPORTED')
+    bpy.ops.wm.save_mainfile()   # the atlas packing resized the stored tiles and dropped stale ones
 
 if preview:
     os.makedirs(preview, exist_ok=True)

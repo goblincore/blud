@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.ts
 //
 // EARLY-Z boot + per-frame glue (spec 2026-10-01). bootEarlyz runs right after the
-// renderer exists and BEFORE any crowd material is built: install the r186 builder
+// renderer exists and BEFORE any crowd material is built: install the r187 builder
 // patch, then prove the browser compiles `frag_depth, greater` (D8). Failure leaves
 // ctx.crowd.earlyz.on false and the boot is the shipped boot.
 import type { GameContext } from '../game-context';

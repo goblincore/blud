@@ -4,6 +4,7 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 import { SPLIT_SHADE } from '../../../../../head-split';
+import { WOUND_VOL } from '../../../wound-volume-flag';
 
 export const WOUND_MASKS_BLOCK = /* wgsl */ `  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(gInstCounts.x));
   // The cut mask's back-facing gate takes the SMOOTH normal (nSmooth, SKIN_NORMAL): pore noise in n speckled its edge.
@@ -12,7 +13,14 @@ export const WOUND_MASKS_BLOCK = /* wgsl */ `  gWoundShadePrim = select(-1.0, f3
   var nSmoothS = nSmooth;
   if (splitTheta != 0.0) { nSmoothS = qRot(vec4<f32>(-splitQ.xyz, splitQ.w), nSmooth); }
   var wmBoth = woundMask(pS, nSmoothS, data, woundCfg, woundCfg2);
-  var cm = charMask(pS, data, woundCfg);
+${WOUND_VOL ? `  // THE BAKED WOUND VOLUME (wound-volume-flag.ts): a crater that left the list keeps a stamped copy of its colour.
+  if (true) {
+    let wvc = wvColour(pS, data, gBand, segVolumeAtlas);
+    wmBoth = vec3<f32>(max(wmBoth.x, wvc.x), max(wmBoth.y, wvc.x), max(wmBoth.z, wvc.y));
+    gWoundTear = max(gWoundTear, wvc.z);
+    gWoundWetOnly = max(gWoundWetOnly, wvc.w);
+  }
+` : ''}  var cm = charMask(pS, data, woundCfg);
   // A CUT FACE (cutFace, split-hit.wgsl.ts) is the inside of the closed body laid open: wound interior all over, so
   // the one mask is raised to it (.xy; the tissue ramp, the wet boost and the fresnel fade follow, as in any wound),
   // and the cavity share a wound of the closed body throws THROUGH the solid at pS is dropped (.z). The vector is

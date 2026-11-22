@@ -60,7 +60,9 @@
 // from this version.
 //
 // Env: LAB_VITE_PORT / LAB_CDP_PORT (default 5323 / 9323). Run inside
-// lab-servers (see scripts/lab-servers.sh).
+// lab-servers (see scripts/lab-servers.sh). MARCH_HASH_FLAGS=<query> appends a
+// page flag in every mode and keeps that mode's pin (see EXTRA_QUERY below):
+//   MARCH_HASH_FLAGS=leanwalk MARCH_HASH_BOXES=1 node scripts/march-hash.mjs
 //
 // SETTLING, DELIBERATELY (2026-09-20). This gate was bistable ACROSS BOOTS on
 // unchanged code (8f2b74e7... / ce7045ac... / 9871c2c2... / b6422b41...),
@@ -302,7 +304,16 @@ const DEFAULT_HASH = CROWD_HASH;
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
-const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1&crowddispatch=quad' : BOXES ? '&crowddispatch=boxes' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
+const MODE_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1&crowddispatch=quad' : BOXES ? '&crowddispatch=boxes' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
+// MARCH_HASH_FLAGS — a compile-time page flag appended in EVERY mode, after the
+// mode's own query (MARCH_HASH_QUERY above loses to the three modes; this does
+// not): `MARCH_HASH_FLAGS=leanwalk MARCH_HASH_BOXES=1` boots
+// `...&crowddispatch=boxes&leanwalk`. For a flag whose claim is bit identity
+// (?leanwalk, docs/superpowers/specs/2026-11-09-march-lean-walk-design.md): the
+// pin of the mode it rides on is checked unchanged, so a flag that moves a
+// single bit FAILs here exactly as a regression would. Empty or unset adds nothing.
+const FLAGS_QUERY = process.env.MARCH_HASH_FLAGS ? `&${process.env.MARCH_HASH_FLAGS}` : '';
+const EXTRA_QUERY = `${MODE_QUERY}${FLAGS_QUERY}`;
 // MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
 // canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
 const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
@@ -502,17 +513,21 @@ if (USE_MASK) {
 
 const cap0 = await capture(maskInfo);
 const room1 = cap0.hash;
+// MARCH_HASH_NOPIN=1 — report a moved pin on stderr and carry on to the repeat and the wounded capture, so two
+// commits (or a flag off and on) can be compared line for line while the pins themselves are stale (a Chrome
+// update moves all of them). It asserts nothing about the pins and must never be used to call a run green.
+const pinFail = process.env.MARCH_HASH_NOPIN === '1' ? (m) => console.error(`PIN NOT ASSERTED (MARCH_HASH_NOPIN): ${m}`) : fail;
 if (PERBODY && room1 !== PERBODY_HASH) {
-  fail(`per-body canonical moved: room1=${room1} expected ${PERBODY_HASH}`);
+  pinFail(`per-body canonical moved: room1=${room1} expected ${PERBODY_HASH}`);
 }
 if (CROWD && room1 !== CROWD_HASH) {
-  fail(`crowd canonical moved: room1=${room1} expected ${CROWD_HASH}`);
+  pinFail(`crowd canonical moved: room1=${room1} expected ${CROWD_HASH}`);
 }
 if (BOXES && !PERBODY && !CROWD && room1 !== BOXES_HASH) {
-  fail(`boxes canonical moved: room1=${room1} expected ${BOXES_HASH}`);
+  pinFail(`boxes canonical moved: room1=${room1} expected ${BOXES_HASH}`);
 }
 if (!PERBODY && !CROWD && !BOXES && !process.env.MARCH_HASH_QUERY && process.env.MARCH_HASH_TILES !== '0' && room1 !== DEFAULT_HASH) {
-  fail(`shipped-default canonical moved: room1=${room1} expected ${DEFAULT_HASH}`);
+  pinFail(`shipped-default canonical moved: room1=${room1} expected ${DEFAULT_HASH}`);
 }
 
 await evaluate('(() => { __sdfGame.step(2); return 1; })()');

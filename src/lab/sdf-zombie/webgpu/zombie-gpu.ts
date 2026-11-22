@@ -10,6 +10,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { stepClothSway } from '../cloth-sway';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
@@ -25,6 +26,10 @@ import { SPLIT_BOUND, boundsSplit, splitAblate } from './split-ablate';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
+import { WOUND_VOL, WV_MAX_ENTRIES, WV_TABLE_COL } from './march/wound-volume-flag';
+import { WOUND_GRID, WOUND_GRID_SLACK } from './march/wound-grid-flag';
+import { woundGridFresh, woundGridKey, writeWoundGrid, type WoundGridKey, type WoundGridStats } from '../wound-grid';
+import { woundVolumeAtlas } from './wound-volume-store';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
@@ -69,7 +74,9 @@ export const WOUND_EXACT_BIT = 8;
 export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32 + WOUND_EXACT_BIT;
 import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
-import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
+import { MARCH_COMPUTE, MARCH_DISCARD_READ, marchBodyForCompute } from './march/compute-flag';
+import type { MarchStage, MarchComputeNodes } from './march-compute';
+import { bareBonesFlag, createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 import { EARLYZ_BOX_EXIT_WGSL } from './earlyz/box-exit.wgsl';
@@ -140,6 +147,12 @@ export interface ZombieGpuView {
    *  no-cull identity) for the bench A/B; the computed radius is kept, so
    *  true restores it without a re-upload. */
   setWoundCull(on: boolean): void;
+  /** THE BAKED WOUND VOLUME (`?woundvol`, wound-volume-store.ts): this body's table of wounded primitives
+   *  (WV_MAX_ENTRIES x 4 texels, written into the wound rows' free columns) and their union bound, or null to
+   *  clear it. The wound bound the shader culls by becomes the union of the list's and this. */
+  setWoundVolumes?(table: Float32Array | null, bound: readonly [number, number, number, number] | null): void;
+  /** What the crater grid last wrote for this body (`?woundgrid`, wound-grid.ts), or null. */
+  woundGridStats?(): (WoundGridStats & { builds: number }) | null;
   /** Diagnostic: the per-wound threat masks last written (wound-threat.ts). */
   woundThreats(): number[];
   readonly woundThreatMargin: number;
@@ -157,7 +170,7 @@ export interface ZombieGpuView {
    * structurally zero (wander translates on the floor), which is why the
    * packed channel is a vec2. Statue bodies leave the default (0, 0).
    */
-  setRootShift(x: number, z: number, bodyYaw?: number): void;
+  setRootShift(x: number, z: number, bodyYaw?: number, dt?: number): void;
   /**
    * Swaps the face sheet, its crop rect (as uv scale/offset) and its mean.
    *
@@ -219,9 +232,13 @@ export interface ZombieGpuView {
    * Lift the march's nearWound gate on the inside-flesh rows (counts2.y) —
    * the melt's skeleton must fold WITHOUT a wound, because the melt sags
    * the flesh off the bones on purpose. Default FALSE; takes effect on the
-   * NEXT update(). Only the melt sets this.
+   * NEXT update(). Set by the lab's melt and by a rupturing body (game-actor.ts beginTear). A body that packs no
+   * inside-flesh rows writes 0 whatever this says (crowd-records.ts bareBonesFlag).
    */
   setBonesBare(on: boolean): void;
+  /** DEBUG: draw no flesh (the march folds zero flesh prims), so a mesh skeleton can be looked at bare
+   *  (__sdfGame.bareSkeleton). Takes effect at once, and holds over later uploads. */
+  setFleshHidden(on: boolean): void;
   /** Rebind opt-in sampled-skeleton resources. The caller owns them. */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
@@ -300,7 +317,7 @@ export const detailFieldFn = (() => {
   return wgslFn(DETAIL_FIELD, chain.slice(-1));
 })();
 
-function buildEntryFn(entry: string) {
+function buildEntryFn(entry: string, seed: ReturnType<typeof wgslFn> = marchNormalRead) {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,
   // before calcNormal which calls it — so any future per-body variant of it
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
@@ -318,9 +335,21 @@ function buildEntryFn(entry: string) {
   // At 26 helpers that is 25 edges rather than 325, and three's NodeBuilder
   // walks those edges repeatedly (NodeBuilder.get was 37.6% of a boot profile).
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [seed],
   );
   return wgslFn(entry, nodes.slice(-1));
+}
+
+/** THE COMPUTE MARCH (march/compute-flag.ts): the march entry with its discards as a flag, and the flag's read.
+ *  LAZY, as earlyzBoxExitFn below and for the same reason: built at import these would renumber the shipped
+ *  programs' buffers. First use is a crowd type's compute twin, which only exists under ?marchcompute. */
+let marchComputeFns: { march: ReturnType<typeof wgslFn>; discardRead: ReturnType<typeof wgslFn> } | null = null;
+function marchComputeEntry() {
+  if (!marchComputeFns) {
+    const discardRead = wgslFn(MARCH_DISCARD_READ, [marchNormalRead] as never);
+    marchComputeFns = { march: buildEntryFn(marchBodyForCompute(MARCH_BODY), discardRead), discardRead };
+  }
+  return marchComputeFns;
 }
 
 /** The default march entry (plus its dependency-ordered helpers), shared by
@@ -912,11 +941,15 @@ function fallbackCrowdVolumeTexture() { return (fallbackCrowdVolume ??= createFa
 let fallbackSegmentVolume: { atlas: THREE.Data3DTexture; meta: THREE.DataTexture } | null = null;
 function fallbackSegmentVolumeTextures() {
   if (!fallbackSegmentVolume) {
-    const atlas = new THREE.Data3DTexture(new Float32Array(8), 2, 2, 2);
-    atlas.format = THREE.RedFormat;
-    atlas.type = THREE.FloatType;
-    atlas.minFilter = atlas.magFilter = THREE.NearestFilter;
-    atlas.needsUpdate = true;
+    // THE BAKED WOUND VOLUME (march/wound-volume-flag.ts) takes this binding: with the switch on the "fallback" is
+    // the wound atlas, and the zero meta below keeps the segment-volume reader off it.
+    const atlas = WOUND_VOL ? woundVolumeAtlas().texture : new THREE.Data3DTexture(new Float32Array(8), 2, 2, 2);
+    if (!WOUND_VOL) {
+      atlas.format = THREE.RedFormat;
+      atlas.type = THREE.FloatType;
+      atlas.minFilter = atlas.magFilter = THREE.NearestFilter;
+      atlas.needsUpdate = true;
+    }
     const meta = new THREE.DataTexture(new Float32Array(BONE_SEG_MAX * 4 * 4), BONE_SEG_MAX, 4);
     meta.format = THREE.RGBAFormat;
     meta.type = THREE.FloatType;
@@ -1064,9 +1097,24 @@ const OCC_FETCH_WGSL = /* wgsl */ `fn occFetch(
 ) -> f32 {
   if (enabled < 0.5) { return 1e9; }
   let dims = vec2<f32>(textureDimensions(occTex, 0));
-  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-  let v = textureLoad(occTex, c, 0).x;
-  if (v <= 0.0) { return 1e9; }
+  let hi = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), hi);
+  // ERODED: the max over this texel and its four DIAGONAL neighbours, and no
+  // bound at all if any of them is empty. The march pixel is upscaled (and in
+  // field mode woven) onto a footprint about one texel wide, while the kit
+  // cloth rasterises at full resolution; a ray clamped because its CENTRE is
+  // under cloth would otherwise leave a fringe of background where the
+  // footprint pokes out past a cloth edge over flesh (a waistband, a hem). The
+  // diagonals bound the footprint's square, so a straight edge crossing it
+  // always uncovers one of them. max() of distances is conservative (a later
+  // tMax only marches further).
+  var v = textureLoad(occTex, c, 0).x;
+  let a = textureLoad(occTex, clamp(c + vec2<i32>(-1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let b = textureLoad(occTex, clamp(c + vec2<i32>(1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let d = textureLoad(occTex, clamp(c + vec2<i32>(-1, 1), vec2<i32>(0, 0), hi), 0).x;
+  let e = textureLoad(occTex, clamp(c + vec2<i32>(1, 1), vec2<i32>(0, 0), hi), 0).x;
+  if (min(min(v, a), min(b, min(d, e))) <= 0.0) { return 1e9; }
+  v = max(max(v, a), max(b, max(d, e)));
   return v;
 }`;
 export const occFetchNode = wgslFn(OCC_FETCH_WGSL);
@@ -1301,6 +1349,9 @@ function fallbackDepthPreUniform() {
  *  the hull point's own distance; `marchCfg` a separate steps uniform so
  *  the inner view's 96 stays untouched; `side` FrontSide for a hull. */
 export interface MarchRayOverride {
+  /** THE COMPUTE MARCH: the nodes that stand in for the fragment stage's own (the pixel's screenUV, the camera),
+   *  and where the march node is handed back. Absent on every material that is drawn. */
+  stage?: MarchStage;
   worldPos: unknown;
   startT: unknown;
   marchCfg: unknown;
@@ -1398,10 +1449,19 @@ export function createMarchMaterial(
   // The ray's world direction. Per-body/box materials derive it from the
   // fragment's interpolated positionWorld; a quad-dispatch crowd reconstructs
   // it from screenUV and passes it through `rays` (see crowdRayNodes).
-  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, cameraPosition))) as never;
+  // THE STAGE'S NODES. A drawn material reads the fragment stage's own; the compute twin (rays.stage) brings its
+  // pixel and camera as uniforms. Undefined, every name below is the node it always was.
+  const st = rays?.stage;
+  const stCamPos = (st?.camPos ?? cameraPosition) as typeof cameraPosition;
+  const stView = (st?.view ?? cameraViewMatrix) as typeof cameraViewMatrix;
+  const stProj = (st?.proj ?? cameraProjectionMatrix) as typeof cameraProjectionMatrix;
+  const stNear = (st?.near ?? cameraNear) as typeof cameraNear;
+  const stFar = (st?.far ?? cameraFar) as typeof cameraFar;
+  const stUV = (st?.screenUV ?? screenUV) as typeof screenUV;
+  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, stCamPos))) as never;
   /** The ray's cosine against the view axis — one definition, shared by the prev-depth
    *  fetch and (via `extra`) any entry that needs it. */
-  const cosRay = mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate();
+  const cosRay = mul(stView, vec4(rayDir, 0.0)).z.negate();
   // Level-only shadow map (perf round 2 task 7). The node rides the march's
   // last three slots; its .value starts on the 1×1 fallback whenever the
   // twin light has not rendered yet (shadow.map is null before three's
@@ -1415,7 +1475,7 @@ export function createMarchMaterial(
   );
   const callMarch = () => (output === 'surface' ? sdfSurfaceMarch : march)({
     worldPos: (rays?.worldPos ?? positionWorld) as never,
-    camPos: cameraPosition,
+    camPos: stCamPos,
     data: dataNode,
     volumeTex: volumeNode,
     faceTex: u.faceTex,
@@ -1437,7 +1497,7 @@ export function createMarchMaterial(
     spotPos: u.spotPos,
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
-    // KEYS BIND BY NAME HERE, not by position. three 0.186 resolves every
+    // KEYS BIND BY NAME HERE, not by position. three 0.187 resolves every
     // WGSL input through parameters[inputNode.name]
     // (nodes/code/FunctionCallNode.js, generate — proven GPU-free in
     // wgslfn-binding.test.ts), so a key's ORDER in this object cannot
@@ -1484,20 +1544,20 @@ export function createMarchMaterial(
     tileHdr: (tiles?.header ?? fallbackTileBindings().header) as never,
     tileEnt: (tiles?.entries ?? fallbackTileBindings().entries) as never,
     tileCfg: u.tileCfg,
-    screenUV: screenUV,
+    screenUV: stUV,
     startT: rays
       ? (rays.startT as never)
       : cone
         ? coneFetch({
             coneTex: texture(cone.texture),
-            screenUV: screenUV,
+            screenUV: stUV,
             enabled: cone.uniforms.enabled,
           })
         : float(0),
     occT: occluder
       ? occFetchNode({
           occTex: texture(occluder.texture),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: occluder.uniforms.enabled,
         })
       : float(1e9),
@@ -1506,7 +1566,7 @@ export function createMarchMaterial(
     shellIn: shell
       ? shellFetchNode({
           shellTex: texture(shell.entry),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: shell.uniforms.enabled,
           disabledValue: float(0),
         })
@@ -1514,7 +1574,7 @@ export function createMarchMaterial(
     shellOut: shell
       ? shellFetchNode({
           shellTex: texture(shell.exit),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: shell.uniforms.enabled,
           disabledValue: float(1e9),
         })
@@ -1529,10 +1589,10 @@ export function createMarchMaterial(
     prevT: prev
       ? prevFetchNode({
           prevTex: texture(prev.texture),
-          screenUV: screenUV,
+          screenUV: stUV,
           enabled: prev.uniforms.enabled,
-          near: cameraNear,
-          far: cameraFar,
+          near: stNear,
+          far: stFar,
           cosRay,
         })
       : float(1e9),
@@ -1624,9 +1684,17 @@ export function createMarchMaterial(
     const tileEmpty = quadTileEmptyNode({
       tileHdr: tiles.header as never,
       tileCfg: u.tileCfg as never,
-      screenUV,
+      screenUV: stUV,
     });
-    marched = Fn(() => {
+    // THE COMPUTE MARCH has no discard: the kernel takes the same gate as a condition and skips the march.
+    if (st) {
+      marched = callMarch();
+      st.capture({
+        marched,
+        emptyTile: (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)),
+        discarded: (dep: unknown) => marchComputeEntry().discardRead({ dep: dep as never }),
+      } as MarchComputeNodes);
+    } else marched = Fn(() => {
       If(
         (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)) as never,
         () => { Discard(); },
@@ -1661,8 +1729,8 @@ export function createMarchMaterial(
   const tracedHit = output === 'surface'
     ? (marched as unknown as { toVar: (name: string) => Swizzled }).toVar('sdfTrace')
     : marched;
-  const hitPos = add(cameraPosition, mul(rayDir, tracedHit.w as never));
-  const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
+  const hitPos = add(stCamPos, mul(rayDir, tracedHit.w as never));
+  const clip = mul(stProj, mul(stView, vec4(hitPos, 1.0)));
   const depth = clip.z.div(clip.w);
 
   if (output === 'surface') {
@@ -1729,6 +1797,11 @@ export interface CrowdMaterialHandles {
   /** The quad dispatch's NDC rasterisation rect — the SAME uniform node the
    *  lit material and its depth-pre twin read. Undefined on the box material. */
   quadRect?: { value: THREE.Vector4 };
+  /** THE COMPUTE MARCH (?marchcompute, quad dispatch with tile lists only): wires the SAME march call this
+   *  material makes onto a compute stage's nodes, and hands the march node back through stage.capture. */
+  buildCompute?: (stage: MarchStage, ray: { worldPos: unknown; rayDir: unknown }) => void;
+  /** The quad's clip-space vertex node, for the material that copies the compute march's result. */
+  quadClip?: unknown;
 }
 
 /** TSL's `attribute` factory is untyped at runtime; this names the node
@@ -1765,6 +1838,14 @@ export interface CrowdMaterialSources {
  * OWN single-band DataTexture per draw and share only the record buffer, so
  * they pass band 0 — their slot indexes the record, not a band.
  */
+/** The wound count a body's record carries. With boxes in the baked wound volume and NO wound on the list it is
+ *  0.75: the list's loops still run zero times (they take i32 of it), and the lean walk's test (lean-walk.wgsl.ts,
+ *  "wound count < 0.5") fails, so the body is marched by mapBody, which reads the boxes. At 0 the lean field drew
+ *  such a body with its craters' colour and none of their shape. */
+export function recordWoundCount(u: { woundCfg: { value: { x: number } }; woundVolumeOn?: { value: number } }): number {
+  return u.woundCfg.value.x > 0 ? u.woundCfg.value.x : (u.woundVolumeOn?.value ? 0.75 : 0);
+}
+
 export function writeViewRecord(
   records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
   split?: SplitWarp | null,
@@ -1775,7 +1856,7 @@ export function writeViewRecord(
     windDrift: u.windDrift.value.toArray(), meltCfg: u.meltCfg.value.toArray(),
     bodyFlash: u.bodyFlash.value.toArray(),
     noiseShift: [u.faceCfg3.value.z, u.lodCfg.value.z, u.faceCfg3.value.w], bodyYaw: u.lodCfg.value.z,
-    headCentre: u.headCentre.value.toArray(), woundCount: u.woundCfg.value.x,
+    headCentre: u.headCentre.value.toArray(), woundCount: recordWoundCount(u),
     headQuat: u.headQuat.value.toArray(), volumePose0: u.volumePose0.value.toArray(),
     volumePose1: u.volumePose1.value.toArray(),
     bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
@@ -1792,6 +1873,9 @@ export function writeViewRecord(
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),
     split,
+    // The body normal map's placement (setBodyNormal writes it to bodyNormCfg.yzw): per body, because the crowd
+    // shares one copy of the uniforms (REC_NMAP_ORIGIN).
+    nmapOrigin: [u.bodyNormCfg.value.y, u.bodyNormCfg.value.z, u.bodyNormCfg.value.w],
   }, band);
 }
 
@@ -1979,6 +2063,28 @@ export function createCrowdMaterial(
     depthPreMaterial,
     quadRect: quad
       ? (quadNodes!.quadRect as unknown as { value: THREE.Vector4 })
+      : undefined,
+    quadClip: quad ? quadNodes!.clip : undefined,
+    // The compute twin binds what the drawn material binds, argument for argument, and SHARES its level-shadow and
+    // segment-volume nodes: the owner rebinds those per frame through the drawn material only.
+    buildCompute: quad && MARCH_COMPUTE && tiles
+      ? (stage, ray) => {
+          createMarchMaterial(
+            dataTex, volumeTex, u,
+            marchComputeEntry().march as unknown as typeof marchBody,
+            undefined, sources?.occluder,
+            { header: tiles.headerNode, entries: tiles.entryNode },
+            sources?.shell, sources?.prev, undefined,
+            { stage, worldPos: ray.worldPos, rayDir: ray.rayDir, startT: float(0), marchCfg: u.marchCfg, side: THREE.DoubleSide },
+            sources?.depthPre, 'lit', undefined,
+            sources?.probeDyn?.node, sources?.lastFrame,
+            undefined,
+            (material as unknown as MaterialWithLevelShadowTex).levelShadowTex as never,
+            mainSegVolume.segVolumeAtlas as never, mainSegVolume.segVolumeMeta as never,
+            { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+            sources?.lightList?.node,
+          );
+        }
       : undefined,
     setSkeletonVolume(atlas, meta) {
       mainSegVolume.segVolumeAtlas.value = atlas;
@@ -2483,6 +2589,7 @@ function warnNearReach(u: MarchUniforms): void {
     + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
 }
 
+
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
@@ -2566,6 +2673,9 @@ export function createZombieGpuView(
   // the gate's "bones are contained in flesh" proof is exactly what the melt
   // violates.
   let bareBones = false;
+  let fleshHidden = false;
+  /** The flesh prim count of the last upload (what setFleshHidden(false) puts back). */
+  let fleshPrims = 0;
 
   // Wound union-reach cull (close-up wound-cull task, 2026-09-05). SHIPS ON:
   // setWounds computes the bound from the live uniforms and writes it to
@@ -2575,6 +2685,27 @@ export function createZombieGpuView(
   // cull anyway (woundCfg.x = 0).
   let woundCullOn = true;
   let woundBoundR = 1e9;
+  // The list's own reach bound and the baked volume's (setWoundVolumes): the uniform carries their union.
+  let listBound: [number, number, number, number] | null = null;
+  let lastWoundGrid: WoundGridStats | null = null;
+  let woundGridBuiltFrom: WoundGridKey | null = null;
+  let woundGridBuilds = 0;
+  let volBound: readonly [number, number, number, number] | null = null;
+  const applyWoundBound = () => {
+    // Before the first setWounds the uniform is the no-cull identity, a superset: it stays, boxes or not.
+    if (!listBound) return;
+    let b: readonly number[] = listBound;
+    if (volBound) {
+      const dx = volBound[0] - b[0]!, dy = volBound[1] - b[1]!, dz = volBound[2] - b[2]!, dist = Math.hypot(dx, dy, dz);
+      if (dist + b[3]! <= volBound[3]) b = volBound;
+      else if (dist + volBound[3] > b[3]!) {
+        const R = (dist + b[3]! + volBound[3]) / 2, t = (R - b[3]!) / dist;
+        b = [b[0]! + dx * t, b[1]! + dy * t, b[2]! + dz * t, R];
+      }
+    }
+    woundBoundR = b[3]!;
+    u.woundBound.value.set(b[0]!, b[1]!, b[2]!, woundCullOn ? b[3]! : 1e9);
+  };
 
   // THREAT MASKS (wound-threat.ts): which clusters each wound's carve bowl can reach,
   // from the group spheres of the LAST upload and the wounds of the LAST setWounds.
@@ -2696,6 +2827,7 @@ export function createZombieGpuView(
       const gr = p.groupRange;
       lastGroups.push({
         bodyIndex: slot,
+        groupIndex: g,
         start: gr[o]!, count: gr[o + 1]!,
         center: [gb[o]!, gb[o + 1]!, gb[o + 2]!],
         radius: gb[o + 3]!,
@@ -2769,11 +2901,12 @@ export function createZombieGpuView(
     refreshThreatTexels();
     sink.markDirty();
     ownAtlas?.flush();
-    u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
+    fleshPrims = p.primCount;
+    u.counts.value.set(fleshHidden ? 0 : p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
     // z is the owner re-fold attribution gate (march.wgsl.ts) and w is the
     // per-ray wound list gate (counts2.w, 2026-09-07) — settings channels
     // that must survive every upload, like perfCfg.
-    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, u.counts2.value.z, u.counts2.value.w);
+    u.counts2.value.set(p.boneCount, bareBonesFlag(bareBones, p.boneCount), u.counts2.value.z, u.counts2.value.w);
     return p;
   }
 
@@ -3034,6 +3167,9 @@ export function createZombieGpuView(
   }
 
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
+  /** The last root position setRootShift saw, and the cloth sway spring's velocity (CLOTH SWAY). */
+  let driftPrev: [number, number, number] | null = null;
+  const swayVel: [number, number] = [0, 0];
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -3047,6 +3183,7 @@ export function createZombieGpuView(
     syncRecord,
     rebind(r) {
       sink = r.sink;
+      woundGridBuiltFrom = null; // another band: its grid rows hold nothing of this body's
       records = r.records;
       slot = r.slot;
       texels = sink.texels;
@@ -3078,6 +3215,7 @@ export function createZombieGpuView(
       if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
     },
     setBonesBare(on) { bareBones = on; },
+    setFleshHidden(on) { fleshHidden = on; u.counts.value.x = on ? 0 : fleshPrims; syncRecord(); },
     setSkeletonVolume(atlas, meta) {
       mainSegmentVolume.segVolumeAtlas.value = atlas;
       mainSegmentVolume.segVolumeMeta.value = meta;
@@ -3128,8 +3266,32 @@ export function createZombieGpuView(
       // re-upload; the game's values are boot constants.
       const b = woundReachBound(worldPositions, radii, worldPositions.length,
         u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
-      woundBoundR = b[3];
-      u.woundBound.value.set(b[0], b[1], b[2], woundCullOn ? b[3] : 1e9);
+      listBound = [b[0], b[1], b[2], b[3]];
+      // THE CRATER GRID (?woundgrid, wound-grid.ts): the index applyWounds walks instead of every row.
+      // Rebuilt only when a wound came, went or moved more than a third of the slack since the last build
+      // (woundGridFresh): a body that stands or lies dead keeps its grid.
+      if (WOUND_GRID && !woundGridFresh(woundGridBuiltFrom, worldPositions, radii, u.woundCfg.value.x, WOUND_GRID_SLACK / 3)) {
+        lastWoundGrid = writeWoundGrid(texels, sink.woundLayout, worldPositions, radii, u.woundCfg.value.x,
+          u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x, WOUND_GRID_SLACK, offsetScales);
+        woundGridBuiltFrom = woundGridKey(worldPositions, radii, u.woundCfg.value.x, woundGridBuiltFrom);
+        woundGridBuilds++;
+      }
+      applyWoundBound();
+      sink.markDirty();
+      syncRecord();
+    },
+    woundGridStats: () => (lastWoundGrid ? { ...lastWoundGrid, builds: woundGridBuilds } : null),
+    setWoundVolumes(table, bound) {
+      const L = sink.woundLayout;
+      const rows = [L.woundRow, L.metaRow, L.capRow, L.flagsRow];
+      for (let e = 0; e < WV_MAX_ENTRIES; e++) for (let r = 0; r < 4; r++) {
+        const o = (rows[r]! * L.stride + WV_TABLE_COL + e) * 4;
+        if (table) texels.set(table.subarray(e * 16 + r * 4, e * 16 + r * 4 + 4), o);
+        else texels.fill(0, o, o + 4);
+      }
+      volBound = table ? bound : null;
+      (u as { woundVolumeOn?: { value: number } }).woundVolumeOn = { value: table ? 1 : 0 };
+      applyWoundBound();
       sink.markDirty();
       syncRecord();
     },
@@ -3160,7 +3322,7 @@ export function createZombieGpuView(
       old.dispose();
       refineTailSync();
     },
-    setRootShift(x, z, bodyYaw = 0) {
+    setRootShift(x, z, bodyYaw = 0, dt = 1 / 60) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
       u.lodCfg.value.z = bodyYaw;
@@ -3168,6 +3330,16 @@ export function createZombieGpuView(
       // pre-pass. Written HERE so there is a single place that decides what
       // "the body's frame" is — see bodyAnchor's declaration.
       u.bodyAnchor.value.set(x, bodyYaw, z);
+      // CLOTH SWAY: windDrift is a damped spring chasing a target set by how the body moves — back from its walk, across
+      // it from its turn — so the folds swing out, ease, and settle back to rest when it stops. The game never set
+      // windDrift before (only the lab's wind did, and the lab still overwrites it every frame). A jump (spawn,
+      // teleport) is not a step.
+      if (driftPrev) {
+        const d = u.windDrift.value;
+        const r = stepClothSway({ x: d.x, z: d.z, vx: swayVel[0], vz: swayVel[1] }, driftPrev, [x, z, bodyYaw], dt);
+        d.x = r.x; d.z = r.z; swayVel[0] = r.vx; swayVel[1] = r.vz;
+      }
+      driftPrev = [x, z, bodyYaw];
       syncRecord();
     },
     setFaceTexture(tex, atlas, mean) {

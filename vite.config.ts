@@ -146,6 +146,7 @@ const SLOW_TESTS = [
   'scripts/blob-depth.test.ts',                                                // 82 s
   'src/lab/sdf-zombie/webgpu/surface-nets-cpu.test.ts',                        // 27 s
   'src/lab/sdf-zombie/pack.test.ts',                                           // 27 s
+  'src/lab/sdf-zombie/flesh-above.test.ts',                                    // ~30 s (local, darwin/arm64)
   'src/lab/sdf-zombie/silhouette.test.ts',                                     // 22 s
   'src/lab/sdf-zombie/webgpu/gib-library.test.ts',                             // 21 s
   'src/lab/sdf-zombie/characters/bride-blob.test.ts',                          // 18 s
@@ -163,6 +164,7 @@ const SLOW_TESTS = [
   'src/lab/sdf-zombie/characters/broodmother-blob.test.ts',                    // 10 s
   'src/lab/sdf-zombie/head-keepout.test.ts',                                   // 10 s
   'src/lab/sdf-zombie/webgpu/character-view.test.ts',                          // 10 s
+  'src/lab/sdf-zombie/characters/kit-sheds.test.ts',                           // 25 s (local): every shipped kit, raw
 ];
 for (const f of SLOW_TESTS) {
   if (!existsSync(resolve(__dirname, f))) throw new Error(`vite.config.ts SLOW_TESTS: no such file ${f}`);
@@ -225,6 +227,7 @@ export default defineConfig({
       'scripts/lib/png-write.test.mjs',
       'scripts/lib/hybrid-estimate.test.mjs',
       'scripts/lib/march-depth-guard.test.mjs',
+      'scripts/lib/doom-scale.test.mjs',
       'scripts/sdf-melee-stage.test.mjs',
     ],
     exclude: [

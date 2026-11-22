@@ -33,7 +33,9 @@ export function updateHud(ctx: GameContext) {
               ? '6 ROD (hold + sweep to cut)'
               : S.live === 'axe'
                 ? '7 AXE (click to chop)'
-                : '2 GRAPESHOT';
+                : S.live === 'melter'
+                  ? '8 MELTER (click to melt)'
+                  : '2 GRAPESHOT';
   ctx.boot.hudEl.textContent =
     `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +
     ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +

@@ -46,11 +46,13 @@
 // motion pipeline — it reads the posed prims.
 //
 import { soldierFallPose } from './soldier-fall';
+import { burnFlailPose, solveElbow } from './burn-flail';
+import { canDeathFall, corpseHoldStep, DEATH_FALL, deathFallPose, deathFallPull, type CorpseHold, type DeathFallChoice } from './death-fall';
 import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
+import { add, dot, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -69,9 +71,9 @@ import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
 import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
 import type { SoldierStaggerLevel } from './soldier-stagger';
-import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
+import type { BraceLimit, CollapsePhase, CorpseBody, FootPlant, HipCone, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
-  COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
+  COLLAPSE_TUNING, CORPSE_INTEGRITY, collapseBody, collapseBraces, collapseFootPlants, collapseHipCones, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
@@ -146,6 +148,21 @@ export const MOTION_TUNING = {
   restCutoff: 0.35 / 60,
 } as const;
 
+/** The topple's chest shove at integrity 1 (m, one frame's displacement:
+ *  0.02 m at 60 Hz is a 1.2 m/s lean). Scaled by integrity. */
+const TOPPLE_SHOVE = 0.02;
+
+/** How fast a body's feet height (MotionState.floorY) follows the floor under it, m/s: the
+ *  player's eye-step rate (game-player.ts), so a body never pops up a step, and a step down eases
+ *  at the same rate. Drops over FALL_DROP_M fall under FALL_GRAVITY instead (plan 3b). */
+export const FLOOR_EASE_MPS = 6;
+/** A floor drop bigger than this FALLS under gravity instead of easing (spec §6.2's step rule, 24 Doom units). */
+export const FALL_DROP_M = 0.75;
+export const FALL_GRAVITY = 9.81;
+/** A soldier's structural fall-pose target over a floor this far below the body's own is released
+ *  to fall to it (sector levels). */
+export const LEDGE_RELEASE_M = 0.1;
+
 /** Hip-fire knobs. */
 export const FIRE = {
   /** How long the fire carry holds after the last shot (s). The plan said
@@ -169,6 +186,10 @@ export const STANDING_RIG = {
   gravityY: -2.2,
   restStiffness: 0.18,
 } as const;
+
+/** A flail arm whose target yaw is within this of straight opposite its hand goes round its own side (motion.ts
+ *  A TOSS-UP GOES OUTWARD). */
+const FLAIL_TOSSUP_RAD = 0.05;
 
 /** Combat steps keep enough flexion for a weight-bearing knee bend. */
 const SOLDIER_STANCE = {
@@ -248,6 +269,18 @@ export interface MotionJoints {
   pelvis: Vec3;
   /** One-sided collapse joint limits, constant for the body. */
   ropes: readonly RopeLimit[];
+  /** Two-sided corpse-integrity braces (collapse.ts), constant for the body. */
+  braces: readonly BraceLimit[];
+  /** Corpse hip limits (collapse.ts relaxHipCones), constant for the body. */
+  hipCones: readonly HipCone[];
+  /** Corpse foot plants (collapse.ts plantFeet), constant for the body. */
+  footPlants: readonly FootPlant[];
+  /** Corpse self-collision capsules (collapse.ts relaxBodyCollisions), constant for the body; null without limbs. */
+  corpseBody: CorpseBody | null;
+  /** Per rig point: how much higher than the foot joint it rests on the
+   *  floor (m) — its flesh depth over the foot's. A corpse lies ON its torso,
+   *  not with every joint at ankle height. */
+  floorLift: readonly number[];
 }
 
 /**
@@ -287,7 +320,48 @@ export function makeMotionJoints(
     groundY: index.footL === undefined || index.footR === undefined ? 0 : Math.min(baseRest[index.footL]![1], baseRest[index.footR]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
+    braces: collapseBraces(names, baseRest),
+    hipCones: collapseHipCones(names, baseRest),
+    footPlants: collapseFootPlants(names, baseRest),
+    corpseBody: collapseBody(names, baseRest, (q, dir) => fleshGirth(body, q, BODY_GIRTH_CAP, dir)),
+    floorLift: floorLiftFor(body, baseRest, index.footL ?? index.footR),
   };
+}
+
+/** The tallest a joint's flesh may lift it off the floor (m): one big
+ *  ellipsoid (a bloated belly) must not prop the corpse up on a point. */
+const FLOOR_LIFT_CAP = 0.14;
+
+/**
+ * The flesh a joint lies on: the THINNEST-axis half-thickness of the thickest
+ * live add prim whose bulk reaches the joint (a torso ellipsoid is flattest
+ * front to back, which is how a corpse lies), less the foot joint's own, so
+ * the foot keeps resting exactly where it did. Clamped to [0, FLOOR_LIFT_CAP].
+ * (Depth of the joint INSIDE the flesh does not work: joints sit at bone ends,
+ * at the surface — the zombie's chest joint is 1 cm deep in a 12 cm chest.)
+ */
+function fleshGirth(body: BuildResult, q: Vec3, cap: number, dir?: Vec3): number {
+  let best = 0;
+  for (const p of body.prims) {
+    if (p.op === 'sub' || p.dead) continue;
+    const ab = sub(p.b, p.a), L2 = dot(ab, ab);
+    const t = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, dot(sub(q, p.a), ab) / L2));
+    if (len(sub(q, add(p.a, scale(ab, t)))) > p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2])) continue;
+    // Along `dir` (bind-space axes): the prim's half-extent that way; without one, its thinnest.
+    const r = dir ? p.radius * Math.hypot(dir[0] * p.scale[0], dir[1] * p.scale[1], dir[2] * p.scale[2])
+      : p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    best = Math.max(best, r);
+  }
+  return Math.min(best, cap);
+}
+
+/** A corpse bone's collision radius cap (m): a bloated belly prim must not wedge the arms a foot off the body. */
+const BODY_GIRTH_CAP = 0.2;
+
+function floorLiftFor(body: BuildResult, rest: readonly Vec3[], foot: number | undefined): number[] {
+  const girth = (q: Vec3): number => fleshGirth(body, q, FLOOR_LIFT_CAP);
+  const footGirth = foot === undefined ? 0 : girth(rest[foot]!);
+  return rest.map(q => Math.max(0, girth(q) - footGirth));
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +385,9 @@ export interface RecoilState {
 /** The whole per-body motion state — every sub-state the modules own, plus
  *  the two wiring-owned blends. Plain data; reconstruct or hand-edit in tests. */
 export interface MotionState {
+  /** THE JUDDER (MotionProfile.rigidFrame): a hit's shudder through the whole rigid frame, `t` s since the last kick,
+   *  `gain` its strength, `dir` the shot (world, unit). Absent until the first hit. */
+  judder?: { t: number; gain: number; dir: Vec3 };
   wander: WanderState;
   gait: ReturnType<typeof stepGait>['state'];
   stagger: StaggerState;
@@ -325,6 +402,10 @@ export interface MotionState {
   fallFatal?: boolean;
   fallImpact?: Vec3;
   fallStrength?: number;
+  /** The authored death fall this body is playing (death-fall.ts); null = the soldier's own fall pose. */
+  fallKind?: DeathFallChoice | null;
+  /** A landed authored death's hold: the shape it re-anchored to and a hit's limp spell (death-fall.ts). */
+  corpseHold?: CorpseHold;
   plantL: PlantState;
   plantR: PlantState;
   /** A quadruped's FRONT paw plants ('foreleg' arm style only; absent on
@@ -363,12 +444,21 @@ export interface MotionState {
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
   fallShift: Vec3 | null;
+  /** The feet's world height: eased toward MotionConfig.floorAt under the root at FLOOR_EASE_MPS.
+   *  It is the root shift's y and lifts every world-plane use of joints.groundY. 0 on room levels
+   *  (no floorAt), where every frame is exactly what it was before this field existed. */
+  floorY: number;
+  /** Sector levels: the body's vertical speed while it falls off a ledge (m/s, ≤ 0). Absent on
+   *  room levels. */
+  floorVel?: number;
 }
 
 /** A fresh motion state: standing at `start`, idle, clock at zero. */
 export function makeMotionState(seed: number, start: Vec3): MotionState {
+  // The spawn's own floor (a sector level's spawn y); `|| 0` keeps room levels' +0 and drops NaN.
+  const floorY = start[1] || 0;
   return {
-    wander: { pos: [start[0], 0, start[2]], heading: 0, speed: 0, target: null, idle: 0 },
+    wander: { pos: [start[0], floorY, start[2]], heading: 0, speed: 0, target: null, idle: 0 },
     gait: { time: 0, seed: seed >>> 0 },
     stagger: makeStaggerState(seed),
     collapse: makeCollapseState(),
@@ -383,6 +473,7 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
     sinceFire: Infinity,
     lastShift: [0, 0, 0],
     fallShift: null,
+    floorY,
   };
 }
 
@@ -413,6 +504,20 @@ export interface MotionConfig {
    *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
    *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
   pose?: readonly Vec3[];
+  /** AUTHORED DEATHS (death-fall.ts): asked once, on the first frame a killed body is down, for the fall it plays.
+   *  Absent = a neutral pick from the gait seed. */
+  deathFall?: () => DeathFallChoice;
+  /** The authored fall met something it cannot go through (a wall, a body: game-actor.ts THE FALL GOES LIMP): every
+   *  point's rest pull is dropped (MotionFrame.restRelease) and the body falls from there under its own weight. */
+  releaseFall?: boolean;
+  /** THE BURNING FLAIL (burn-flail.ts): while present and the body stands, both arms are placed on the
+   *  flail's hand targets (over the carry, the reach and any attack) and the trunk pitches and sways with
+   *  it. `t` is seconds since ignite, `amp` 0..1, `fold` 0..1 across the falter. ABSENT on every unburnt
+   *  frame: the zombie path is pinned on the key being absent. */
+  burnFlail?: { t: number; seed: number; amp: number; fold: number };
+  /** This death is AUTHORED whatever the profile says: a physics-death body (the zombie) plays the fall
+   *  `deathFall` returns. Set for a burn death. Soft targets and bodies that fail canDeathFall ignore it. */
+  authoredDeath?: boolean;
   /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
    *  the wider of the two wins. Undefined or 0 changes nothing. */
   jawGape?: number;
@@ -434,6 +539,18 @@ export interface MotionConfig {
    *  length at toe-off by design, so this is not a general rule, and absent
    *  is bit-identical to before the key existed. */
   plantReach?: number;
+  /** THE FLOOR UNDER THE BODY (sector levels): world floor height at (x, z); NaN off the map keeps
+   *  the previous floor. MotionState.floorY eases toward it at FLOOR_EASE_MPS. ABSENT on room
+   *  levels: floorY stays where it started (0) and every frame is bit-identical to before. */
+  floorAt?: (x: number, z: number) => number;
+  /** Sector levels: the highest rise the body's floor follows (SECTOR_STEP_M). A floor further above
+   *  the feet is a wall, not a step: the body keeps its current floor. Absent: no cap (room levels,
+   *  the lab). */
+  maxStepUp?: number;
+  /** Sector levels: the floor under the body's CENTRE (floorAt is the disc floor). Mid-fall, a disc
+   *  floor further above the feet than maxStepUp (a lip the falling body is beside) is not a
+   *  landing: the body keeps falling toward this one. Absent: the fall reads floorAt only. */
+  fallFloorAt?: (x: number, z: number) => number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -493,10 +610,32 @@ export interface MotionFrame {
   jawGape: number;
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
   restPull: number;
+  /** Sector levels: rig points whose rest pull is dropped this frame (the wiring zeroes their
+   *  restScale) — a soldier's structural fall pose over a lower floor (a ledge, a pit) lets those
+   *  points fall to it instead of holding them flat on the root's plane. Absent otherwise. */
+  restRelease?: number[];
   /** Gravity for stepRig this frame (soft standing vs full falling weight). */
   gravity: Vec3;
   /** One-sided joint limits to relax after stepRig. Empty while standing. */
   ropes: RopeLimit[];
+  /** Corpse-integrity braces to relax after the ropes (collapse.ts
+   *  relaxBraces). Empty while standing and for the soldier's structural fall. */
+  braces: readonly BraceLimit[];
+  /** Hip limits to relax with the braces (collapse.ts relaxHipCones); empty exactly when braces are. */
+  hipCones: readonly HipCone[];
+  /** Foot plants for a collapsed body (collapse.ts plantFeet); empty while it stands. */
+  footPlants: readonly FootPlant[];
+  /** Self-collision for a collapsed body (collapse.ts relaxBodyCollisions); null while it stands. */
+  corpseBody: CorpseBody | null;
+  /** The integrity to relax them at: the profile's corpseIntegrity, else the
+   *  live CORPSE_INTEGRITY knob. */
+  integrity: number;
+  /** Per rig point floor lift over floorY (MotionJoints.floorLift); the
+   *  wiring passes it to applyFloorContact while collapsed. */
+  floorLift: readonly number[];
+  /** 0..1: how far the skull has let go of its standing look cone and lies
+   *  with the neck (rig.headFollow). Ramps in over the fall's release. */
+  headFollow: number;
   phase: CollapsePhase;
   /** True while falling/settled. */
   collapsed: boolean;
@@ -524,6 +663,25 @@ const SOLVE = {
 } as const;
 
 const Z: Vec3 = [0, 0, 0];
+
+/** THE JUDDER's shape (MotionProfile.rigidFrame): a SEIZURE (owner: "like causing an epileptic seizure"). `shake` m of
+ *  fast shudder and `recoil` m of shove along the shot at a kick of gain 1, `decay` s to 1/e (it convulses for ~1.5 s);
+ *  while it lasts the legs SPASM every `spasm` s, each knee kicked up to `knee` m, in a jerky order; kicks stack to
+ *  `maxGain`. */
+const JUDDER = { shake: 0.035, recoil: 0.045, recoilHz: 4, decay: 0.38, knee: 0.14, spasm: 0.085, maxGain: 2.5 } as const;
+
+/** How hard a rigidFrame body is seizing now, 0..1 (gain 1 and up is full): the brain's arcs read it
+ *  (brain-arcs.ts). */
+export function judderLevel(state: MotionState): number {
+  const j = state.judder;
+  return j ? Math.min(1, j.gain * Math.exp(-j.t / JUDDER.decay)) : 0;
+}
+
+/** The trunk joints a MotionProfile.rigidFrame body moves as one piece and pins (the cerebrax's frame: the brain,
+ *  the harness and the four leg sockets; and `neck` / `head`, the skull bone's ends, which carry the kit on the
+ *  brain's face, so they hold still with it and only the game's flesh jiggle moves them). */
+const RIGID_FRAME_JOINTS = ['pelvis', 'hips', 'hipL', 'hipR', 'spineA', 'spineB', 'chest', 'clavicleL', 'clavicleR',
+  'shoulderL', 'shoulderR', 'neck', 'head'] as const;
 
 /** Joints the reach-style blend floor applies to (the arms). */
 const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
@@ -605,8 +763,22 @@ export function stepMotion(
     forced: sig.forcedCollapse || (isSoldierFamily(profile)
       && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
+    toughness: profile.toughness,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
+  // THE JUDDER (owner, 2026-11-09: shooting the brain should make "the whole thing judder like hitting the nervous
+  // system"): each hit kicks a shudder the rigid frame carries whole (below, where its joints are laid), and twitches
+  // the knees. Folds into one that is still ringing; a corpse lets it go.
+  let judder = profile.rigidFrame && !collapsed ? state.judder : undefined;
+  const judderKick = !!(profile.rigidFrame && !collapsed && sig.shot);
+  if (judderKick && sig.shot) {
+    const left = judder ? judder.gain * Math.exp(-judder.t / JUDDER.decay) : 0;
+    const d = sig.shot.dirWorld, l = Math.hypot(d[0], d[1], d[2]) || 1;
+    judder = { t: 0, gain: Math.min(JUDDER.maxGain, left + (sig.shot.type === 'pellet' ? 0.6 : 1) * (sig.shot.gain ?? 1)),
+      dir: [d[0] / l, d[1] / l, d[2] / l] };
+  } else if (judder) {
+    judder = judder.t + dt > JUDDER.decay * 6 ? undefined : { ...judder, t: judder.t + dt };
+  }
 
   // SOLDIER-STYLE HIT REACTIONS (the arm open / flail / hunch): the soldier,
   // and any profile that opts in (the cultist, staggerStyle 'soldier').
@@ -666,6 +838,40 @@ export function stepMotion(
       clamp(wander.pos[2] + soldierStagger.travelDelta[2], bounds.minZ, bounds.maxZ),
     ] };
   }
+  // --- the floor under the root (sector levels) -----------------------------
+  // feetY eases toward cfg.floorAt at FLOOR_EASE_MPS, or falls under FALL_GRAVITY when the floor
+  // drops by more than FALL_DROP_M; the wander root rides it. No floorAt: it stays at the state's
+  // floor (0 on room levels) and nothing below changes by a bit.
+  let feetY = state.floorY;
+  let floorVel = state.floorVel ?? 0;
+  if (cfg.floorAt) {
+    let want = cfg.floorAt(wander.pos[0], wander.pos[2]);
+    // Mid-fall, a disc floor the body cannot step onto (a lip it is beside) is not a landing: it
+    // keeps falling toward the floor under its centre.
+    if (floorVel < 0 && cfg.fallFloorAt && cfg.maxStepUp !== undefined && !(want <= feetY + cfg.maxStepUp)) {
+      const centre = cfg.fallFloorAt(wander.pos[0], wander.pos[2]);
+      if (Number.isFinite(centre)) want = centre;
+    }
+    if (Number.isFinite(want)) {
+      // Mid-fall, a floor ABOVE the feet that it can step onto ends the fall where it is and the
+      // step rule below eases it up (never a snap up to it).
+      if (floorVel < 0 && want > feetY) floorVel = 0;
+      if (floorVel < 0 || want < feetY - FALL_DROP_M) {
+        // A DROP (a ledge, a pit, a blast's knock over the edge): fall, land on the floor.
+        floorVel -= FALL_GRAVITY * dt;
+        feetY = Math.max(want, feetY + floorVel * dt);
+        if (feetY === want) floorVel = 0;
+      } else if (cfg.maxStepUp === undefined || want - feetY <= cfg.maxStepUp) {
+        const max = FLOOR_EASE_MPS * dt;
+        feetY = Math.abs(want - feetY) <= max ? want : feetY + Math.sign(want - feetY) * max;
+      }
+    }
+  }
+  if (wander.pos[1] !== feetY) wander = { ...wander, pos: [wander.pos[0], feetY, wander.pos[2]] };
+  /** A body-frame height on today's floor → the world, on the floor under the body. Branched, not
+   *  `+ 0`: adding zero turns a -0 into +0 and the frames are pinned bit for bit. */
+  const onFloor = (y: number): number => (feetY === 0 ? y : y + feetY);
+  const worldGround = onFloor(joints.groundY);
 
   // --- body yaw: the damped rigid turn -------------------------------------
   // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
@@ -693,7 +899,17 @@ export function stepMotion(
   const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
   const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend + .16 * crouchPosture;
   const walkPosture = clamp((state.walkPosture ?? 0) + (groundedSoldier && !aimedSoldier ? 1 : -1) * 3 * dt, 0, 1);
-  const footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
+  // A falling soldier's planted feet leave the ledge with him (sector levels): his contacts drop by
+  // this frame's fall, so the support never pins him to the floor he fell from. 0 otherwise.
+  const fallDy = floorVel < 0 || (state.floorVel ?? 0) < 0 ? feetY - state.floorY : 0;
+  const footworkFrom = fallDy !== 0 && state.footwork ? {
+    ...state.footwork,
+    feet: state.footwork.feet.map(p => [p[0], p[1] + fallDy, p[2]] as Vec3) as [Vec3, Vec3],
+    swing: state.footwork.swing ? { ...state.footwork.swing,
+      from: [state.footwork.swing.from[0], state.footwork.swing.from[1] + fallDy, state.footwork.swing.from[2]] as Vec3,
+      to: [state.footwork.swing.to[0], state.footwork.swing.to[1] + fallDy, state.footwork.swing.to[2]] as Vec3 } : null,
+  } : state.footwork;
+  let footwork = groundedSoldier ? stepSoldierFootwork(footworkFrom, {
     fromRoot: state.wander.pos, desiredRoot: wander.pos, yaw: bodyYaw, dt,
     feet: [havePoints ? points[idx.footL]!.pos : joints.base[idx.footL]!, havePoints ? points[idx.footR]!.pos : joints.base[idx.footR]!],
     hips: (['L', 'R'] as const).map(side => {
@@ -715,8 +931,12 @@ export function stepMotion(
       const injured = sig.mobilityInjury?.side === side || sig.mobilityInjury?.side === 'both';
       return 1 - mobilityPosture * (injured ? .62 : .38);
     }) as [number, number],
-    groundY: joints.groundY,
+    groundY: worldGround,
   }) : undefined;
+  // The footwork root's y is a lerp between last frame's floor and this one's: the root stands on
+  // the eased floor, and the footwork's own root agrees so its next rebase shift has no dy.
+  if (footwork && footwork.root[1] !== feetY)
+    footwork = { ...footwork, root: [footwork.root[0], feetY, footwork.root[2]] };
   if (footwork) wander = { ...wander, pos: footwork.root,
     speed: dt > 0 ? Math.hypot(footwork.root[0] - state.wander.pos[0], footwork.root[2] - state.wander.pos[2]) / dt : 0 };
 
@@ -797,7 +1017,7 @@ export function stepMotion(
   // captured in WORLD space from where the foot actually is, so a planted
   // foot pivots in place while the body turns around it (no skate).
   const shift: Vec3 = frozen ?? [
-    wander.pos[0] - joints.pelvis[0], 0, wander.pos[2] - joints.pelvis[2],
+    wander.pos[0] - joints.pelvis[0], feetY, wander.pos[2] - joints.pelvis[2],
   ];
   const pivot = joints.pelvis;
   // Reach- and carry-style arms keep a presence floor so a standing body's
@@ -851,9 +1071,10 @@ export function stepMotion(
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
     const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);
     const off = rotateYaw(leaned, bodyYaw);
+    const y = spun[1] + off[1] - (name.startsWith('foot') || name.startsWith('toe') ? 0 : stanceDrop);
     return [
       pivot[0] + shift[0] + spun[0] + off[0],
-      spun[1] + off[1] - (name.startsWith('foot') || name.startsWith('toe') ? 0 : stanceDrop),
+      shift[1] === 0 ? y : y + shift[1],
       pivot[2] + shift[2] + spun[2] + off[2],
     ];
   });
@@ -862,14 +1083,26 @@ export function stepMotion(
   // The whole upper body pitches forward about the hips joint: a ROTATION of
   // targets, so no segment length changes. Zero for the shamble — the branch
   // is skipped entirely so the zombie's arithmetic is untouched.
-  const torsoLean = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
+  // A burning body's trunk pitches and sways with the flail (burn-flail.ts); null on every unburnt frame,
+  // so torsoLean and qLean below are the old expressions exactly.
+  // A body without the humanoid arm joints takes no overlay at all, trunk and head included (the spec).
+  const burnArms = idx.shoulderL !== undefined && idx.shoulderR !== undefined && idx.elbowL !== undefined
+    && idx.elbowR !== undefined && idx.handL !== undefined && idx.handR !== undefined;
+  const burnPose = cfg.burnFlail && cfg.burnFlail.amp > 0 && !collapsed && burnArms
+    ? burnFlailPose(cfg.burnFlail.t, cfg.burnFlail.seed, cfg.burnFlail.amp, cfg.burnFlail.fold) : null;
+  const torsoLeanBase = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
+  const torsoLean = burnPose ? torsoLeanBase + burnPose.pitch : torsoLeanBase;
+  /** The flail's side sway: a roll about the body's forward axis, applied after the pitch. Shared with the
+   *  shoulder socket clamp below so its authored chest->shoulder vector follows the same rotation. */
+  const swayLean = (qPitch: ReturnType<typeof qFromAxisAngle>) => (burnPose && burnPose.sway !== 0
+    ? qMul(qFromAxisAngle(rotateYaw([0, 0, 1], bodyYaw), burnPose.sway), qPitch) : qPitch);
   if (torsoLean !== 0 && !collapsed && idx.hips !== undefined) {
     const pivotP = targets[idx.hips]!;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     // Forward lean = POSITIVE rotation about +right for the up-pointing
     // spine (right-hand rule takes +y toward +z) — the reach pivot's negated
     // convention applies to the DOWN-pointing hang, not to this chain.
-    const qLean = qFromAxisAngle(right, torsoLean);
+    const qLean = swayLean(qFromAxisAngle(right, torsoLean));
     const hipsY = joints.base[idx.hips]![1];
     joints.names.forEach((name, i) => {
       if (name === 'pelvis' || name === 'hips') return;
@@ -895,7 +1128,7 @@ export function stepMotion(
     // vector follows it: a pivot rotation maps a relative vector by the
     // rotation alone, and both anchor points sit above the hips pivot.
     const leanRan = torsoLean !== 0 && idx.hips !== undefined;
-    const qLean = qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), torsoLean);
+    const qLean = swayLean(qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), torsoLean));
     for (const side of ['L', 'R'] as const) {
       const iS = idx[`shoulder${side}`]!;
       const relLocal = sub(joints.base[iS]!, joints.base[idx.chest]!);
@@ -944,7 +1177,7 @@ export function stepMotion(
       const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
-      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence + (r.swing ? r.swing[side] * blend : 0);
       const pitch = attack
         ? basePitch + (side === 'L' ? attack.reach.pitchL : attack.reach.pitchR)
         : basePitch;
@@ -1195,7 +1428,12 @@ export function stepMotion(
       const fullRaisedHand = qRotate(qFromAxisAngle([1,0,0], lift),
         qRotate(qFromAxisAngle([0,0,1], -sign * flail.abduct), base.hand));
       const fromYaw = Math.atan2(fullRaisedHand[0], fullRaisedHand[2]);
-      const yawDelta = Math.atan2(Math.sin(sign * flail.yawOut - fromYaw), Math.cos(sign * flail.yawOut - fromYaw));
+      let yawDelta = Math.atan2(Math.sin(sign * flail.yawOut - fromYaw), Math.cos(sign * flail.yawOut - fromYaw));
+      // A TOSS-UP GOES OUTWARD. A target almost straight opposite the hand (the cultist's left hand on his gun:
+      // 3.140 rad away) is as far one way round as the other, and the shorter way was picked on a hair: 0.0016 rad
+      // made that arm fling out wide, and a hand 2 cm over swung it across the chest instead (2026-11-12, when a rig
+      // fix moved his resting hand). Within FLAIL_TOSSUP_RAD of opposite, the arm goes round its own side.
+      if (Math.PI - Math.abs(yawDelta) < FLAIL_TOSSUP_RAD) yawDelta = sign * Math.abs(yawDelta);
       const qOut = qFromAxisAngle([0,1,0], yawDelta * w);
       const qLocal = qMul(qOut, qMul(qLift, qAbduct));
       const rotateFull = (v: Vec3) => qRotate(qLocal, v);
@@ -1235,7 +1473,9 @@ export function stepMotion(
   // --- IK override 1: foot plants ------------------------------------------
   // A blast's recoveryStep releases both locks for one frame (a forced
   // stance edge): the feet catch up to the shoved root, then re-plant.
-  const release = stagger.recoveryStep && !collapsed;
+  // A body falling off a ledge (floorVel < 0, sector levels) holds no stance either: the feet leave
+  // the ledge with it and re-plant on landing.
+  const release = (stagger.recoveryStep && !collapsed) || floorVel < 0;
   const footWorld = (i: number): Vec3 =>
     havePoints ? points[i]!.pos : targets[i]!;
   const plantStep = (
@@ -1243,7 +1483,7 @@ export function stepMotion(
   ): PlantState => stepPlant(st, {
     stance: stance && !release,
     footPos: footWorld(footIdx),
-    groundY: joints.groundY,
+    groundY: worldGround,
     ...(cfg.plantReach !== undefined
       ? { hip: targets[hipIdx]!, maxReach: cfg.plantReach * (lens[0] + lens[1]) }
       : {}),
@@ -1252,6 +1492,12 @@ export function stepMotion(
   // yaw (not wander.heading — the knee must agree with the turned body
   // mid-turn, same contract as every other body-local thing this frame).
   const legPole = headingDir(bodyYaw);
+  // A spider's knee rides HIGH (GaitProfile.kneePole, the cerebrax): the hind legs' pole is authored body-local for
+  // the LEFT leg and mirrored for the right. Absent: knees bow forward, as every biped's always have.
+  const authoredKneePole = gaitProfile.kneePole;
+  const kneePoleOf = (side: 'L' | 'R'): Vec3 => authoredKneePole
+    ? rotateYaw([side === 'L' ? authoredKneePole[0] : -authoredKneePole[0], authoredKneePole[1], authoredKneePole[2]], bodyYaw)
+    : legPole;
   if (cfg.faceHeading !== undefined && !collapsed && !footwork) {
     // Travel can reverse under an aimed torso. Swing feet follow travel, but
     // the knee hinge still faces the chest instead of turning inside out.
@@ -1262,7 +1508,7 @@ export function stepMotion(
       if (sig.missing[side === 'L' ? 'legL' : 'legR'] || idx[foot] === undefined) continue;
       const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
       const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
-      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);
+      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, kneePoleOf(side));
       targets[iff] = chain[2]!;
     }
   }
@@ -1275,7 +1521,7 @@ export function stepMotion(
     }
     const solved = solvePlantedLeg(
       targets[idx[hip]!]!, targets[idx[knee]!]!, targets[idx[foot]!]!,
-      st, lens, SOLVE, legPole,
+      st, lens, SOLVE, kneePoleOf(hip === 'hipL' ? 'L' : 'R'),
     );
     targets[idx[knee]!] = solved.knee;
     targets[idx[foot]!] = solved.foot;
@@ -1314,7 +1560,7 @@ export function stepMotion(
   let plantHandR = state.plantHandR;
   const fore = gait.pose.foreStance;
   if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
-    const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
+    const handGround = onFloor(Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]));
     const backPole = scale(legPole, -1);
     const authoredPole = gaitProfile.elbowPole;
     for (const side of ['L', 'R'] as const) {
@@ -1459,19 +1705,94 @@ export function stepMotion(
     }
   }
 
-  const structural = isSoldierFamily(profile) && collapsed;
+  // --- the burning flail (burn-flail.ts) -------------------------------------
+  // Last word on the arms while a body burns: each hand goes to the flail's target by a two-bone solve
+  // from the FINAL shoulder target, so both segments keep their rest lengths. The hand tip rides the
+  // hand's move (the tip follow pass already ran), and so does a carried gun: it is translated with the
+  // right hand, keeping its carry orientation, so it stays in the fist (the support hand leaves it).
+  if (burnPose) {
+    const midX = joints.base[idx.pelvis!]![0];
+    for (const side of ['L', 'R'] as const) {
+      if (side === 'L' ? sig.missing.armL : sig.missing.armR) continue;
+      const iS = idx[`shoulder${side}`], iE = idx[`elbow${side}`], iH = idx[`hand${side}`];
+      if (iS === undefined || iE === undefined || iH === undefined) continue;
+      const l1 = len(sub(joints.base[iE]!, joints.base[iS]!)), l2 = len(sub(joints.base[iH]!, joints.base[iE]!));
+      const out = joints.base[iS]![0] >= midX ? 1 : -1;
+      const h = side === 'L' ? burnPose.handL : burnPose.handR;
+      const S = targets[iS]!;
+      const want = add(S, scale(rotateYaw([h[0] * out, h[1], h[2]], bodyYaw), l1 + l2));
+      // Elbows out and down, a little behind: the bend a raised human arm takes.
+      const r = solveElbow(S, want, l1, l2, rotateYaw([out, -0.6, -0.3], bodyYaw));
+      const moved = sub(r.hand, targets[iH]!);
+      targets[iE] = r.elbow;
+      targets[iH] = r.hand;
+      const iT = idx[`handTip${side}`];
+      if (iT !== undefined) targets[iT] = add(targets[iT]!, moved);
+      if (side === 'R' && gun) gun = { ...gun, root: add(gun.root, moved) };
+    }
+    if (burnPose.headToss !== 0 && idx.head !== undefined && idx.neck !== undefined) {
+      const q = qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), burnPose.headToss);
+      targets[idx.head] = add(targets[idx.neck]!, qRotate(q, sub(targets[idx.head]!, targets[idx.neck]!)));
+    }
+  }
+
+  // AUTHORED DEATHS (death-fall.ts): every humanoid but a soft target or a physics-death body (the zombie) lies down along a keyed fall the
+  // rig springs toward, the way the soldier family always has. `cfg.authoredDeath` (a burn death) puts a physics-death body on one too.
+  const animatedDeath = !isSoldierFamily(profile) && DEATH_FALL.on && !profile.soft
+    && (!profile.physicsDeath || !!cfg.authoredDeath) && canDeathFall(joints.names);
+  const structural = (isSoldierFamily(profile) || animatedDeath) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
-  const floorY = joints.groundY - (structural ? .13 : MOTION_TUNING.floorPad);
+  const floorY = worldGround - (structural && !animatedDeath ? .13 : MOTION_TUNING.floorPad);
   const fallPose = structural ? (state.fallPose ?? points.map(p => [...p.pos] as Vec3)) : undefined;
-  const fallFatal = !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
+  const fallFatal = animatedDeath || !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
   const fallImpact = state.fallImpact ?? sig.shot?.dirWorld ?? (state.recoil.joint !== null ? state.recoil.dirWorld : rotateYaw([0,0,-1], bodyYaw));
   const fallStrength = state.fallStrength ?? (sig.shot?.type === 'blast' ? 1 : sig.shot ? .4 : .8);
-  if (structural) {
+  // The fall is chosen on the first down frame of a body already dead; a soldier downed alive keeps his own
+  // pose (and its dead version if a later hit kills him), so his writhe never jumps to another fall.
+  const fallKind: DeathFallChoice | null | undefined = !structural ? undefined
+    : state.fallKind !== undefined ? state.fallKind
+    : fallFatal && DEATH_FALL.on && canDeathFall(joints.names)
+      ? (cfg.deathFall?.() ?? { kind: fallStrength >= 1 ? 'blown' : 'backward', strength: 1, side: (state.gait.seed & 1) ? 1 : -1 })
+      : null;
+  let corpse: ReturnType<typeof corpseHoldStep> = null;
+  if (structural && fallKind) {
+    const missing = new Set<GaitJointName>();
+    if (sig.missing.armL) (['elbowL', 'handL', 'handTipL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.armR) (['elbowR', 'handR', 'handTipR'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legL) (['kneeL', 'footL', 'toeL'] as const).forEach(n => missing.add(n));
+    if (sig.missing.legR) (['kneeR', 'footR', 'toeR'] as const).forEach(n => missing.add(n));
+    if (!sig.headAlive) missing.add('head');
+    const fall = deathFallPose(fallKind, {
+      base: joints.base, names: joints.names, start: fallPose!, pivot, shift, yaw: bodyYaw,
+      floor: floorY, limbFloor: worldGround - MOTION_TUNING.floorPad, impact: fallKind.impact ?? fallImpact, missing,
+    }, collapse.state.fallAge);
+    corpse = corpseHoldStep(fallKind, collapse.state.fallAge, state.corpseHold, !!sig.shot, dt, points.map(p => p.pos), fall, joints.names);
+    (corpse?.targets ?? fall).forEach((p, i) => { targets[i] = [...p] as Vec3; });
+  } else if (structural) {
     const fall = soldierFallPose(joints.base, joints.names, fallPose!, pivot, shift, bodyYaw, collapse.state.fallAge,
       floorY, sig.missing.legL || sig.wounded.legL, !fallFatal, fallImpact, fallStrength, sig.missing.armL);
     fall.forEach((p, i) => { targets[i] = p; });
   }
+  const fallPull = corpse?.pull ?? (fallKind ? deathFallPull(fallKind.kind, collapse.state.fallAge) : 1);
+  // Sector levels: the structural pose lies every target on the ROOT's plane, held at rest pull 1.
+  // A target over a floor lower than that (a ledge's lip, a pit) is released to fall to it; with
+  // the pelvis over it the whole body goes (the torso is the load-bearing mass).
+  let restRelease: number[] | undefined;
+  if (structural && cfg.floorAt) {
+    const over = (p: Vec3): boolean => {
+      const f = cfg.floorAt!(p[0], p[2]);
+      return Number.isFinite(f) && f < feetY - LEDGE_RELEASE_M;
+    };
+    const pel = idx.pelvis;
+    if (pel !== undefined && over(targets[pel]!)) restRelease = targets.map((_, i) => i);
+    else {
+      const some = targets.flatMap((p, i) => (over(p) ? [i] : []));
+      if (some.length) restRelease = some;
+    }
+  }
+
+  if (structural && fallKind && cfg.releaseFall) restRelease = targets.map((_, i) => i);
 
   // --- the pose layer -------------------------------------------------------
   // After every other target writer (gait, carry, aim, plants, the soldier fall) so the authored pose has the last word.
@@ -1479,12 +1800,27 @@ export function stepMotion(
   if (poseActive) {
     cfg.pose!.forEach((p, i) => {
       const spun = rotateYaw([p[0] - pivot[0], p[1], p[2] - pivot[2]], bodyYaw);
-      targets[i] = [pivot[0] + shift[0] + spun[0], spun[1], pivot[2] + shift[2] + spun[2]];
+      targets[i] = [pivot[0] + shift[0] + spun[0], shift[1] === 0 ? spun[1] : spun[1] + shift[1], pivot[2] + shift[2] + spun[2]];
     });
   }
 
+  // THE TOPPLE (corpse integrity, spec 2026-11-02 §4): a braced torso no
+  // longer folds as it lands, so with nothing to tip it, it can come straight
+  // down and balance on its pelvis. The fall's first frame leans the chest
+  // along the shot that killed it, else a direction drawn from the seed.
+  const integrity = profile.corpseIntegrity ?? CORPSE_INTEGRITY.value;
+  if (collapsed && state.collapse.phase === 'standing' && !structural && integrity > 0 && idx.chest !== undefined) {
+    const shot = sig.shot?.dirWorld;
+    const a = ((state.gait.seed * 2654435761) >>> 0) / 4294967296 * Math.PI * 2;
+    let dir: Vec3 = shot && Math.hypot(shot[0], shot[2]) > 1e-3 ? [shot[0], 0, shot[2]] : [Math.cos(a), 0, Math.sin(a)];
+    dir = normalize(dir);
+    kicks.push({ joint: 'chest', delta: scale(dir, TOPPLE_SHOVE * integrity) });
+  }
+
   const nextState: MotionState = {
-    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
+    ...(judder ? { judder } : {}),
+    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength, fallKind: fallKind ?? null } : {}),
+    ...(corpse ? { corpseHold: corpse.hold } : {}),
     wander, gait: gait.state, stagger: stagger.state,
     ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
@@ -1504,7 +1840,48 @@ export function stepMotion(
     ...(soldierFullArmBase === undefined ? {} : { soldierFullArmBase }),
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
+    floorY: feetY,
+    ...(cfg.floorAt ? { floorVel } : {}),
   };
+
+  // MotionProfile.rigidFrame: the trunk moves as ONE rigid piece, the pelvis target's translation plus the body's yaw.
+  // The gait's bob, sway and lean offset each trunk joint on its own, a few cm apart; the cerebrax's pelvis bone is
+  // only 4 cm long, so that tipped its frame up to 10 degrees, and with it the brain, the kit and the socket balls,
+  // while the craters (damage.ts frame: a prim's axis, no roll) slid across the brain. Pinned below (posePins).
+  if (profile.rigidFrame && !collapsed && idx.pelvis !== undefined) {
+    let p0 = targets[idx.pelvis]!;
+    const b0 = joints.base[idx.pelvis]!;
+    if (judder) {
+      // The shudder: three incommensurate fast shakes (no axis reads as a metronome) and a slower recoil along the shot.
+      const t = judder.t, e = judder.gain * Math.exp(-t / JUDDER.decay), w = 2 * Math.PI, A = JUDDER.shake, R = JUDDER.recoil;
+      const kick = R * Math.sin(w * JUDDER.recoilHz * t);
+      p0 = add(p0, [
+        e * (A * Math.sin(w * 13 * t) + judder.dir[0] * kick),
+        e * (0.7 * A * Math.sin(w * 17 * t + 1.3) + judder.dir[1] * kick * 0.5),
+        e * (A * Math.sin(w * 11 * t + 2.1) + judder.dir[2] * kick),
+      ]);
+      targets[idx.pelvis] = p0;
+    }
+    // The legs spasm: on the hit and then every JUDDER.spasm s while it convulses, each knee kicked up and out by its
+    // own jerky share (the verlet rings them back; the feet stay planted).
+    const beat = judder ? Math.floor(judder.t / JUDDER.spasm) : -1;
+    const newBeat = judder && (judderKick || Math.floor((judder.t - dt) / JUDDER.spasm) !== beat);
+    if (judder && newBeat) {
+      const g = judder.gain * Math.exp(-judder.t / JUDDER.decay);
+      if (g > 0.15) {
+        ([['kneeL', 1, 0], ['kneeR', -1, 1], ['elbowL', 1, 2], ['elbowR', -1, 3]] as const).forEach(([j, side, n]) => {
+          // A fixed shuffle per beat: some legs jerk hard, some barely, some down.
+          const k = Math.sin((beat + 1) * 7.31 + n * 2.17) * 0.9 + 0.35;
+          if (idx[j] !== undefined) kicks.push({ joint: j, delta: add(rotateYaw([side * JUDDER.knee * 0.5 * k * g, 0, 0], bodyYaw), [0, JUDDER.knee * k * g, 0]) });
+        });
+      }
+    }
+    for (const name of RIGID_FRAME_JOINTS) {
+      const i = idx[name];
+      if (i === undefined || i === idx.pelvis) continue;
+      targets[i] = add(p0, rotateYaw(sub(joints.base[i]!, b0), bodyYaw));
+    }
+  }
 
   return {
     state: nextState,
@@ -1538,14 +1915,28 @@ export function stepMotion(
         // head frame plus the gape), and a free chin point would sag on a
         // stiffness-0 bone (rig-bind.ts).
         const jaw = !collapsed && idx.jaw !== undefined ? (['jaw'] as const) : [];
-        const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        // MotionProfile.rigidFrame: the trunk is one welded frame the legs hang off; the legs' constraints must not
+        // drag its sockets about.
+        const frame = profile.rigidFrame && !collapsed ? RIGID_FRAME_JOINTS : [];
+        const pins = [...legs, ...arms, ...jaw, ...frame].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return pins.length ? { posePins: pins } : {};
       })(),
-      restPull: structural ? 1 : collapse.restPull,
-      gravity: structural ? [0, -1.5, 0] : collapsed
+      restPull: structural ? (fallKind ? fallPull : 1) : collapse.restPull,
+      ...(restRelease ? { restRelease } : {}),
+      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0]
+        // A loosened fall (DEATH_FALL.pull/settle below 1) hands the weight back to gravity.
+        : [0, fallKind ? MOTION_TUNING.collapseGravity + (-1.5 - MOTION_TUNING.collapseGravity) * Math.min(1, fallPull) : -1.5, 0]) : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
+      braces: collapsed && !structural && integrity > 0 ? joints.braces : [],
+      hipCones: collapsed && !structural && integrity > 0 ? joints.hipCones : [],
+      footPlants: collapsed && !structural ? joints.footPlants : [],
+      corpseBody: collapsed && !structural ? joints.corpseBody : null,
+      integrity,
+      floorLift: joints.floorLift,
+      // An authored death fall lies the skull with the neck at once (the soldier's headFollowsRig).
+      headFollow: structural && fallKind ? 1 : collapsed && !structural ? Math.min(1, collapse.state.fallAge / COLLAPSE_TUNING.fallReleaseTime) : 0,
       phase: collapse.phase,
       collapsed,
       meter: collapse.state.meter,
@@ -1578,15 +1969,28 @@ const HEM_IDLE = 0.4;
  * bounce below MOTION_TUNING.restCutoff dies outright (the chunk stepper's
  * |vy| < 0.35 kill). `groundY` should be joints.groundY - floorPad. Pure.
  */
+/** A collapsed frame's per-point floor lift (MotionFrame.floorLift), or none
+ *  at integrity 0 (the single plane, as before braces). */
+export function corpseLift(f: Pick<MotionFrame, 'floorLift' | 'integrity'>): readonly number[] | undefined {
+  return f.integrity > 0 && f.floorLift.length ? f.floorLift : undefined;
+}
+
 export function applyFloorContact(
   points: readonly RigPoint[],
   groundY: number,
   restitution: number = COLLAPSE_TUNING.groundRestitution,
   friction: number = COLLAPSE_TUNING.groundFriction,
+  floorAt?: (x: number, z: number, from: Vec3) => number,
+  /** Per point, how far above the floor it rests (a corpse's flesh
+   *  thickness: corpseLift). Added to whichever floor applies. */
+  lift?: readonly number[],
 ): RigPoint[] {
-  return points.map(p => {
+  return points.map((p, i) => {
     if (p.pinned) return p;
-    if (p.pos[1] >= groundY) return p;
+    // Sector levels: the contact plane under THIS point (an arm over a ledge hangs down it); `from`
+    // is where the point was last frame, so the caller can judge its rise.
+    const g = (floorAt ? floorAt(p.pos[0], p.pos[2], p.prev) : groundY) + (lift?.[i] ?? 0);
+    if (p.pos[1] >= g) return p;
     const vy = p.pos[1] - p.prev[1]; // per-frame fall displacement
     const bounce = vy < 0 ? -vy * restitution : 0;
     const still = bounce < MOTION_TUNING.restCutoff;
@@ -1594,8 +1998,17 @@ export function applyFloorContact(
     const vz = (p.pos[2] - p.prev[2]) * friction;
     return {
       pinned: false,
-      pos: [p.pos[0], groundY, p.pos[2]],
-      prev: [p.pos[0] - vx, groundY - (still ? 0 : bounce), p.pos[2] - vz],
+      pos: [p.pos[0], g, p.pos[2]],
+      prev: [p.pos[0] - vx, g - (still ? 0 : bounce), p.pos[2] - vz],
     };
   });
+}
+
+/** The rig's restScale with the frame's released points (MotionFrame.restRelease) zeroed: those
+ *  points keep no rest pull this step. Other points keep their own scale (1 when the rig has none). */
+export function releasedRestScale(rig: { points: readonly unknown[]; restScale?: readonly number[] },
+  released: readonly number[]): number[] {
+  const k = rig.points.map((_, i) => rig.restScale?.[i] ?? 1);
+  for (const i of released) k[i] = 0;
+  return k;
 }

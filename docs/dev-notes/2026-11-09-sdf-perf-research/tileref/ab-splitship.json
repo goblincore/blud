@@ -1,0 +1,282 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "base": "off",
+ "legs": [
+  {
+   "name": "off",
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "frozen=1",
+    "variant": "splitship",
+    "prelude": "__sdfGame.setHullExitBound(true);\n(() => { const z = __sdfGame.zombies().find((q) => q.room === 1); const d = 0.6, eyeH = 1.62, aimY = 1.0; const ex = z.pos[0], ez = z.pos[2] + d; const dx = z.pos[0] - ex, dz = z.pos[2] - ez; __sdfGame.setPose(ex, ez, Math.atan2(dx, -dz), Math.atan2(aimY - eyeH, Math.hypot(dx, dz)), 0); })();\n__sdfGame.step(4);\nwindow.__A = [[0, 0, 'slug'], [0.14, 0.06, 'slug'], [0.07, -0.08, 'pellet'], [-0.07, 0.1, 'pellet'], [-0.16, -0.04, 'pellet']];\nwindow.__B = [[-0.22, -0.15], [-0.1, -0.16], [0.02, -0.18], [0.18, -0.14], [-0.2, 0.0], [-0.11, 0.02], [0.09, 0.01], [0.21, 0.03], [-0.18, 0.16], [-0.04, 0.18], [0.1, 0.17], [0.2, 0.14], [0.03, 0.09], [-0.13, -0.07], [0.15, -0.06]].map(([a, b]) => [a, b, 'pellet']);\nwindow.__ladderStamp = (list, min) => {\n  const b = __sdfGame.pose();\n  let n = 0, id = -1;\n  for (const [dy, dp, kind] of list) {\n    __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw + dy, b.pitch + dp, 0);\n    const p = __sdfGame.predictSlugHit();\n    if (p.actorId < 0 || !p.hit) continue;\n    if (__sdfGame.stampWoundAt(p.origin[0], p.origin[1], p.origin[2], p.dir[0], p.dir[1], p.dir[2], kind, p.actorId)) { n++; id = p.actorId; }\n  }\n  __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw, b.pitch, 0);\n  __sdfGame.step(5);\n  const wounds = id >= 0 ? __sdfGame.zombie(id).woundList().length : 0;\n  if (n < min || __sdfGame.chunkCount !== 0) throw new Error('ladder stamp: ' + n + ' stamped, ' + wounds + ' wounds, ' + __sdfGame.chunkCount + ' chunks');\n  window.__ladderWounds = wounds;\n  return wounds;\n};\nwindow.__ladderChop = (side, target) => {\n  const z = __sdfGame.zombies().find((q) => q.room === 1);\n  const r = __sdfGame.axeChop(z.id, side, target);\n  if (!r) throw new Error('ladder chop: axeChop(' + side + ', ' + target + ') returned ' + r);\n  __sdfGame.freeze(false);\n  for (let i = 0; i < 14; i++) __sdfGame.step(1, 1 / 60);\n  __sdfGame.freeze(true);\n  for (let i = 0; i < 70; i++) __sdfGame.step(1, 1 / 60);\n  window.__ladderLast = { chop: r, wounds: (__sdfGame.actorWounds(z.id) || []).length, split: __sdfGame.headSplit(z.id) };\n  return r;\n};\nwindow.__ladderNeedSplit = () => { const z = __sdfGame.zombies().find((q) => q.room === 1); if (!__sdfGame.headSplit(z.id)) throw new Error('ladder: the head did not split'); return 1; };\n1"
+   },
+   "label": "closeup ?frozen=1 splitship xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "off2",
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "frozen=1",
+    "variant": "splitship",
+    "prelude": "__sdfGame.setHullExitBound(true);\n(() => { const z = __sdfGame.zombies().find((q) => q.room === 1); const d = 0.6, eyeH = 1.62, aimY = 1.0; const ex = z.pos[0], ez = z.pos[2] + d; const dx = z.pos[0] - ex, dz = z.pos[2] - ez; __sdfGame.setPose(ex, ez, Math.atan2(dx, -dz), Math.atan2(aimY - eyeH, Math.hypot(dx, dz)), 0); })();\n__sdfGame.step(4);\nwindow.__A = [[0, 0, 'slug'], [0.14, 0.06, 'slug'], [0.07, -0.08, 'pellet'], [-0.07, 0.1, 'pellet'], [-0.16, -0.04, 'pellet']];\nwindow.__B = [[-0.22, -0.15], [-0.1, -0.16], [0.02, -0.18], [0.18, -0.14], [-0.2, 0.0], [-0.11, 0.02], [0.09, 0.01], [0.21, 0.03], [-0.18, 0.16], [-0.04, 0.18], [0.1, 0.17], [0.2, 0.14], [0.03, 0.09], [-0.13, -0.07], [0.15, -0.06]].map(([a, b]) => [a, b, 'pellet']);\nwindow.__ladderStamp = (list, min) => {\n  const b = __sdfGame.pose();\n  let n = 0, id = -1;\n  for (const [dy, dp, kind] of list) {\n    __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw + dy, b.pitch + dp, 0);\n    const p = __sdfGame.predictSlugHit();\n    if (p.actorId < 0 || !p.hit) continue;\n    if (__sdfGame.stampWoundAt(p.origin[0], p.origin[1], p.origin[2], p.dir[0], p.dir[1], p.dir[2], kind, p.actorId)) { n++; id = p.actorId; }\n  }\n  __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw, b.pitch, 0);\n  __sdfGame.step(5);\n  const wounds = id >= 0 ? __sdfGame.zombie(id).woundList().length : 0;\n  if (n < min || __sdfGame.chunkCount !== 0) throw new Error('ladder stamp: ' + n + ' stamped, ' + wounds + ' wounds, ' + __sdfGame.chunkCount + ' chunks');\n  window.__ladderWounds = wounds;\n  return wounds;\n};\nwindow.__ladderChop = (side, target) => {\n  const z = __sdfGame.zombies().find((q) => q.room === 1);\n  const r = __sdfGame.axeChop(z.id, side, target);\n  if (!r) throw new Error('ladder chop: axeChop(' + side + ', ' + target + ') returned ' + r);\n  __sdfGame.freeze(false);\n  for (let i = 0; i < 14; i++) __sdfGame.step(1, 1 / 60);\n  __sdfGame.freeze(true);\n  for (let i = 0; i < 70; i++) __sdfGame.step(1, 1 / 60);\n  window.__ladderLast = { chop: r, wounds: (__sdfGame.actorWounds(z.id) || []).length, split: __sdfGame.headSplit(z.id) };\n  return r;\n};\nwindow.__ladderNeedSplit = () => { const z = __sdfGame.zombies().find((q) => q.room === 1); if (!__sdfGame.headSplit(z.id)) throw new Error('ladder: the head did not split'); return 1; };\n1"
+   },
+   "label": "closeup ?frozen=1 splitship xb1",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "on",
+   "dir": ".scratch/tileref/t-xb1-on-splitship",
+   "shaderFrom": "",
+   "note": "",
+   "hullExitBound": true,
+   "scene": {
+    "scene": "closeup",
+    "query": "frozen=1&tileref",
+    "variant": "splitship",
+    "prelude": "__sdfGame.setHullExitBound(true);\n(() => { const z = __sdfGame.zombies().find((q) => q.room === 1); const d = 0.6, eyeH = 1.62, aimY = 1.0; const ex = z.pos[0], ez = z.pos[2] + d; const dx = z.pos[0] - ex, dz = z.pos[2] - ez; __sdfGame.setPose(ex, ez, Math.atan2(dx, -dz), Math.atan2(aimY - eyeH, Math.hypot(dx, dz)), 0); })();\n__sdfGame.step(4);\nwindow.__A = [[0, 0, 'slug'], [0.14, 0.06, 'slug'], [0.07, -0.08, 'pellet'], [-0.07, 0.1, 'pellet'], [-0.16, -0.04, 'pellet']];\nwindow.__B = [[-0.22, -0.15], [-0.1, -0.16], [0.02, -0.18], [0.18, -0.14], [-0.2, 0.0], [-0.11, 0.02], [0.09, 0.01], [0.21, 0.03], [-0.18, 0.16], [-0.04, 0.18], [0.1, 0.17], [0.2, 0.14], [0.03, 0.09], [-0.13, -0.07], [0.15, -0.06]].map(([a, b]) => [a, b, 'pellet']);\nwindow.__ladderStamp = (list, min) => {\n  const b = __sdfGame.pose();\n  let n = 0, id = -1;\n  for (const [dy, dp, kind] of list) {\n    __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw + dy, b.pitch + dp, 0);\n    const p = __sdfGame.predictSlugHit();\n    if (p.actorId < 0 || !p.hit) continue;\n    if (__sdfGame.stampWoundAt(p.origin[0], p.origin[1], p.origin[2], p.dir[0], p.dir[1], p.dir[2], kind, p.actorId)) { n++; id = p.actorId; }\n  }\n  __sdfGame.setPose(b.pos[0], b.pos[2], b.yaw, b.pitch, 0);\n  __sdfGame.step(5);\n  const wounds = id >= 0 ? __sdfGame.zombie(id).woundList().length : 0;\n  if (n < min || __sdfGame.chunkCount !== 0) throw new Error('ladder stamp: ' + n + ' stamped, ' + wounds + ' wounds, ' + __sdfGame.chunkCount + ' chunks');\n  window.__ladderWounds = wounds;\n  return wounds;\n};\nwindow.__ladderChop = (side, target) => {\n  const z = __sdfGame.zombies().find((q) => q.room === 1);\n  const r = __sdfGame.axeChop(z.id, side, target);\n  if (!r) throw new Error('ladder chop: axeChop(' + side + ', ' + target + ') returned ' + r);\n  __sdfGame.freeze(false);\n  for (let i = 0; i < 14; i++) __sdfGame.step(1, 1 / 60);\n  __sdfGame.freeze(true);\n  for (let i = 0; i < 70; i++) __sdfGame.step(1, 1 / 60);\n  window.__ladderLast = { chop: r, wounds: (__sdfGame.actorWounds(z.id) || []).length, split: __sdfGame.headSplit(z.id) };\n  return r;\n};\nwindow.__ladderNeedSplit = () => { const z = __sdfGame.zombies().find((q) => q.room === 1); if (!__sdfGame.headSplit(z.id)) throw new Error('ladder: the head did not split'); return 1; };\n1"
+   },
+   "label": "closeup ?frozen=1&tileref splitship xb1",
+   "manifest": "manifest.json"
+  }
+ ],
+ "baseMedianMs": 15.405000001192093,
+ "table": [
+  {
+   "leg": "off",
+   "label": "closeup ?frozen=1 splitship xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "medianMs": 15.405000001192093,
+   "lo": 12.110000002384187,
+   "hi": 20.080000007152556
+  },
+  {
+   "leg": "off2",
+   "label": "closeup ?frozen=1 splitship xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "medianMs": 16.93000000119209,
+   "lo": 12.780000007152557,
+   "hi": 20.6,
+   "diffMedianMs": 0.7449999988079066,
+   "diffMinMs": -2.850000011920926,
+   "diffMaxMs": 7.810000002384188,
+   "diffMedianPct": 4.836092169751741,
+   "diffMinPct": -18.500486930869087,
+   "diffMaxPct": 50.69782539292323
+  },
+  {
+   "leg": "on",
+   "label": "closeup ?frozen=1&tileref splitship xb1",
+   "hullExitBound": true,
+   "dir": ".scratch/tileref/t-xb1-on-splitship",
+   "medianMs": 9.739999997615815,
+   "lo": 7.6099999904632565,
+   "hi": 13.279999995231629,
+   "diffMedianMs": -6.09500000476837,
+   "diffMinMs": -8.95,
+   "diffMaxMs": -2.310000002384186,
+   "diffMedianPct": -39.565076301828746,
+   "diffMinPct": -58.09802011884074,
+   "diffMaxPct": -14.995131465143979
+  }
+ ],
+ "runs": [
+  {
+   "rep": 1,
+   "order": [
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "off": 18.62999999523163,
+    "off2": 16.42999999523163,
+    "on": 9.67999999523163
+   },
+   "minMs": {
+    "off": 13.920000004768372,
+    "off2": 12.420000004768372,
+    "on": 8.910000002384185
+   },
+   "diff": {
+    "off2": -2.1999999999999993,
+    "on": -8.95
+   }
+  },
+  {
+   "rep": 2,
+   "order": [
+    "off2",
+    "on",
+    "off"
+   ],
+   "ms": {
+    "off2": 20.6,
+    "on": 9.3,
+    "off": 12.789999997615814
+   },
+   "minMs": {
+    "off2": 11.689999997615814,
+    "on": 8.479999995231628,
+    "off": 10.57000000476837
+   },
+   "diff": {
+    "off2": 7.810000002384188,
+    "on": -3.489999997615813
+   }
+  },
+  {
+   "rep": 3,
+   "order": [
+    "on",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 9.8,
+    "off": 12.110000002384187,
+    "off2": 16.630000007152557
+   },
+   "minMs": {
+    "on": 8.690000009536742,
+    "off": 10.860000002384187,
+    "off2": 14.35
+   },
+   "diff": {
+    "off2": 4.52000000476837,
+    "on": -2.310000002384186
+   }
+  },
+  {
+   "rep": 4,
+   "order": [
+    "off",
+    "off2",
+    "on"
+   ],
+   "ms": {
+    "off": 20.080000007152556,
+    "off2": 17.22999999523163,
+    "on": 13.279999995231629
+   },
+   "minMs": {
+    "off": 17.15,
+    "off2": 15.110000002384187,
+    "on": 9.369999992847443
+   },
+   "diff": {
+    "off2": -2.850000011920926,
+    "on": -6.800000011920927
+   }
+  },
+  {
+   "rep": 5,
+   "order": [
+    "off2",
+    "on",
+    "off"
+   ],
+   "ms": {
+    "off2": 19.519999992847442,
+    "on": 10.489999997615815,
+    "off": 15.879999995231628
+   },
+   "minMs": {
+    "off2": 14.089999997615815,
+    "on": 8.789999997615814,
+    "off": 12.229999995231628
+   },
+   "diff": {
+    "off2": 3.6399999976158135,
+    "on": -5.3899999976158135
+   }
+  },
+  {
+   "rep": 6,
+   "order": [
+    "on",
+    "off",
+    "off2"
+   ],
+   "ms": {
+    "on": 7.6099999904632565,
+    "off": 14.930000007152557,
+    "off2": 12.780000007152557
+   },
+   "minMs": {
+    "on": 7.1300000071525576,
+    "off": 11.4,
+    "off2": 11.57000000476837
+   },
+   "diff": {
+    "off2": -2.1500000000000004,
+    "on": -7.320000016689301
+   }
+  }
+ ],
+ "info": {
+  "off": {
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "warmS": 0.623,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "off2": {
+   "dir": ".scratch/tileref/t-xb1-off-splitship",
+   "warmS": 0.404,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  },
+  "on": {
+   "dir": ".scratch/tileref/t-xb1-on-splitship",
+   "warmS": 0.418,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {}
+    }
+   ],
+   "errors": []
+  }
+ }
+}

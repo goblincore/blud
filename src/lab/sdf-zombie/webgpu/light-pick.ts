@@ -28,6 +28,10 @@
 // rgb let a 35-intensity muzzle flash near a body steal slot 0 (the dominant: scatter, the wound
 // shadow, the shine) from the tube it stands under (Task 10 review). Ties by list index.
 //
+// Emitter push, key step (emit-push.ts): a light's rank is also x its rankScale (its power over the level's
+// reference). bodyNorm divides every lamp by its OWN power, so without it a 1.5 exit sign and a 10 screen bank
+// ranked alike at equal presence and the nearest won slot 0. The packed weight is unchanged.
+//
 // Each lane packs index + weight (weight < 1, clamped to 0.999 so index + weight never rolls
 // into the next index), -1 empty.
 
@@ -93,10 +97,11 @@ export function lightPresence(l: ListLight, b: PickBody): number {
 }
 
 /** The delivered-light factor the shader multiplies the packed weight by, reduced to a scalar:
- *  luminance(rgb) x profile gain x bodyNorm. Presence x this = what the light delivers. */
+ *  luminance(rgb) x profile gain x bodyNorm (presence x this = what the light delivers), x the rank-only
+ *  rankScale (1 unless the emitter push's key step set it). */
 function deliveredScale(l: ListLight): number {
   const lum = l.color[0] * 0.2126 + l.color[1] * 0.7152 + l.color[2] * 0.0722;
-  return lum * LIGHT_PROFILES[l.profile]!.gain * l.bodyNorm;
+  return lum * LIGHT_PROFILES[l.profile]!.gain * l.bodyNorm * (l.rankScale ?? 1);
 }
 
 /** presence x luminance(rgb) x profile gain x bodyNorm: what the light DELIVERS at the body,

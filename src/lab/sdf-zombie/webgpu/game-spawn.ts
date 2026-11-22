@@ -7,6 +7,11 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { FLOATER_BODIES, createFloaterSpace, type FloaterBody, type FloaterSpace } from './floater-move';
+import { sectorSightBlocker } from './sector-ray';
+import type { SectorGround } from './sector-ground';
+import { stressSpawns } from './stress-spawns';
+import type { SectorMap } from './sector-def';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { burstVolume, spawnImpactGout } from '../blood-sim';
@@ -15,22 +20,26 @@ import { characterEntry } from '../character-registry';
 import { woundWorldPos, type Wound } from '../damage';
 import { headPopDebris } from '../head-pop';
 import { decapitationRule } from '../head-burst';
+import { splitsHead } from '../head-split';
 import { HEAD_LEAF } from './game-head-damage';
 import { LIGHT_PRESETS } from '../material';
 import { hitFeedback } from '../player-hit-feedback';
-import { spawnRocket } from '../rockets';
+import { ROCKET, spawnRocket } from '../rockets';
 import { GUNNER_TUNING } from '../soldier-brain';
 import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeTallowMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
+import { TALLOW_VOLLEY, spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
-import { shellAmpOf } from './game-hit-trace';
+import { actorSpawnCentre, clampSpawnInside, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
+import { seatSpawnInsideMap } from './sector-debris';
 import { wanderBounds, type RoomDef } from './game-level';
 import { damagePlayer } from './game-loop';
 import {
@@ -41,6 +50,8 @@ import { applyMoonKey } from './game-outdoor';
 import { bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor } from './game-skeleton-actors';
 import { spawnPellets, spawnRound } from './game-weapon';
 import { applyWoundRamp, faceFor } from './game-wound-vfx';
+import { igniteExplosionLight } from './game-dynamite-throw';
+import { emitMuzzleSmoke } from './muzzle-smoke';
 import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import { type LevelRoom } from './level-def';
 import { VITALS } from './player-vitals';
@@ -48,6 +59,7 @@ import { GUTCRAWLER_TUNING } from '../hound-attack';
 import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
+import { spawnMeltBone, spawnMeltDrip, spawnMeltGob } from './game-melter';
 import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
 import { dressKitFlesh } from './kit-flesh';
 import { kitFleshMaterial } from './game-chunk-bake';
@@ -83,7 +95,14 @@ export const GAME_LEVEL_SHADOW = 1.0;
 /** Height above the player's feet an enemy SMG or chaingun round is aimed at (m). */
 export const SMG_TARGET_CHEST_Y = 1.25;
 
-export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
+export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnAt: Vec3, errs: string[]): ZombieActor {
+  // SECTOR LEVELS: the feet stand on the floor under the spawn point (standingFloor; a point off the
+  // map keeps its own y), and the actor's motion follows the floor from there. Room levels stand on
+  // FLAT_GROUND: the point as given and no ground handed to the actor, so nothing about them changes.
+  const ground = ctx.world.level.ground;
+  const sectorGround = ground !== FLAT_GROUND ? ground : null;
+  const floorHere = sectorGround ? sectorGround.floorAt(spawnAt[0], spawnAt[2]) : NaN;
+  const start: Vec3 = Number.isFinite(floorHere) ? [spawnAt[0], floorHere, spawnAt[2]] : spawnAt;
   const enc = ctx.world.level.enclosureFor(room.name)!;
   const roomFurniture = ctx.world.level.furniture
     .filter(f => f.room === room.id)
@@ -202,9 +221,20 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   const rigGroup = new THREE.Group();
   rigGroup.name = `deferred-rig-${name}-${start[0]!.toFixed(2)}-${start[2]!.toFixed(2)}`;
   if (ctx.boot.deferredMode) ctx.boot.handle.scene.add(rigGroup);
+  // SECTOR levels (plan 3b): dropped equipment (the gun, shed kit, casings) lands on the sector floor and stops at its
+  // walls, and starts inside the level from the body's centre on the body's floor. The actor does not exist yet; the
+  // seat reads it once it does (equipment only drops after spawn). Room levels pass neither.
+  const sectorMap = sectorGround ? ctx.world.level.def?.sectors : undefined;
+  let seatActor: ZombieActor | null = null;
+  const debrisOpts = sectorMap ? {
+    ground: debrisGround(ctx)!,
+    seat: (at: Vec3, radius: number) => seatSpawnInsideMap(sectorMap, sectorGround as SectorGround,
+      seatActor ? actorSpawnCentre(ctx, seatActor) : null, at, radius),
+  } : {};
   const character = createCharacterView({
     name,
     start,
+    ...debrisOpts,
     renderer: ctx.boot.handle.renderer,
     scene: ctx.boot.deferredMode ? rigGroup : ctx.boot.handle.scene,
     effectsScene: ctx.vfx.characterEffects.scene,
@@ -370,8 +400,18 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   }
   const zombieId = ctx.boot.nextId++;
   rigGroup.userData.gameActorId = zombieId;
+  // A FLOATER on a sector level (floater-move.ts, Doom's MF_FLOAT): it routes over the floater space's
+  // grid (walls and low openings only) and floats; room levels keep the ground body.
+  const floatSpace = sectorGround && ctx.world.level.def?.sectors && FLOATER_BODIES[name]
+    ? floaterSpaceFor(ctx, ctx.world.level.def.sectors, sectorGround as SectorGround, FLOATER_BODIES[name]!) : null;
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
+    // A corpse hits the level's boxes (corpse-contact.ts); read each step, since gates open and barrels go.
+    colliders: () => ctx.world.colliders,
+    ...(sectorGround ? { ground: sectorGround } : {}),
+    ...(floatSpace ? { floater: floatSpace } : {}),
+    ...(sectorGround && ctx.world.level.def?.sectors
+      ? { sectorSight: sectorSightBlocker(ctx.world.level.def.sectors, sectorGround as SectorGround) } : {}),
     boundedWounds: ctx.vfx.boundedWoundPreview,
     // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
     // bride) gets the ring brain on SWORD_TUNING plus strike contact and
@@ -398,6 +438,35 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
         ctx.weapon.bile.push(spawnBile(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A THROWER (the imp): claws up close and, at range, a fireball thrown overhand from the right fist's socket
+    // (MotionProfile.spit) at the player's chest (fireball.ts), enemy-mind.ts makeImpMind.
+    ...(characterEntry(name).profile.throws === 'fireball' ? {
+      mind: makeImpMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A VOLLEY (the tallow): clubs up close and, at range, braces both arm-cannons and fires fireballs right and
+    // left in turn from each muzzle (MotionProfile.spit / spitL) at the player's chest, enemy-mind.ts makeTallowMind.
+    ...(characterEntry(name).profile.throws === 'volley' ? {
+      mind: makeTallowMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        const target: Vec3 = [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]];
+        ctx.weapon.fireballs.push(spawnFireball(origin, target, zombieId, TALLOW_VOLLEY.shotDamage, 'rocket'));
+        // THE MUZZLE BLAST (owner, 2026-11-15): first "a bigger muzzle flash and maybe smoke", then "less flame and
+        // just smoke". So: a flash of light and a plume of smoke (muzzle-smoke.ts), just ahead of the muzzle, and no
+        // fire billboards. The arm's kick is attack.ts cannonKick.
+        const dx = target[0] - origin[0], dy = target[1] - origin[1], dz = target[2] - origin[2];
+        const l = Math.hypot(dx, dy, dz) || 1, ahead = TALLOW_VOLLEY.blast.aheadM / l;
+        const at: Vec3 = [origin[0] + dx * ahead, origin[1] + dy * ahead, origin[2] + dz * ahead];
+        igniteExplosionLight(ctx, at);
+        emitMuzzleSmoke(ctx, at, [dx, dy, dz]);
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
@@ -438,18 +507,39 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         // (rockets.ts), aimed like the tommy gun: the arm's heading, the
         // player's chest for the vertical. It detonates through the
         // dynamite path (the rocket step in the frame loop below).
-        if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
+        // Sector levels (plan 3b review): the warhead starts at the muzzle clamped inside the map from the shooter's
+        // body centre (clampSpawnInside), so a warbull hugging a thin wall never launches from inside or past it —
+        // its first segment, and a blast on that step, start on his side. Room levels: the muzzle, as before.
+        if (weapon === 'rocket') {
+          const centre = sectorGround ? actorSpawnCentre(ctx, actor) : null;
+          const origin = centre ? clampSpawnInside(ctx, centre, muz, ROCKET.radius) : muz;
+          ctx.weapon.rockets.push(spawnRocket(origin, shotDir, zombieId));
+        }
         // The pistol, like the chaingun, fires ONE aimed round per trigger event.
-        else if (weapon === 'chaingun' || weapon === 'pistol') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
-        else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
+        else {
+          const rounds = weapon === 'chaingun' || weapon === 'pistol'
+            ? [spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc()))]
+            : spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc()));
+          // Sector levels: the first step's wall test starts at the shooter's eye (1.4 m over its
+          // floor), so a muzzle poking past a wall line cannot fly on beyond it (game-tick.ts).
+          if (sectorGround) {
+            const sp = actor.pose().pos;
+            for (const r of rounds) r.launchFrom = [sp[0], sp[1] + 1.4, sp[2]];
+          }
+          ctx.weapon.soldierPellets.push(...rounds);
+        }
       },
     } : {}),
     profile: characterEntry(name).profile,
     seed: 1337 + ctx.boot.nextId * 101,
     bounds: wanderBounds(room),
     furniture: roomFurniture,
-    navigation: ctx.world.encounterNav,
+    navigation: floatSpace ? floatSpace.navigation : ctx.world.encounterNav,
     onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+    // MELT (game-melter.ts): a bone group lets go of the melting body and becomes a bone-only chunk piece.
+    onMeltBone: (piece, vel) => spawnMeltBone(ctx, actor, piece, vel),
+    onMeltGob: (at, radius) => spawnMeltGob(ctx, actor, at, radius),
+    onMeltDrip: at => spawnMeltDrip(ctx, actor, at),
     // A melee hit on the player. There is no player health, so a hit is
     // FEEDBACK only: the red flash, the camera shake and the counter
     // (player-hit-feedback.ts). Every actor gets it; the zombie mind never
@@ -475,24 +565,32 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
     // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
     // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
+    // Every head the split fits (head-split.ts splitsHead) pops when a slug finds it split wide; only the zombie's
+    // slug decapitation pops as well (the soldier's keeps the flying head).
     ...(name === 'zombie' ? {
       onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
     } : {}),
-    ...(characterEntry(name).profile.soft || name === 'zombie' ? {
+    ...(characterEntry(name).profile.soft || splitsHead(name) ? {
       onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
         const at = head.origin;
         ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
         let rad = 0.08;
         for (const p of head.prims) for (const e of [p.a, p.b]) rad = Math.max(rad, Math.hypot(e[0] - at[0], e[1] - at[1], e[2] - at[2]));
-        burstVolume(ctx.vfx.bloodSim, at, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+        // Sector levels (plan 3b): the head's blood starts inside the level; the gout's drops know the body's floor.
+        const seat = seatBurstSpawn(ctx, actor, at);
+        burstVolume(ctx.vfx.bloodSim, seat.pos, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+          undefined, seat.seat);
         const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
-        spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+        spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+          undefined, seat.floorY);
         if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
         ctx.render.segMeshRenderer?.explodeSkull(actor,ctx.render.skeletonSources.get(actor)?.sources ?? [],dir);
         ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc, name === 'zombie' ? HEAD_LEAF.iris : undefined));
       },
     } : {}),
   });
+  seatActor = actor;
+
   // Ship default + any live toggle: a late spawn must not fall back to the
   // flat bone fold while the rest of the room culls.
   if (crowdAttach) actor.crowd = crowdAttach;
@@ -516,14 +614,46 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   return actor;
 }
 
+/** One floater space per sector map and body (its grid takes a few hundred ms: built at the first spawn). */
+const floaterSpaces = new WeakMap<SectorMap, Map<FloaterBody, FloaterSpace>>();
+function floaterSpaceFor(ctx: GameContext, map: SectorMap, ground: SectorGround, body: FloaterBody): FloaterSpace {
+  let byBody = floaterSpaces.get(map);
+  if (!byBody) floaterSpaces.set(map, byBody = new Map());
+  let space = byBody.get(body);
+  if (!space) {
+    const t0 = performance.now();
+    space = createFloaterSpace(map, ground, ctx.world.level.rooms, ctx.world.level.staticColliders, body);
+    console.info(`[floater-nav] built in ${(performance.now() - t0).toFixed(1)} ms`);
+    byBody.set(body, space);
+  }
+  return space;
+}
+
 export function spawnAll(ctx: GameContext, errs: string[]): void {
   // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
   // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
   // cultist, juggernaut and warbull slots keep their kind (level-def
   // SpawnKind).
-  for (const s of ctx.world.level.spawnList()) {
+  const list = ctx.world.level.spawnList();
+  for (const s of list) {
     const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
     ctx.world.actors.push(spawnEnemy(ctx, name, s.room, s.pos, errs));
+  }
+  // ?stress=N (sector levels): N more of the level's own kinds near its spawns, for culling at scale (stress-spawns.ts).
+  const stress = Number(new URLSearchParams(location.search).get('stress') ?? 0);
+  const map = ctx.world.level.def?.sectors;
+  if (stress > 0 && map) {
+    const ground = ctx.world.level.ground as SectorGround;
+    const sources = list.map(s => ({ kind: s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind, pos: s.pos }));
+    const extra = stressSpawns(sources, stress, (x, z, y) => {
+      const f = ground.floorUnder(x, z, 0.45);
+      return Number.isFinite(f) && Math.abs(f - y) < 0.3 && ground.sectorAt(x, z) >= 0 ? f : null;
+    }, 1);
+    for (const e of extra) {
+      const room = list[e.from]!.room;
+      ctx.world.actors.push(spawnEnemy(ctx, e.kind, room, e.pos, errs));
+    }
+    console.info(`[stress] ${extra.length} extra enemies (asked ${stress}); cast ${ctx.world.actors.length}`);
   }
 }
 
@@ -542,7 +672,9 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headSplit?.reset();
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
+  ctx.gibs.kitRemains.clear();
   ctx.boot.kitEye?.clear();
+  ctx.boot.kitPrewarm?.clear();
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
   // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and

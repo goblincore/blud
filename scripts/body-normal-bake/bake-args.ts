@@ -14,13 +14,15 @@ export interface BakeArgs { width: number; regions: RegionArgs; argv: string[] }
 export function parseBakeArgv(argv: string[]): BakeArgs {
   const limbs: string[] = [], torsoSegs: string[] = [], pos: string[] = [];
   let torsoAxis: string | null = null;
+  let torsoR0: number | null = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--limb') limbs.push(argv[++i]!);
     else if (argv[i] === '--torso-axis') torsoAxis = argv[++i]!;
+    else if (argv[i] === '--torso-r0') torsoR0 = Number(argv[++i]);
     else if (argv[i] === '--torso-seg') torsoSegs.push(argv[++i]!);
     else if (!argv[i]!.startsWith('--')) pos.push(argv[i]!);
   }
-  return { width: Number(pos[0] ?? 512), regions: { torsoRows: Number(pos[1] ?? 256), torsoAxis, limbs, torsoSegs }, argv };
+  return { width: Number(pos[0] ?? 512), regions: { torsoRows: Number(pos[1] ?? 256), torsoAxis, torsoR0, limbs, torsoSegs }, argv };
 }
 
 const FILE = resolve(dirname(fileURLToPath(import.meta.url)), 'bake-args.json');

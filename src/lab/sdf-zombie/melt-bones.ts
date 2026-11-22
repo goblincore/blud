@@ -51,7 +51,20 @@ export function groupOf(boneName: string | undefined): BoneGroup {
 }
 
 /**
- * Group the bone prims of a body. ORGANS ARE NOT BONES: op 'organ' prims
+ * groupOf FOR THE MELT: the same, but a foot goes with its shin. Left to the torso default, the foot bones rode in the
+ * CAGE group: the cage then reached from the ribs to the floor, and in the game (whose chunks rest on their own
+ * capsule ends) it came to rest the moment it was released, a ribcage hanging at chest height over the puddle.
+ * The melt only: the gib parts (gib-parts.ts, gib-carve.ts) group by groupOf, and the baked gib set is cut that way
+ * (its bone.cage piece carries the feet; a regrouping there is a 'source-mismatch' and the mesh gib falls back).
+ */
+export function meltGroupOf(boneName: string | undefined): BoneGroup {
+  if (boneName === 'foot.l') return 'shin.l';
+  if (boneName === 'foot.r') return 'shin.r';
+  return groupOf(boneName);
+}
+
+/**
+ * Group the bone prims of a body FOR THE MELT (meltGroupOf). ORGANS ARE NOT BONES: op 'organ' prims
  * live on the same bonePrims array but are soft — they melt with the flesh
  * (task 7), they do not drop as rigid chunks, so they are excluded here.
  */
@@ -61,7 +74,7 @@ export function partitionBones(
   const out = new Map<BoneGroup, Primitive[]>();
   for (const p of bonePrims) {
     if (p.op !== 'bone') continue;
-    const g = groupOf(p.bone);
+    const g = meltGroupOf(p.bone);
     const arr = out.get(g);
     if (arr) arr.push(p);
     else out.set(g, [p]);
@@ -148,10 +161,15 @@ export function releaseThreshold(g: BoneGroup): number {
  * because the test asserts where these groups COME TO REST — a second copy
  * of the formula would let the lab drift out from under the gate.
  */
-export function meltBoneSpawnVel(centroid: Vec3, rng: () => number): Vec3 {
-  const r = Math.hypot(centroid[0], centroid[2]);
+export function meltBoneSpawnVel(
+  centroid: Vec3, rng: () => number,
+  /** The body's vertical axis (melt.ts MeltFrame); the origin when omitted. */
+  axis: { x: number; z: number } = { x: 0, z: 0 },
+): Vec3 {
+  const dx = centroid[0] - axis.x, dz = centroid[2] - axis.z;
+  const r = Math.hypot(dx, dz);
   const dir: Vec3 = r > 1e-3
-    ? [centroid[0] / r, 0, centroid[2] / r]
+    ? [dx / r, 0, dz / r]
     : [rng() - 0.5, 0, rng() - 0.5];
   const push = 0.3 + rng() * 0.4;
   return [dir[0] * push, -0.1, dir[2] * push];

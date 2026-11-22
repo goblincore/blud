@@ -3,6 +3,7 @@
 // Task-3 split of the march body (2026-09-19): cone, depth-prepass and temporal ray start bounds.
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
+import { LEAN_WALK_PROBE as LEAN } from '../../../lean-walk-flag';
 
 export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
@@ -97,7 +98,7 @@ export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass
       // the three recovery probes share it — every call site is an inlined
       // copy of the field in the Metal compile. Same probes, same order.
       for (var probe = 0; probe < 4; probe = probe + 1) {
-        dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+        ${LEAN ? 'if (leanOk) { dres0 = mapLean(camPos + rd * s, data, inst, instCfg); } else { ' : ''}dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);${LEAN ? ' }' : ''}
         if (probe == 3 || (dres0.x > 0.0 && dres0.z < 0.5)) { break; }
         let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);
         if (back <= 0.0) { break; }

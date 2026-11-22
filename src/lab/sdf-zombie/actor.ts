@@ -23,12 +23,12 @@
 import type { BuildResult } from './build-body';
 import { bindRig, impulseAt, pinTips, type BoundRig } from './rig-bind';
 import {
-  applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  applyFloorContact, corpseLift, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
 import { constrainRigBends, stepRig } from './rig';
-import { relaxRopeConstraints, type MissingLimbs } from './collapse';
+import { relaxAnkles, relaxBraces, relaxHipCones, relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
@@ -226,6 +226,9 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       },
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+    // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+    if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
+    if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones)];
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
     // A fist closed on its prop's grip (profile.prop.fistOnGrip) points along
     // the motion target motion.ts laid on the grip line, not the rest hang.
@@ -235,11 +238,18 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       ? new Set([fistTip]) : undefined;
     points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
-      points = applyFloorContact(points, f.floorY);
+      const lift = corpseLift(f), floorY = f.floorY;
+      // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles).
+      // Pinned tips are already rigid: only a rig without them (the game's) needs the spring.
+      if (m.bound.tips.length === 0) points = relaxAnkles(points, f.hipCones, i => floorY + (lift?.[i] ?? 0));
+      points = applyFloorContact(points, f.floorY, undefined, undefined, undefined, lift);
+      // One more brace pass after the floor moved points, then the floor again
+      // so the last word keeps the corpse out of the ground.
+      if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBraces(points, f.braces, f.integrity, 1), f.hipCones, 1), f.floorY, undefined, undefined, undefined, lift);
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+      rig: constrainRigBends({ ...m.bound.rig, points, stepDt: sdt, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
         // This frame's weights, or none: a caller that stops passing them must not leave last frame's face behind.
         ...(morphs || m.bound.rig.morphs ? { morphs } : {}) },
         f.collapsed ? f.floorY : undefined),

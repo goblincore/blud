@@ -5,6 +5,8 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
 import { RAY_MASK_PROBE as RAYMASK } from '../../../raymask-flag';
+import { LEAN_WALK as LEAN } from '../../../lean-walk-flag';
+import { LEAN_CENSUS_BLOCK } from '../../../lean-walk.wgsl';
 
 export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x == 4, 2026-08-31). Returns RAW COUNTERS
   // instead of a colour, and — the whole point — returns BEFORE the discard,
@@ -71,4 +73,4 @@ export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x 
   // g = the folds whose prim box the ray never crosses (see foldGroup).
   if (debugCfg.x > 20.5 && debugCfg.x < 21.5) {
     return vec4<f32>(gDebugPrims, gMaskSkip, gDebugSteps + select(0.0, 1000.0, hit), t);
-  }` : ''}`;
+  }` : ''}${LEAN ? LEAN_CENSUS_BLOCK : ''}`;

@@ -47,6 +47,9 @@ describe('projectile elbow upload', () => {
         [0, 0, 1]));
       const check = () => {
         const a = latest.prims[upper]!, b = latest.prims[fore]!;
+        // A cut at the elbow (the usual cut since joint toughness, 2026-11-02)
+        // takes the forearm: a dead prim has no frame left to respect.
+        if (b.dead) return;
         expect(dot(normalize(sub(a.b, a.a)), normalize(sub(b.b, b.a))))
           .toBeGreaterThanOrEqual(Math.cos(150 * Math.PI / 180) - 1e-6);
         const yaw = actor.pose().yaw;

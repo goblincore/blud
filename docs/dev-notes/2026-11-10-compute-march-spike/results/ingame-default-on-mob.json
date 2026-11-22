@@ -1,0 +1,197 @@
+{
+ "query": "frozen=1",
+ "prelude": "docs/dev-notes/2026-11-10-compute-march-spike/prelude-mob.js",
+ "frames": 30,
+ "rounds": 4,
+ "ship": {
+  "sdfScale": 0.5,
+  "upscale": true
+ },
+ "settleS": 1.131,
+ "state": {
+  "compiled": true,
+  "enabled": true,
+  "types": [
+   {
+    "frames": 20,
+    "groups": [
+     32,
+     35
+    ],
+    "rect": [
+     72,
+     30,
+     328,
+     300
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 2,
+    "groups": [
+     16,
+     17
+    ],
+    "rect": [
+     0,
+     118,
+     124,
+     246
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 20,
+    "groups": [
+     17,
+     14
+    ],
+    "rect": [
+     158,
+     89,
+     281,
+     195
+    ],
+    "drawing": true
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 0,
+    "groups": [
+     0,
+     0
+    ],
+    "rect": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "drawing": false
+   },
+   {
+    "frames": 18,
+    "groups": [
+     50,
+     38
+    ],
+    "rect": [
+     0,
+     0,
+     400,
+     300
+    ],
+    "drawing": true
+   }
+  ]
+ },
+ "baseMs": 37.54499999880791,
+ "summary": {
+  "off2": {
+   "medianMs": 38.72000000079473,
+   "diffMedianMs": 1.5283333341280603,
+   "diffMinMs": -4.649999999999999,
+   "diffMaxMs": 3.863333332538609,
+   "diffMedianPct": 4.0706707529007495
+  },
+  "on": {
+   "medianMs": 29.539999999602635,
+   "diffMedianMs": -7.788333330551783,
+   "diffMinMs": -12.526666669050854,
+   "diffMaxMs": -7.456666668256123,
+   "diffMedianPct": -20.743996086826662
+  }
+ },
+ "rows": [
+  {
+   "off": 37.77666666507721,
+   "off2": 41.63999999761582,
+   "on": 30.04666666984558
+  },
+  {
+   "on": 29.466666666666665,
+   "off": 37.313333332538605,
+   "off2": 37.94333333571752
+  },
+  {
+   "off": 37.07000000079473,
+   "off2": 39.496666665871935,
+   "on": 29.613333332538605
+  },
+  {
+   "on": 29.269999996821085,
+   "off": 41.79666666587194,
+   "off2": 37.14666666587194
+  }
+ ],
+ "passes": "{\"installed\":true,\"samples\":[{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":2.19655,\"start\":0,\"end\":2.19655},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.22308,\"start\":0,\"end\":0.22308},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":0.016958,\"start\":0.449951,\"end\":0.466909},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":1.714766,\"start\":5.105963,\"end\":6.820729},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":0.691197,\"start\":6.395653,\"end\":7.08685},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":32.167592,\"start\":7.014018,\"end\":39.18161},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":32.252175,\"start\":7.018184,\"end\":39.270359},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":32.738626,\"start\":7.023184,\"end\":39.76181},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":32.774167,\"start\":7.039976,\"end\":39.814143},{\"frame\":0,\"label\":\"sdf:upscale:L1a\",\"kind\":\"render\",\"ms\":33.284201,\"start\":7.062142,\"end\":40.346343},{\"frame\":0,\"label\":\"sdf:upscale:L2a\",\"kind\":\"render\",\"ms\":33.591071,\"start\":7.073892,\"end\":40.664963},{\"frame\":0,\"label\":\"sdf:upscale:L3a\",\"kind\":\"render\",\"ms\":33.862149,\"start\":7.084517,\"end\":40.946666},{\"frame\":0,\"label\":\"sdf:upscale:L4a\",\"kind\":\"render\",\"ms\":34.112937,\"start\":7.096142,\"end\":41.209079},{\"frame\":0,\"label\":\"sdf:upscale:shuffle\",\"kind\":\"render\",\"ms\":34.224977,\"start\":7.122642,\"end\":41.347619},{\"frame\":0,\"label\":\"sdf:upscale:sharpen\",\"kind\":\"render\",\"ms\":34.34731,\"start\":7.147807,\"end\":41.495117},{\"frame\":0,\"label\":\"sdf:composite\",\"kind\":\"render\",\"ms\":33.651611,\"start\":7.964004,\"end\":41.615615},{\"frame\":0,\"label\":\"goo:surface\",\"kind\":\"render\",\"ms\":32.912581,\"start\":8.929989,\"end\":41.84257},{\"frame\":0,\"label\":\"effects\",\"kind\":\"render\",\"ms\":32.934955,\"start\":8.934864,\"end\":41.869819},{\"frame\":0,\"label\":\"post:fxaa\",\"kind\":\"render\",\"ms\":24.816996,\"start\":17.343861,\"end\":42.160857},{\"frame\":0,\"label\":\"post:vhs-input\",\"kind\":\"render\",\"ms\":24.884204,\"start\":17.348652,\"end\":42.232856},{\"frame\":0,\"label\":\"post:vhs\",\"kind\":\"render\",\"ms\":23.548308,\"start\":18.794796,\"end\":42.343104},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":23.004524,\"start\":19.469078,\"end\":42.473602},{\"frame\":0,\"label\":\"post:blit\",\"kind\":\"render\",\"ms\":10.615505,\"start\":31.944471,\"end\":42.559976},{\"frame\":0,\"label\":\"sdf:polys\",\"kind\":\"render\",\"ms\":2.479712,\"start\":41.846945,\"end\":44.326657},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":2.12676,\"start\":42.354895,\"end\":44.481655},{\"frame\":0,\"label\":\"sdf:shell-hull\",\"kind\":\"render\",\"ms\":1.536602,\"start\":43.051384,\"end\":44.587986},{\"frame\":0,\"label\":\"sdf:march\",\"kind\":\"render\",\"ms\":30.348746,\"start\":44.193742,\"end\":74.542488},{\"frame\":0,\"label\":\"sdf:last-blit\",\"kind\":\"render\",\"ms\":30.434368,\"start\":44.199409,\"end\":74.633777},{\"frame\":0,\"label\":\"sdf:upscale:occupiedTiles\",\"kind\":\"render\",\"ms\":30.613908,\"start\":44.203951,\"end\":74.817859},{\"frame\":0,\"label\":\"sdf:upscale:activeTiles\",\"kind\":\"render\",\"ms\":30.611491,\"start\":44."
+}

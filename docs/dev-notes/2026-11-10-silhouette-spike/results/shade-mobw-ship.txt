@@ -1,0 +1,36 @@
+lab-servers: starting vite on 5391
+lab-servers: starting chrome (headless) on debug port 9391
+warm ship          1 s  errors 0
+warm ship2         1 s  errors 0
+warm flat          1 s  errors 0
+warm ng            1 s  errors 0
+warm normal        1 s  errors 0
+warm masks         1 s  errors 0
+warm material      1 s  errors 0
+warm lights        1 s  errors 0
+warm probes        1 s  errors 0
+warm wshadow       1 s  errors 0
+warm ambient       1 s  errors 0
+warm no-probes     1 s  errors 0
+warm no-fd         1 s  errors 0
+  rep  1  ship 52.53  ship2 50.63  flat 28.64  ng 33.78  normal 38.60  masks 39.53  material 40.58  lights 39.77  probes 47.12  wshadow 52.47  ambient 51.50  no-probes 43.36  no-fd 47.53
+  rep  2  ship 51.90  ship2 52.36  flat 28.37  ng 34.35  normal 38.95  masks 39.07  material 40.11  lights 40.75  probes 48.38  wshadow 51.42  ambient 51.64  no-probes 43.47  no-fd 47.86
+  rep  3  ship 61.05  ship2 55.43  flat 28.81  ng 33.84  normal 38.90  masks 38.31  material 39.49  lights 38.86  probes 48.10  wshadow 51.93  ambient 57.02  no-probes 49.49  no-fd 47.85
+  rep  4  ship 51.63  ship2 51.83  flat 27.68  ng 40.07  normal 42.97  masks 38.06  material 38.77  lights 39.13  probes 48.22  wshadow 51.56  ambient 51.22  no-probes 43.31  no-fd 46.11
+  rep  5  ship 56.53  ship2 52.74  flat 28.80  ng 39.68  normal 38.97  masks 37.44  material 38.88  lights 39.67  probes 48.36  wshadow 50.62  ambient 62.73  no-probes 51.46  no-fd 55.10
+
+cut             ms  stage ms             range  of the pass
+flat         28.64                                         
+ng           34.35      5.98       5.03..12.39         11 %
+normal       38.95      4.60       -0.71..5.06          9 %
+masks        38.31     -0.59       -4.91..0.93         -1 %
+material     39.49      1.05        0.71..1.44          2 %
+lights       39.67      0.36       -0.81..0.79          1 %
+probes       48.22      8.69        7.35..9.24         17 %
+wshadow      51.56      3.34        2.26..5.35          6 %
+ambient      51.64      0.22      -0.97..12.11          0 %
+ship         52.53      0.41       -6.20..4.03          1 %
+ship2        52.36  against ship -1.90 (-5.62..0.46)
+no-probes    43.47  against ship -8.43 (-11.56..-5.07)
+no-fd        47.85  against ship -5.00 (-13.20..-1.43)
+wrote .scratch/compute/mobw-ship-shade.json

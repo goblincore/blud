@@ -6,6 +6,21 @@
 // the globals it reads change, this is where the probe has to follow.
 import { APPLY_WOUNDS, FOLD_GROUP, HASH13, NOISE3, SAMPLE_VOLUME, SMAX, SMIN } from './march.wgsl';
 import { NG_WOUND_LIP, NG_WOUNDS, NORMAL_GRADIENT_HELPERS } from './normal-gradient.wgsl';
+import { WOUND_VOL } from './march/wound-volume-flag';
+import { WV_APPLY, WV_FUNCTIONS } from './march/fields/wound-volume.wgsl';
+
+/** applyWounds as the probe compiles it: the LIST only. With the baked wound volume on (wound-volume-flag.ts) the
+ *  real text also reads the volume's boxes from a 3D texture; the probe checks the list against ngWounds and has no
+ *  atlas to hand over, so those three pieces are cut out, each one exactly once or this throws. */
+export function probeApplyWounds(): string {
+  if (!WOUND_VOL) return APPLY_WOUNDS;
+  let src = APPLY_WOUNDS;
+  for (const piece of [', wvAtlas: texture_3d<f32>', WV_APPLY, `\n${WV_FUNCTIONS}`]) {
+    if (src.split(piece).length !== 2) throw new Error('normal-gradient probe: applyWounds no longer carries the wound volume piece ' + JSON.stringify(piece.slice(0, 40)));
+    src = src.replace(piece, () => '');
+  }
+  return src;
+}
 
 // Private globals applyWounds / ngWounds read but do not declare themselves.
 // The real march gets them from FOLD_GROUP (instance + per-ray wound list) and
@@ -39,5 +54,5 @@ export const NG_WOUND_PROBE = /* wgsl */ `fn ngWoundProbe(p: vec3<f32>, base: ve
 
 /** ngWoundProbe's include chain, in declaration order (noise3: ragged craters). */
 export function probeWoundSources(): string[] {
-  return [probeWoundGlobalsSource(), SMIN, SMAX, HASH13, NOISE3, APPLY_WOUNDS, ...NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS];
+  return [probeWoundGlobalsSource(), SMIN, SMAX, HASH13, NOISE3, probeApplyWounds(), ...NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS];
 }

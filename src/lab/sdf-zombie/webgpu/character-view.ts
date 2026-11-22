@@ -34,22 +34,34 @@ import { makeZombie } from '../body';
 import { translateBody } from '../translate';
 import { rotateYaw } from '../gait';
 import { kitFrames, type BoundRig } from '../rig-bind';
+import type { ArcDrive } from '../brain-arcs';
 import type { MotionFrame } from '../motion';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
 import type { BodyDef, Vec3 } from '../types';
+import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import type { VisualWound } from '../shared-wounds/torso';
 import { tearUpload, wetLipUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
-import { loadKit, type KitOverlay } from './kit-overlay';
+import { loadKit, type KitOverlay, type KitWreck } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
-import { createArmorSparks, createMuzzleFlash } from './character-effects';
+import { hash01 } from '../gib-launch';
+import { KIT_BURST, kitBurstLaunch } from '../kit-burst';
+import { createArmorSparks, createBrainArcs, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
+import { levelBatchOn } from './level-batch';
+
+/** `?batch=0` keeps every casing pool an InstancedMesh drawn even while empty (level-batch.ts). */
+const casingsBatched = typeof location !== 'undefined' && levelBatchOn(location.search);
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
+import { WOUND_VOL, WV_LIST_KEEP, WV_MAX_ENTRIES } from './march/wound-volume-flag';
+import { WOUND_GRID } from './march/wound-grid-flag';
+import { WG_MAX_WOUNDS } from '../wound-grid';
+import { createBodyWoundVolumes, stampable, woundVolumeAtlas, WV_DEFAULT_CFG, type WoundVolumeCfg } from './wound-volume-store';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
+  MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
 import { isSoldierFamily } from '../motion-profile';
@@ -349,6 +361,11 @@ export type WoundPointTransform = (v: Vec3, primIdx: number, dir: boolean) => Ve
 export interface WoundRing {
   /** The live ring, oldest evicted at MAX_WOUNDS. */
   all(): readonly Wound[];
+  /** The wounds that left the ring into the baked wound volume (wound-volume-store.ts), oldest first; empty without
+   *  the volume. They are still holes in the body: what asks "where is this body wounded" (the sever rules, the
+   *  wounded limbs, the skeleton's and organs' exposure) reads these beside all(). Capped at MAX_BAKED_RECORD
+   *  (the oldest forgotten); a wound whose primitive has died is dropped. */
+  baked(): readonly Wound[];
   /**
    * Push a freshly stamped wound and record where it was placed.
    * `posed` and `bodyYaw` are the pose it was stamped against — the caller
@@ -391,12 +408,59 @@ export interface WoundRing {
   ): void;
   /** Replace the ring wholesale — the sever path rebuilds it. */
   set(wounds: Wound[]): void;
+  /** The radius past which an overflow merge evicts instead (damage.ts pushWound; MERGE.maxRadius until set). A body
+   *  whose gun craters are scaled up (MotionProfile.gore.craterScale, the teratoma) sets it scaled the same, or its
+   *  ring fills after two volleys and every further crater evicts an old one instead of deepening the damage. */
+  setMergeMaxRadius(r: number): void;
+  /** Free what the ring holds off the heap (the baked wound volume's boxes, `?woundvol`). */
+  dispose(): void;
 }
+
+/** Baked wounds a ring remembers for the rules that read wounds (WoundRing.baked). */
+export const MAX_BAKED_RECORD = 256;
 
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
   let nextEventId = 1;
+  let mergeMax: number = MERGE.maxRadius;
   const stampWorld = new WeakMap<Wound, Vec3>();
+  // THE BAKED WOUND VOLUME (`?woundvol`, wound-volume-store.ts): the ring never merges at its cap; the crater that
+  // overflows it waits here for the next refresh (which has the pose) and is stamped into its primitive's box.
+  const volumes = WOUND_VOL ? createBodyWoundVolumes() : null;
+  let overflow: Wound[] = [];
+  let bakedRecord: Wound[] = [];
+  let tableUp = false;
+  const table = volumes ? new Float32Array(WV_MAX_ENTRIES * 16) : null;
+  // NO ROOM: the atlas is full (or this body has every box it may have). A wound is never dropped for it: the one
+  // that could not be baked goes back on the list, and from then on the list merges at its cap as it did before
+  // the volume, until a box is freed somewhere (the atlas counts them) and baking is tried again.
+  const atlas = volumes ? woundVolumeAtlas() : null;
+  let noRoomAt = -1;
+  const push = (w: Wound) => {
+    // THE CRATER GRID (`?woundgrid`, wound-grid.ts): every wound stays on the list, WG_MAX_WOUNDS of them, and none
+    // is merged; the oldest is dropped past that.
+    if (WOUND_GRID) { wounds = pushWound(wounds, w, WG_MAX_WOUNDS, 0); return; }
+    if (!volumes || noRoomAt === atlas!.frees) { wounds = pushWound(wounds, w, MAX_WOUNDS, mergeMax); return; }
+    const before = wounds;
+    wounds = pushWound(wounds, w, MAX_WOUNDS, 0);
+    for (const o of before) if (!wounds.includes(o) && stampable(o)) overflow.push(o);
+    // `?woundlist=<n>` (wound-volume-flag.ts): only the newest n bakeable wounds stay exact; the oldest past that
+    // is baked now. The list is oldest first.
+    if (WV_LIST_KEEP < MAX_WOUNDS) {
+      let n = 0;
+      for (const o of wounds) if (stampable(o)) n++;
+      for (let i = 0; i < wounds.length && n > WV_LIST_KEEP; i++) {
+        if (!stampable(wounds[i]!)) continue;
+        overflow.push(wounds[i]!);
+        wounds = wounds.filter((_, j) => j !== i);
+        i--; n--;
+      }
+    }
+  };
+  const volumeCfg = (gpu: ZombieGpuView): WoundVolumeCfg => {
+    const c = gpu.uniforms?.woundCfg?.value, c2 = gpu.uniforms?.woundCfg2?.value;
+    return c && c2 ? { blendK: c.y, rimSplay: c.z, rimOffset: c.w, rimWidth: c2.x } : WV_DEFAULT_CFG;
+  };
   const identify = (w: Wound) => {
     if (w.eventId === undefined) w.eventId = nextEventId++;
     else nextEventId = Math.max(nextEventId, w.eventId + 1);
@@ -404,17 +468,37 @@ export function createWoundRing(): WoundRing {
   };
   return {
     all: () => wounds,
+    baked: () => bakedRecord,
     stamp(wound, posed, bodyYaw) {
-      identify(wound); wounds = pushWound(wounds, wound, MAX_WOUNDS);
+      identify(wound); push(wound);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
       return wound;
     },
     stampBundle(ws) {
-      for (const w of ws) wounds = pushWound(wounds, identify(w), MAX_WOUNDS);
+      for (const w of ws) push(identify(w));
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
+    setMergeMaxRadius(r) { mergeMax = Number.isFinite(r) && r > 0 ? r : MERGE.maxRadius; },
+    dispose() { volumes?.dispose(); overflow = []; bakedRecord = []; },
     refresh(gpu, posed, bodyYaw, visual, xf) {
+      if (volumes && table && typeof gpu.setWoundVolumes === 'function') {
+        if (overflow.length) {
+          const cfg = volumeCfg(gpu);
+          const next = bakedRecord.filter(w => !posed.prims[w.primIdx]?.dead);
+          for (const o of overflow) {
+            if (volumes.stamp(o, posed.prims, bodyYaw, cfg)) next.push(o);
+            else if (volumes.noRoom) { noRoomAt = atlas!.frees; wounds = pushWound(wounds, o, MAX_WOUNDS, mergeMax); }
+          }
+          bakedRecord = next.length > MAX_BAKED_RECORD ? next.slice(next.length - MAX_BAKED_RECORD) : next;
+          overflow = [];
+        }
+        if (volumes.size || tableUp) {
+          const t = volumes.table(table, posed.prims, bodyYaw, xf);
+          gpu.setWoundVolumes(t ? table : null, t ? t.bound : null);
+          tableUp = !!t;
+        }
+      }
       const rows = visual ?? wounds;
       if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;
       // The wound position is computed from the CLEAN prims (its stored offset
@@ -473,6 +557,13 @@ export function createWoundRing(): WoundRing {
   };
 }
 
+/** What a gibbed body leaves behind (surrenderEquipment). */
+export interface SurrenderedEquipment {
+  kit: KitOverlay | null;
+  wreck: KitWreck | null;
+  prop: HeldProp | null;
+}
+
 export interface CharacterView {
   readonly entry: CharacterEntry;
   /** This body's wounds and their carve upload. */
@@ -518,14 +609,23 @@ export interface CharacterView {
      *  Absent = an idle heartbeat on this view's own clock, so the lab's
      *  turntable blinks too. Only kits with `led`/`core` materials react. */
     lights?: StatusLights | null,
+    /** The brain's electricity (brain-arcs.ts; game-actor arcDrive): null or absent is dark. */
+    arcs?: ArcDrive | null,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
   muzzle(): Vec3 | null;
   /** Let the held prop go (collapse, gib). */
   releaseProp(vel: Vec3, seed: number): void;
+  /** What this body has dropped (the debris seam): casings, the released gun, shed kit pieces. */
+  debris(): { casings: { pos: Vec3; resting: boolean }[]; prop: { pos: Vec3; resting: boolean } | null;
+    kit: { x: number; z: number; minY: number; resting: boolean }[] };
   /** Restore equipment and clear detached armor when a fresh body replaces this one. */
   resetEquipment(): void;
+  /** The body has gibbed: the kit comes apart and the gun lets go, both thrown by `launch`, and both are handed to the
+   *  caller, who steps and disposes them from now on (kit-remains.ts). A later retireEquipment leaves them alone.
+   *  Null when there is nothing to hand over. */
+  surrenderEquipment(launch: (key: string, centre: Vec3) => Vec3, torso: Vec3, seed: number): SurrenderedEquipment | null;
   /** Permanently remove attachments when the actor leaves the simulation. */
   retireEquipment(): void;
   dispose(): void;
@@ -570,6 +670,11 @@ export interface CharacterViewOpts {
   /** Called with the loaded kit (before it is added to the scene) and the character's palette, so the game can draw its
    *  FLESH parts with the flesh shader's lighting (kit-flesh.ts). Absent (the lab): kit-overlay's own standard look. */
   dressKitFlesh?: (kitRoot: THREE.Object3D, palette: FleshMaterial | null) => void;
+  /** SECTOR levels: what dropped equipment lands on (plan 3b). Absent on room levels: the y = 0 plane. */
+  ground?: DebrisGround;
+  /** SECTOR levels (plan 3b): where a released gun, a shed kit piece or an ejected casing starts — inside the level
+   *  from the body's centre, on the body's floor (game-spawn.ts builds it per actor). Absent on room levels. */
+  seat?: DebrisSeat;
 }
 
 /**
@@ -616,19 +721,24 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const armed = opts.unarmed !== true;
   const muzzleFlash = armed && entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
+  // A convulsing brain (MotionProfile.fleshJiggle, the cerebrax) crackles with electricity while it seizes.
+  const brainArcs = entry.profile.fleshJiggle && opts.effectsScene ? createBrainArcs() : null;
+  if (brainArcs) opts.effectsScene!.add(brainArcs.object);
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
   // The warbull's launcher throws no brass: its rockets leave nothing behind.
   const casings = armed && isSoldierFamily(entry.profile) && entry.profile.gunner?.weapon !== 'rocket'
-    ? (chaingun ? createShotgunCasings(256, 0xc8963c) : createShotgunCasings()) : null;
+    ? (chaingun ? createShotgunCasings(256, 0xc8963c, casingsBatched) : createShotgunCasings(128, 0xc53424, casingsBatched)) : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
   if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true,
-      { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true);
+    // Breakable: the kit leaves with the anatomy under it (character-registry.ts kitSheds); armour also takes hits.
+    const breakable = entry.armoured === true ? 'armour' : entry.kitSheds === true ? 'sheds' : false;
+    const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable,
+      { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], breakable);
     kitLoad
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
@@ -645,6 +755,27 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
   }
 
+  function surrenderEquipment(launch: (key: string, centre: Vec3) => Vec3, torso: Vec3, seed: number): SurrenderedEquipment | null {
+    if (equipmentRetired) return null;
+    const rolls = (key: string) => [hash01(key, 5, seed), hash01(key, 6, seed), hash01(key, 7, seed)] as const;
+    const launchKit = (key: string, centre: Vec3) => kitBurstLaunch(launch(key, centre), centre, torso, rolls(key));
+    const wreck = kit?.burst(launchKit, rolls, opts.seat) ?? null;
+    const keptKit = wreck ? kit : null;
+    if (keptKit) kit = null; // never posed: left for retireEquipment, which disposes it
+    let prop: HeldProp | null = null;
+    if (heldProp?.posed) {
+      prop = heldProp;
+      heldProp = null;
+      prop.object.visible = true; // the sight cull's, while there was a body to cull
+      if (!prop.released) {
+        const m = prop.muzzle();
+        const v = launchKit('prop', m);
+        prop.release([v[0] * KIT_BURST.velGain, v[1] * KIT_BURST.velGain, v[2] * KIT_BURST.velGain], seed, opts.seat);
+      }
+    }
+    return keptKit || prop ? { kit: keptKit, wreck, prop } : null;
+  }
+
   function retireEquipment(): void {
     if (equipmentRetired) return;
     equipmentRetired = true;
@@ -656,6 +787,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     heldProp = null;
     muzzleFlash?.dispose();
     armorSparks?.dispose();
+    brainArcs?.dispose();
     casings?.dispose();
   }
 
@@ -667,14 +799,15 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null, lights = null) {
-      if (equipmentRetired) return;
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null, lights = null, arcs = null) {
+      if (equipmentRetired) { brainArcs?.update(null, dt); return; }
       lightsClock += dt;
+      brainArcs?.update(arcs, dt);
       kit?.glow(lights ?? statusLights({ mode: 'idle', t: lightsClock, phase: releaseSeed * 0.37 }));
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.
-      casings?.step(dt);
+      casings?.step(dt, opts.ground);
       if (!kit && !heldProp) {
         ejection.update(sinceFire, false);
         return;
@@ -684,7 +817,8 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       const frames = kitFrames(body, bound, bodyYaw);
       const armorSpec = entry.profile.armor?.spec;
       const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt,
-        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null }) ?? [];
+        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null,
+        ground: opts.ground ?? null, seat: opts.seat ?? null }) ?? [];
       // Sparks with no kit loaded yet (the juggernaut before his glTF is built)
       // still show the round glancing off.
       if (!kit && armor) for (const p of armor.hits) armorSparks?.burst(p, 5);
@@ -694,14 +828,14 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         if (frame?.gun && !heldProp.released) {
           heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw), barrelSpin);
         }
-        if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
-        heldProp.step(Math.min(dt, 1 / 30), 0);
+        if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed, opts.seat);
+        heldProp.step(Math.min(dt, 1 / 30), 0, opts.ground);
         if (ejection.update(sinceFire, !!frame?.gun && !heldProp.released) && casings) {
           // Receiver's right-side port, using the rendered gun's recoil transform.
           heldProp.object.updateWorldMatrix(true, false);
           ejectOrigin.set(.038, .006, -.025).applyMatrix4(heldProp.object.matrixWorld);
           ejectRight.set(1, 0, 0).transformDirection(heldProp.object.matrixWorld);
-          casings.eject(ejectOrigin.toArray() as Vec3, ejectRight.toArray() as Vec3);
+          casings.eject(ejectOrigin.toArray() as Vec3, ejectRight.toArray() as Vec3, opts.seat);
         }
         // Gas begins just outside the bore, so the barrel doesn't punch a
         // black hole through the hot core when viewed from the side.
@@ -712,22 +846,28 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       return heldProp ? heldProp.muzzle() : null;
     },
     releaseProp(vel, seed) {
-      heldProp?.release(vel, seed);
+      heldProp?.release(vel, seed, opts.seat);
       muzzleFlash?.pose(null, Infinity);
+    },
+    debris() {
+      return { casings: casings?.debris() ?? [], prop: heldProp?.dropped() ?? null, kit: kit?.dropped() ?? [] };
     },
     resetEquipment() {
       if (equipmentRetired) return;
       ejection.reset();
       kit?.resetDamage();
       armorSparks?.reset();
+      brainArcs?.reset();
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },
+    surrenderEquipment,
     retireEquipment,
     dispose() {
       if (disposed) return;
       disposed = true;
       retireEquipment();
+      wounds.dispose();
       gpu.dispose();
     },
   };

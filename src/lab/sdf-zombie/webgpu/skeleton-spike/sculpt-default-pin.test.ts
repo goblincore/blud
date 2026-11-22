@@ -20,6 +20,7 @@ import {
 import { createBoneMeshCache } from './sculpt-cache';
 import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, resolveSkull, sculptRecipe } from './sculpt-variant';
+import { batchDraws } from './segment-instance';
 
 // TWO LOOKS OF THE SCULPTED SKULL ARE PINNED, by the zombie's and the soldier's head mesh bytes and the paint's shader
 // text: a change to either is a change to what the game draws, and must be made on purpose (and the pin moved with
@@ -54,7 +55,12 @@ const BLOBS = [['zombie', zombie], ['soldier', soldier]] as const;
 const CLASSIC = {
   zombie: { key: 'zombie:head:2:77b0c2d:skull-sculpt-1@0.01', verts: 2220, tris: 4448, bytes: '492f9fb76d46f916' },
   soldier: { key: 'soldier:head:2:11a18b47:soldier-skull-sculpt-1@0.01', verts: 1686, tris: 3392, bytes: '4eef1460c3417114' },
-  wgsl: '8232c6723fa94dba',
+  // MOVED 2026-11-15 on purpose (the skeleton kit; the owner: "match the color of the skeleton and skull"): the first
+  // paint reads feature.w 0.5 as a skeleton-kit piece and wears it as the skull's ivory (meshBoneSurface boneFlag). A
+  // head's flag is step(0.75, w) where it was min(w, 1): the same 0 / 1 for the 0, 1 and 2 a head or an extracted
+  // bone carries, so no head and no extracted bone changed colour. A kit piece near a wound (woundNear) wears the meat instead.
+  // Before: 8232c6723fa94dba.
+  wgsl: '059c2d6828e72b2c',
 };
 const DEFAULT = {
   zombie: { key: 'zombie:head:2:77b0c2d:skull-sculpt-2@0.005', verts: 9144, tris: 18296, bytes: '44f3c7f58b87817c' },
@@ -62,9 +68,14 @@ const DEFAULT = {
   // MOVED 2026-10-08 on purpose (the owner's playtest: a shot face showed clean ivory, "dirtier and messier"): the second
   // paint gained sculptCling, torn flesh stuck to a head's bone near a wound, and its head wound stain went 0.22 -> 0.38.
   // The head meshes above did not move. Before: wgsl 61ebace5c3abd470, material 22a19cc4defab95a.
-  wgsl: 'ed73609fd46628d7',
+  // MOVED 2026-11-15 on purpose (the skeleton kit; the owner: "match the color of the skeleton and skull"): the second
+  // paint reads feature.w 0.5 as a skeleton-kit piece and gives it the skull's bone base (boneFlag), and a head's flag
+  // is step(0.75, w) where it was min(w, 1): the same 0 / 1 for the 0, 1 and 2 a head or an extracted bone carries,
+  // so no head and no extracted bone changed. The head meshes above did not move. Before: wgsl ed73609fd46628d7.
+  wgsl: '8c1e4f8199000945',
   // Every WGSL text the default page's bone material reaches (the second paint, the bone hash and noise, the shade).
-  material: 'a6c2599add05ffc5',
+  // MOVED 2026-11-15 with both paints' text (see CLASSIC.wgsl and wgsl above). Before: a6c2599add05ffc5.
+  material: 'a3be7b0aae7cea78',
 };
 /** The name a WGSL source declares first. */
 const nameOf = (src: string): string => /\bfn (\w+)/.exec(src)![1]!;
@@ -147,7 +158,7 @@ describe('the default skull is pinned: the sculpted skull, full', () => {
     const heads = BLOBS.map(([character, blob]) => headOf(character, blob));
     renderer.update(heads.map(h => [h]), heads.map((_, id) => ({ id })));
     const received = heads.map((head) => {
-      const batch = renderer.object.children.find(c => (c as THREE.InstancedMesh).geometry === cache.get(head).geometry) as THREE.InstancedMesh;
+      const batch = renderer.object.children.find(c => batchDraws(c, cache.get(head).geometry)) as THREE.Mesh;
       const material = batch.material as MeshBasicNodeMaterial;
       expect([material.name, material.userData.sculptPaint]).toEqual(['skeleton-bone', 2]);
       return { material, code: wgslReached(material.colorNode!) };

@@ -4,6 +4,8 @@
 // damage mirror — split out of march.wgsl.ts (phase 1, move-only). Pure TS,
 // no WGSL. Imported by the barrel and by the WGSL helper modules.
 
+import { WOUND_GRID } from './wound-grid-flag';
+import { WG_ROWS } from '../../wound-grid';
 import { MAX_PRIMS } from '../../validate';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
@@ -16,7 +18,8 @@ export const RAY_CULL_SLACK = '0.07';
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
 
-export const DATA_ROWS = 26;
+/** Rows a body's band takes. The crater grid (`?woundgrid`, wound-grid-flag.ts) adds its own after the 26. */
+export const DATA_ROWS = 26 + (WOUND_GRID ? WG_ROWS : 0);
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -67,7 +70,7 @@ export const MAX_GROUPS = MAX_PRIMS;
 /** Per-cluster span into the group list: x = first group, y = group count. */
 export const ROW_CLUSTER_GROUPS = 15;
 /** `shell` construction (2048-08-25): x = half-thickness, y = rim radius,
- *  z = clip offset, w = hasClip (0/1). Read only by prims with a shell fold
+ *  z = clip offset, w = hasClip: 0 none, else 1 + the edge ruffle in metres (ShellParams.ruffle). Read only by prims with a shell fold
  *  (profile bit 2 set — see ROW_PRIM_SHAPE's `prof`). */
 export const ROW_PRIM_SHELL = 16;
 /** `shell` clip plane: xyz = unit normal; w = per-prim emissive `glow=`

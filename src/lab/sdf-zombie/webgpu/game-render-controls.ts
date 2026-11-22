@@ -8,6 +8,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 
+import { bodyMaySee, guardHiddenMatrices } from './game-zone-cull';
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { visibleFovDeg } from './fisheye';
@@ -23,6 +24,7 @@ import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-wound-streams';
 import { arenaPending } from './arena-cycle';
 import { simTimeMs } from './sim-clock';
+import { headShape } from './game-zombie-face';
 import { scaleForRung, stepAdaptive } from '../adaptive-scale';
 import { parseUpscaleConfig, parseUpscaleModelJson } from './upscale/upscale-model';
 import { type UpscaleInfo } from './upscale/upscale-stage';
@@ -312,7 +314,11 @@ export function updateVisibleActors(ctx: GameContext): void {
       // behind the wall while a body leaning out of cover already showed an
       // arm and its head: flesh culled, skeleton meshes not, so the owner saw
       // a bare skull and arm bones in the doorway (2026-09-20).
-      seen = bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders);
+      // Sector levels add their walls, floors and ceilings (ctx.world.sightOccluder; null on
+      // room levels, where this is the boxes-only test exactly).
+      // The zone cull's camera flood first (game-zone-cull.ts): flesh in no flooded sector is out of sight, no rays.
+      seen = bodyMaySee(ctx, c, 'draw')
+        && bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
     }
     if (seen) ctx.world.lastSeenMs.set(a.id, now);
     const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
@@ -341,6 +347,49 @@ export function updateVisibleActors(ctx: GameContext): void {
   ctx.world.coverage.biggestFrac = biggest;
   ctx.render.visibleActors = out;
   ctx.world.cullCounts.visible = out.length;
+}
+
+/** THE POLYGON HALVES FOLLOW THE CULL (sector levels, 2026-10-25). Also settles the view upload a
+ *  drawn body is owed (game-actor setViewSync). A body's kit (skinned armour and
+ *  sculpted pieces) and its held prop are scene meshes three culls by frustum only, so a body the march
+ *  cull dropped behind a wall still drew and skinned its kit and gun: at E1M1's start 111 skinned kit
+ *  meshes and 48 gun meshes of 29 bodies sat in the scene, mostly behind walls. Shown when the body is
+ *  in this frame's march set OR the tick's visual set (the padded cone, last frame's visible, the
+ *  bodies within 3 m — all in sight), so the kit never leaves before the flesh does. A released prop
+ *  lies on its own and stays shown. Sector levels only (ctx.world.sightOccluder set): room levels are
+ *  untouched. */
+const kitDrawn = new Set<ZombieActor>();
+export function syncKitVisibility(ctx: GameContext): void {
+  if (!ctx.world.sightOccluder) return;
+  kitDrawn.clear();
+  for (const a of ctx.render.visibleActors) kitDrawn.add(a);
+  let now = NaN;
+  for (const a of ctx.world.actors) {
+    const visual = ctx.render.visualActors.has(a);
+    if (kitDrawn.has(a)) {
+      // The tick skipped the view upload of a body outside its visual set (game-tick VIEW SYNC): one the
+      // march draws anyway is uploaded now, before the draw reads it. Back off again next tick if still out.
+      a.setViewSync(true);
+      // ...and its per-actor visual state, which the tick writes for the visual set only (view time, the
+      // face's head shape): the same writes, so its first frame in sight is not a frame stale.
+      if (!visual) {
+        if (Number.isNaN(now)) now = ctx.demo.hold ? simTimeMs() / 1000 : performance.now() / 1000;
+        a.view.setTime(now);
+        const skull = headShape(a.drawnBody());
+        if (skull) a.view.setHeadShape(skull.centre, skull.axes);
+      }
+    }
+    const ch = a.character;
+    if (!ch) continue;
+    const on = visual || kitDrawn.has(a);
+    // The kit pre-warm's root of this step draws whatever the cull says (game-kit-prewarm.ts forcedRoot): out of
+    // sight, behind a wall, it builds now rather than the frame it comes into view.
+    const warm = ctx.boot.kitPrewarm?.forcedRoot ?? null;
+    if (ch.kit) { ch.kit.object.visible = on || ch.kit.object === warm; guardHiddenMatrices(ctx, ch.kit.object); }
+    if (ch.prop) guardHiddenMatrices(ctx, ch.prop.object);
+    if (ch.prop && !ch.prop.released) ch.prop.object.visible = on || ch.prop.object === warm;
+    else if (ch.prop) ch.prop.object.visible = true;
+  }
 }
 
 let warnedScaleDropsUpscale = false;

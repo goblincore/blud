@@ -7,6 +7,8 @@ import * as THREE from 'three/webgpu';
 import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT } from './march.wgsl';
 import { BASE_PRIM_STRIDE } from '../validate';
 import { MAX_WOUNDS } from '../damage';
+import { WOUND_GRID } from './march/wound-grid-flag';
+import { WG_MAX_WOUNDS, WG_ROW0 } from '../wound-grid';
 
 export function bandRowOffset(band: number): number { return band * DATA_ROWS; }
 
@@ -25,7 +27,7 @@ export interface PrimSink {
   /** Row inside the band; same contract as the legacy writeRow(row, src, count, col). */
   writeRow(row: number, src: Float32Array, count: number, col?: number): void;
   /** Layout for `writeWounds(texels, ..., layout)` so wound rows land in this band. */
-  readonly woundLayout: { maxWounds: number; woundRow: number; metaRow: number; capRow: number; flagsRow: number; cutRow: number; stride: number };
+  readonly woundLayout: { maxWounds: number; woundRow: number; metaRow: number; capRow: number; flagsRow: number; cutRow: number; stride: number; gridRow: number };
   markDirty(): void;
 }
 
@@ -75,7 +77,7 @@ export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader, stri
           mark();
         },
         woundLayout: {
-          maxWounds: MAX_WOUNDS, stride,
+          maxWounds: WOUND_GRID ? WG_MAX_WOUNDS : MAX_WOUNDS, stride, gridRow: r0 + WG_ROW0,
           woundRow: r0 + ROW_WOUND, metaRow: r0 + ROW_WOUND_META,
           capRow: r0 + ROW_WOUND_CAP, flagsRow: r0 + ROW_WOUND_FLAGS, cutRow: r0 + ROW_WOUND_CUT,
         },

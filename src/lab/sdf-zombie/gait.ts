@@ -150,6 +150,10 @@ export const GAIT_TUNING = {
   reachBobAmp: 0.035,
   /** Reach style: lateral sway riding the hip-sway beat (m). */
   reachSwayAmp: 0.025,
+  /** Reach style: each arm's swing about its reach (rad) as the body walks, forward as the leg on its side goes back
+   *  (motion.ts scales it by the walk's blend, so a body standing still holds its reach). 0, every gait before the
+   *  imp's: the arms hold still in the reach. */
+  reachSwing: 0,
   /** Head counter-bob as a fraction of the root bob. */
   headBob: 0.5,
   /** Scale on the sideways sway of everything ABOVE the hips (spine, chest, clavicles, neck, head), 0..1, default 1 (every
@@ -236,6 +240,10 @@ export type GaitProfile = {
    *  Default [0, 0, -1], a dog's elbow pointing back. A crawler hauling itself on its arms (the gutcrawler) points
    *  its elbows UP and OUT, above the shoulders, like a man pulling himself along a floor. */
   elbowPole?: Vec3;
+  /** The hind legs' knee IK pole for a planted foot, body-local, for the LEFT leg (+x; the right mirrors x). Default:
+   *  the body's forward, the knee bowing ahead as on every biped. A spider (the cerebrax) carries its knees HIGH
+   *  above the body and out to the side, so it poles them up and out. */
+  kneePole?: Vec3;
   /** 'foreleg' only: the CHEST ROLL (m). The shoulder over the planted paw drops and the reaching one rises, and the
    *  chest shifts toward the planted arm by half as much: the body's weight rolls onto the arm that is hauling it.
    *  Tied to each paw's own stance clock, deepest at mid-stance. Absent/0: no roll (the quadrupeds). */
@@ -343,6 +351,33 @@ export const STOMP: GaitProfile = {
   // The hunch is authored in the .blob's rest pose; the lean adds only a
   // little more commitment toward the heading.
   torsoLean: 6,
+};
+
+/** The tallow's stomp (characters/tallow.blob): STOMP's heavy lift-and-plant with REACH arms at a zero rest pitch.
+ *  STOMP carries its arms ('carry'), and the swing's arm pivot runs only for the reach style (motion.ts), so on STOMP
+ *  the tallow's arms ignored every attack: the imp's throw and the volley's brace both rendered as a statue
+ *  (2026-11-14). Pitch 0 is the authored hang (his gorilla arms, the cannons low and ahead); each arm swings 0.16 rad
+ *  against its leg as he walks, a heavy ape's sway, and the brace (attack.ts) raises them on top. The legs WADDLE:
+ *  short steps and a wide side-to-side rock, for 0.54 m stumps. */
+export const TALLOW_STOMP: GaitProfile = {
+  ...STOMP,
+  name: 'tallow-stomp',
+  armStyle: 'reach',
+  reachPitch: 0,
+  reachElbowDrop: 0,
+  reachShoulderUp: 0,
+  reachBobAmp: 0.030,
+  reachSwayAmp: 0.030,
+  reachSwing: 0.16,
+  // THE WADDLE on stumps (owner, fifth look: shorter legs). STOMP's 0.42 m stride and 0.17 lift are for 1.0 m legs;
+  // his are 0.54. Short steps, a low lift, and the whole mass rocking from side to side onto each planted leg.
+  strideLen: 0.24,
+  footLift: 0.09,
+  kneeBend: 0.08,
+  kneeLift: 0.04,
+  swayAmp: 0.10,
+  shoulderSway: 0.85,
+  rockAmp: 0.025,
 };
 
 /** The cultist's GLIDE: the shamble with the legs hidden. Under a floor-length
@@ -472,6 +507,23 @@ export const PROWL: GaitProfile = {
  *  knee flattened to 27 mm off the hip-to-hock line, butcher-blob.test.ts). */
 export const PROWL_QUICK: GaitProfile = { ...PROWL, name: 'prowl-quick', strideFreq: 2.0 };
 
+/** The imp's prowl: PROWL_QUICK with LOOSE arms (2026-11-02, owner: the zombie's stiff outstretched arms were wrong
+ *  for him, "less stiff and lower arms and more fluid"). The upper arm hangs a little forward (0.30 rad, not the
+ *  mummy's 1.42 at the horizon) with the forearm cocked 45 deg forward and down, talons ready by the thighs (at 0.55
+ *  and -0.65 the forearms still stood level at the chest and read as the reach), and each arm swings 0.42 rad
+ *  against its leg as he walks; a deeper bob and sway carry them. Still the reach style, so the throw's and the
+ *  claw's arcs add to it as they do to the zombie's. */
+export const IMP_PROWL: GaitProfile = {
+  ...PROWL_QUICK,
+  name: 'imp-prowl',
+  reachPitch: 0.30,
+  reachElbowDrop: -0.50,
+  reachShoulderUp: 0,
+  reachBobAmp: 0.045,
+  reachSwayAmp: 0.035,
+  reachSwing: 0.42,
+};
+
 /** The deadeye's prowl: PROWL with CARRY arms (motion.ts takes the arm style from the gait, so a gunner needs a
  *  carry gait; the pistol's carry owns the right arm and the left swings). */
 export const PROWL_CARRY: GaitProfile = { ...PROWL, name: 'prowl-carry', armStyle: 'carry', armSwing: 0.03 };
@@ -593,6 +645,33 @@ export const GIBBET_STALK: GaitProfile = {
   rockAmp: 0.02,
 };
 
+/** The CEREBRAX's stride (characters/cerebrax.blob): a boss brain carried on four long spider legs. The gibbet's
+ *  four-beat stalk on legs four times its size, so slower (a big body takes big, unhurried steps) and longer, each
+ *  foot lifted high and set down on its point. Its knees ride HIGH: both pairs are poled up and out (the arms'
+ *  `elbowPole`, the legs' `kneePole`), so a planted leg folds like a spider's, never like a dog's. The frame barely
+ *  bobs; the brain does the moving (it pulses, and turns in its ring to aim). */
+export const CEREBRAX_STRIDE: GaitProfile = {
+  ...GIBBET_STALK,
+  name: 'cerebrax-stride',
+  hemSwing: 0,
+  strideFreq: 0.9,
+  stanceDuty: 0.65,
+  strideLen: 0.55,
+  landAhead: 0.6,
+  footLift: 0.40,
+  footPush: 0.05,
+  kneeBend: 0.0,
+  kneeLift: 0.25,
+  elbowBow: 0.0,
+  swayAmp: 0.03,
+  bobAmp: 0.03,
+  // No roll: the frame is rigid (MotionProfile.rigidFrame drops the trunk's per-joint offsets anyway).
+  rockAmp: 0,
+  headBob: 0.2,
+  elbowPole: [0.6, 0.8, 0.15],
+  kneePole: [0.6, 0.8, -0.15],
+};
+
 /** THE CHAIR's waddle (characters/chair.blob): how you walk a heavy chair
  *  across a floor, by rocking it corner to corner. A PACE (forePhase 0): the
  *  two legs on one side lift together while the chair tips onto the other
@@ -688,6 +767,8 @@ export interface ReachPose {
   /** Rigid bob/sway translation riding the stride beat — applied to the
    *  WHOLE arm (shoulder-relative), so it never changes a segment length. */
   shift: Vec3;
+  /** The walk's swing per side (rad, ADDED to the pitch, GaitProfile.reachSwing); absent when the gait has none. */
+  swing?: { L: number; R: number };
 }
 
 /** One frame of gait output — rest-pose TARGET offsets, body-local. */
@@ -995,6 +1076,15 @@ export function stepGait(
       drop: T.reachElbowDrop,
       shift: [T.reachSwayAmp * Math.sin(swayPhase), -T.reachBobAmp * bobCurve, 0],
     };
+    if (T.reachSwing) {
+      // The foot's place along its stride, +1 front to -1 back: it goes back through the stance and forward through
+      // the swing. The arm on its side swings the other way.
+      const foot = (phi: number, side: 'L' | 'R'): number => {
+        const p = stanceProgress(phi, duty(side));
+        return p.stance ? Math.cos(Math.PI * p.v) : -Math.cos(Math.PI * p.u);
+      };
+      reach.swing = { L: -T.reachSwing * raiseL * foot(phiL, 'L'), R: -T.reachSwing * raiseR * foot(phiR, 'R') };
+    }
   }
 
   const legA = leg(phiL, 'L');

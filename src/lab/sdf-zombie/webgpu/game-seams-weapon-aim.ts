@@ -12,15 +12,28 @@ import { updateHud } from './game-hud';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
 import { aimAtNearestSurface, aimDir, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
 import { eyeOf } from './game-player';
+import { standingFloor } from './level-ground';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
+import { SLOT_AIM_STYLE } from './aim-style';
+import { setFreeAimOverride } from './game-player-input';
 import { predictSlugHitNow } from './game-hit-trace';
 import { spawnSlug } from './game-weapon';
 import type { Vec3 } from '../types';
 import { gunWetLipOn, setGunWetLip } from '../torn-lips';
+import { pelletFalloff, pelletFalloffFromParams, resetPelletFalloff, setPelletFalloff, type PelletFalloffTuning } from '../pellet-falloff';
 
 export function createWeaponAimSeams(ctx: GameContext) {
+  // The pellet range falloff's URL params (`pelletFalloff=0`, `pelletFull`, `pelletFar`, `pelletMin`), read once at boot.
+  if (typeof location !== 'undefined') setPelletFalloff(pelletFalloffFromParams(new URLSearchParams(location.search)));
   return {
+    /** PELLET RANGE FALLOFF (pellet-falloff.ts): merge a partial tuning ({ on, fullM, farM, minFactor, craterMin,
+     *  severMin }) and return the live one; `'reset'` restores the defaults; `{ at: m }` adds the factor at that range. */
+    pelletFalloff: (p: (Partial<PelletFalloffTuning> & { at?: number }) | 'reset' = {}) => {
+      const t = p === 'reset' ? resetPelletFalloff() : setPelletFalloff(p);
+      const at = p === 'reset' ? undefined : p.at;
+      return at !== undefined ? { ...t, at, factor: pelletFalloff(at) } : t;
+    },
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
     // the headless driver can shoot; aim with setPose(yaw, pitch).
@@ -31,7 +44,11 @@ export function createWeaponAimSeams(ctx: GameContext) {
      *  with no shot, no ammo and no weapon ownership (Night Train's player has no shotgun at the
      *  coat check). Hand-step at dt 0 to hold it. */
     muzzleFlash: () => { ctx.weapon.flashAge = 0; return !!ctx.weapon.flashLight; },
-    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
+    /** Free aim on/off for EVERY weapon (the G session override), or null to hand it back to each weapon's own
+     *  style (aim-style.ts: the shotgun mouselook, the rest free aim). Re-centres the reticle. Returns the result. */
+    setFreeAim(on: boolean | null) { setFreeAimOverride(ctx, on); ctx.weapon.aim = { x: 0, y: 0 }; return ctx.player.freeAimOn; },
+    /** The aim scheme in force: whether free aim is on, the session override, and each weapon's own style. */
+    aimStyle: () => ({ freeAim: ctx.player.freeAimOn, override: ctx.player.freeAimOverride, slot: ctx.weapon.slotState.target, styles: { ...SLOT_AIM_STYLE } }),
     /** Show/hide the crosshair and the strafe steering cursor (key C). Aiming is unchanged. Returns the new visibility. */
     setReticleVisible(on: boolean) { ctx.player.reticleHidden = !on; return !ctx.player.reticleHidden; },
     setInfiniteAmmo: (on: boolean) => {
@@ -114,7 +131,9 @@ export function createWeaponAimSeams(ctx: GameContext) {
       let dx = p.pos[0] - cx, dz = p.pos[2] - cz;
       const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
       const stand = o.dist ?? 1.1;
-      p.pos = [cx + dx * stand, p.pos[1], cz + dz * stand];
+      const sx = cx + dx * stand, sz = cz + dz * stand;
+      p.pos = [sx, standingFloor(ctx.world.level.ground, sx, sz), sz];   // the floor under the standoff (0 on room levels)
+      p.stepLag = 0;
       p.vel = [0, 0, 0];
       p.yaw = Math.atan2(-dx, dz);
       const eyeY = p.pos[1] + 1.62;

@@ -273,3 +273,24 @@ describe('the flashlight is judged at the CHEST (owner 2026-09-27: blown at ~2 m
     expect(lightPresence(list[0]!, aside)).toBeLessThan(weightAt(2) * 0.25);
   });
 });
+
+describe('rankScale (the emitter push key step)', () => {
+  const lamp = (x: number, i: number, rankScale?: number): LightSource => ({ kind: 'point', profile: 'lamp', pos: [x, 1.5, 0],
+    color: [1, 1, 1], intensity: i, range: 12, rooms: [3], refIntensity: i, ...(rankScale !== undefined ? { rankScale } : {}) });
+  // buildLightList orders by intensity: the 10 lamp is list index 0, the 1.5 lamp index 1.
+  const key = (srcs: LightSource[]) => { const l = buildLightList(srcs); const p = pickLights(l, body(0, 0)); return { l, p, key: l[p.idx[0]!]!.intensity }; };
+  it('without it a weak near lamp keys the body over a strong far one (bodyNorm drops each lamp\'s power)', () => {
+    expect(key([lamp(1, 1.5), lamp(3, 10)]).key).toBe(1.5);
+  });
+  it('with each lamp ranked by its power the strong one keys it; the packed weights are unchanged', () => {
+    const plain = key([lamp(1, 1.5), lamp(3, 10)]).p;
+    const { p, key: k } = key([lamp(1, 1.5, 1.5 / 5), lamp(3, 10, 10 / 5)]);
+    expect(k).toBe(10);
+    expect(p.weight[0]).toBeCloseTo(plain.weight[1], 12);
+    expect(p.weight[1]).toBeCloseTo(plain.weight[0], 12);
+  });
+  it('rankScale 1 is not carried to the list', () => {
+    expect(buildLightList([lamp(1, 2, 1)])[0]!.rankScale).toBeUndefined();
+    expect(buildLightList([lamp(1, 2, 0.5)])[0]!.rankScale).toBe(0.5);
+  });
+});

@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BLAST_REFRACTION, blastRefractionBand, blastRefractionBirthRadiusM,
   blastRefractionLife, blastRefractionOffset, blastRefractionPhase,
-  blastRefractionStrength, projectBlastPoint, projectBlastRefraction,
+  blastRefractionStrength, projectBlastPoint, projectBlastRefraction, blastDepthGate, blastLinearDepth, blastShellFrontDepth,
 } from './blast-refraction';
 import type { Vec3 } from './types';
 
@@ -183,5 +183,42 @@ describe('blast refraction feed contract', () => {
     const world: Vec3 = [1, 2, -3];
     const p = projectBlastPoint(world, VP)!;
     expect(Number.isFinite(p.u)).toBe(true);
+  });
+});
+
+describe('the depth gate (?blastfx=depth)', () => {
+  const T = BLAST_REFRACTION;
+  it('the shell front is the near side of the sphere: nearest at the centre, the blast depth at the band edge', () => {
+    expect(blastShellFrontDepth(8, 3, 0)).toBeCloseTo(5, 9);
+    expect(blastShellFrontDepth(8, 3, 1)).toBeCloseTo(8, 9);
+    expect(blastShellFrontDepth(8, 3, 0.5)).toBeCloseTo(8 - 3 * Math.sqrt(0.75), 9);
+  });
+
+  it('a pixel past the band (rn > 1) never reads a NaN', () => {
+    expect(blastShellFrontDepth(8, 3, 1.4)).toBe(8);
+  });
+
+  it('with the camera inside the sphere the front is floored, so the view model stays straight', () => {
+    expect(blastShellFrontDepth(1, 3, 0)).toBe(T.depthNearM);
+    expect(blastDepthGate(0.6, blastShellFrontDepth(1, 3, 0))).toBe(0);
+  });
+
+  it('what stands in front stays straight, what stands behind bends as it did, a surface at the cut ramps', () => {
+    const front = blastShellFrontDepth(8, 3, 0);
+    expect(blastDepthGate(front - 1, front)).toBe(0);
+    expect(blastDepthGate(front, front)).toBe(0);
+    expect(blastDepthGate(front + T.depthSoftM, front)).toBe(1);
+    expect(blastDepthGate(200, front)).toBe(1);
+    expect(blastDepthGate(front + T.depthSoftM / 2, front)).toBeCloseTo(0.5, 9);
+  });
+
+  it('the depth value goes back to view metres with the projection matrix\'s own terms', () => {
+    // three's WebGPU perspective terms: P10 = -f/(f-n), P14 = -f*n/(f-n). Forward depth, 0 at near and 1 at far.
+    const n = 0.1, f = 200;
+    const p10 = -f / (f - n), p14 = -(f * n) / (f - n);
+    expect(blastLinearDepth(0, p10, p14)).toBeCloseTo(n, 6);
+    expect(blastLinearDepth(1, p10, p14)).toBeCloseTo(f, 3);
+    const z = 5;
+    expect(blastLinearDepth((p10 * -z + p14) / z, p10, p14)).toBeCloseTo(z, 6);
   });
 });

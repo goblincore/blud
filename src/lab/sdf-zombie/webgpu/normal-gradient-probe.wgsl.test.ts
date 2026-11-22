@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APPLY_WOUNDS } from './march.wgsl';
-import { NG_WOUND_PROBE, probeWoundSources } from './normal-gradient-probe.wgsl';
+import { NG_WOUND_PROBE, probeApplyWounds, probeWoundSources } from './normal-gradient-probe.wgsl';
 
 // Top-level comma count of the first `name(...)` call or signature in src.
 function arity(src: string, name: string): number {
@@ -22,7 +22,10 @@ function arity(src: string, name: string): number {
 describe('normal-gradient probe (ngWoundProbe)', () => {
   it('calls applyWounds with its current argument count', () => {
     const call = NG_WOUND_PROBE.slice(NG_WOUND_PROBE.indexOf('applyWounds('));
-    expect(arity(call, 'applyWounds')).toBe(arity(APPLY_WOUNDS, 'fn applyWounds'));
+    // The probe compiles the list-only text (probeApplyWounds: no wound volume atlas), so that is what it must match.
+    expect(arity(call, 'applyWounds')).toBe(arity(probeApplyWounds(), 'fn applyWounds'));
+    expect(probeApplyWounds()).not.toContain('wvAtlas');
+    expect(probeApplyWounds()).not.toContain('wvRead');
   });
 
   it('declares every private global its include chain reads', () => {

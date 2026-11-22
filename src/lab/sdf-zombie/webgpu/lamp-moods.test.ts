@@ -170,3 +170,10 @@ describe('strobe afterglow: cold flash bursts after the opening strobe (Boiler R
     for (const v of sample(f, strobeEnd, strobeEnd + 120)) expect(v).toBeLessThanOrEqual(LAMP_SCRIPT.burstLevel);
   });
 });
+
+describe('glow (an emitter surface\'s light, item 2g B1)', () => {
+  it('is a mood and holds steady at 1 (the surface flickers per panel, not the light)', () => {
+    expect(LAMP_MOODS).toContain('glow');
+    for (let t = 0; t < 30; t += 0.37) expect(moodLevel('glow', t, 4.2)).toBe(1);
+  });
+});

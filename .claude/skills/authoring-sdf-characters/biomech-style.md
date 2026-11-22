@@ -275,9 +275,25 @@ pistol. A ranged variant needs a different set of parts from a melee one:
 
 ## Budget
 
-The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
-detail into a normal map on a low-poly cage, aiming for 2-4k triangles per part. Author at full detail first;
-optimize once the look is approved.
+The twinhead kit is about 145k triangles, too high for crowds. Author at full detail first; optimize once the
+look is approved.
+
+**Kit normal maps (since 2026-11-09, the cerebrax first).** A sculpted part can keep its detail at a low triangle
+count:
+- `kit_sculpt.py` `keep_high` copies the fused sculpt before `decimate`.
+- `bake_normal` UV-unwraps the decimated part (smart project), bakes the high onto it as a tangent-space normal map
+  in Cycles (selected to active), and packs the tile into the `.blend`. A mirrored `.r` part shares its `.l` tile.
+- `build.py --export` packs every tile into `<kit>-normal.png` + `.json` (`pack_normal_atlas`, 2048, tiles shrink
+  together to fit) and exports tangents.
+- `scripts/blender-kit.ts` remaps each part's UVs into the atlas and ships it as `<character>-kit-n.png` beside the
+  `.gltf`, the `normalTexture` of every material with a baked part. Parts without a tile in such a material point
+  at the atlas's flat block.
+- The cerebrax's `finish_part` bakes by default (`nrm=False` opts out). Another kit opts in by calling
+  `keep_high` / `bake_normal` in its own finish step.
+
+Gotchas: the high copy must be hidden from render while `bake_ao` runs (keep_high does it), or its surface,
+lying on the low one, blacks the AO out. A baked image must have a fake user, or the `.blend` drops it on save
+(no material uses it).
 
 ## Non-humanoid rigs (the gorehound, 2026-10-22)
 
@@ -613,3 +629,373 @@ first, surging ~0.9 m (`slamAdvance`). A first pass that lifted the chest 0.30 m
 renders that checkout without a word; give each worktree its own `LAB_VITE_PORT`/`LAB_CDP_PORT` and read the
 `lab-servers: starting vite` line. The lab's 0.4 m reference cube hides a body this low (hide it in a `BLOB_PROBE`), and
 `BLOB_TARGET_X`/`BLOB_TARGET_Z` move the orbit centre to a head 0.8 m from the origin.
+
+## A fireball thrower: the imp (2026-10-24)
+
+The imp (`characters/imp.blob`, kit `assets-source/imp-kit/`) is a gaunt demon on the butcher's digitigrade legs that
+throws fireballs. What it taught:
+
+- **A reference is a point of departure.** The owner's brief came with a Doom 3 imp; the first head (a pale egg with an
+  eye-hole cluster and a lipless grin) read as an alien and as a copy. The owner pointed at the house style instead:
+  build the head as **flesh over a simplified version of the twinhead's demon skull** (not the metal skull itself, which
+  was tried and rejected as "the demon head"). In prims: a long low cranium blended wide into the temples, a brow ridge
+  per side in a V, slanted sunken sockets with a small red ember each, cheekbones sweeping back, a long narrow muzzle, a
+  jaw with a chin point, kit fangs and horns. Pitfalls on the way, each one a look: a cranium wider than the face (and
+  one brow bar straight across) reads as a **hat brim**; sockets that meet in the middle read as **goggles**; round dark
+  nostrils a centimetre across read as a **pig snout**, narrow slits raked up the muzzle read as flared nostrils; horns
+  curling up and back are seen end-on from the front as **mouse ears**, so sweep them out as much as back.
+- **No fingers: a socket, caged.** Each hand is a knuckled skullmetal cup round a burning coal (`ventglow`), with five
+  talons rising off a crown of points on its rim and curling hard back in over the mouth (curl ~1.8 rad; at 1.35 they
+  hung open). It reads at fighting range as an orange point between dark claws, and the fireball leaves from it. A
+  straight flared tube for the cup read as a plastic drum; bulge it over the knuckles and give the rim points. Knuckles
+  as balls read as marbles; ridges do not.
+- **Fire light without lights.** The coal and the chest's forge-heart light the parts round them through
+  baked `_glow` (`glow_bake` in `imp_common.py`: falloff times facing). A second glow colour needs its own material name
+  in `GLOW_FROM_ATTRIBUTE`: `impmetal` (skullmetal's look) and `impclaw` (horn's) burn orange where `skullmetal` burns
+  red. (The teratoma's `orbitmetal` alias is not in kit-overlay.ts on main, so its socket glow falls back to the default
+  look: worth a check.)
+- **Joining parts in Blender: deselect first.** `bpy.ops.object.join()` joins every SELECTED object, and a part's
+  install leaves it selected: the first eye-ember join swallowed the ocular plate, which then rendered as a glowing
+  yellow crown.
+- **A hunched torso bakes round a tilted axis.** At a 26 deg hunch the torso is probed and baked round the spine
+  (`--torso-axis 0,1.56,0.19:0,0.90,-0.06`; `scripts/imp-detail-gen.ts` probes from the same line). The zombie's
+  generated spinal column breached the starved back under the hunch (both the kyphosis and the lumbar curve): leave it
+  out and put the spine's ridge in the normal map. Leg detail is a `--limb` region per leg bone like the arms'
+  (`limbOf` in the generator picks `leg` or `arm`). **Sinew** is a long, nearly straight cord, thickest in its middle,
+  sampled every ~1.4 cm (no meander, no knots): it is what makes a starved limb ropy where veins make it swollen.
+- **The throw is an arm arc, not a new pose system.** `attack.ts` `throw` (windup pitch 2.4 rad, up and back past the
+  vertical; strike 0.45, forward and down) runs through the zombie arms' `armArc`; `makeImpMind` holds the body,
+  faces the player and raises `fire` once at `IMP_TUNING.fireAt`, and `MotionProfile.spit` from `handTipR` puts the
+  ball in the hand. A strike pitch of 1.05 ended the follow-through 45 deg up and read as a lob. Judge it with
+  `BLOB_SWING_SWEEP=throw:0:0.6 BLOB_YAW=-1.3` (yaw in RADIANS; degrees spin the camera round to a random angle).
+- **A glowing part needs a reason to exist.** A cage of bars over a glowing orb between two hooked blades read as "an
+  afterthought" (owner). What replaced it is a SYSTEM: a crested skullmetal heart set in the wound, the fire showing
+  only through a slit, and fuel lines from it over the ribs and down the arms into the burning fists, so the chest
+  explains the hands. Keep the glow tight (`glow_bake` reach ~0.03 at the lips): at 0.07 the whole housing went orange
+  and stopped reading as metal.
+- **Glowing hoses: dark iron, thin seams, no floor.** Ribs every 1.4 cm with a glow floor read as a string of orange
+  beads, and a pair run straight to the shoulders as a V necklace. Ribs every 2.4 cm, a seam at `band ** 24`, the hose
+  sunk part-way into the skin and routed over the ribs to the armpit read as fire running under the hide.
+- **Teeth root in the flesh, not on the mouth.** A dark mouth prim stands proud, so a probe of the whole head lands on
+  its face and teeth float in front of it; seated inside it they vanish and the mouth reads as a black ring. Probe the
+  head with that prim left out (`scripts/imp-skin.ts` `front.flesh`), root just above and below it, and rake the teeth
+  out over the dark. Make the gap tall enough to be a gape.
+- **Forward horns leave sideways first.** Up-first read as antennae. Out, then turning forward (2.1 rad over 15 cm),
+  with rings barely proud of the horn (proud ones read as a corrugated pipe).
+- **Blender aborts on a name like `crest3.14159`:** it parses the `.NNN` suffix as an integer (`stoi: out of range`).
+  Keep part names integral.
+- **`lab never booted` can just mean load.** The turntable waits 80 s; at a load average of 80 a cold boot took 94 s.
+  Check `uptime` before suspecting your change.
+- **A light projectile, not the rocket.** The teratoma's fireball is the warbull's rocket (the dynamite's blast). An
+  imp throws often from a quick body, so `fireball.ts` is its own straight-ish ball (11 m/s, a slight droop it aims
+  for, 14 on a hit and 5 on a near miss, a 0.55 m fire burst through the dynamite's burst visual and light), and it
+  hurts only the player.
+
+### The imp's second pass: proportions, claw feet, its own skull (2026-11-02)
+
+- **Shorter legs move everything above the hip.** Dropping the pelvis (0.94 → 0.76) is one number in the blob but every
+  height in the kit, the skin probes, the detail generator and the bake's torso axis. Keep one offset (`LOWER = 0.24`
+  in `imp_common.py`, the same constant in `scripts/imp-detail-gen.ts`) and subtract it at every above-hip height
+  rather than retuning each part; a bigger head is likewise one scale (`HS = 1.25` in `make_head.py`, the head prims
+  scaled to match). The torso axis in `bake-args.json` moves with it.
+- **Big claw feet: flesh toes, kit claws.** Splayed toes are blob pads plus tapering `bar` digits on the foot bone (the
+  foot tip is pinned to the ankle's rest offset, so the toes stay level through the walk); the kit only caps each digit
+  with a cuff ring and a curled horn claw in a darker keratin tint. A reference image for the idea stays out of the
+  repo.
+- **An exposed skull can be its own mesh.** The sculpted `bones` block (ratio/blob/bar only, nothing subtractive) made
+  a blobby demon skull. The anatomical skull path now takes a skull per character (`OWN_SKULLS` in `skull-cast.ts`):
+  the imp's is the twinhead's demon skull, horns cut, ~9.9k tris, split into the 14 `SKULL_PIECES` with openings in a
+  manifest, built reproducibly by `scripts/build_imp_skull.py` (Blender headless, `--publish`). Size it with its own
+  fit fractions (`IMP_FIT` in `anatomical-skull.ts`): at the human ones the crown came through the intact head. Leave
+  eyes out of a skull like this (`PLAIN_SKULL_CHARACTERS`), and keep the sculpted bone as the fallback and the sizing
+  target.
+- **The validator's "bone inside flesh" is optimistic in thin overlaps.** The flesh SDF underestimates depth where thin
+  prims overlap, so a bone that passes can still breach. Filler prims fix it but change the skin; shrinking the bone
+  about a pivot (and dropping the flesh brows and jaw from the bone copy, re-cut as thin bars) does not.
+- **An exposed skull needs dirt to read** (owner: clean bone with no eyes was "impossible to see the skull features").
+  `build_imp_skull.py` bakes the hollows (AO from the source mesh onto the low one: baked on the low mesh alone, its
+  smooth normals crackle every triangle black) into the normal atlas's alpha, and `SkullAsset.grime` turns on a wash,
+  dried blood in the hollows, small clinging flesh islands, and the sockets going black last (painted before the
+  blood, the blood covered them). Large cling islands sat on the muzzle as a pink nose: keep them small.
+- **The skull must reach as far as the flesh does.** A long flesh muzzle over a short-faced skull leaves the muzzle's
+  tip floating once a shot cuts across it. The build script draws the lower face forward into a snout (`snout()`,
+  dropped to follow the hide's slope; level, its bridge broke the muzzle's top) and `IMP_FIT` grows to match.
+- **Eyes from the model, not a search.** The orbit search (skull-orbits.ts) took a temple pit for one of the imp's
+  slanted slit orbits. The demon skull was modelled with eyeballs, so the manifest carries their `eyes.radius` and the
+  envelope fit seats eyes at the orbit openings, carried by the fit.
+- **Loose arms are still the reach style.** `IMP_PROWL` lowers the reach (0.30 rad, forearm 45 deg down) and adds
+  `reachSwing` against the legs, scaled by the walk's blend so standing still holds them; the throw's and claw's arcs
+  add on top unchanged. The throw has its own beats (`THROW_TUNING`: a 42% cock, a 10% whip, a follow-through down and
+  across to 70%, `SWING_ARCS.throw.followPitch/Yaw`).
+- **Kit teeth need bone under them.** The kit's teeth root in the hide's open mouth, so a skull with a shut jaw leaves
+  them floating once the face is shot off (owner: "the skull and the teeth dont really connect"). Measure, don't eyeball:
+  fit the skull, read the kit's tooth roots out of the glTF, and take the distance from each root to the nearest bone,
+  and from each bone vertex to the intact hide (`sdBody`), together. A forward pull that seats the teeth can push the
+  snout's bridge through the hide, so pull only the tooth row. The demon skull's jaw is short and set back: it is cut
+  free along its border (shared vertices stretched into streaks across the gape), swung open, thrust forward and
+  narrowed in `build_imp_skull.py` (`JAW_OPEN`, `JAW_THRUST`, `JAW_WIDTH`, `SNOUT_ROW`). Anything that grows the
+  asset's box moves the whole fit, so solve `IMP_FIT` for the old matrix and the cranium stays put.
+- **A kit only sheds if the registry says so.** Without `kitSheds: true` (or `armoured`) in `character-registry.ts`
+  the kit never runs `createKitDamage`: a shot-off arm left the imp's fist and hoses hanging in the air, though every
+  island was on the right bone. With it, a `tooth` island also falls out when a crater reaches it, so kit teeth never
+  float in front of the exposed skull (the seating above only narrows that gap). Every kit has one or the other
+  (`characters/kit-sheds.test.ts` fails a new kit without it, and pins how far any torso piece reaches into a limb).
+- **A bone that names no limb sheds with its parent's.** A tusk bone under the forearm, a horn under the skull: kit
+  pieces on them ride the nearest ancestor that names a limb (`limbBone` in kit-damage.ts). `plate` islands take hits
+  and break only on an `armoured` kit; on a `kitSheds` kit a plate-named blade is scenery.
+- **A hose sheds by the bone it rides.** Kit pieces leave with the limb their island is skinned to (kit-damage.ts
+  `piecesOf` / `kitPieceAttached`), so a hose that crosses a joint must break there. One that runs from the chest to
+  the shoulder stayed behind on a shot-off arm. Split it at a coupling: the outer run rides the clavicle (it sheds
+  with the upper arm), the inner one stays on the chest. Pinned by `characters/imp-kit.test.ts`.
+
+## Joints in motion: the zombie's shoulder and hips (2026-11-05)
+
+Owner playtest of the ragdoll: the shoulder "seems to pop out", the thigh tubes "go up too high on the side", the
+pelvis "looks like a full flesh diaper". Both came from flesh that never turns with its limb.
+
+- **A blob at a joint rides the joint POINT, not the limb.** The zombie's shoulder ball (on the clavicle, at the
+  shoulder) and the top cap of its thigh tube (starting 2 cm down the thigh, at the hip) both bind to the joint's
+  rig point. When the limb swings, the limb's tube moves away and the ball stays: a ball-and-stick socket, a ball
+  hanging under a raised arm, a round lump beside the pelvis when a leg swings out. A rest-pose turntable shows none
+  of it. Look at the joint posed: raise the arm forward, out and overhead, and the leg forward and out. A CPU-field
+  render of the posed body (`applyRig` on a `bindRig` with the limb's points turned, marched with `sdBody`) is enough
+  to see it.
+- **Fixes that held.** Shoulder: the same ball, blended over 30 mm instead of 7-10 mm (and the upper arm 15 mm), so
+  ball, arm and torso read as one mound in every pose. Hips: start the thigh tube lower on the thigh (0.18, its top
+  at the pelvis ball's middle) so its top moves with the leg, blend it 30 mm into the pelvis ball, taper it toward
+  the knee, and give the flank to the TRUNK: a capsule across the pelvis bone's top (`tip=`) at the old width.
+- **Moving flesh off a joint can expose the wound skeleton.** The thigh tops were covering the iliac crests; with them
+  lowered, validateBody's breach check named the bone prims. Cover them with trunk flesh, not by moving the bone.
+- **The flesh at a joint is also the sever's armour.** `connectivity.ts` cuts at chain joints and limb roots by
+  covering a disc at the joint's girth with wound spheres placed on the flesh SURFACE. A thicker or tapered upper arm
+  (a deltoid riding the arm, tried) pushed that surface out, so 30 slugs no longer took the shoulder
+  (`connectivity-toughness.test.ts`), while a fatter shoulder end caught more of a pellet storm and lost the arm
+  (`game-actor.test.ts`). A second prim at a joint is a second chain joint, and the sever cut the whole limb tube off
+  at it. After any joint edit, run those two files, `connectivity.test.ts` and the arm clip tests (which index arm
+  prims by position and read tapered prims' radius per sample).
+- **The zombie is authored twice.** `zombie.blob` and `body.ts` `ZOMBIE` must match (`zombie-blob.test.ts`), and
+  several actor tests build from `body.ts`, not the `.blob`.
+
+## Seams and sutures: the zombie's reconstituted flesh (2026-11-05)
+
+Owner: the walking zombie "has like visible seams currently, not sure from where". Make them sutures.
+
+- **Where the seams come from.** The skin noise (the shading normal's fbm, the grain, the mottle) and the body
+  normal map are all read at `restPoint`: the hit mapped into its DOMINANT prim's rest frame. Where the dominant prim
+  flips and the two prims have moved differently since rest, the two sides read the texture centimetres apart, and it
+  tears along the flip line. Zero at rest, so turntables never show it; shoot `BLOB_POSE=walk`. Measured on the
+  zombie: 10 mm at the shoulder for a 30 deg arm swing, 42 mm at the hip for a 25 deg stride, 62 mm at the neck for a
+  20 deg nod. **Point prims (`blob ... at=`) were the loudest**: restPoint gives them no axis to swing, so their noise
+  never turned with the limb (the hand of a reaching arm, the shoulder mound, the knee ball). Fixed at the root: applyRig
+  stamps a plain point sphere's bone rotation as a NOISE-ONLY orient (`orient-shape.ts`). A sphere turned about its
+  centre is the same field, so silhouettes and the march path are untouched and the pack keeps its cluster off
+  sdPrimO. Anisotropic point prims (the spine and foot blobs) keep the orient they shape with, which is the yaw
+  standing: turning only their noise would slide the texture over a silhouette that does not turn.
+- **Baking the noise would not fix it.** The map is read through the same `anchor`, so baked noise tears on the same
+  lines, at 1-2 mm texels instead of resolution-free. Keep the noise live; bake structure.
+- **Put the sutures ON the flip lines** (`scripts/zombie-detail-gen.ts`): rays round a junction axis, bisect where
+  `nearestPrim` leaves one prim set for the other. Emit every stitch once per cluster that meets there (torso AND
+  arm), each copy projected onto that cluster's own skin, because each map region bakes only its own cluster.
+- **Normal map, not mesh.** The seams straddle two bones that move apart, which a rigidly skinned kit shears; they sit
+  where the zombie severs, so mesh would need shed logic per part; flush mesh drowns in skin noise and lifted it floats.
+- **Scale.** Welts 8 mm either side of the cut, thread r 3.2 mm arching 6.5 mm proud, a stitch every 3 cm. The first
+  pass at two thirds of that read as a fine ladder at 1 m and as speckle beyond. At 2.4 m they are still a glint of
+  relief; relief alone has a range limit (a colour channel for the thread would push it).
+- **A point prim read the map rotated** until it got its bone's rotation: a wrist suture on its flip line smeared long
+  bars across the back of the reaching hand, so the wrist was briefly a cuff up the forearm. With the pose orient the
+  wrist suture sits on the forearm / hand flip line and the foreArm region runs past the hand. If a point prim is
+  ever anisotropic AND sits under detail, check it posed: its noise frame is the one it shapes with.
+- **Limb regions can be bands.** A hit no region claims wears no map, so bake only the bands round the seams; one
+  region reaches across a joint for the same cluster (foreArm t -0.15 covers the elbow's upper-arm side).
+
+## A boss brain-spider: the cerebrax (2026-11-08)
+
+The cerebrax (`characters/cerebrax.blob`, kit `assets-source/cerebrax-kit/`, folds `scripts/cerebrax-detail-gen.ts`)
+is a huge brain clamped in a bone-metal harness on four long spider legs, a chaingun slung under its face. The
+gibbet's rule again: the machine is the body, the brain is the cargo. What it added:
+
+**Brain folds are a random-wave labyrinth, not placed ridges.** Gyri are fat sausages packed side by side, meandering
+in long curves that never cross. The NODAL LINES of a narrow-band random wave field (a sum of ~64 plane waves of
+one wavelength, random directions and phases) are exactly that shape, at a nearly even spacing. The recipe:
+- Evaluate the field in 3D on the brain's surface (an ellipsoid fitted by probing), so nothing about the PATTERN
+  depends on the map's projection. Add a slow domain warp (0.9 m wavelength, 6 cm) so the spacing breathes.
+- Trace the zero contour with marching squares on a 0.5 deg lat/lon grid of directions. Join the segments by
+  their shared grid edges, then resample every 2 cm of 3D arclength and probe each sample onto the skin.
+- A 0.20 m 3D wavelength gives lines ~9.9 cm apart on a 1.34 m brain (a man's gyri, scaled up). Ridges of
+  r 5.5 cm standing 2 cm proud, blend 4 mm, have ~8.5 cm footprints, so neighbours meet in a V crease: the
+  sulcus. At r 5 cm and 1.8 cm proud, flat floors showed between them.
+- Gaps, not grooves (the detail is additive). Leave no folds along the longitudinal fissure (3 cm either side
+  of x = 0 over the top), the lateral fissures, the face and under the harness. Taper each fold's last 6 cm
+  into the gap, and drop stubs under 7 cm (they read as beads). Two rolled "bank" folds either side of the
+  longitudinal fissure make it read as a cleft rather than a seam.
+- The face's wrinkles: furrows BOWED down into a scowl. Three level forehead furrows read as stacked bars.
+
+**A ball's projection: a vertical cylinder, poles where nobody looks.** The bake's projections are cylinders, and a
+cylinder smears its poles. On this boss the bottom pole sits in the harness and the top pole is above the player's
+eye line. The forehead, front and sides (what a player at 1.6 m sees of a brain centred at 1.9 m) sit at the
+cylinder's equator, so a vertical axis is the right one. A cylinder through the FACE (tilted forward) would put the
+pole on the one patch that has no folds, but it costs the forehead 1.5x stretch. Two limits:
+- **Region 0's rays started 0.6 m from its axis**, so on a torso wider than that they started inside the flesh.
+  `bake-body-normal.ts --torso-r0 <m>` sets it (the cerebrax bakes at 1.1).
+- **The region table stores positions in -2.5..2.5 m** (`body-normal.wgsl.ts` pos16). A body whose flesh rises
+  past 2.5 m compiled loses its relief above that. The brain's top is held under 2.47 m (`cerebrax-blob.test.ts`
+  pins it), and the boss's height comes from its legs.
+- **The GPU bake needs the `webgpu` package.** Without it the bake silently falls back to the CPU: 3,160 detail
+  prims at 1024 x 320 would have taken hours, where the GPU took 13 s. A worktree that borrows an older checkout's
+  `node_modules` may not have `webgpu`, so read the `bake-body-normal: gpu|cpu` line before waiting. Never pipe the
+  bake through `tail`: it hides that line until the end.
+
+**No parallax needed (yet).** Nothing parallax-like exists in the march (`body-normal.wgsl.ts` only bends the
+shading normal). At 4 mm texels the folds read as deep from every angle in the frames. Parallax or relief mapping
+would be a renderer feature; propose it to the owner rather than building it.
+
+**A boss at `scale`.** `scale 1.60` multiplies every compiled length, so:
+- the kit's joints, the skin probes and the detail generator all work in COMPILED metres, and the generator
+  divides each emitted number back by the scale (the gamer's rule);
+- the thin SDF cores grow 1.6x too. The legs' first cores (r 4 cm authored, 6.4 cm compiled) were FATTER than the
+  kit's shin tube and rendered as black rods. Size cores against the compiled kit.
+
+**Spider legs on the biped names.** The gibbet's four-legged rig with the thighs and upper arms raked UP to knees
+2.75 m high, and the shins dropping long and nearly straight to a point. The planted-leg IK used to pole every knee
+FORWARD, which folds a spider's knee under the body. `GaitProfile.kneePole` (new, the hind legs) and `elbowPole`
+(the forelegs) pole them up and out. `cerebrax-blob.test.ts` walks the real pipeline and pins every knee at least
+0.6 m over its socket. The gait is the gibbet's stalk, slower and longer (0.9 Hz, 0.55 m strides, 0.4 m lifts).
+
+**Lock the cargo to its frame; no turret.** The first pass put the brain on `skull` so the aim chain would swivel
+it in its ring. Two faults came from that, both seen only in the arena:
+- The aim lays the neck->skull vector along the GAZE, clamped to 0.5 rad off rest. With the skull bone pointing up,
+  a level gaze tipped the whole brain 29 deg forward, face down onto the harness, in every pose.
+- Rigid prims on `skull` follow its frame unclamped, through the sprung neck: sway, nods and hit recoil moved the
+  brain against a harness on `pelvis`, and it clipped through the ring and the gun.
+
+So everything that must not part rides ONE bone, `rigid`: the brain, the face, the eyes, the teeth, the tendrils,
+the harness and the gun, all on `pelvis`. The aim is the body's turn, and the chaingun's sweep is that turn
+anyway. (If a turret is ever wanted, point the skull bone FORWARD, so a level gaze is no pitch, and keep anything it
+must not touch on the same bone.) A part moved from one bone to another keeps its rest position. Its offsets now
+count from the new bone's point, and the kit parts are renamed `<bone>|<part>`; drop the old names from the .blend.
+
+**Bake a good accident into the rest pose.** In the end the owner LIKED the tipped look the aim chain produced: the
+brain rolled 29 deg forward in its clamp, overhanging the ring, the face low and close to the gun. What was wrong was
+only that it moved. So the tilt is authored, on the locked frame:
+- Every brain and face prim is the upright brain rotated 25 deg about its centre: offsets, tips and bends. Ellipsoid
+  axes stay world-aligned, because the grammar has no rest orient and the lobes are nearly round.
+- The kit and the fold generator keep their face-relative placements in the UPRIGHT brain's (lat, lon) and map them
+  through `tilted()` (common.py `TILT`) and `tilt()/untilt()` (the generator). The random-wave folds live in 3D and
+  need no map.
+- The harness's V got deeper with a flat bottom under the chin, and the gun hangs lower (re-read the muzzle and the
+  `spit` offset).
+
+Fix the motion before moving parts: a 6 cm face raise, tried in between, was reverted.
+
+**Pulsing without a new system.** `MotionProfile.joystick` with `amp 0, idle 0` and a `swell` period is a plain
+breath for ANY body: every lobe prim carries `morph=swell:*1.025..1.05`, and `actor.ts` drives the weight.
+
+**A gun in the body.** `gunner: { weapon: 'chaingun' }` plus `spit` from the hips' rig point gives the soldier's
+shooting brain on the juggernaut's sweeping-burst tuning, fired from a body-mounted barrel (no prop, no arms).
+`game-actor-cerebrax.test.ts` drives the game actor and checks the bursts leave the muzzle. That catches a `spit`
+offset inside the brain, or a mind that never fires, which no turntable shows.
+
+**Kit notes.**
+- Polished `chrome` on a large part renders BLACK in the dark levels (it reflects the room). Long legs read as
+  silver in fused `skullmetal`; keep chrome for rods.
+- `join()` swallows every selected object, and an installed part stays selected: the first build lost the gun
+  into the barrels and the ammo feed into the eyes. `common.py`'s `join_work()` deselects first.
+- Curled tendrils: a pair curled about mirrored axes mirrors with ONE sign. At 3.2 rad over a metre they closed
+  into handle loops; about 2 rad sweeps like a ram's horn.
+- A harness for a ball: a band fitted to the probed skin, high at the back and dipping to a mandible point under
+  the low face (a level ring cut across the chin), with talons curling in over the brain like prongs round a gem.
+- Legs on a ring read as stuck on. With only the band, the owner saw "the legs ... disconnected from the rest of
+  the frame". The fix was a chassis (`make_harness.py` `frame`):
+  - a rail down each flank, joining the hind socket to the fore socket;
+  - four braces dropping from the sockets to a belly boss under the brain;
+  - a stay from the belly to the gun's keel;
+  - socket balls big enough to swallow the strut's root through the whole stride.
+
+  The player looks UP at a boss, so judge the undercarriage from eye height (`BLOB_PITCH=-0.2 BLOB_TARGET_Y=1.6`).
+  The default turntable pitch hides it.
+- A shin tube that stops short of the ankle (it ended at 0.93 of the bone) leaves a visible gap over the foot ball.
+  Run tubes into the next knuckle.
+- Hit reactions for a rigid boss (MotionProfile.rigidFrame). Its rig flinch moves nothing, so the hit is sold three ways:
+  - `fleshJiggle`: the struck lobes shove, distort and squash, out of step with each other. It is a post-pose deform, so craters ride it. The kit on the flesh rides the frame-pinned `skull` bone, which the jiggle shoves.
+  - motion.ts JUDDER: the whole frame seizes as one piece, and the legs spasm.
+  - brain-arcs.ts: electricity over the brain while it seizes. Seat effects on the MEASURED surface (a direction-to-radius table marched at spawn), not an ellipsoid fit; that sat 7-16% inside the lobes. Draw them without a depth test: the SDF's depth swallows anything a few cm proud.
+- A kit can drop to about a third of its triangles with no visible loss at game range: the baked AO and smooth shading carry the fine noise. Corrugated tubes are the exception; their ribbing smears.
+- With a baked normal atlas ("Kit normal maps" under Budget) the ribbing survives too: the cerebrax went 94k -> 74k triangles (tendrils 9000 -> 5000, harness 9000 -> 6500, struts, knees and collars down a third). Its 20 tiles fill a 2048 atlas at 56% of their baked size; the big parts (harness, frame, tendrils) come out at about 500 px per metre.
+
+## A corpulent body with fused cannons: the tallow (2026-11-14)
+
+The tallow (`characters/tallow.blob`, kit `assets-source/tallow-kit/`) is a 1.3 m wide fat man whose forearms have
+grown into cannons. Three owner looks in one day; what they taught:
+
+- **Bolted-on reads as silly; fused reads as horror.** The first kit (burners on stumps, belly siphons wrapping the
+  waist, a feeding muzzle) was "rather silly ... the way the tubes are oriented". The owner picked Cronenberg fusion
+  (the Videodrome gun-hand): the forearm FLESH runs on over each cannon's breech and the barrel leaves the meat through a
+  swollen lip; the boiler is sunk two thirds into his back inside a rim of fat prims; one hose a side, diving under the
+  skin mid-run. Fewer parts, each one coming out of the meat.
+- **A bar's end cap carries the meat past `to=`.** A capsule ends in a hemisphere of its end radius: a forearm sleeve
+  of r 0.150 authored `to=0.56` on a 0.40 m bone really ran to t ~0.93 and hid the cannon's chamber. Subtract
+  `r2 / length` from where you want the flesh to stop.
+- **Scale the face to the body.** A man-sized face-block head (r 0.088) was a nub on a 1.3 m body; 0.155 with a jaw
+  mass under it reads.
+- **Goofy vs mean is angles.** A tall dome, sleepy slits with bags, a round bulb nose and soft lips read as goofy
+  (owner). Mean: a low broad crown, a V brow knotted over the nose, red embers in slanted dark sockets, cheekbones
+  raking up, a hooked nose, tusks, both lips bowed UP so the corners turn down. Painted glossy lips read as clown lips
+  again (the teratoma's lesson): leave them unpainted.
+- **The decal's frame is the biggest r x max scale**, not the biggest volume (`lab-main.ts headShape`). A wide jaw
+  (0.13 x 1.45) beat a taller cranium and the mouth decal landed under the lower lip. `tallow-blob.test.ts` pins the
+  cranium as the winner.
+- **Painted raw bands read as sweatbands and stripes.** A raw-red lip ring round the forearm and raw rim prims round
+  the boiler read as a red wristband and red stripes down his back. Unpainted swelling, with the rawness left to the
+  normal map.
+- **Boilers and back sacs:** clamping talons plus crest spines made a spiked ball strapped on; sunk with only a crest,
+  ribs, a glowing slit and two short chimney horns, it reads as part of him.
+
+### The tallow's third pass: industrial weapons, blood at the joints
+
+- **The skull style is not every weapon's style.** Crowned muzzles, chevron fins and crest spines on a cannon read as
+  "too floral" (owner). An arm cannon wanted to be plainly a heavy machine: octagonal blocks, bolted bands, a slotted
+  brake, a piston, a tank (`tallow_common.py` `prism`, `bolt`). The skull rules still suit organic plates and horns.
+- **Blood at the joint is KIT, not paint.** The owner wanted "bloody decals where the metal flesh interfaces". Painted
+  SDF bands read as sweatbands, so the blood is a `gore` kit part (white material, blood in vertex colours, the `gore`
+  look in kit-overlay.ts): torn lumps lying against the joint, drips hanging off its low side (`gore_ring`, `drip`),
+  plus a mottled smear on the metal itself, thick at the flesh and running forward underneath.
+- **Gore must be irregular and dark.** An even ring of even lumps read as red beads; skip a quarter, clump some, make
+  one in five big, wander them along the joint. Linear blood over ~0.14 renders as bright paint-red: keep it mostly
+  0.06-0.23 red.
+- **Glow baked inside a bore leaks outside.** A `glow_bake` reach of 0.12 from a fire 8 cm inside the muzzle turned
+  the whole barrel bronze; 0.05 keeps it to the bore. Put the fire near the muzzle, or it is lost down the barrel.
+- **Flesh cords on a machine read as sausages.** Tendons laid along an industrial barrel looked like pink sticks.
+- **zsh does not word-split a variable.** `E="env A=1 B=2"; $E cmd` runs a command named "env A=1 B=2" and
+  `blob:shot` writes nothing; spell the env out.
+
+### The tallow's fourth pass: gorilla arms, his skin, a two-gun volley
+
+- **STOMP's arms ignore attacks.** STOMP (the ogre's, the venus's walk) has `armStyle: 'carry'`, and motion.ts runs the
+  swing's arm pivot only for the reach style, so every arm attack on a STOMP body renders as a statue (the imp's throw
+  did on the tallow, and the lab's `BLOB_SWING_SWEEP` showed identical frames). A body that swings its arms on a heavy
+  walk needs a reach variant: `gait.ts TALLOW_STOMP` (reach, `reachPitch 0` = the authored hang, a small
+  `reachSwing`). If a swing sweep shows no motion, check the gait's arm style first.
+- **A two-gun body:** `MindOutput.fireSide` tags the round and `MotionProfile.spitL` is the left muzzle
+  (game-actor.ts picks it); `attack.ts 'brace'` drives BOTH arms with one arc. `webgpu/game-actor-tallow.test.ts`
+  checks the rounds leave each muzzle in turn, raised and in front. Read each shot's origin against where the body
+  stood WHEN it fired: after a volley the mind walks on.
+- **Gorilla arms on a fat body:** length alone left the muzzles at hip height; the arms also had to hang further
+  forward (upper arm pitch 14) and the forearms lower (45, not 62). Size anything in forearm lengths (the cannon's
+  `t`) and it grows with the arm; set the hand bone so its tail is still the muzzle.
+- **Veins on a big body need scaling.** The recipe's 6 mm trunks baked as thin dark cracks on a 1.3 m wide torso; 1.5x
+  (9 mm, 6.5 mm proud) reads as raised veins. A crease arc with a 2 cm sag reads as one straight seam across the
+  chest: curve it up under each breast. The bake took 9-11 s on the GPU at 1024 wide (2,000 detail prims).
+
+### The tallow's fifth pass: corpulence is proportion
+
+- **Width alone reads as "big", not "fat".** At 1.3 m wide on legs 39% of his height he still read "a bit generic ...
+  doesnt quite read as corpulent" (owner). What changed it: legs cut to 29% of his height (stumps), the apron hanging
+  BELOW the knees so the front view is belly over two short pillars, and FAT FORCED INTO GEAR (the ankle rolls
+  squeezed up over iron boot cuffs, `make_boots.py`). Bound fat is the corpulence cue.
+- **Cut the legs with one number.** The legs dropped 0.16 m; the kit's skin table keeps its DESIGN heights and probes
+  `LOWER` below them (`scripts/tallow-surface.ts`, read by `tallow_common.py` `tp`; the same constant in
+  `scripts/tallow-detail-gen.ts`), so no make_*.py height had to be retyped. Bone-relative parts (cannons, boots) need
+  nothing. Pins that test heights should read them off the skeleton, not as numbers.
+- **A new character with `glow=` prims needs a `GLOW_PRIMS` entry** in `pack.test.ts` (each glow author at its exact
+  count). `npm run test:changed` does not run that file for a new `.blob` (nothing beside it changed); CI's full suite
+  caught the tallow's two eyes.

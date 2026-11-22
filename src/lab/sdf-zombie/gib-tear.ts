@@ -190,6 +190,14 @@ export interface TearTuning {
   boneSpin: number;
   /** Spin scale for the head region, so the face stays recognizable. */
   headSpin: number;
+  /**
+   * THE BODY MAY STILL MOVE DURING THE WINDOW (gib-switch.ts `beat`, 2026-10-29): the doomed body takes the
+   * survivor's blast reaction (root knock + stagger lurch), so its posed prims travel away from where the plan
+   * was cut. True pivots each region's spin about its origin CARRIED WITH THE POSE (`regionDrift`), and the
+   * frame reports that drift so the release spawns the pieces about the same pivots (no pop). Absent/false: the
+   * plan's own origins, the old window exactly.
+   */
+  followPose?: boolean;
 }
 
 export const TEAR_TUNING: TearTuning = {
@@ -307,6 +315,8 @@ export interface TearState {
   /** The resolver's falloff at this body, 0..1 — a grazing blast barely moves. */
   falloff: number;
   age: number;
+  /** The posed body's prims when the plan was cut — `regionDrift`'s reference (TearTuning.followPose). */
+  refPrims?: readonly Primitive[];
 }
 
 /**
@@ -766,6 +776,35 @@ export interface RuptureFrame {
    */
   deformedPrims: readonly Primitive[];
   deformedBones: readonly Primitive[];
+  /** Per-region travel of the POSE since the plan was cut (`regionDrift`); present only with `followPose`. */
+  drift?: Vec3[];
+}
+
+/**
+ * How far each region's SOURCED geometry has travelled: the mean midpoint of its source prims in `prims` (the
+ * body's current posed prims) minus the same in `ref` (the posed prims the plan was cut from; same indexing). A
+ * region with no sourced flesh rows (a bone-only piece) takes the mean drift of the rest. Zero for a body that
+ * has not moved since the plan was made. Pure.
+ */
+export function regionDrift(plan: RupturePlan, prims: readonly Primitive[], ref: readonly Primitive[]): Vec3[] {
+  const out: (Vec3 | null)[] = plan.pieces.map(piece => {
+    let n = 0, dx = 0, dy = 0, dz = 0;
+    for (const i of piece.srcPrims ?? []) {
+      const now = prims[i], was = ref[i];
+      if (!now || !was) continue;
+      dx += (now.a[0] + now.b[0] - was.a[0] - was.b[0]) / 2;
+      dy += (now.a[1] + now.b[1] - was.a[1] - was.b[1]) / 2;
+      dz += (now.a[2] + now.b[2] - was.a[2] - was.b[2]) / 2;
+      n++;
+    }
+    return n > 0 ? [dx / n, dy / n, dz / n] : null;
+  });
+  const known = out.filter((v): v is Vec3 => v !== null);
+  const mean: Vec3 = known.length
+    ? [known.reduce((s, v) => s + v[0], 0) / known.length, known.reduce((s, v) => s + v[1], 0) / known.length,
+      known.reduce((s, v) => s + v[2], 0) / known.length]
+    : [0, 0, 0];
+  return out.map(v => v ?? mean);
 }
 
 /**
@@ -834,11 +873,12 @@ export function rupturePosed(
   if (sloughing) moved = true;
 
   const shift = (q: Primitive, o: Vec3): Primitive => ({ ...q, a: add(q.a, o), b: add(q.b, o) });
+  const drift = tuning.followPose && tear.refPrims ? regionDrift(plan, posed.prims, tear.refPrims) : undefined;
   const place = (q: Primitive, r: number): Primitive => {
     const rot = quats[r]!;
     const moved2 = isIdentityQ(rot)
       ? q
-      : rotatePrimAbout(q, rot, plan.pieces[r]!.origin);
+      : rotatePrimAbout(q, rot, drift ? add(plan.pieces[r]!.origin, drift[r]!) : plan.pieces[r]!.origin);
     return shift(moved2, offsets[r]!);
   };
   const prims = deformedPrims.map((q, i) => {
@@ -866,5 +906,6 @@ export function rupturePosed(
     angVels,
     deformedPrims,
     deformedBones,
+    ...(drift ? { drift } : {}),
   };
 }

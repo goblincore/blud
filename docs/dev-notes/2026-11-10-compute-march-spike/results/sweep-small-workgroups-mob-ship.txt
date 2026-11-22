@@ -1,0 +1,16 @@
+ 7:46  up 11 days, 16:09, 2 users, load averages: 3.71 3.85 3.33
+.scratch/compute/mob-ship: 400 x 300, 3 draw(s); tiles 25 x 19
+  draw 0: rect px 72,30,328,300  tiles in rect 306, not empty 53, longest list 11
+  draw 1: rect px 100,89,281,195  tiles in rect 96, not empty 25, longest list 31
+  draw 2: rect px 0,0,400,300  tiles in rect 475, not empty 400, longest list 64
+warm frag       1 s  texels over 1e-4:      0  max 0.00  floats not identical: 0  over the bar by channel rgba 0/0/0/0  colour moved > 0.02: 0  hit/miss flips 0
+warm frag2      1 s  texels over 1e-4:      0  max 0.00  floats not identical: 0  over the bar by channel rgba 0/0/0/0  colour moved > 0.02: 0  hit/miss flips 0
+warm list      52 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+warm list8     51 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+warm list4     51 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+warm list2     53 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+warm list1     58 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+warm mask8     51 s  texels over 1e-4:    143  max 0.0461  floats not identical: 44930  over the bar by channel rgba 112/84/75/1  colour moved > 0.02: 1  hit/miss flips 0
+  rep  1  frag 37.22  frag2 36.68 (-0.54)  list 27.43 (-9.79)  list8 24.94 (-12.28)  list4 44.76 (+7.54)  list2 139.33 (+102.11)  list1 512.05 (+474.83)  mask8 24.87 (-12.35)
+scripts/native-spike/servers.sh: line 13: 73825 Terminated: 15          "$@"
+exit stopped by hand after one repeat: list2 and list1 are far slower than the fragment pass

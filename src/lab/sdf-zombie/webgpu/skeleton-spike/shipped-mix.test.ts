@@ -22,6 +22,7 @@ import { meshBoneSource } from './mesh-skull';
 import { createBoneMeshCache } from './sculpt-cache';
 import { sculptRecipe } from './sculpt-variant';
 import { BALL_HEADS } from './skull-cast';
+import { batchDraws } from './segment-instance';
 
 const CAST = ['zombie', 'soldier', 'juggernaut', 'cultist', 'female', 'bonewalker'] as const;
 const built = CAST.map((character) => {
@@ -36,7 +37,7 @@ function drawnOn(cache: Awaited<ReturnType<typeof createBoneMeshCache>>) {
   const renderer = createSegmentMeshRenderer(cache);
   const owners = built.map((_, i) => ({ id: i + 1 }));
   renderer.update(built.map(b => b.sources), owners);
-  const materialOf = (g: THREE.BufferGeometry) => { const m = (renderer.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined)?.material as THREE.Material | undefined; return m ? [m.name, m.userData.sculptPaint ?? null] : null; };
+  const materialOf = (g: THREE.BufferGeometry) => { const m = (renderer.object.children.find(c => batchDraws(c, g)) as THREE.Mesh | undefined)?.material as THREE.Material | undefined; return m ? [m.name, m.userData.sculptPaint ?? null] : null; };
   const rows = Object.fromEntries(built.map((b, i) => {
     const head = cache.get(b.head), eyes = renderer.drawn.filter(d => d.owner === owners[i] && d.eye);
     const at = (seats: readonly MeshEyePlacement[] | null | undefined) => !!seats && seats.length === eyes.length && eyes.every((d, k) =>
@@ -74,7 +75,8 @@ describe('the default page: one renderer, the shipped mix', () => {
     const said: string[] = [];
     const cache = await createBoneMeshCache('', line => { said.push(line); }, () => Promise.reject(new Error('no asset')));
     expect(cache.skullKit).toBeNull();
-    expect(said).toHaveLength(1);
+    // One line for the plates, one for the imp's own skull (its asset is asked for beside them).
+    expect(said).toEqual([expect.stringContaining('the anatomical skull did not load'), expect.stringContaining('the imp skull')]);
     const rows = drawnOn(cache);
     for (const c of ['zombie', 'soldier', 'juggernaut']) expect(rows[c], c).toMatchObject({ plates: false, head: bone(2), limb: bone(2), eyes: 2, seat: 'sculpt' });
     for (const c of ['cultist', 'female']) expect(rows[c], c).toMatchObject({ plates: false, head: bone(1), limb: bone(1), eyes: 2, seat: 'sculpt' });

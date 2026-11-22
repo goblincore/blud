@@ -1,0 +1,533 @@
+{
+ "base": ".scratch/sil/closeup",
+ "depthStep": 0.03,
+ "reach": 1,
+ "quality": {
+  "repeat": {
+   "all": 0,
+   "band": 0,
+   "inside": 0,
+   "pixels": {
+    "all": 480000,
+    "band": 11850,
+    "inside": 165823
+   }
+  },
+  "s50": {
+   "size": [
+    400,
+    300
+   ],
+   "edgeTexels": 33692,
+   "bilinear": {
+    "all": 0.016230107991872595,
+    "band": 0.3902192314457413,
+    "inside": 0.011945714266901003,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "bicubic": {
+    "all": 0.017153490821212484,
+    "band": 0.39952729354478406,
+    "inside": 0.012255279338752714,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "sil": {
+    "all": 0.0055420190568817055,
+    "band": 0.0633299726996864,
+    "inside": 0.011513262254592416,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    },
+    "edge": 33692,
+    "edgeMiss": 12051,
+    "edgeNoSurface": 164
+   }
+  },
+  "s375": {
+   "size": [
+    300,
+    225
+   ],
+   "edgeTexels": 57362,
+   "bilinear": {
+    "all": 0.0242092595245723,
+    "band": 0.3986956759967972,
+    "inside": 0.01692183087904652,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "bicubic": {
+    "all": 0.025287065429588324,
+    "band": 0.40179756565274516,
+    "inside": 0.017557830276004865,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "sil": {
+    "all": 0.006983671511000931,
+    "band": 0.05906961964493179,
+    "inside": 0.015994080967469217,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    },
+    "edge": 57362,
+    "edgeMiss": 18007,
+    "edgeNoSurface": 394
+   }
+  },
+  "s25": {
+   "size": [
+    200,
+    150
+   ],
+   "edgeTexels": 116704,
+   "bilinear": {
+    "all": 0.04201699331346626,
+    "band": 0.40701943349769815,
+    "inside": 0.028060745838169837,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "bicubic": {
+    "all": 0.04364450230475061,
+    "band": 0.4105984743879683,
+    "inside": 0.029405839442259,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    }
+   },
+   "sil": {
+    "all": 0.010289934278360877,
+    "band": 0.06605914257658264,
+    "inside": 0.02506508136907277,
+    "pixels": {
+     "all": 480000,
+     "band": 11850,
+     "inside": 165823
+    },
+    "edge": 116704,
+    "edgeMiss": 29697,
+    "edgeNoSurface": 1724
+   }
+  }
+ },
+ "legs": [
+  {
+   "name": "s50",
+   "dir": ".scratch/sil/closeup-s50",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "s50again",
+   "dir": ".scratch/sil/closeup-s50",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "s375",
+   "dir": ".scratch/sil/closeup-s375",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "s25",
+   "dir": ".scratch/sil/closeup-s25",
+   "manifest": "manifest.json"
+  },
+  {
+   "name": "edge-s50",
+   "dir": ".scratch/sil/closeup-e100",
+   "manifest": "manifest.sil-s50.json",
+   "edgeTexels": 33692
+  },
+  {
+   "name": "edge-s375",
+   "dir": ".scratch/sil/closeup-e100",
+   "manifest": "manifest.sil-s375.json",
+   "edgeTexels": 57362
+  },
+  {
+   "name": "edge-s25",
+   "dir": ".scratch/sil/closeup-e100",
+   "manifest": "manifest.sil-s25.json",
+   "edgeTexels": 116704
+  }
+ ],
+ "info": {
+  "s50": {
+   "warmS": 0.416,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "s50again": {
+   "warmS": 0.396,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "s375": {
+   "warmS": 0.335,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "s25": {
+   "warmS": 0.326,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0,
+     "meanDiff": 0,
+     "differingFrac": 0,
+     "nonZeroFrac": 1,
+     "over02": 0,
+     "over10": 0,
+     "classes": {},
+     "differingTexels": 0,
+     "inexactFloats": 0,
+     "chanOver": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "chanMax": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "hitFlips": 0
+    }
+   ],
+   "errors": []
+  },
+  "edge-s50": {
+   "warmS": 27.479,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.5139768216758966,
+     "meanDiff": 0.10976972520000806,
+     "differingFrac": 0.31329583333333333,
+     "nonZeroFrac": 1,
+     "over02": 150382,
+     "over10": 150382,
+     "classes": {},
+     "differingTexels": 150382,
+     "inexactFloats": 601528,
+     "chanOver": [
+      150382,
+      150382,
+      150382,
+      150382
+     ],
+     "chanMax": [
+      0.5139768216758966,
+      0.414865936152637,
+      0.32203991059213877,
+      0.20471125841140747
+     ],
+     "hitFlips": 150382
+    }
+   ],
+   "errors": []
+  },
+  "edge-s375": {
+   "warmS": 0.397,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.5139768216758966,
+     "meanDiff": 0.0970630320165966,
+     "differingFrac": 0.27639166666666665,
+     "nonZeroFrac": 1,
+     "over02": 132668,
+     "over10": 132668,
+     "classes": {},
+     "differingTexels": 132668,
+     "inexactFloats": 530672,
+     "chanOver": [
+      132668,
+      132668,
+      132668,
+      132668
+     ],
+     "chanMax": [
+      0.5139768216758966,
+      0.414865936152637,
+      0.32203991059213877,
+      0.20471125841140747
+     ],
+     "hitFlips": 132668
+    }
+   ],
+   "errors": []
+  },
+  "edge-s25": {
+   "warmS": 0.392,
+   "parity": [
+    {
+     "label": "sdf:march",
+     "maxDiff": 0.5139768216758966,
+     "meanDiff": 0.06247084751517978,
+     "differingFrac": 0.17711666666666667,
+     "nonZeroFrac": 1,
+     "over02": 85016,
+     "over10": 85016,
+     "classes": {},
+     "differingTexels": 85016,
+     "inexactFloats": 340064,
+     "chanOver": [
+      85016,
+      85016,
+      85016,
+      85016
+     ],
+     "chanMax": [
+      0.5139768216758966,
+      0.414865936152637,
+      0.32203991059213877,
+      0.20471125841140747
+     ],
+     "hitFlips": 85016
+    }
+   ],
+   "errors": []
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "ms": {
+    "s50": 5.25,
+    "s50again": 5.1199999928474424,
+    "s375": 3.1299999952316284,
+    "s25": 1.8899999976158142,
+    "edge-s50": 2.589999997615814,
+    "edge-s375": 2.8899999976158144,
+    "edge-s25": 3.9600000023841857
+   }
+  },
+  {
+   "rep": 2,
+   "ms": {
+    "s50again": 4.8,
+    "s375": 3.2299999952316285,
+    "s25": 1.8799999952316284,
+    "edge-s50": 2.6399999976158144,
+    "edge-s375": 2.9299999952316282,
+    "edge-s25": 4.1099999904632565,
+    "s50": 4.75
+   }
+  },
+  {
+   "rep": 3,
+   "ms": {
+    "s375": 3.25,
+    "s25": 1.890000009536743,
+    "edge-s50": 2.5,
+    "edge-s375": 3.1100000023841856,
+    "edge-s25": 4.339999997615815,
+    "s50": 4.8599999904632565,
+    "s50again": 4.519999992847443
+   }
+  },
+  {
+   "rep": 4,
+   "ms": {
+    "s25": 1.9100000023841859,
+    "edge-s50": 2.560000002384186,
+    "edge-s375": 2.9600000023841857,
+    "edge-s25": 3.9,
+    "s50": 4.829999995231629,
+    "s50again": 4.570000004768372,
+    "s375": 3.3800000071525576
+   }
+  },
+  {
+   "rep": 5,
+   "ms": {
+    "edge-s50": 2.5900000095367433,
+    "edge-s375": 3.1199999928474424,
+    "edge-s25": 3.8899999976158144,
+    "s50": 4.770000004768372,
+    "s50again": 4.490000009536743,
+    "s375": 3.3299999952316286,
+    "s25": 1.8899999976158142
+   }
+  }
+ ],
+ "baseMedianMs": 4.829999995231629,
+ "table": [
+  {
+   "name": "400x300 again (A/A)",
+   "medianMs": 4.570000004768372,
+   "diffMedianMs": -0.25999999046325684,
+   "diffMinMs": -0.3399999976158137,
+   "diffMaxMs": 0.04999999999999982,
+   "diffMedianPct": -5.3830225821933615
+  },
+  {
+   "name": "edge rays for s50",
+   "medianMs": 2.589999997615814,
+   "diffMedianMs": -2.269999992847443,
+   "diffMinMs": -2.660000002384186,
+   "diffMaxMs": -2.1100000023841856,
+   "diffMedianPct": -46.997929504937446
+  },
+  {
+   "name": "edge rays for s375",
+   "medianMs": 2.9600000023841857,
+   "diffMedianMs": -1.8200000047683718,
+   "diffMinMs": -2.3600000023841856,
+   "diffMaxMs": -1.6500000119209295,
+   "diffMedianPct": -37.681159556214276
+  },
+  {
+   "name": "edge rays for s25",
+   "medianMs": 3.9600000023841857,
+   "diffMedianMs": -0.8800000071525576,
+   "diffMinMs": -1.2899999976158143,
+   "diffMaxMs": -0.5199999928474419,
+   "diffMedianPct": -18.219461863795633
+  },
+  {
+   "name": "s50 + its edge rays",
+   "medianMs": 7.389999997615814,
+   "diffMedianMs": 2.5899999976158146,
+   "diffMinMs": 2.5,
+   "diffMaxMs": 2.6399999976158144,
+   "diffMedianPct": 53.623188409374066
+  },
+  {
+   "name": "s375 + its edge rays",
+   "medianMs": 6.340000009536743,
+   "diffMedianMs": 1.5000000119209291,
+   "diffMinMs": 0.7699999928474428,
+   "diffMaxMs": 1.679999983310699,
+   "diffMedianPct": 31.055900898587783
+  },
+  {
+   "name": "s25 + its edge rays",
+   "medianMs": 5.85,
+   "diffMedianMs": 1.0099999904632568,
+   "diffMinMs": 0.5999999999999996,
+   "diffMaxMs": 1.3700000166893016,
+   "diffMedianPct": 20.910972908082186
+  },
+  {
+   "name": "s375 alone",
+   "medianMs": 3.25,
+   "diffMedianMs": -1.5200000047683715,
+   "diffMinMs": -2.1200000047683716,
+   "diffMaxMs": -1.4400000095367433,
+   "diffMedianPct": -31.46997942585874
+  },
+  {
+   "name": "s25 alone",
+   "medianMs": 1.8899999976158142,
+   "diffMedianMs": -2.9199999928474427,
+   "diffMinMs": -3.3600000023841856,
+   "diffMaxMs": -2.8700000047683716,
+   "diffMedianPct": -60.45548645404109
+  }
+ ]
+}

@@ -22,6 +22,7 @@ import { createBakedChunkMaterial } from './baked-chunks';
 import { registerLitChunkMaterial } from './game-chunk-bake';
 import { carveBodyIntoPieces, type CarvedPiece } from './gib-carve';
 import { makeChunk } from '../gib-chunks';
+import { seatChunkSpawn } from './game-hit-trace';
 import { spawnSpritePiece } from './gib-sprite-pieces';
 import { rngStreams } from './rng';
 import { loadGibSheet, loadGibSpriteAtlas } from './gib-sprites';
@@ -278,13 +279,15 @@ export function ensureCarvedLibrary(ctx: GameContext): boolean {
 export function spawnCarvedPiece(ctx: GameContext, 
   piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
   impulseVel: Vec3 | null, impulseDelay: number,
+  /** SECTOR levels (plan 3b): the body centre — seatChunkSpawn clamps the spawn from it. */
+  from?: Vec3 | null,
 ): boolean {
   if (!ensureCarvedLibrary(ctx) || !ctx.bake.carvedMaterial) return false;
   const rng = rngStreams.misc;
-  const state = makeChunk(
+  const state = seatChunkSpawn(ctx, makeChunk(
     piece.limb as never, origin, [0, 0, 0], piece.radius,
     piece.longAxis as never, rng, kind,
-  );
+  ), from);
   spawnSpritePiece(ctx.vfx.spritePieces, {
     state,
     impulseDelay, impulseVel,

@@ -45,12 +45,21 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
   if (!cluster || !cluster.alive)
     return { body, chunk: { limb, prims: [], bones: [], origin: [0, 0, 0], tornAt: [] }, stumpWound: null };
 
-  const prims = body.prims.slice(cluster.start, cluster.start + cluster.count)
+  // A flying HEAD leaves its neck behind (owner, 2026-11-02: "the head flies
+  // off with the neck nub which looks weird"). Nearly every head cluster opens
+  // with its `neck` bone's prims; the piece is the skull alone. The neck goes
+  // with the dead cluster (prims are never re-packed: smin is
+  // non-associative), so the body keeps the stump it always had. A head with
+  // nothing but neck prims keeps them all rather than flying empty.
+  const leaves = (p: Primitive) => limb !== 'head' || p.bone !== 'neck';
+  const all = body.prims.slice(cluster.start, cluster.start + cluster.count)
     .filter(p => !p.dead); // mid-limb-severed prims already left as chunks
+  const prims = all.some(leaves) ? all.filter(leaves) : all;
   // Bone leaves with its limb. Bones live in their own array and carry the
   // cluster INDEX they belong to, so this is a filter rather than a slice.
   const clusterIdx = body.clusters.findIndex(c => c.limb === limb);
-  const bones = (body.bonePrims ?? []).filter(b => b.cluster === clusterIdx && !b.dead);
+  const clusterBones = (body.bonePrims ?? []).filter(b => b.cluster === clusterIdx && !b.dead);
+  const bones = clusterBones.some(leaves) ? clusterBones.filter(leaves) : clusterBones;
   const clusters = body.clusters.map(c => (c.limb === limb ? { ...c, alive: false } : c));
   const next: BuildResult = { ...body, clusters };
 

@@ -60,6 +60,9 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
+import impBlobSrc from './characters/imp.blob?raw';
+import cerebraxBlobSrc from './characters/cerebrax.blob?raw';
+import tallowBlobSrc from './characters/tallow.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -90,6 +93,10 @@ export interface CharacterEntry {
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
+  /** The kit comes off with the anatomy under it: a shot-off arm takes its hoses and fist, a head shot that reaches a
+   *  tooth row knocks it out (webgpu/kit-damage.ts). Implied by `armoured`. Absent: the kit stays on the bones, which
+   *  characters/kit-sheds.test.ts allows no kit. */
+  kitSheds?: boolean;
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -160,11 +167,17 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
     kit: '/assets/lab/zombie-kit.gltf',
+    kitSheds: true, // a shot-off forearm takes its hand
+    // Sutures along the seams the body was sewn together at: shoulders, neck, waist, hips (characters/zombie.detail
+    // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
+    // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.
+    bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
   },
   goblin: {
     name: 'goblin', src: goblinBlobSrc,
     kit: '/assets/lab/goblin-kit.gltf',
+    kitSheds: true,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin'),
   },
@@ -183,6 +196,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   'goblin-cinematic': {
     name: 'goblin-cinematic', src: goblinCinematicBlobSrc,
     kit: '/assets/lab/goblin-cinematic-kit.gltf',
+    kitSheds: true,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin-cinematic'),
   },
@@ -195,6 +209,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   'goblin-cinematic-home': {
     name: 'goblin-cinematic-home', src: goblinCinematicHomeBlobSrc,
     kit: '/assets/lab/goblin-cinematic-kit.gltf',
+    kitSheds: true,
     kitOnly: ['tooth'],
     kitScale: 1.3077,
     face: ZOMBIE_FLAT,
@@ -203,12 +218,14 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   clown: {
     name: 'clown', src: clownBlobSrc,
     kit: '/assets/lab/clown-kit.gltf',
+    kitSheds: true,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('clown'),
   },
   'clown-alt': {
     name: 'clown-alt', src: clownAltBlobSrc,
     kit: '/assets/lab/clown-alt-kit.gltf',
+    kitSheds: true,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('clown-alt'),
   },
@@ -302,6 +319,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   warbull: {
     name: 'warbull', src: warbullBlobSrc,
     kit: '/assets/lab/warbull-kit.gltf',
+    kitSheds: true,
     // Cropped from the reference plate's head (warbull.blob, sheet block).
     // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
     face: { ...bakedFace('warbull-face.png'), mean: 0.14481547752506288 },
@@ -329,6 +347,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The machinery: Blender parts (assets-source/twinhead-kit/) skinned to the
     // .blob's bones by scripts/blender-kit.ts.
     kit: '/assets/lab/twinhead-kit.gltf',
+    kitSheds: true,
     // The torso's muscle and surface detail (characters/twinhead.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/twinhead-body-n.png', meta: '/assets/lab/twinhead-body-n.json', strength: 1 },
     face: bakedFace('twinhead-face.png'),
@@ -341,6 +360,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The machinery: Blender parts (assets-source/butcher-kit/) skinned to the
     // .blob's bones by scripts/blender-kit.ts.
     kit: '/assets/lab/butcher-kit.gltf',
+    kitSheds: true,
     // Muscle and varicose veins on the torso and arms (characters/butcher.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/butcher-body-n.png', meta: '/assets/lab/butcher-body-n.json', strength: 1 },
     face: bakedFace('butcher-face.png'),
@@ -351,6 +371,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   flayer: {
     name: 'flayer', src: flayerBlobSrc,
     kit: '/assets/lab/flayer-kit.gltf',
+    kitSheds: true,
     // Ribs, spine and veins on the gaunt torso and arms (characters/flayer.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/flayer-body-n.png', meta: '/assets/lab/flayer-body-n.json', strength: 1 },
     face: bakedFace('flayer-face.png'),
@@ -361,6 +382,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   deadeye: {
     name: 'deadeye', src: deadeyeBlobSrc,
     kit: '/assets/lab/deadeye-kit.gltf',
+    kitSheds: true,
     // Muscle and veins (characters/deadeye.detail from butcher-detail-gen.ts deadeye; baked, never marched).
     bodyNormal: { url: '/assets/lab/deadeye-body-n.png', meta: '/assets/lab/deadeye-body-n.json', strength: 1 },
     face: bakedFace('deadeye-face.png'),
@@ -373,6 +395,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   gorehound: {
     name: 'gorehound', src: gorehoundBlobSrc,
     kit: '/assets/lab/gorehound-kit.gltf',
+    kitSheds: true,
     // Folds, ribs, muscle and varicose veins (characters/gorehound.detail, baked round a LENGTHWISE torso axis:
     // scripts/gorehound-detail-gen.ts has the bake command; never marched).
     bodyNormal: { url: '/assets/lab/gorehound-body-n.png', meta: '/assets/lab/gorehound-body-n.json', strength: 1 },
@@ -395,6 +418,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   gibbet: {
     name: 'gibbet', src: gibbetBlobSrc,
     kit: '/assets/lab/gibbet-kit.gltf',
+    kitSheds: true,
     // The sac's folds, striae and varicose veins and the head's (characters/gibbet.detail, baked DOWN the hem
     // pendulum: scripts/gibbet-detail-gen.ts has the bake command; never marched).
     bodyNormal: { url: '/assets/lab/gibbet-body-n.png', meta: '/assets/lab/gibbet-body-n.json', strength: 1 },
@@ -407,6 +431,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   chair: {
     name: 'chair', src: chairBlobSrc,
     kit: '/assets/lab/chair-kit.gltf',
+    kitSheds: true,
     // Baked scars, ribs and varicose veins (chair.detail, scripts/seated-detail-gen.ts).
     bodyNormal: { url: '/assets/lab/chair-body-n.png', meta: '/assets/lab/chair-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
@@ -419,6 +444,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   gamer: {
     name: 'gamer', src: gamerBlobSrc,
     kit: '/assets/lab/gamer-kit.gltf',
+    kitSheds: true,
     // Baked varicose veins and stretch marks (gamer.detail, scripts/seated-detail-gen.ts).
     // Strength 1.5: the owner wants the veins on his neck, face and the stick "pronounced".
     bodyNormal: { url: '/assets/lab/gamer-body-n.png', meta: '/assets/lab/gamer-body-n.json', strength: 1.5 },
@@ -431,6 +457,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // unit and the left greave/boot. Compiled from characters/cyberdemon-kit.wam
     // by scripts/build-wam-kit.sh; committed as the glTF.
     kit: '/assets/lab/cyberdemon-kit.gltf',
+    kitSheds: true,
     // The .blob's sheet block declares cyberdemon-face.png — a GENERATED,
     // mouth-only decal at MULTIPLY (there is no reference mesh, so
     // blob:face-bake cannot run; scripts/make-cyberdemon-face.py draws it).
@@ -449,6 +476,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The chains and shackles live in characters/bloatmaw-kit.wam, compiled by
     // scripts/build-wam-kit.sh into public/assets/lab/bloatmaw-kit.gltf.
     kit: '/assets/lab/bloatmaw-kit.gltf',
+    kitSheds: true,
     // No sheet block and no decal: the maw, teeth, eyes and throat core are
     // geometry, and there is no reference mesh to bake. ZOMBIE_FLAT, per the
     // "never declare an image for a file that does not exist" rule.
@@ -460,6 +488,35 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // root sway/bob and the arm reach. See the .blob header and the report.
     profile: motionProfileFor('bloatmaw'),
   },
+  // The fireball-throwing demon (imp.blob's header): a gaunt hunched biped on the
+  // butcher's digitigrade skeleton, its flesh in the .blob, sinew and veins in the
+  // baked body normal map, and the hard parts (talons and burning hand sockets,
+  // teeth and horns, a forge-heart and its fuel lines, foot claws) Blender kit
+  // (assets-source/imp-kit/). No face sheet: the face is prims and kit.
+  imp: {
+    name: 'imp', src: impBlobSrc,
+    kit: '/assets/lab/imp-kit.gltf',
+    kitSheds: true,
+    // Starved ribs, spine knuckles, sinew cords and veins on the torso, arms and legs (characters/imp.detail, baked;
+    // never marched).
+    bodyNormal: { url: '/assets/lab/imp-body-n.png', meta: '/assets/lab/imp-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('imp'),
+  },
+  // THE BOSS BRAIN-SPIDER (cerebrax.blob's header): a huge brain in the .blob, its gyri, sulci and veins in the
+  // baked body normal map, and the harness, the four spider legs, the cables and the under-barrel chaingun Blender
+  // kit (assets-source/cerebrax-kit/). No face sheet: the face is prims, the eyes and teeth kit.
+  cerebrax: {
+    name: 'cerebrax', src: cerebraxBlobSrc,
+    kit: '/assets/lab/cerebrax-kit.gltf',
+    kitSheds: true,
+    // The gyri and sulci (a random-wave labyrinth of folds), the fissures, cortical veins and the snarl's wrinkles
+    // (characters/cerebrax.detail, baked round a vertical axis through the brain: scripts/cerebrax-detail-gen.ts has
+    // the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/cerebrax-body-n.png', meta: '/assets/lab/cerebrax-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('cerebrax'),
+  },
   // The cacodemon-style floater (teratoma.blob's header): a flesh ball in the
   // .blob, its folds and veins in the baked body normal map, and the hard parts
   // (horns, teeth, talons, the eye, shackles and chains) Blender kit
@@ -468,6 +525,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   teratoma: {
     name: 'teratoma', src: teratomaBlobSrc,
     kit: '/assets/lab/teratoma-kit.gltf',
+    kitSheds: true,
     // The ball's roped folds, veins and nodules (characters/teratoma.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/teratoma-body-n.png', meta: '/assets/lab/teratoma-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
@@ -480,6 +538,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The face stays GEOMETRY (no decal): the maw, teeth and eyes are prims,
     // so `face` is the flat nub and no `image` is declared.
     kit: '/assets/lab/gnasher-kit.gltf',
+    kitSheds: true,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('gnasher'),
   },
@@ -488,6 +547,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // Belt, hide kilt, breeches, boots and bracers: characters/ogre-kit.wam,
     // compiled by scripts/build-wam-kit.sh ogre; committed as the glTF.
     kit: '/assets/lab/ogre-kit.gltf',
+    kitSheds: true,
     // The .blob's sheet block declares ogre-face.png — a GENERATED mouth-only
     // decal at MULTIPLY (no reference mesh to bake; scripts/make-ogre-face.py
     // draws it). mean is the declared value; the face step re-measures off
@@ -554,10 +614,28 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // parts (assets-source/venus-kit/) skinned to the .blob's bones by
     // scripts/blender-kit.ts.
     kit: '/assets/lab/venus-kit.gltf',
+    kitSheds: true,
     // Fat rolls, cellulite, stretch marks and varicose veins (characters/venus.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('venus'),
+  },
+
+  // The walking rendering vat (tallow.blob's header): a corpulent man whose own fat, rendered in a boiler sunk in his
+  // back, feeds the cannons his forearms have grown into (the Cronenberg pass).
+  tallow: {
+    name: 'tallow', src: tallowBlobSrc,
+    // The arm cannons, the sunken back boiler and the feed hoses: Blender parts
+    // (assets-source/tallow-kit/) skinned to the .blob's bones by scripts/blender-kit.ts.
+    kit: '/assets/lab/tallow-kit.gltf',
+    kitSheds: true,
+    // Fat rolls, creases, cellulite, stretch marks, and veins radiating from the boiler and the cannon blocks
+    // (characters/tallow.detail from scripts/tallow-detail-gen.ts; baked, never marched).
+    bodyNormal: { url: '/assets/lab/tallow-body-n.png', meta: '/assets/lab/tallow-body-n.json', strength: 1 },
+    // His own face (owner: not the zombie's): every feature is a prim in tallow.blob, and this generated decal
+    // (scripts/make-tallow-face.py) draws only the mouth's cavity and teeth, at MULTIPLY.
+    face: bakedFace('tallow-face.png'),
+    profile: motionProfileFor('tallow'),
   },
 
 };

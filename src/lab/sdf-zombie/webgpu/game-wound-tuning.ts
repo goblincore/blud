@@ -12,6 +12,11 @@ import { SPILL_CHANCE } from '../entrails-spawn';
 import { rebuildCast } from './game-spawn';
 import { applyWoundRamp } from './game-wound-vfx';
 import { type WoundTuningValues } from './wound-panel';
+import { setJointToughness, setSoldierToughness } from '../connectivity';
+import { setCorpseIntegrity } from '../collapse';
+import { setBlowAway, type BlowWeapon } from '../blow-away';
+import { setSlump } from '../slump-death';
+import { setDeathFall } from '../death-fall';
 
 
 /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
@@ -35,6 +40,45 @@ export function applyWoundTuning(ctx: GameContext, o: Partial<WoundTuningValues>
   }
   if (ramp) for (const a of ctx.world.actors) applyWoundRamp(ctx, a.view);   // chunks copy the body template's meatCfg at spawn
   if (o.gutSize !== undefined) ctx.vfx.woundTuning.gutSize = o.gutSize;
+  // Gameplay knobs (spec 2026-11-02), read live by the sever check and the fall.
+  if (o.shoulderToughness !== undefined) {
+    ctx.vfx.woundTuning.shoulderToughness = o.shoulderToughness;
+    setJointToughness({ root: o.shoulderToughness });
+  }
+  if (o.elbowToughness !== undefined) {
+    ctx.vfx.woundTuning.elbowToughness = o.elbowToughness;
+    setJointToughness({ mid: o.elbowToughness });
+  }
+  if (o.soldierShoulder !== undefined) {
+    ctx.vfx.woundTuning.soldierShoulder = o.soldierShoulder;
+    setSoldierToughness({ root: o.soldierShoulder });
+  }
+  if (o.soldierElbow !== undefined) {
+    ctx.vfx.woundTuning.soldierElbow = o.soldierElbow;
+    setSoldierToughness({ mid: o.soldierElbow });
+  }
+  if (o.corpseIntegrity !== undefined) {
+    ctx.vfx.woundTuning.corpseIntegrity = o.corpseIntegrity;
+    setCorpseIntegrity(o.corpseIntegrity);
+  }
+  if (o.blowAway !== undefined) {
+    ctx.vfx.woundTuning.blowAway = o.blowAway;
+    setBlowAway({ scale: o.blowAway });
+  }
+  const perWeapon = { blowAwayShotgun: 'shotgun', blowAwayDouble: 'doubleShotgun', blowAwaySlug: 'slug', blowAwayExplosion: 'explosion' } as const;
+  for (const [k, w] of Object.entries(perWeapon) as [keyof typeof perWeapon, BlowWeapon][]) {
+    const chance = o[k];
+    if (chance !== undefined) { ctx.vfx.woundTuning[k] = chance; setBlowAway({ weapons: { [w]: { chance } } }); }
+  }
+  if (o.deathAnimated !== undefined) { ctx.vfx.woundTuning.deathAnimated = o.deathAnimated; setDeathFall({ on: o.deathAnimated >= 0.5 }); }
+  if (o.deathPull !== undefined) { ctx.vfx.woundTuning.deathPull = o.deathPull; setDeathFall({ pull: o.deathPull }); }
+  if (o.deathSettle !== undefined) { ctx.vfx.woundTuning.deathSettle = o.deathSettle; setDeathFall({ settle: o.deathSettle }); }
+  if (o.slump !== undefined) { ctx.vfx.woundTuning.slump = o.slump; setSlump({ chance: o.slump }); }
+  if (o.blowAwayRange !== undefined) {
+    ctx.vfx.woundTuning.blowAwayRange = o.blowAwayRange;
+    const farM = Math.max(o.blowAwayRange, 2.6);
+    setBlowAway({ weapons: { shotgun: { farM }, doubleShotgun: { farM } } });
+  }
   // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
   // they shape every rope spawned from now on; existing ropes keep theirs.
   if (o.coilTightness !== undefined) ctx.vfx.woundTuning.coilTightness = o.coilTightness;

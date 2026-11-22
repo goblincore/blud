@@ -4,6 +4,9 @@
 
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
+import { createSectorNavigation } from './sector-navigation';
+import { sectorSightBlocker } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
@@ -67,7 +70,7 @@ import {
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
-import { makeGameContext } from './game-context';
+import { makeGameContext, type GameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
 import { startBoneMeshCache } from './skeleton-spike/sculpt-cache';
@@ -89,7 +92,8 @@ import { parseBlob } from '../blob-parse';
 import { MOTION_TUNING } from '../motion';
 import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from './character-view';
 import { createCharacterEffects } from './character-effects';
-import { characterEntry, characterNames } from '../character-registry';
+import { CHARACTERS, characterEntry, characterNames } from '../character-registry';
+import { applyClothQuery } from './bench-cloth';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
@@ -101,8 +105,17 @@ import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import type { Quat } from '../vec';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { wanderBounds, type RoomDef } from './game-level';
-import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
-import { parseLevelJson } from './level-json';
+import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sectorActiveLevel } from './active-level';
+import { parseLevel } from './sector-json';
+import { addSectorMeshes } from './game-sector-mesh';
+import { createGameDoors } from './game-doors';
+import { createZoneCull, updateZoneCull } from './game-zone-cull';
+import { freezeLevelMatrices } from './game-level-batch';
+import { doorTravel } from './sector-doors';
+import { SECTOR_BODY_RADIUS_M } from './sector-def';
+import { createDoorSeams } from './game-seams-doors';
+import { EMIT_PUSH, emitterAccent } from './game-sector-light';
+import { standingFloor } from './level-ground';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-rooms';
 import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor';
@@ -160,7 +173,7 @@ import { createGpuFrameAttributor } from './gpu-frame-summary';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
-import { createWarmBackgroundTracker } from './warm-background';
+import { createWarmBackgroundTracker, withHidden } from './warm-background';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -183,6 +196,8 @@ import {
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { TEAR_TUNING } from '../gib-tear';
+import { GIB_SWITCH_TEAR_SEC, parseGibSwitch } from '../gib-switch';
+import { parseBlastFx } from '../blast-fx';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
@@ -194,6 +209,11 @@ import {
   WEAPON_SLOTS, makeWeaponSlotState, requestSlot, slotForKey, slotLowerAmount, slotReady,
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
+import { setShotFix, shotFixOn } from '../body-field';
+import { goreSpreadOn, setGoreSpread } from '../gore-spread';
+import { meatPoolOn, setMeatPool } from '../meat-pool';
+import { seedUploadOn, setSeedUpload } from '../seed-band';
+import { warmGore } from './game-gore-spread';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { boneExposureOf } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
@@ -220,6 +240,9 @@ import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutt
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
+import { createBulletTimePanel } from './bullet-time-panel';
+import { applyBulletTimeTuning, bulletTimeFromParams } from '../bullet-time';
+import { adrenalineFromParams, applyAdrenalineTuning } from '../adrenaline';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import { createLightLayersPanel } from './light-layers-panel';
 import { listLook } from './light-list';
@@ -260,7 +283,7 @@ import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
-import { boneChunkRadius, mulberry32 } from '../melt-bones';
+import { boneChunkRadius, meltGroupOf, mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshEviction, fleshOverCap, fleshShrink } from '../flesh-bits';
 import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
@@ -277,7 +300,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Primitive } from '../types';
 import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
-import { CHUNK_DETAIL_GAIN, MAX_CHUNK_BUDGET, applyDynamiteTuning, dynamiteTuningValues } from './game-dynamite-tuning';
+import { CHUNK_DETAIL_GAIN, MAX_CHUNK_BUDGET, applyBlastFx, applyDynamiteTuning, dynamiteTuningValues } from './game-dynamite-tuning';
 import { createDebugProbeSeams } from './game-seams-debug-probe';
 import { createBenchSeams } from './game-seams-bench';
 import { createRenderDiagSeams } from './game-seams-render-diag';
@@ -292,6 +315,7 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createMelterHarness } from './game-melter';
 import { createRodHarness } from './game-rod';
 import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
@@ -302,6 +326,8 @@ import { createHeadShot } from './game-head-shot';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createMeatGib } from './game-meat-gib';
 import { createKitEye } from './game-kit-eye';
+import { createKitPrewarm } from './game-kit-prewarm';
+import { createLevelPrewarm } from './game-level-prewarm';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -325,6 +351,11 @@ import { createFireSeams } from './game-seams-fire';
 import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
+import { createDebrisSeams } from './game-seams-debris';
+import { createBlastTraceSeams } from './game-seams-blast-trace';
+import { createBarrelSeams } from './game-seams-barrels';
+import { createBarrelRuntime } from './game-barrels';
+import { barrelBox } from './barrel-runtime';
 import { createMarchDebugSeams } from './game-seams-march-debug';
 import { createEarlyzSeams } from './game-seams-earlyz';
 import { EARLYZ_FLAG } from './earlyz/flag';
@@ -345,17 +376,18 @@ import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDir
 import { ceilingAt } from './game-hit-trace';
 import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-throw';
+import { ROCKET_LIGHT, createRocketLightPool, liveRocketLights } from './rocket-light';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-wound-vfx';
-import { CULL_DWELL_MS, updateVisibleActors } from './game-render-controls';
-import { chunkCollidersAt } from './game-hit-trace';
+import { CULL_DWELL_MS, syncKitVisibility, updateVisibleActors } from './game-render-controls';
+import { actorSpawnCentre, chunkCollidersAt, seatBurstSpawn } from './game-hit-trace';
 import { applySdfScale } from './game-render-controls';
 import { aimDir } from './game-weapon-rig';
 import { finishChunkBake, spawnGoreShowcase } from './game-chunk-bake';
 import { ensureCarvedLibrary } from './game-gib-spawn';
 import { updateHud } from './game-hud';
 import { selectVisualActors } from './visual-actor-set';
-import { bodyInSight } from './actor-sight';
+import { bodyInSight, sectorOcclusion } from './actor-sight';
 import { sceneCensus } from './game-telemetry-scene';
 import { demoRecordStart } from './game-demo-record';
 import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render-controls';
@@ -508,6 +540,15 @@ async function main() {
     ?? (Date.now() & 0x7fffffff);
   setRngSeed(ctx.demo.seed);
   console.info(`[sdf-game] demo seed ${ctx.demo.seed}${ctx.boot.seedSearch.has('seed') ? ' (?seed=)' : ' (random)'}`);
+  // BULLET TIME knobs from the URL (?bt_move=0.66 &c., bullet-time.ts BULLET_TIME_PARAMS), validated like the
+  // __sdfGame.bulletTime({...}) seam; a refused one is logged rather than silently dropped.
+  {
+    const bt = applyBulletTimeTuning(bulletTimeFromParams(ctx.boot.seedSearch));
+    if (bt.rejected.length) console.warn(`[sdf-game] bullet time params refused: ${bt.rejected.join('; ')}`);
+    // ADRENALINE (adrenaline.ts ADRENALINE_PARAMS: ?adrenaline=0, ?adr_world= &c.), the same way.
+    const adr = applyAdrenalineTuning(adrenalineFromParams(ctx.boot.seedSearch));
+    if (adr.rejected.length) console.warn(`[sdf-game] adrenaline params refused: ${adr.rejected.join('; ')}`);
+  }
 
   // LOADING SCREEN (spike program). The boot compiles for seconds before the
   // game is playable — WebGPU init, the TSL graph, the weapon GLB, and since
@@ -594,10 +635,10 @@ async function main() {
     if (levelParam) {
       const res = await fetch(`/assets/levels/${levelParam}.level.json`);
       if (!res.ok) throw new Error(`level ${levelParam}: HTTP ${res.status}`);
-      const def = parseLevelJson(await res.json(), { state: q.get('state') ?? undefined });
+      const def = parseLevel(await res.json(), { state: q.get('state') ?? undefined, emitPush: EMIT_PUSH });
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
-      ctx.world.level = authoredLevel(def);
+      ctx.world.level = def.sectors ? sectorActiveLevel(def) : authoredLevel(def);
       ctx.world.artScene = await loadLevelArt(levelParam, def.art);
     } else {
       ctx.world.level = ringLevel();
@@ -687,8 +728,7 @@ async function main() {
   ctx.world.sightA = [0, 0, 0];
 
   // Static colliders: enemies route with gates open (spec §6.4).
-  ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
-  ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+  buildEncounter(ctx);
   ctx.world.encounterHomes = new Map<number, Vec3>();
   ctx.world.surfaces = { planes: ctx.world.level.surfaces.planes, boxes: ctx.world.level.surfaces.boxes };
   ctx.world.levelGroup = new THREE.Group();
@@ -767,6 +807,13 @@ async function main() {
   }
   // Mesh key §5: the art joins the group BEFORE the per-room light lists are
   // assigned (below), so it is lit exactly like the walls.
+  // Sector levels (spec 2026-10-24 §6.4): floors, ceilings and walls from the sectors.
+  if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, ctx.world.level.def.sectors);
+  // Doors (sector levels with `doors`): their leaves join the level group here, so the light-list loop lights them.
+  if (ctx.world.level.def?.sectors) ctx.world.doors = createGameDoors(ctx);
+  // Barrels (plan 3b): sector levels only. Their meshes join the level group here so the light-list loop below lights
+  // them like the walls; their boxes join ctx.world.colliders (the same array) before anything moves.
+  if (ctx.world.level.def?.barrels?.length) ctx.world.barrels = createBarrelRuntime(ctx, ctx.world.level.def.barrels);
   if (ctx.world.artScene && ctx.world.level.def?.art) placeLevelArt(ctx, ctx.world.artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
@@ -848,9 +895,14 @@ async function main() {
     ctx.world.accentGroup.add(pl);
     ctx.vfx.explosionLightPool.push(pl);
   }
+  // The volley rockets' flight light (rocket-light.ts): permanent too, beside the blast pool.
+  createRocketLightPool(ctx, ctx.world.accentGroup);
   ctx.lighting.flickerLights = [];
   for (const r of ctx.world.level.rooms) {
-    for (const a of r.accents) {
+    for (const a0 of r.accents) {
+      // Emitter-surface lights (glow mood, item 2g B1): ?emitlights=0 drops them, ?emitlightgain= scales them.
+      const a = emitterAccent(a0, location.search);
+      if (!a) continue;
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
@@ -1748,9 +1800,18 @@ async function main() {
       if (lead) ctx.render.segMeshRenderer.organLook.tint.value.set(lead.organColor.value.r, lead.organColor.value.g, lead.organColor.value.b, lead.organAmp.value);
       const organsMesh = ctx.render.organMode === 'mesh';
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
+        // A melting body has no segment meshes at all (skull and eyes included): they cannot follow a melt, and its
+        // own packed bone rows draw the skeleton until each group falls out as a chunk (game-actor beginMelt).
         let e = ctx.render.skeletonSources.get(a);
         if (!e) { e = buildSkeletonSources(ctx, a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); a.view.setPackOrgans(!organsMesh); }
         else if (e.body !== a.body) { e = buildSkeletonSources(ctx, a, e.name); (e as { severed?: boolean }).severed = true; ctx.render.skeletonSources.set(a, e); }
+        // A MELTING BODY SHOWS ITS MESH SKELETON (the skull, its eyes, the ribs) behind the flesh as it runs off; a
+        // group the melt has let go of (it is a falling chunk now) leaves the mesh the same frame.
+        if (a.melting()) {
+          const gone = a.meltReleased();
+          // (the organs go with the ribcage: left behind, they sat in the finished pool as one big red lump.)
+          return gone.size ? e.sources.filter(src => (src.kind === 'organ' ? !gone.has('cage') : !gone.has(meltGroupOf(src.prims?.[0]?.bone)))) : e.sources;
+        }
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx, ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
@@ -1985,6 +2046,16 @@ async function main() {
             fill: ctx.vfx.spread,
           });
         }
+        // (3b') ROCKETS IN FLIGHT (the tallow's volley, rocket-light.ts): after the blasts, before the fires and
+        // the tracers. A rocket outside the gather's room cannot reach it, as for a blast.
+        for (const r of liveRocketLights(ctx)) {
+          if (gatherLights.length >= 8) break;
+          if (!nearRoomPoint(r.pos, dynRoom)) continue;
+          gatherLights.push({
+            pos: [r.pos[0], r.pos[1], r.pos[2]], color: [...ROCKET_LIGHT.colour],
+            intensity: ROCKET_LIGHT.gatherPeak * r.level * ctx.lighting.fxLightScale,
+          });
+        }
         // (3c) BURNING BODIES feed the same list (≤2 slots; surplus burners
         // merge into the nearest slot) so a future anchor or shadow fix lights
         // the room here. NOTE: at the chest anchor the light self-shadows on
@@ -2053,6 +2124,8 @@ async function main() {
         const k = 1 - age / 0.14;
         directFlashes.push({ pos: [m[0], m[1], m[2]], intensity: 35 * k * k });
       }
+      // Rockets in flight key the bodies they pass (rocket-light.ts).
+      for (const r of liveRocketLights(ctx)) directFlashes.push({ pos: r.pos, intensity: ROCKET_LIGHT.flashPeak * r.level });
       // BURNING BODIES feed the SAME bodyFlash slot (flare test harness).
       ctx.vfx.burning.pushFlashes(directFlashes);
       // The shared light list: every light that can touch a body, one buffer, once a frame.
@@ -2277,7 +2350,14 @@ async function main() {
     // frame's bodies and chunks. With the gate off the lists are not walked.
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
+    // The camera's portal flood (game-zone-cull.ts): level meshes in sectors it cannot see leave the render, and
+    // the march cull below skips the sight rays of bodies in none of its sectors.
+    updateZoneCull(ctx);
+    // Pickup batches (game-level-batch.ts) read this frame's flood: the shown pickups' rows packed for one draw an item.
+    ctx.world.loop?.batches?.update();
+    freezeLevelMatrices(ctx);   // sector levels: static level transforms composed once (`?batch=0` off)
     updateVisibleActors(ctx);
+    syncKitVisibility(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
     // has written its record AND after updateVisibleActors(), so the visible
     // set passed to sync() is THIS frame's. The per-frame globals (beam,
@@ -2404,6 +2484,13 @@ async function main() {
       // simulating; they are simply not submitted until the program is ready.
       ctx.boot.warmBackground.gibDraw() === 'draw' ? chunkObjects() : []);
     ctx.telemetry.telemetry.end('crowd-set-bodies', setBodiesTiming);
+    // Leaving the pieces out of setBodies does not stop them marching: they sit in
+    // the scene on SDF_LAYER, so the merged pass draws them anyway, and in `failed`
+    // that draw is the synchronous compile. They must be out of the render.
+    const renderSdfLayer = () => {
+      if (ctx.boot.warmBackground.gibDraw() === 'draw') ctx.render.sdfLayer.render(scene, camera);
+      else withHidden(chunkObjects(), () => ctx.render.sdfLayer.render(scene, camera));
+    };
     const sdfRenderTiming = ctx.telemetry.telemetry.begin();
     if (ctx.goo.enabled && ctx.goo.layer) {
       // Fire/gib profiling: the goo layer's callback IS the SDF submit, so
@@ -2411,13 +2498,13 @@ async function main() {
       const gooTiming = ctx.telemetry.telemetry.begin();
       ctx.goo.layer.render(camera, () => {
         const inner = ctx.telemetry.telemetry.begin();
-        ctx.render.sdfLayer.render(scene, camera);
+        renderSdfLayer();
         ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
       });
       ctx.telemetry.telemetry.end('crowd-goo-outer', gooTiming);
     } else {
       const inner = ctx.telemetry.telemetry.begin();
-      ctx.render.sdfLayer.render(scene, camera);
+      renderSdfLayer();
       ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
     }
     ctx.telemetry.telemetry.end('crowd-sdf-render', sdfRenderTiming);
@@ -2450,13 +2537,14 @@ async function main() {
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.object, 'exclude');
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.shadowObject, 'exclude');
 
-  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
-  // march -- the distance it rasterises is only accurate in the near field
-  // and under-reports badly beyond ~3 m, which shredded bodies at range.
-  // The full measurement and the revival conditions are in march.wgsl.ts
-  // above tMax. __sdfGame.setOccluder still renders the pass for
-  // diagnostics; nothing consumes it.
+  // INNER-HULL OCCLUDER OFF (2026-09-01): it measured as worth nothing, and its
+  // CPU rebuild is not free. (Its distance decay, the original reason, was fog,
+  // fixed 2026-09-04.) __sdfGame.setOccluder still turns it on for A/B.
   ctx.render.sdfLayer.setOccluderEnabled(false);
+  // KIT OCCLUSION ON (2026-10-26): opaque kit cloth bounds the march's tMax, so
+  // flesh under trousers and boots is neither marched to the skin nor shaded
+  // (kit-occluder.ts; KIT_OCCLUDER_LAYER). ?kitocc=0 / __sdfGame.setKitOccluder.
+  ctx.render.sdfLayer.setKitOccluderEnabled(new URLSearchParams(location.search).get('kitocc') !== '0');
 
   /** Close-up task 3: the quarter-resolution depth prepass — a coarse march
    *  of the same field at one texel per 4x4 SDF-pixel block (~1/16 of the
@@ -3022,6 +3110,7 @@ async function main() {
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+    const listed = new Set<THREE.NodeMaterial>(ctx.world.levelNodeMaterials);
     for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
       if (mesh.userData.skipLevelLights) continue; // unlit art (the train's window scenery)
@@ -3033,9 +3122,12 @@ async function main() {
       if (!nm) continue;
       nm.lightsNode = list;
       mesh.material = nm;
-      ctx.world.levelNodeMaterials.push(nm);
+      // A material shared by several meshes of one room (the barrels' per-zone set) is listed once.
+      if (!listed.has(nm)) { listed.add(nm); ctx.world.levelNodeMaterials.push(nm); }
     }
   }
+  // ?cloth=<variant>: the SDF-cloth cost spike's garments on the zombie (bench-cloth.ts). Dev only.
+  applyClothQuery(location.search, CHARACTERS.zombie as { src: string });
   ctx.boot.spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
     return v && characterNames().includes(v) ? v : null;
@@ -3191,8 +3283,12 @@ async function main() {
       || r.id === Number(ctx.boot.roomParam)) ?? null;
   ctx.player.player = {
     pos: ctx.boot.room
-      ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2, 0, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
-      : [ctx.world.level.playerStart.x, 0, ctx.world.level.playerStart.z],
+      ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2,
+        standingFloor(ctx.world.level.ground, (ctx.boot.room.minX + ctx.boot.room.maxX) / 2, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2),
+        (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
+      : [ctx.world.level.playerStart.x,
+        standingFloor(ctx.world.level.ground, ctx.world.level.playerStart.x, ctx.world.level.playerStart.z),
+        ctx.world.level.playerStart.z],
     vel: [0, 0, 0],
     yaw: ctx.boot.room ? 0 : ctx.world.level.playerStart.yaw,
     pitch: ctx.world.level.playerStart.pitch,
@@ -3260,7 +3356,9 @@ async function main() {
   window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
   ctx.player.parked = DEFAULT_PROBE_WEIGHT;
 
-  // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
+  // GRAPESHOT INPUT. Left = both barrels (owner, 2026-10-25: the default shot is the double), right = one —
+  // the single barrel stays as the shell-saving option. Mapped HERE, at capture, not in applyInputFrame: a
+  // recorded demo's frame says how many barrels went off, so old recordings still replay as recorded. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
   // DYNAMITE (slot 3) takes the same left button but as a HELD input: press
   // lights the fuse, release throws (fpv.ts's cook machine). Right button stays
@@ -3278,6 +3376,8 @@ async function main() {
     if (ctx.weapon.flail?.onMouseDown(e.button)) return;
     // SLOT 5 (flare): left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    // SLOT 8 (the melter): left click only, deferred to the tick like the flare.
+    if (ctx.weapon.melter?.onMouseDown(e.button)) return;
     // SLOT 6 (the rod): hold + sweep; the cut lands on release.
     if (ctx.weapon.rod?.onMouseDown(e.button)) return;
     // SLOT 7 (the axe): a click starts the combo's next chop.
@@ -3287,8 +3387,8 @@ async function main() {
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
     // above is already a flag the tick consumes, so it is on the same seam.
-    if (e.button === 0) ctx.weapon.pendingFire = 1;
-    else if (e.button === 2) ctx.weapon.pendingFire = 2;
+    if (e.button === 0) ctx.weapon.pendingFire = 2;
+    else if (e.button === 2) ctx.weapon.pendingFire = 1;
   });
   // The release half of the cook. Without this the bundle could only ever cook
   // to an overcook, which is not the weapon.
@@ -3334,6 +3434,10 @@ async function main() {
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
+  // WEAPON SLOT 8 (the melt-death dev harness, game-melter.ts): its own rig on aimRig.
+  ctx.weapon.melter = createMelterHarness(ctx, {
+    traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+  });
   // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
   ctx.weapon.rod = createRodHarness(ctx, {
     traceMelee: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
@@ -3375,11 +3479,14 @@ async function main() {
     // frames on it was a 0.3 m red ball exactly around the brain's climb, and it hid the brain
     // (head-4-brain.png). And a PELLET gout, not the slug one (85 near-stationary 6-14 cm drops held at the
     // crown for up to 0.9 s).
-    burst: (_a, at, dir) => {
-      burstVolume(ctx.vfx.bloodSim, at, 0.06, [dir[0] * 0.6, 0.4, dir[2] * 0.6], rngStreams.bleed, ctx.boot.nextEmitterStream++,
-        { count: 0.4, speed: 0.5 });
+    burst: (a, at, dir) => {
+      // Sector levels (plan 3b): inside the level, on the body's floor — every burst drop too.
+      const seat = seatBurstSpawn(ctx, a, at);
+      burstVolume(ctx.vfx.bloodSim, seat.pos, 0.06, [dir[0] * 0.6, 0.4, dir[2] * 0.6], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+        { count: 0.4, speed: 0.5 }, seat.seat);
       const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
-      spawnImpactGout(ctx.vfx.bloodSim, 'pellet', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+      spawnImpactGout(ctx.vfx.bloodSim, 'pellet', seat.pos, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+        undefined, seat.floorY);
     },
     bleed: (a, w, point, incoming, kind) => registerBleed(ctx, a, w, kind, { point, incoming }),
     attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },
@@ -3907,7 +4014,7 @@ async function main() {
       }
       // THE GIB / CHUNK MARCH VARIANT (2026-09-18) now compiles in the
       // BACKGROUND set (2026-09-19): detached pieces march through the SHARED
-      // chunk material, whose ~240 KB shader no boot object uses. It used to be
+      // chunk material, whose ~364 KB shader no boot object uses. It used to be
       // warmed here behind the loader because the first dismemberment built it
       // SYNCHRONOUSLY mid-game (47.8 s + a second stall, cold). The protection
       // stays; only the WAITING moves — `startBackgroundCompiles` rebuilds this
@@ -3916,25 +4023,14 @@ async function main() {
       //
       // DEFERRED ROUTE keeps the old behind-the-loader warm: its G-buffer router
       // draws the chunk mesh directly, so the setBodies skip does not cover it.
-      // Constant rng: the shared rngStreams must not advance here.
       let warmChunkView: ChunkGpuView | null = null;
       if (!ctx.boot.backgroundMode) {
         try {
-          const a0 = ctx.world.actors[0];
-          const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
-          const warmFirst = warmPrims[0];
-          if (a0 && ctx.bake.material && warmFirst) {
-            const warmOrigin: Vec3 = [0, 1, 0];
-            const warmState = makeChunk(
-              warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
-            );
-            warmChunkView = createChunkGpuView(
-              warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
-              ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-            );
-            warmChunkView.object.layers.set(SDF_LAYER);
-            scene.add(warmChunkView.object);
-          }
+          warmChunkView = createWarmChunkView(
+            ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+          );
+          warmChunkView.object.layers.set(SDF_LAYER);
+          scene.add(warmChunkView.object);
         } catch (err) {
           console.warn('[warm] gib-variant warm view could not be built — first gib will compile live', err);
         }
@@ -3969,10 +4065,19 @@ async function main() {
       // switch it on (a dummy capsule, out of view) for this one real frame so
       // its pipelines compile here, not on the first ignite.
       const unwarmFire = ctx.vfx.burning.warmVolume();
+      // Every skeleton segment batch of the cast, built and drawn once (degenerate) in this real frame: otherwise
+      // the first hit that exposes bone builds ~20 of them in one frame (mesh-renderer.ts PREWARM_PER_UPDATE).
+      ctx.render.segMeshRenderer?.prewarmNext();
+      // The first blood's cold start (game-gore-spread.ts warmGore): a scratch blood sim drawn in this frame, its
+      // spawn/step/sync code run once, the live sim swapped back after. `?gorespread=0` skips it.
+      const tg = performance.now();
+      const unwarmGore = warmGore(ctx, camera);
+      phases.goreWarm = performance.now() - tg;
       try {
         ctx.boot.handle.drawOnce();
       } finally {
         unwarmFire();
+        unwarmGore();
       }
       phases.drawOnce = performance.now() - tp;
       mark('warm-draw-once-done');
@@ -4030,6 +4135,27 @@ async function main() {
   };
 
   /**
+   * The throwaway view the chunk program is compiled through. It needs NO ACTOR
+   * (first-chunk freeze, 2026-11-02): it used to borrow the first actor's prims
+   * and uniforms, so a level that boots with nobody in it (the sector fixture)
+   * compiled nothing and settled the gib job `failed`; its first chunk then built
+   * this ~364 KB shader synchronously, a 27 s rAF gap on a cold Metal cache. The
+   * shared material swaps every value per draw, so a default look and the fallback
+   * volume texture key the same pipeline as a real piece.
+   */
+  const createWarmChunkView = (options: Parameters<typeof createChunkGpuView>[7]): ChunkGpuView => {
+    const warmOrigin: Vec3 = [0, 1, 0];
+    const warmPrims = [{
+      limb: 'torso', cluster: 0, op: 'add', a: [-0.02, 1, 0], b: [0.02, 1, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0.03,
+    } as unknown as Primitive];
+    // Constant rng: the shared rngStreams must not advance here.
+    const warmState = makeChunk('torso', warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5);
+    return createChunkGpuView(
+      warmState, warmPrims, defaultUniforms(blankFaceTexture()), undefined, undefined, ctx.bake.material, [], options,
+    );
+  };
+
+  /**
    * Compiles the gib/chunk march variant in BOTH contexts it draws in (the
    * march MRT and the gib-shutter half-float layer) after the loader. Uses the
    * same throwaway view the boot warm used; removed and disposed when done.
@@ -4038,31 +4164,36 @@ async function main() {
   const compileGibVariantInBackground = async (): Promise<boolean> => {
     let warmChunkView: ChunkGpuView | null = null;
     try {
-      const a0 = ctx.world.actors[0];
-      const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
-      const warmFirst = warmPrims[0];
-      if (!a0 || !ctx.bake.material || !warmFirst) return false;
-      const warmOrigin: Vec3 = [0, 1, 0];
-      const warmState = makeChunk(
-        warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
-      );
-      warmChunkView = createChunkGpuView(
-        warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
-        undefined,
-      );
+      warmChunkView = createWarmChunkView(undefined);
       warmChunkView.object.layers.set(SDF_LAYER);
+      // HIDDEN except across each compile's synchronous prologue, as the crowd
+      // compile below does. The warm chunk is real geometry (the first actor's
+      // first two prims, i.e. its HEAD) in the live scene on SDF_LAYER: left
+      // visible, the live march drew it for the whole compile, which is a
+      // blink while the browser's shader cache is warm and many seconds of a
+      // dark second head beside the zombie's after ANY march source change
+      // makes the compile cold (bisected onto PR #83, which only changed the
+      // march text). compileAsync projects the object synchronously before
+      // its first await, so visibility after that call does not matter.
+      warmChunkView.object.visible = false;
       scene.add(warmChunkView.object);
+      const warmObject = warmChunkView.object;
+      const prologue = <T>(start: () => Promise<T>): Promise<T> => {
+        warmObject.visible = true;
+        try { return start(); } finally { warmObject.visible = false; }
+      };
       // The march MRT context (rgba32float). Then the gib-shutter context
       // (rgba16float) — the second cold per-SHAPE target; a shape compiles once
       // per (shape x target), so both must be warmed before `gib` is ready.
-      const mrtOk = await ctx.render.sdfLayer.precompileInBackground(
-        warmChunkView.object, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
-      );
+      const mrtOk = await prologue(() => ctx.render.sdfLayer.precompileInBackground(
+        warmObject, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+      ));
       let shutterOk = true;
       if (ctx.gibs.shutter) {
-        shutterOk = await ctx.gibs.shutter.precompileSubjectInBackground(
-          warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
-        );
+        const shutter = ctx.gibs.shutter;
+        shutterOk = await prologue(() => shutter.precompileSubjectInBackground(
+          warmObject, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+        ));
       }
       return mrtOk && shutterOk;
     } catch (err) {
@@ -4231,6 +4362,8 @@ async function main() {
   ctx.weapon.rocketViews = [];
   ctx.weapon.bile = [];
   ctx.weapon.bileViews = [];
+  ctx.weapon.fireballs = [];
+  ctx.weapon.fireballViews = [];
   // The gather's tracer provider (declared at the top, next to probeGather) can
   // only be wired once both lists exist — see the boot-race note there.
   ctx.lighting.liveTracers = () => [...ctx.weapon.pellets, ...ctx.weapon.soldierPellets];
@@ -4482,7 +4615,12 @@ async function main() {
   // body is swapped for debris in the very frame the bundle goes off — and is
   // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
   // the agreed start.
-  ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
+  // THE LIVE -> GIB SWITCH steps (gib-switch.ts, `?gibswitch=beat,blood,launch,timing`; `none` = the old
+  // switch). `timing` shortens the window to GIB_SWITCH_TEAR_SEC; an explicit `?gibtear=` still wins.
+  ctx.gibs.switchSteps = parseGibSwitch(DYN_PARAMS.get('gibswitch'));
+  ctx.gibs.kitDebris = DYN_PARAMS.get('gibkit') !== '0';
+  ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 })
+    ?? (ctx.gibs.switchSteps.has('timing') ? GIB_SWITCH_TEAR_SEC : 0.2);
   /**
    * NON-RIGID SLOUGH multiplier (`?tearslough=`, 0..3, default 1). The rupture
    * deforms flesh endpoints rather than sliding rigid regions; this scales the
@@ -4510,6 +4648,8 @@ async function main() {
     headFollow: parseFloatParam(DYN_PARAMS.get('tearhead'), { min: 0, max: 1 }) ?? TEAR_TUNING.headFollow,
     neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
     recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
+    // THE HIT BEAT (`?gibswitch=beat`): the doomed body is struck back like a survivor (gib-switch.ts).
+    ...(ctx.gibs.switchSteps.has('beat') ? { followPose: true } : {}),
   };
   // Owner-approved optical wave defaults; URL flags retain off/on A/B control.
   ctx.vfx.blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;
@@ -4874,6 +5014,14 @@ async function main() {
   // the A/B control for the wound-stamping cost, settable per boot so the two
   // arms can be measured interleaved rather than across runs.
   setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
+  // ?shotfix=0 restores the full CPU body folds on the shot path (body-field.ts: the pellet trace and the wound probes).
+  setShotFix(shotFixOn(location.search));
+  // ?gorespread=0 restores the gore in the hit frame and drops the boot gore warm (gore-spread.ts, game-gore-spread.ts).
+  setGoreSpread(goreSpreadOn(location.search));
+  // ?meatpool=0: a new torn-meat mesh a chunk (meat-pool.ts). ?seedupload=0: the shutter seed uploaded whole every
+  // frame (seed-band.ts, seed-upload.ts).
+  setMeatPool(meatPoolOn(location.search));
+  setSeedUpload(seedUploadOn(location.search));
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   ctx.vfx.explosionLights = [];
 
@@ -5014,6 +5162,8 @@ async function main() {
       ctx.vfx.explosionVfx = null;
     }
   }
+  // THE EXPLOSION PASS (blast-fx.ts, `?blastfx=depth,front,timing`; `none` = the old look).
+  applyBlastFx(ctx, parseBlastFx(DYN_PARAMS.get('blastfx')));
 
   // -----------------------------------------------------------------------
   mark('bleed-start');
@@ -5450,6 +5600,10 @@ async function main() {
   });
   ctx.panels.lightLayersPanel = createLightLayersPanel();
   ctx.panels.lightLayersPanel.setVisible(true);
+  // BULLET TIME (bullet-time-panel.ts): the mode's time scales as sliders, beside LIGHT LAYERS. Visible+collapsed
+  // like its siblings; __sdfGame.bulletTimePanel(false) dismisses it.
+  ctx.panels.bulletTimePanel = createBulletTimePanel();
+  ctx.panels.bulletTimePanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -5522,13 +5676,14 @@ async function main() {
   // the wound is the actor's own reference, so the anchor rides the body).
   ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
-    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, undefined, actorSpawnCentre(ctx, a));
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
   };
   ctx.boot.onGoreDispatch = (a, pieces) => {
+    const from = actorSpawnCentre(ctx, a);
     for (const p of pieces) {
       spawnChunkPiece(ctx, { ...p, spinAngVel: p.angVel },
-        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel);
+        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel, from);
     }
   };
   /** A kinematic SDF piece riding an actor (head-damage's dangling eye): no
@@ -5545,6 +5700,10 @@ async function main() {
   ctx.boot.meatGib = createMeatGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null });
   // The popping kit eye (game-kit-eye.ts): the teratoma's eyeball hangs out on a stalk, then snaps off.
   ctx.boot.kitEye = createKitEye(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null });
+  // Every cast kit mesh drawn once, one a step, before the player first sees it (game-kit-prewarm.ts).
+  ctx.boot.kitPrewarm = createKitPrewarm(ctx);
+  // Every level mesh (sector batches, barrels, pickups) drawn once, nearest first, one build a step (game-level-prewarm.ts).
+  ctx.boot.levelPrewarm = createLevelPrewarm(ctx);
   ctx.boot.attachPiece = (a, prims, pos, opts) => {
     // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
     // consume rngStreams.misc (every other piece's sequence stays put).
@@ -5939,6 +6098,10 @@ async function main() {
     createHeadSeams(ctx),
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
+    createDebrisSeams(ctx),
+    createBlastTraceSeams(ctx),
+    createBarrelSeams(ctx),
+    createDoorSeams(ctx),
     createMarchDebugSeams(ctx),
     createEarlyzSeams(ctx),
     createMiscSeams(ctx),
@@ -6129,3 +6292,34 @@ main().catch((err) => {
   if (loaderStatus) loaderStatus.textContent = 'FAILED — see console';
   console.error('[sdf-game] bootstrap failed', err);
 });
+
+/** Enemy routing and the encounter director for the active level. Sector levels (plan
+ *  2026-10-24-sector-levels-3a Task 5): enemies route over the sector ground and see through sector
+ *  space only; room levels keep the room planner and box-only sight. */
+function buildEncounter(ctx: GameContext): void {
+  const sectorMap = ctx.world.level.def?.sectors;
+  if (sectorMap) {
+    const sectorGround = ctx.world.level.ground as SectorGround;
+    const navStart = performance.now();
+    ctx.world.encounterNav = createSectorNavigation(sectorMap, sectorGround, ctx.world.level.rooms,
+      // Enemies route round the drums (built before the barrel runtime, so from the defs: every drum stands at load);
+      // a destroyed drum's cells stay blocked until reload (plan 3b, a known gap).
+      [...ctx.world.level.staticColliders, ...(ctx.world.level.def?.barrels ?? []).map(barrelBox)]);
+    console.info(`[sector-nav] built in ${(performance.now() - navStart).toFixed(1)} ms (${sectorMap.sectors.length} sectors, ${sectorMap.lines.length} lines)`);
+    // Doors: the grid routes through doorways; a body's travel is held at a door's leaves, and a refused step near
+    // one asks it to open (sector-doors.ts doorTravel). ctx.world.doors is read lazily (built with the meshes).
+    const nav = ctx.world.encounterNav;
+    if (sectorGround.doors.defs.length > 0)
+      ctx.world.encounterNav = { ...nav, canTravel: doorTravel(sectorGround.doors, nav.canTravel, SECTOR_BODY_RADIUS_M, d => ctx.world.doors?.request(d)) };
+    ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
+    // The render culls (march + visual set) see through the same geometry (actor-sight.ts).
+    ctx.world.sightOccluder = sectorOcclusion(sectorMap, sectorGround);
+    // The portal flood cull and the enemy update LOD (game-zone-cull.ts; ?cull=0 off).
+    ctx.world.zoneCull = createZoneCull(ctx);
+  } else {
+    ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
+    ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+    ctx.world.sightOccluder = null;
+    ctx.world.zoneCull = null;
+  }
+}

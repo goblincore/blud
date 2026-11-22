@@ -44,8 +44,11 @@ describe('BODY_NORMAL_BLOCK', () => {
     expect(BODY_NORMAL_BLOCK).toContain('let nmapTorso = hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w);');
     expect(BODY_NORMAL_BLOCK).toContain('if ((nmapKind < 0.5) != nmapTorso) { continue; }');
     // A placed body's rest points are moved by its spawn point (translateBody), the regions are baked round the
-    // origin: the block tests the regions against the rest point minus bodyNormCfg.yzw, never against it raw.
-    expect(BODY_NORMAL_BLOCK).toContain('let nmapAnc = anchor - bodyNormCfg.yzw;');
+    // origin: the block tests the regions against the rest point minus the body's OWN placement, read from its
+    // instance record (gInstNmapOrigin): bodyNormCfg is one copy for a whole crowd type, so reading the origin there
+    // put every crowd member but the source off its map (2026-11-06).
+    expect(BODY_NORMAL_BLOCK).toContain('let nmapAnc = anchor - gInstNmapOrigin;');
+    expect(BODY_NORMAL_BLOCK).not.toContain('bodyNormCfg.yzw;');
     expect(BODY_NORMAL_BLOCK).not.toMatch(/dot\(anchor - nmapHd|= anchor - \(nmapHd/);
     const locals = [...BODY_NORMAL_BLOCK.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)].map(m => m[1]!);
     expect(locals.length).toBeGreaterThan(0);

@@ -41,7 +41,8 @@
 //
 // THE SPLIT AND HEAD DAMAGE DO NOT MIX (game-head-damage.ts: its regions, trackers and deform are measured on the
 // closed head). open() refuses a head that leaf holds state for (deps.headDamaged), and that leaf declines a head
-// this one has open (isOpen). Only the plain zombie has presets (the slug burst's rule too).
+// this one has open (isOpen). Only the characters the presets fit split (head-split.ts splitsHead: the zombie and the
+// soldier); the slug burst's opening stays the zombie's.
 //
 // AT RANGE the view writes the split closed (head-split.ts splitDrawDistance), measured from the eye the frame is
 // drawn with: the draw stage hands it over (drawEye, game-main), and the leaf passes it to the view of each actor it
@@ -59,7 +60,7 @@ import { stampCut } from '../cut-wound';
 import { headQuatOf } from '../rig-bind';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, makePointMotion, openSplit, pointAccel, punchSplit,
-  splitFaceSegs, splitMassPoint, splitWarpOf, stepSplit, widenSplit, wobbleDrive,
+  splitFaceSegs, splitHold, splitMassPoint, splitWarpOf, splitsHead, stepSplit, widenSplit, wobbleDrive,
   type HeadFrame, type PointMotion, type SplitPresetId, type SplitState, type SplitWarp, type WobbleParams,
 } from '../head-split';
 import { headAlive, headShape } from './flame-anchors';
@@ -76,7 +77,7 @@ export interface HeadSplitDeps {
 export interface HeadSplitLeaf {
   /** Chop 1: choose the preset from the chop (the blade plane's normal and the impact, world) and spring open toward
    *  `frac` of its max. Returns the cut faces, stamped but NOT yet in the wound ring: the caller blasts them with its
-   *  chop. Null when it refused (already open, not the plain zombie, no live head, tearing, or a head the head-damage
+   *  chop. Null when it refused (already open, a character the presets do not fit, no live head, tearing, or a head the head-damage
    *  leaf holds): the caller then keeps its own cut. */
   open(a: ZombieActor, bladeNormalW: Vec3, impactW: Vec3, frac: number): readonly Wound[] | null;
   /** Later chops: spring on to `frac` of the preset's max (the preset stays; the target never drops), and kick the
@@ -127,18 +128,18 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
   const heads = new Map<ZombieActor, ActorSplit>();
   const wobble: WobbleParams = deps.wobble ?? HEAD_SPLIT.wobble;
 
-  /** The head's frame on a body posed by `a`'s rig (the prims are the closed head's, split or not), and the skull's
-   *  half-width, which the preset's offsets are shares of. */
+  /** The head's frame on a body posed by `a`'s rig (the prims are the closed head's, split or not), with its
+   *  character's hold (head-split.ts SPLIT_HEADS), and the skull's half-width, which the preset's offsets are shares of. */
   function skullOf(a: ZombieActor, b: BuildResult): { frame: HeadFrame; halfWidth: number } | null {
     const s = headShape(b);
     if (!s) return null;
-    return { frame: headFrameOf(s, headQuatOf(a.boundRig(), a.pose().yaw) ?? [0, 0, 0, 1]), halfWidth: s.axes[0] };
+    return { frame: headFrameOf(s, headQuatOf(a.boundRig(), a.pose().yaw) ?? [0, 0, 0, 1], splitHold(a.characterName())), halfWidth: s.axes[0] };
   }
 
   /** The character, not the motion profile: every character without a profile of its own moves on the zombie's, and
-   *  the presets are measured on the zombie's head alone. */
+   *  the presets fit only the heads they were measured on (head-split.ts splitsHead). */
   const canSplit = (a: ZombieActor): boolean =>
-    a.characterName() === 'zombie' && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
+    splitsHead(a.characterName()) && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
 
   /** The split hook: asked by the actor at every re-pose, with the un-split pose. */
   function hook(a: ZombieActor, h: ActorSplit, p: BuildResult): SplitWarp | null {

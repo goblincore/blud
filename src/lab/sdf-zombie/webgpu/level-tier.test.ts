@@ -14,6 +14,7 @@ const light = (over: Partial<ListLight> = {}): ListLight => ({
 describe('isLevelCheap — which lights the cheap tier takes', () => {
   it('takes fire-mood lights and shadowless tubes, never beacons or shadowed tubes', () => {
     expect(isLevelCheap({ mood: 'fire' })).toBe(true);
+    expect(isLevelCheap({ mood: 'glow', fixture: 'none' })).toBe(true);        // an emitter surface's light (item 2g B1)
     expect(isLevelCheap({ fixture: 'bulb', mood: 'fire' })).toBe(true);
     expect(isLevelCheap({ fixture: 'tube', mood: 'steady', shadow: false })).toBe(true);
     expect(isLevelCheap({ fixture: 'tube', mood: 'steady' })).toBe(false);

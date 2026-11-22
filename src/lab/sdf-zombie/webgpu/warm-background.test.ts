@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWarmBackgroundTracker } from './warm-background';
+import { createWarmBackgroundTracker, withHidden } from './warm-background';
 
 // THE BACKGROUND-COMPILE CONTRACT (defer-compile task, 2026-09-19).
 //
@@ -96,5 +96,22 @@ describe('warm-background tracker', () => {
     const t = createWarmBackgroundTracker();
     t.start('gib');
     expect(t.snapshot()).toEqual({ gib: 'compiling', crowd: 'pending' });
+  });
+});
+
+describe('withHidden', () => {
+  it('hides every object for the draw and restores each one\'s own visibility', () => {
+    const shown = { visible: true };
+    const hidden = { visible: false };
+    let during: boolean[] = [];
+    withHidden([shown, hidden], () => { during = [shown.visible, hidden.visible]; });
+    expect(during).toEqual([false, false]);
+    expect([shown.visible, hidden.visible]).toEqual([true, false]);
+  });
+
+  it('restores visibility when the draw throws', () => {
+    const o = { visible: true };
+    expect(() => withHidden([o], () => { throw new Error('draw failed'); })).toThrow('draw failed');
+    expect(o.visible).toBe(true);
   });
 });

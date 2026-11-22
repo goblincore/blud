@@ -1,0 +1,30 @@
+[
+ {
+  "ship": 58.27999999523163,
+  "shipDiff": "[\"runner\",\"repeat\",\"rounds\",\"medianMs\",\"minMs\",\"maxMs\",\"parity\",\"errors\"]",
+  "ship2": 59.98999999761581,
+  "ship2Diff": "[\"runner\",\"repeat\",\"rounds\",\"medianMs\",\"minMs\",\"maxMs\",\"parity\",\"errors\"]",
+  "off": 47.95999999046326,
+  "offDiff": "[\"runner\",\"repeat\",\"rounds\",\"medianMs\",\"minMs\",\"maxMs\",\"parity\",\"errors\"]"
+ },
+ {
+  "off": 47.820000004768374,
+  "ship2": 58.82999999523163,
+  "ship": 58.97999999523163
+ },
+ {
+  "ship": 59.25,
+  "ship2": 58.78000000715256,
+  "off": 49.179999995231626
+ },
+ {
+  "off": 48.63000000715256,
+  "ship2": 59.98999999761581,
+  "ship": 59.4
+ },
+ {
+  "ship": 59.57999999523163,
+  "ship2": 57.91000000238419,
+  "off": 48.679999995231626
+ }
+]

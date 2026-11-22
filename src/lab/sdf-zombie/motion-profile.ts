@@ -4,7 +4,8 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import type { FleshJiggleSpec } from './flesh-jiggle';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, IMP_PROWL, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, TALLOW_STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, CEREBRAX_STRIDE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -13,6 +14,7 @@ import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 import type { GoreTuning } from './gore-tuning';
 import type { KitEyeSpec } from './kit-eye';
+import type { CollapseToughness } from './collapse';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -68,6 +70,9 @@ export interface MotionProfile {
    *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
    *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
   spit?: { from: GaitJointName; offset: Vec3 };
+  /** A two-gun body's LEFT muzzle (the tallow's cannons): a shot the mind tags `fireSide: 'L'` leaves here, the rest
+   *  from `spit`. */
+  spitL?: { from: GaitJointName; offset: Vec3 };
   /** PER-CHARACTER GORE (gore-tuning.ts): bigger gun craters, a heavier impact gout and flesh bits thrown off the
    *  hit. Absent = the shared look exactly. */
   gore?: GoreTuning;
@@ -85,17 +90,34 @@ export interface MotionProfile {
   /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
    *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
   joystick?: JoystickSpec;
+  /** A RIGID FRAME (the cerebrax): while it stands, the trunk's joints (pelvis, hips, spine, chest, clavicles,
+   *  shoulders) are pinned to their pose targets (MotionFrame.posePins), so the Verlet rig cannot tug them. Its legs
+   *  are 2.7 m long: their length constraints dragged the hip and shoulder points 20-27 cm off the frame each stride,
+   *  and the kit's legs (thigh / upperarm frames) slid out of their socket balls on the frame (pelvis). */
+  rigidFrame?: boolean;
+  /** A hit makes the flesh QUIVER (flesh-jiggle.ts): the game shoves, distorts and squashes the `pelvis` flesh about
+   *  each hit and shoves the `skull` bone (the kit on the flesh) with the whole mass. For a rigidFrame body, whose rig
+   *  flinch moves nothing. */
+  fleshJiggle?: FleshJiggleSpec;
   /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
    *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
    *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
    *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
    *  on the arm, so the arm's own swing carries it. */
   armWeapon?: { side: 'L' | 'R'; damage: number };
+  /** A THROWER (the imp): the zombie's mind and claws up close, and at range a wind-up and an overhand throw of a
+   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). 'volley' (the tallow): both
+   *  arm-cannons braced level and four fireballs, right and left in turn, from `spit` and `spitL`
+   *  (enemy-mind.ts makeTallowMind). */
+  throws?: 'fireball' | 'volley';
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
    *  (owner playtest 2026-09-24). */
   soft?: boolean;
+  /** TOUGHNESS: divides what each kind of hit adds to the collapse meter (collapse.ts CollapseToughness), so a big
+   *  body soaks more hits before it goes down. Absent: the shared rule (a zombie drops to one point-blank double). */
+  toughness?: CollapseToughness;
   /** Hit reactions: 'soldier' = the soldier's stagger (arms thrown open,
    *  full flail, the hunch; soldier-stagger.ts) instead of the zombie's
    *  lurch/shudder. The soldier always has it. */
@@ -111,6 +133,14 @@ export interface MotionProfile {
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
+  /** CORPSE INTEGRITY for this character (0..1, collapse.ts braces): how much
+   *  the falling body keeps its shape. Absent follows the live global knob. */
+  corpseIntegrity?: number;
+  /** The free physics death (collapse.ts) instead of an authored fall (death-fall.ts). The zombie's (owner
+   *  2026-11-02: the five falls repeat in a crowd); the bodies built on his profile opt back out. */
+  physicsDeath?: boolean;
+  /** HOW THIS BODY BURNS (burn-behaviour.ts): absent fields take BURN_TIER_DEFAULT. */
+  burn?: Partial<BurnTier>;
 }
 
 /** True for the soldier and his variants (MotionProfile.family). */
@@ -128,6 +158,10 @@ export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | 
  */
 export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | null | undefined): boolean {
   return !isSoldierFamily(profile) && !profile?.soft;
+}
+
+export function resolveBurnTier(profile: Pick<MotionProfile, 'burn'> | null | undefined): BurnTier {
+  return { ...BURN_TIER_DEFAULT, ...(profile?.burn ?? {}) };
 }
 
 /**
@@ -169,16 +203,39 @@ export const SOLDIER_FLAIL: FlailTuning = {
   abduct: 0.55, liftL: 0, liftR: -0.35, yawOut: 1.30, lagL: true, riseSec: 0.25, durationSec: 1.35, arch: 0,
 };
 
+/** How a character burns: how long it panics, how fast, how hard it flails, and whether fire kills it. */
+export interface BurnTier {
+  /** Seconds of panic + falter before the burn death, rolled per body. */
+  panicSec: readonly [number, number];
+  /** Cruise speed multiplier while panicking. */
+  speed: number;
+  /** Flail amplitude scale (0 = no arm flail). */
+  flail: number;
+  /** Fire kills this body when its clock ends. False: it panics, then carries on, alight. */
+  dies: boolean;
+  /** It dies on an authored BURN fall (death-fall.ts BURN_FALL_KINDS). False: its ordinary death. The
+   *  burn falls are keyed for a biped: a quadruped whose rig reuses the humanoid joint names (the
+   *  gorehound) passes canDeathFall and must opt out here. */
+  fall: boolean;
+}
+export const BURN_TIER_DEFAULT: BurnTier = Object.freeze({ panicSec: [3, 6] as const, speed: 1.3, flail: 1, dies: true, fall: true });
+
+const BURN_SOLDIER: Partial<BurnTier> = { panicSec: [2.5, 4.5], speed: 1.4 };
+const BURN_HEAVY: Partial<BurnTier> = { panicSec: [5, 8], speed: 1.1, flail: 0.6, dies: false };
+const BURN_BEAST: Partial<BurnTier> = { panicSec: [2.5, 4], speed: 1.4, flail: 0, fall: false };
+
 export const ZOMBIE_PROFILE: MotionProfile = {
   name: 'zombie',
   gait: { walk: SHAMBLE, run: SHAMBLE },
   runBand: { from: Infinity, to: Infinity },
   cruise: WANDER_TUNING.speed,
   armStyle: 'reach',
+  physicsDeath: true,
 };
 
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
+  burn: BURN_SOLDIER,
   family: 'soldier',
   gait: { walk: MARCH, run: RUN },
   // Cruise and the walk→run band come from the reference clips' implied
@@ -225,6 +282,7 @@ export const SOLDIER_PROFILE: MotionProfile = {
  *  on the shared GUN_GRIP locators. */
 export const OGRE_PROFILE: MotionProfile = {
   name: 'ogre',
+  burn: BURN_HEAVY,
   // One gait: an ogre does not break into a run (runBand never reached).
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
@@ -254,7 +312,9 @@ export const OGRE_PROFILE: MotionProfile = {
  *  low steps that stay inside his floor-length robe. */
 export const CULTIST_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'cultist',
+  burn: BURN_SOLDIER,
   // Carry-style glide: the tommy gun owns the arms (gait.ts GLIDE_CARRY).
   gait: { walk: GLIDE_CARRY, run: GLIDE_CARRY },
   armStyle: 'carry',
@@ -286,6 +346,7 @@ export const CULTIST_PROFILE: MotionProfile = {
 export const JUGGERNAUT_PROFILE: MotionProfile = {
   ...SOLDIER_PROFILE,
   name: 'juggernaut',
+  burn: BURN_HEAVY,
   // MARCH only: a tank does not sprint. runBand at Infinity keeps runWeight 0.
   gait: { walk: MARCH, run: MARCH },
   runBand: { from: Infinity, to: Infinity },
@@ -317,6 +378,7 @@ export const JUGGERNAUT_PROFILE: MotionProfile = {
 export const WARBULL_PROFILE: MotionProfile = {
   ...SOLDIER_PROFILE,
   name: 'warbull',
+  burn: BURN_HEAVY,
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
   // Under the juggernaut's 0.9: at 2.4 m he covers ground by stride, and the
@@ -351,6 +413,7 @@ export const WARBULL_PROFILE: MotionProfile = {
  *  shoots, and the spike is his silhouette. */
 export const TWINHEAD_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'twinhead',
   gait: { walk: STOMP, run: STOMP },
   runBand: { from: Infinity, to: Infinity },
@@ -373,7 +436,9 @@ export const TWINHEAD_PROFILE: MotionProfile = {
  *  it FAST, which is most of what makes it more dangerous than the base. */
 export const BUTCHER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'butcher',
+  burn: BURN_HEAVY,
   gait: { walk: PROWL, run: PROWL },
   // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
   cruise: 1.45,
@@ -405,7 +470,9 @@ export const FLAYER_PROFILE: MotionProfile = {
  *  soldier family: bare flesh, a gore body like the twinhead. */
 export const DEADEYE_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'deadeye',
+  burn: BURN_SOLDIER,
   gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
   // Slower than the butcher: he walks to a range and holds it.
   cruise: 1.3,
@@ -430,10 +497,33 @@ export const DEADEYE_PROFILE: MotionProfile = {
  *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
 export const VENUS_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'venus',
   gait: { walk: STOMP, run: STOMP },
   cruise: 0.9,
   turnRate: 2.0,
+};
+
+/** The tallow (characters/tallow.blob): a corpulent walking rendering vat whose forearms have grown into cannons
+ *  (assets-source/tallow-kit/). The heaviest biped: the venus's STOMP (with reach arms, TALLOW_STOMP) at a slower cruise, and the slowest
+ *  turn in the roster short of the cerebrax, so a running player can get behind him, where the boiler is. At range
+ *  he braces both cannons level and fires a VOLLEY of burning tallow, right and left in turn (enemy-mind.ts
+ *  makeTallowMind, the imp's fireball from each muzzle: the hand bones' tails). Up close the zombie mind's swing is a
+ *  club with a cannon. */
+export const TALLOW_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  physicsDeath: false,
+  name: 'tallow',
+  burn: BURN_HEAVY,
+  // The STOMP with reach arms (gait.ts TALLOW_STOMP): on STOMP's carry arms the brace never moved them.
+  gait: { walk: TALLOW_STOMP, run: TALLOW_STOMP },
+  cruise: 0.7,
+  turnRate: 1.6,
+  throws: 'volley',
+  // handTip is each muzzle's lip (make_cannons.py: the bore ends at forearm t 1.56, where the 0.246 m hand bone's tail
+  // falls); 4 cm on clears the brake.
+  spitL: { from: 'handTipL', offset: [0, 0, 0.04] },
+  spit: { from: 'handTipR', offset: [0, 0, 0.04] },
 };
 
 /** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
@@ -443,7 +533,9 @@ export const VENUS_PROFILE: MotionProfile = {
  *  (1.15 m/s) and quick to turn: a hound runs you down. */
 export const GOREHOUND_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gorehound',
+  burn: BURN_BEAST,
   gait: { walk: GOREHOUND, run: GOREHOUND },
   runBand: { from: Infinity, to: Infinity },
   cruise: 1.3,
@@ -458,7 +550,9 @@ export const GOREHOUND_PROFILE: MotionProfile = {
  *  GUTCRAWLER_TUNING). Slow and heavy. */
 export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gutcrawler',
+  burn: BURN_BEAST,
   gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
   runBand: { from: Infinity, to: Infinity },
   cruise: 0.75,
@@ -474,6 +568,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
  *  (hound-attack.ts, bile.ts, enemy-mind.ts makeGibbetMind). */
 export const GIBBET_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'gibbet',
   gait: { walk: GIBBET_STALK, run: GIBBET_STALK },
   runBand: { from: Infinity, to: Infinity },
@@ -494,6 +589,7 @@ export const GIBBET_PROFILE: MotionProfile = {
  *  first. Heavy and slow to turn. */
 export const CHAIR_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'chair',
   gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
   runBand: { from: Infinity, to: Infinity },
@@ -526,6 +622,7 @@ export const GAMER_PROFILE: MotionProfile = {
  *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
 export const TERATOMA_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'teratoma',
   gait: { walk: HOVER, run: HOVER },
   runBand: { from: Infinity, to: Infinity },
@@ -550,6 +647,14 @@ export const TERATOMA_PROFILE: MotionProfile = {
   // SDF eyeball in its yellow hangs out on a stalk drawn 1.4x the zombie's (EYE_STALK: 0.20 m, a thick nerve) from the eye's front: it
   // dangles in front of the mouth. At 2x it hung below the chin, hidden behind the gun (arena look).
   eye: { offset: [0, 0.175, 0.40], radius: 0.135, material: 'cacoeye', iris: [1.0, 0.55, 0.02], popRadius: 0.10, stalkScale: 1.4 },
+  // BEEFIER (owner 2026-10-27: "the teratomas are too easy to kill — they should be beefier and take more hits"; Doom's
+  // cacodemon soaks several shotgun blasts). On the shared meter (collapse.ts: pellet 0.055, slug 0.13, threshold 0.8)
+  // one point-blank double (20 pellets, all on the ball at 3 m and at 8 m) dropped it, a single barrel took 2 and a
+  // slug 7 (arena, measured). /4.5 on pellets: a full double adds 1.1/4.5 = 0.244, so 3 leave it at 0.73 and the
+  // 4th drops it (7 single barrels). /1.75 on slugs (and on non-gibbing blast credit): 0.074 each, 11 slugs; the slug
+  // stays the weaker round per trigger pull, as it is on every body. A shot-off arm counts /4.5 like the pellets
+  // that took it. Dynamite still gibs it: the gib rule is damage vs GIB_THRESHOLD, which never reads the meter.
+  toughness: { pellet: 4.5, blast: 1.75, sever: 4.5 },
   gore: {
     craterScale: 2.2,
     blood: {
@@ -560,6 +665,67 @@ export const TERATOMA_PROFILE: MotionProfile = {
       // Sized to read at fighting range: at x1.6 a slug's bits (5-8 cm) were specks at 4.5 m (arena look, 2026-10-24).
       pellet: { count: [0.35, 2], scale: 1.3 },
       slug: { count: [6, 9], scale: 2.2 },
+    },
+  },
+};
+
+/** The imp (characters/imp.blob): a gaunt hunched demon on the butcher's digitigrade legs that THROWS FIREBALLS.
+ *  Quick and agile: the flayer's 2.0 Hz prowl with loose, low, swinging arms (gait.ts IMP_PROWL) at a faster
+ *  cruise, and a quick turn. Up close the zombie mind's
+ *  unarmed swing, which with talons for hands reads as a claw rake (the venus's lesson); at range it winds up and
+ *  throws (enemy-mind.ts makeImpMind): the fireball is born in the right hand's burning socket and leaves from it. */
+export const IMP_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'imp',
+  gait: { walk: IMP_PROWL, run: IMP_PROWL },
+  cruise: 1.6,
+  turnRate: 3.2,
+  throws: 'fireball',
+  // The fireball leaves the right fist's burning socket: the hand bone's tail (handTipR) is the socket's coal
+  // (assets-source/imp-kit/make_hands.py EMBER, 0.96 down the bone); a few cm on clears the talons.
+  spit: { from: 'handTipR', offset: [0, 0, 0.04] },
+};
+
+/** THE CEREBRAX (characters/cerebrax.blob): a boss, a huge brain clamped into a harness on four long spider legs, a
+ *  chaingun slung under its face. It walks on CEREBRAX_STRIDE (the gibbet's four-beat stalk, spider-kneed) and shoots
+ *  through the soldier's brain on the juggernaut's CHAINGUN_TUNING: long sweeping bursts from a long range, no strafing,
+ *  the sweep a slow turn a running player can outrun. The gun fires from the body (`spit`), not a held prop. The brain
+ *  PULSES on the `swell` morph (joystick.ts joystickSwell) with no joystick throw (no `hem` bone); a shot quivers it (fleshJiggle). */
+export const CEREBRAX_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  physicsDeath: false,
+  name: 'cerebrax',
+  gait: { walk: CEREBRAX_STRIDE, run: CEREBRAX_STRIDE },
+  runBand: { from: Infinity, to: Infinity },
+  // Slow and heavy: its legs are long, so it covers ground anyway; the gun is the threat.
+  cruise: 0.9,
+  // The chaingun's sweep is the body's turn (CHAINGUN_TUNING.sweepFire), so this is how fast its fire chases you.
+  turnRate: 1.1,
+  armStyle: 'foreleg',
+  gunner: { weapon: 'chaingun' },
+  // The under-barrel's muzzle (assets-source/cerebrax-kit/make_gun.py prints it: blob (0, 0.77, 1.43), hung under the tilted brain's face), body-local
+  // from the hips' rig point (compiled (0, 1.504, 0)), plus 5 cm so the round leaves clear of the barrels.
+  spit: { from: 'pelvis', offset: [0, -0.734, 1.48] },
+  // One welded frame: the brain, harness and leg sockets never move against each other (MotionProfile.rigidFrame).
+  rigidFrame: true,
+  // A slow breath (owner: "visibly pulse or throb"): the lobes swell 2.5-5% over 1.6 s.
+  joystick: { amp: 0, idle: 0, swell: { period: 1.6 } },
+  // A shot QUIVERS the brain (owner: "more violent and distorted"): the struck lobes shove 9 cm and squash 18%, out of
+  // step with each other, at 7 Hz; the whole brain shoves 2.5 cm in its clamp (1.8 cm clearance plus the band's lip).
+  // Gone in ~0.7 s. The face takes a third of the local shove so its kit eyes and teeth stay seated.
+  fleshJiggle: { amp: 0.09, bulk: 0.025, freq: 7, decay: 0.16, reach: 0.45, squash: 0.18, calm: 0.35, calmReach: 0.35 },
+  // A BOSS soaks: twice the teratoma's meter divisors. Dynamite still gibs through GIB_THRESHOLD.
+  toughness: { pellet: 9, blast: 3.5, sever: 9 },
+  // Craters and gouts sized for a 1.3 m brain, like the teratoma's ball (its numbers, a little bigger).
+  gore: {
+    craterScale: 2.4,
+    blood: {
+      pellet: { countMul: 2.5, sizeMul: 1.35, coneScale: 1.25, speedMul: 1.4 },
+      slug: { countMul: 3, sizeMul: 1.4, coneScale: 1.35, speedMul: 3 },
+    },
+    chunks: {
+      pellet: { count: [0.35, 2], scale: 1.4 },
+      slug: { count: [6, 9], scale: 2.4 },
     },
   },
 };
@@ -603,6 +769,7 @@ export const BRIDE_PROFILE: MotionProfile = {
  *  ogre's 0.075 for his 0.15 m hand. */
 export const GOBLIN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
+  physicsDeath: false,
   name: 'goblin',
   // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
   // legs (0.7323 m since the 1.70 m rescale, 2026-10-11: cadence retuned in gait.ts). SHAMBLE_CARRY, the phase-3 interim,
@@ -646,6 +813,9 @@ const BY_NAME: Record<string, MotionProfile> = {
   chair: CHAIR_PROFILE,
   gamer: GAMER_PROFILE,
   teratoma: TERATOMA_PROFILE,
+  imp: IMP_PROFILE,
+  cerebrax: CEREBRAX_PROFILE,
+  tallow: TALLOW_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

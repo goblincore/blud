@@ -629,6 +629,22 @@ export interface ShutterResolveHandle {
 }
 
 /**
+ * WARM A RESOLVE BY DRAWING IT (tear-off first-use pipelines, 2026-10-28). The layers used to warm with
+ * compileAsync, and the first blood/gore frame still built `shutter:candidate-resolve` in-frame: compileAsync builds
+ * against a fresh render context of its own, whose attachments are the defaults (a depth buffer, the output colour
+ * space), while the real draw goes to a no-depth half-float stage target, so the pipeline keys differ. One real
+ * draw into the real target builds exactly the pipeline capture() uses. The stage target is fully rewritten by
+ * every capture, so the warm leaves nothing behind. Not from inside post-aa's render callback: target switches and
+ * clears issued there wedged the headless GPU (shutter-game-layer ensureTargets).
+ */
+export function warmResolveDraw(
+  renderer: THREE.WebGPURenderer, resolve: ShutterResolveHandle, target: THREE.RenderTarget,
+): void {
+  const prev = renderer.getRenderTarget();
+  try { resolve.render(renderer, target); } finally { renderer.setRenderTarget(prev); }
+}
+
+/**
  * Build the single bounded resolve material. Created on demand (the page only
  * constructs it when the candidate is actually in use), and it never allocates
  * per frame.

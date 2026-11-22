@@ -17,7 +17,14 @@ import { describe, it, expect } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
 import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
-import { fbm, restSpacePoint, surfaceNoise } from './validate';
+import { fbm, restSpacePoint, sdPrimitive, surfaceNoise } from './validate';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import { applyRig, bindRig } from './rig-bind';
+import { segmentQuat } from './rig-frames';
+import { orientShapesField } from './orient-shape';
+import { packBody } from './pack';
+import zombieBlob from './characters/zombie.blob?raw';
 import type { Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import {
@@ -187,5 +194,68 @@ describe('rest-space anchor — oriented prims use the exact frame', () => {
     };
     const p: Vec3 = [0.3, 0.4, 0.5];
     expect(restSpacePoint(p, dead, mini)).toEqual(p);
+  });
+});
+
+describe('rest-space anchor — POINT prims turn with their bone (2026-11-05)', () => {
+  // A point prim (a == b: the zombie's hand ball, `blob arm on foreArm at=1.00`)
+  // has no axis for restPoint to swing, so before this it mapped by
+  // translation alone: the skin noise stayed world-aligned on the hand while
+  // the forearm beside it turned, and the noise tore into a crisp ring at the
+  // wrist where the dominant prim flips. applyRig now stamps the bone's
+  // rotation as a NOISE-ONLY orient (orient-shape.ts): restPoint composes it,
+  // the field does not change, and the pack keeps the arm cluster off sdPrimO.
+  const body = buildBody(compileBlob(parseBlob(zombieBlob)));
+  const bound = bindRig(body);
+  const handIdx = body.prims.findIndex(p => p.bone === 'foreArm.l' && len(sub(p.a, p.b)) === 0 && p.op !== 'sub');
+  const frame = bound.binding[handIdx]!.armFrame!;
+  const elbow = bound.rig.points[frame.head]!.pos;
+  const wrist = bound.rig.points[frame.tail]!.pos;
+  const restDir = normalize(sub(wrist, elbow));
+  // Bend the forearm 70 degrees about an axis across it: the reaching-arm case.
+  const turn = qFromAxisAngle(normalize(cross(restDir, [0, 0, 1])), 1.2);
+  const points = bound.rig.points.map((p, i) =>
+    i === frame.tail ? { ...p, pos: add(elbow, qRotate(turn, sub(wrist, elbow))) } : p);
+  const posed = applyRig(body, { ...bound, rig: { ...bound.rig, points } });
+  const restHand = body.prims[handIdx]!;
+  const posedHand = posed.prims[handIdx]!;
+  const qBone = segmentQuat(frame.restDir, normalize(sub(points[frame.tail]!.pos, elbow)), 0);
+  // A material point on the BACK of the hand, off the forearm line, so the hand
+  // ball is the dominant prim there in both poses.
+  const off = vscale(normalize(add(restDir, [0, 0, -0.6])), restHand.radius * 0.98);
+  const mRest = add(restHand.a, off);
+  const mPosed = add(posedHand.a, qRotate(qBone, off));
+
+  it('the hand is a plain sphere and gets the forearm rotation as a pose orient', () => {
+    expect(handIdx).toBeGreaterThanOrEqual(0);
+    expect(orientShapesField(restHand)).toBe(false);
+    expect(posedHand.poseOrient).toBe(true);
+    for (let k = 0; k < 4; k++) expect(posedHand.orient![k]!).toBeCloseTo(qBone[k]!, 12);
+  });
+
+  it('maps the same material point to the same rest point, and reads the same noise', () => {
+    const back = restSpacePoint(mPosed, posed, body);
+    for (let k = 0; k < 3; k++) expect(back[k]!).toBeCloseTo(mRest[k]!, 6);
+    expect(surfaceNoise(mPosed, posed, body)).toBeCloseTo(surfaceNoise(mRest, body, body), 6);
+  });
+
+  it('counterfactual: without the orient the point prim mapped by translation alone and swam', () => {
+    const bare = { ...posed, prims: posed.prims.map((p, i) => i === handIdx ? { ...p, orient: undefined } : p) };
+    const back = restSpacePoint(mPosed, bare, body);
+    expect(len(sub(back, mRest))).toBeGreaterThan(0.02);
+  });
+
+  it('leaves the field and the march path alone: same distance, cluster not flagged oriented', () => {
+    const bare = { ...posedHand, orient: undefined, poseOrient: undefined };
+    for (const p of [mPosed, add(posedHand.a, [0.03, -0.05, 0.02]) as Vec3])
+      expect(sdPrimitive(p, posedHand)).toBe(sdPrimitive(p, bare));
+    const packed = packBody(posed);
+    const c = posed.clusters.findIndex(x => handIdx >= x.start && handIdx < x.start + x.count);
+    const clusterOriented = posed.prims.slice(posed.clusters[c]!.start, posed.clusters[c]!.start + posed.clusters[c]!.count)
+      .some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6 && orientShapesField(p));
+    expect(clusterOriented).toBe(false);
+    expect(Math.round(packed.clusterRange[c * 4 + 3]!) & 1).toBe(0);
+    // The quat itself IS packed: restPoint reads it.
+    expect(packed.primQuat[handIdx * 4 + 3]!).toBeCloseTo(qBone[3]!, 6);
   });
 });

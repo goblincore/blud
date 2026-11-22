@@ -34,6 +34,9 @@ export interface LightSource {
    *  light's live level (Task 10 calibration, light-profiles.ts). Absent: 1 (the profile gain
    *  converts the raw intensity). */
   refIntensity?: number;
+  /** Multiplies the light's RANK on a body (light-pick.ts), never its delivered light: the emitter push's key
+   *  step (emit-push.ts keyRankScale) puts each lamp's power back into which light keys a body. Absent: 1. */
+  rankScale?: number;
 }
 
 export interface ListLight {
@@ -46,6 +49,8 @@ export interface ListLight {
   /** 1 / refIntensity (1 when absent): the body shader's per-light normaliser, packed in light
    *  v3.z. rgb stays physical (plan 2's level materials read it and ignore this lane). */
   bodyNorm: number;
+  /** LightSource.rankScale, carried to the list when it is not 1 (CPU only, never packed). */
+  rankScale?: number;
   /** CPU-only (light-pick.ts, never packed): a spot's coverage-zero cosine, cos(min(pi,
    *  acos(cosOuter) x profile.edge)), computed once per light here instead of once per body
    *  (Task 10 review). Unused for point/directional lights. */
@@ -166,6 +171,7 @@ export function buildLightList(src: readonly LightSource[], rel?: ListRelevance)
         axis: norm(s.axis ?? [0, -1, 0]), cosOuter, cosInner, roomMask: mask,
         bodyNorm: s.refIntensity && s.refIntensity > 0 ? 1 / s.refIntensity : 1,
         ...(s.levelCheap ? { levelCheap: true } : {}),
+        ...(s.rankScale !== undefined && s.rankScale !== 1 ? { rankScale: s.rankScale } : {}),
         coverZero,
       };
     });

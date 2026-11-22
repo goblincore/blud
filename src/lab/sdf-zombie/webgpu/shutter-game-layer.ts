@@ -36,10 +36,13 @@ import type { BloodSim, Droplet } from '../blood-sim';
 import { GOO_TUNING, type GooLayer, type GooSelection } from './goo-layer';
 import { setPassLabel } from './gpu-pass-timing';
 import {
-  createShutterResolve, planSweepStamp, rasterizeSweepSeed, seedDimsForOutput,
+  createShutterResolve, warmResolveDraw, planSweepStamp, rasterizeSweepSeed, seedDimsForOutput,
   SHUTTER_CANDIDATE_TAPS, DEFAULT_DEPTH_BIAS_M, EMPTY_SEED_STATS,
   type ShutterProjection, type ShutterResolveHandle, type SweepSeedStats, type SweepStamp,
 } from './shutter-blur';
+import { SWEEP_MAX_HALF_TEXELS, SWEEP_MIN_HALF_TEXELS } from './shutter-blur';
+import { createSeedUploader, readSeedTexture, type SeedUploadStats } from './seed-upload';
+import { stampRowBand } from '../seed-band';
 
 // ---------------------------------------------------------------------------
 // Owner-accepted defaults / bounds. Every value here is either the accepted
@@ -239,11 +242,15 @@ export interface ShutterGameDiagnostics {
   layer: { width: number; height: number };
   selectedDroplets: number;
   last: SweepSeedStats & { buildMs: number };
+  /** The seed's upload this frame (seed-upload.ts) and the running totals. */
+  upload: SeedUploadStats & { totalBytes: number; totalMs: number; frames: number };
   passes: { sceneRenders: number; gooChains: number; fullscreen: number };
   error: string | null;
 }
 
 export interface ShutterGameLayer {
+  /** DEBUG: the GPU seed read back and compared with the CPU buffer (texels that differ; null: no seed yet). */
+  verifySeed(): Promise<{ mismatches: number; texels: number; nonZero: number; upload: SeedUploadStats } | null>;
   readonly enabled: boolean;
   readonly exposureSeconds: number;
   readonly exposureMs: number;
@@ -327,6 +334,9 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
   let lastError: string | null = null;
 
   let lastStats: SweepSeedStats & { buildMs: number } = { ...EMPTY_SEED_STATS, buildMs: 0 };
+  // The seed goes up by its dirty rows (seed-upload.ts; `?seedupload=0`: whole, every frame).
+  const seedUploader = createSeedUploader(opts.renderer);
+  let uploadTotalBytes = 0, uploadTotalMs = 0, uploadFrames = 0;
   let selectedDroplets = 0;
 
   const stamps: SweepStamp[] = [];
@@ -355,7 +365,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     capsW = capsH = seedW = seedH = layerW = layerH = 0;
   }
 
-  function ensureTargets(capture: THREE.RenderTarget, densityW: number, densityH: number): void {
+  function ensureTargets(capture: THREE.RenderTarget, densityW: number, densityH: number, warm = true): void {
     const dims = shutterSeedDims(densityW, densityH, seedScale);
     const cw = Math.max(1, capture.width);
     const ch = Math.max(1, capture.height);
@@ -381,6 +391,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     seedTex.minFilter = THREE.NearestFilter;
     seedTex.magFilter = THREE.NearestFilter;
     seedTex.needsUpdate = true;
+    seedUploader.reset();
     resolve = createShutterResolve(
       {
         layerTex: layerTarget.texture,
@@ -397,12 +408,19 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     // stageTarget's pixels, so neither is ever sampled uninitialised.
     // Warm the pipelines in this exact target configuration, once. Await-and-
     // forget: the first real frame still works if the compile loses the race.
-    warmOnce();
+    if (warm) warmOnce();
   }
 
-  function warmOnce(): void {
+  /** `draw`: warm by drawing into the real targets (outside post-aa's callback only — shutter-blur warmResolveDraw);
+   *  otherwise a compileAsync, which builds a look-alike pipeline the real draw may not reuse. */
+  function warmOnce(draw = false): void {
     if (warmed || !resolve) return;
     warmed = true;
+    if (draw && stageTarget && layerTarget) {
+      warmResolveDraw(renderer, resolve, stageTarget);
+      void gooLayer.precompileLayer(layerTarget);
+      return;
+    }
     void renderer.compileAsync(resolve.scene, warmCam).catch(() => {});
     void gooLayer.precompileLayer();
   }
@@ -445,9 +463,12 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     if (!enabled || !(exposureSeconds > 0)) return null;
     try {
       const diag = gooLayer.densityDiagnostics;
-      ensureTargets(cap, diag.densityWidth, diag.densityHeight);
+      // No warm from here: this runs inside post-aa's callback, where the warm's draws are unsafe (warmResolveDraw).
+      // The tick's prewarm() call warms the next frame, before any droplet has had time to need the pipelines.
+      ensureTargets(cap, diag.densityWidth, diag.densityHeight, false);
       if (!layerTarget || !stageTarget || !seedTex || !seedData || !resolve) return null;
 
+      setPassLabel('shutter:plan');
       if (planSelectedStamps(sim, camera) === 0) {
         // EMPTY WORK FAST PATH: the sharp-remainder pass already drew the whole
         // fused frame (nothing was selected), so the captured frame is exactly
@@ -458,6 +479,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
 
       // 1. SELECTED airborne blood, shaded ONCE as premultiplied colour+coverage.
       gooLayer.setSelection(SHUTTER_SELECTED_SELECTION);
+      setPassLabel('shutter:goo-sync');
       gooLayer.sync(sim, camera);
       const prevClear = renderer.getClearColor(clearColor).getHex();
       const prevAlpha = renderer.getClearAlpha();
@@ -474,12 +496,15 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
       //    empty stamp list CLEARS the seed rather than re-uploading a stale
       //    sweep, so a selected droplet with unusable motion still composites
       //    its sharp current shape through the layer's base and is never lost.
+      setPassLabel('shutter:seed');
       const buildStart = performance.now();
       const stats = stamps.length > 0
         ? rasterizeSweepSeed(stamps, layerW, layerH, seedW, seedH, seedData)
         : { ...EMPTY_SEED_STATS };
       if (stamps.length === 0) seedData.fill(0);
-      seedTex.needsUpdate = true;
+      const up = seedUploader.upload(seedTex, seedData, seedW, seedH,
+        stampRowBand(stamps, layerW, layerH, seedW, seedH, SWEEP_MIN_HALF_TEXELS, SWEEP_MAX_HALF_TEXELS));
+      uploadTotalBytes += up.bytes; uploadTotalMs += up.ms; uploadFrames++;
       const buildMs = performance.now() - buildStart;
 
       // 3. ONE bounded fullscreen resolve over the captured scene + its depth.
@@ -533,7 +558,9 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
       try {
         const diag = gooLayer.densityDiagnostics;
         if (!(diag.densityWidth > 0) || !(diag.densityHeight > 0)) return false;
-        ensureTargets(capture, diag.densityWidth, diag.densityHeight);
+        ensureTargets(capture, diag.densityWidth, diag.densityHeight, false);
+        // Outside post-aa's callback (boot, or the tick): warm by drawing into the real targets.
+        warmOnce(true);
         return resolve !== null;
       } catch (err) {
         fail('prewarm failed', err);
@@ -557,9 +584,21 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
         layer: { width: layerW, height: layerH },
         selectedDroplets,
         last: { ...lastStats },
+        upload: { ...seedUploader.last, totalBytes: uploadTotalBytes, totalMs: uploadTotalMs, frames: uploadFrames },
         passes: { sceneRenders: 0, gooChains: 1, fullscreen: 1 },
         error: lastError,
       };
+    },
+    async verifySeed() {
+      if (!seedTex || !seedData) return null;
+      const cpu = seedData.slice();
+      const w = seedW, h = seedH, up = { ...seedUploader.last };
+      const gpu = await readSeedTexture(renderer, seedTex, w, h);
+      if (!gpu) return null;
+      let mismatches = 0, nonZero = 0;
+      const gi = new Uint32Array(gpu.buffer), ci = new Uint32Array(cpu.buffer);
+      for (let i = 0; i < ci.length; i++) { if (gi[i] !== ci[i]) mismatches++; if (ci[i] !== 0) nonZero++; }
+      return { mismatches, texels: w * h, nonZero, upload: up };
     },
     dispose() {
       disposeTargets();

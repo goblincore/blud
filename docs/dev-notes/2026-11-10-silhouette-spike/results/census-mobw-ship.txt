@@ -1,0 +1,23 @@
+17:04  up 12 days,  1:27, 2 users, load averages: 4.18 3.80 4.56
+.scratch/compute/mobw-ship: 400 x 300, 3 draw(s); hit 79220 px (66.0 %), near miss (within 8 px) 3960, far miss 36820
+warm all      1 s  errors 0
+warm all2     1 s  errors 0
+warm hit      2 s  errors 0
+warm near     0 s  errors 0
+warm far      0 s  errors 0
+warm none     0 s  errors 0
+  rep  1  all 65.28  all2 64.26  hit 68.72  near 9.55  far 2.85  none 0.13
+  rep  2  all 68.93  all2 72.54  hit 66.03  near 11.45  far 2.79  none 0.13
+  rep  3  all 80.72  all2 79.16  hit 80.12  near 11.52  far 3.09  none 0.22
+  rep  4  all 81.59  all2 85.55  hit 80.42  near 11.79  far 2.88  none 0.19
+  rep  5  all 84.85  all2 85.78  hit 85.09  near 13.24  far 2.93  none 0.18
+
+the whole pass 80.72 ms; again 79.16; with no pixel running 0.18
+class    pixels   leg ms   own ms             range  of the pass  ns a pixel
+hit       79220    80.12    79.90      65.90..84.91         99 %        1009
+near       3960    11.52    11.32       9.42..13.06         14 %        2859
+far       36820     2.88     2.72        2.66..2.87          3 %          74
+the three legs put together (hit + near + far - 2 x none): 94.29 ms against the whole pass's 80.72
+wrote .scratch/compute/mobw-ship-census.json
+exit 0
+17:08  up 12 days,  1:31, 2 users, load averages: 6.73 4.55 4.59

@@ -58,8 +58,9 @@ export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.w
     let nmapHdr = textureLoad(bodyNormTex, vec2<i32>(0, 0), 0) * 255.0;
     if (nmapMask > 0.0 && nmapRa.w > 0.0 && round(nmapHdr.x) == 66.0 && round(nmapHdr.y) == 78.0) {
       // The rest point in the map's frame: a PLACED body (the game's spawn point) carries its rest points moved by
-      // the placement, bodyNormCfg.yzw (zombie-gpu.ts setBodyNormal); the regions are baked round the origin.
-      let nmapAnc = anchor - bodyNormCfg.yzw;
+      // the placement (zombie-gpu.ts setBodyNormal); the regions are baked round the origin. Read from the
+      // instance record, not bodyNormCfg.yzw: the crowd shares one copy of the uniforms (REC_NMAP_ORIGIN).
+      let nmapAnc = anchor - gInstNmapOrigin;
       let nmapTorso = hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w);
       let nmapCount = min(i32(round(nmapHdr.w)), 16);
       var nmapBestD = 1e9;

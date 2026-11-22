@@ -1,0 +1,528 @@
+{
+ "reps": 6,
+ "repeat": 10,
+ "rounds": 15,
+ "table": [
+  {
+   "rung": "ship",
+   "quietMs": 12.855000001192092,
+   "medianMs": 13,
+   "bestMs": 12.42999999523163,
+   "lo": 12.810000002384186,
+   "hi": 19.089999997615813
+  },
+  {
+   "rung": "flat",
+   "quietMs": 8.05,
+   "medianMs": 8.119999992847443,
+   "bestMs": 7.860000002384186,
+   "lo": 8.05,
+   "hi": 15.729999995231628
+  },
+  {
+   "rung": "flat-noop",
+   "quietMs": 8.084999996423722,
+   "medianMs": 8.220000004768371,
+   "bestMs": 7.879999995231628,
+   "lo": 8.029999995231629,
+   "hi": 15.35
+  },
+  {
+   "rung": "walk2x",
+   "quietMs": 11.310000002384186,
+   "medianMs": 11.380000007152557,
+   "bestMs": 10.870000004768372,
+   "lo": 11.25,
+   "hi": 16.55
+  },
+  {
+   "rung": "no-wounds",
+   "quietMs": 7.455000007152558,
+   "medianMs": 7.489999997615814,
+   "bestMs": 7.319999992847443,
+   "lo": 7.440000009536743,
+   "hi": 13.529999995231629
+  },
+  {
+   "rung": "ship-air-gate-2",
+   "quietMs": 12.019999998807908,
+   "medianMs": 12.140000009536744,
+   "bestMs": 11.610000002384187,
+   "lo": 12.010000002384185,
+   "hi": 18.65
+  },
+  {
+   "rung": "walk-near-2",
+   "quietMs": 8.175,
+   "medianMs": 8.230000007152558,
+   "bestMs": 7.979999995231628,
+   "lo": 8.170000004768372,
+   "hi": 15.2
+  },
+  {
+   "rung": "ship-walk-near-2",
+   "quietMs": 12.410000002384187,
+   "medianMs": 12.489999997615815,
+   "bestMs": 12.039999997615814,
+   "lo": 12.4,
+   "hi": 19.509999990463257
+  },
+  {
+   "rung": "walk-near-4",
+   "quietMs": 8.159999996423721,
+   "medianMs": 8.190000009536742,
+   "bestMs": 7.95,
+   "lo": 8.159999990463257,
+   "hi": 13.839999997615815
+  },
+  {
+   "rung": "ship-walk-near-4",
+   "quietMs": 12.684999996423722,
+   "medianMs": 12.8,
+   "bestMs": 12.45,
+   "lo": 12.67999999523163,
+   "hi": 19.430000007152557
+  },
+  {
+   "rung": "ship-walk-near-6",
+   "quietMs": 12.930000007152557,
+   "medianMs": 13.079999995231628,
+   "bestMs": 12.57000000476837,
+   "lo": 12.890000009536744,
+   "hi": 20.689999997615814
+  }
+ ],
+ "runs": {
+  "ship": [
+   {
+    "medianMs": 12.810000002384186,
+    "minMs": 12.42999999523163
+   },
+   {
+    "medianMs": 13,
+    "minMs": 12.519999992847442
+   },
+   {
+    "medianMs": 12.9,
+    "minMs": 12.770000004768372
+   },
+   {
+    "medianMs": 12.989999997615815,
+    "minMs": 12.490000009536743
+   },
+   {
+    "medianMs": 15.089999997615815,
+    "minMs": 14.230000007152558
+   },
+   {
+    "medianMs": 19.089999997615813,
+    "minMs": 17.829999995231628
+   }
+  ],
+  "flat": [
+   {
+    "medianMs": 8.05,
+    "minMs": 7.879999995231628
+   },
+   {
+    "medianMs": 8.05,
+    "minMs": 7.860000002384186
+   },
+   {
+    "medianMs": 8.119999992847443,
+    "minMs": 7.9
+   },
+   {
+    "medianMs": 8.080000007152558,
+    "minMs": 7.9
+   },
+   {
+    "medianMs": 9.620000004768372,
+    "minMs": 8.6
+   },
+   {
+    "medianMs": 15.729999995231628,
+    "minMs": 11.589999997615815
+   }
+  ],
+  "flat-noop": [
+   {
+    "medianMs": 8.139999997615813,
+    "minMs": 7.920000004768371
+   },
+   {
+    "medianMs": 8.15,
+    "minMs": 7.939999997615814
+   },
+   {
+    "medianMs": 8.220000004768371,
+    "minMs": 7.879999995231628
+   },
+   {
+    "medianMs": 8.029999995231629,
+    "minMs": 7.910000002384185
+   },
+   {
+    "medianMs": 11.2,
+    "minMs": 10.330000007152558
+   },
+   {
+    "medianMs": 15.35,
+    "minMs": 10.05
+   }
+  ],
+  "walk2x": [
+   {
+    "medianMs": 11.370000004768372,
+    "minMs": 10.870000004768372
+   },
+   {
+    "medianMs": 11.380000007152557,
+    "minMs": 11.25
+   },
+   {
+    "medianMs": 11.370000004768372,
+    "minMs": 11.2
+   },
+   {
+    "medianMs": 11.25,
+    "minMs": 10.919999992847442
+   },
+   {
+    "medianMs": 15.160000002384185,
+    "minMs": 14.65
+   },
+   {
+    "medianMs": 16.55,
+    "minMs": 15.680000007152557
+   }
+  ],
+  "no-wounds": [
+   {
+    "medianMs": 7.470000004768371,
+    "minMs": 7.319999992847443
+   },
+   {
+    "medianMs": 7.440000009536743,
+    "minMs": 7.339999997615815
+   },
+   {
+    "medianMs": 7.55,
+    "minMs": 7.439999997615814
+   },
+   {
+    "medianMs": 7.489999997615814,
+    "minMs": 7.4
+   },
+   {
+    "medianMs": 7.470000004768371,
+    "minMs": 7.379999995231628
+   },
+   {
+    "medianMs": 13.529999995231629,
+    "minMs": 9.419999992847442
+   }
+  ],
+  "ship-air-gate-2": [
+   {
+    "medianMs": 12.029999995231629,
+    "minMs": 11.610000002384187
+   },
+   {
+    "medianMs": 12.110000002384187,
+    "minMs": 11.769999992847442
+   },
+   {
+    "medianMs": 12.230000007152558,
+    "minMs": 11.660000002384185
+   },
+   {
+    "medianMs": 12.010000002384185,
+    "minMs": 11.720000004768371
+   },
+   {
+    "medianMs": 12.140000009536744,
+    "minMs": 11.95
+   },
+   {
+    "medianMs": 18.65,
+    "minMs": 16.160000002384187
+   }
+  ],
+  "walk-near-2": [
+   {
+    "medianMs": 8.189999997615814,
+    "minMs": 8.089999997615815
+   },
+   {
+    "medianMs": 8.270000004768372,
+    "minMs": 8.140000009536744
+   },
+   {
+    "medianMs": 8.230000007152558,
+    "minMs": 8.17999999523163
+   },
+   {
+    "medianMs": 8.170000004768372,
+    "minMs": 7.979999995231628
+   },
+   {
+    "medianMs": 8.17999999523163,
+    "minMs": 8.060000002384186
+   },
+   {
+    "medianMs": 15.2,
+    "minMs": 10.169999992847442
+   }
+  ],
+  "ship-walk-near-2": [
+   {
+    "medianMs": 12.4,
+    "minMs": 12.189999997615814
+   },
+   {
+    "medianMs": 12.689999997615814,
+    "minMs": 12.039999997615814
+   },
+   {
+    "medianMs": 12.420000004768372,
+    "minMs": 12.180000007152557
+   },
+   {
+    "medianMs": 12.440000009536742,
+    "minMs": 12.160000002384185
+   },
+   {
+    "medianMs": 12.489999997615815,
+    "minMs": 12.289999997615814
+   },
+   {
+    "medianMs": 19.509999990463257,
+    "minMs": 18.670000004768372
+   }
+  ],
+  "walk-near-4": [
+   {
+    "medianMs": 8.160000002384185,
+    "minMs": 8.039999997615814
+   },
+   {
+    "medianMs": 8.270000004768372,
+    "minMs": 8.15
+   },
+   {
+    "medianMs": 8.159999990463257,
+    "minMs": 8.019999992847442
+   },
+   {
+    "medianMs": 8.190000009536742,
+    "minMs": 7.95
+   },
+   {
+    "medianMs": 8.180000007152557,
+    "minMs": 8.009999990463257
+   },
+   {
+    "medianMs": 13.839999997615815,
+    "minMs": 11.7
+   }
+  ],
+  "ship-walk-near-4": [
+   {
+    "medianMs": 12.67999999523163,
+    "minMs": 12.45
+   },
+   {
+    "medianMs": 12.8,
+    "minMs": 12.560000002384186
+   },
+   {
+    "medianMs": 12.689999997615814,
+    "minMs": 12.479999995231628
+   },
+   {
+    "medianMs": 12.8,
+    "minMs": 12.57000000476837
+   },
+   {
+    "medianMs": 12.870000004768372,
+    "minMs": 12.590000009536743
+   },
+   {
+    "medianMs": 19.430000007152557,
+    "minMs": 18.389999997615813
+   }
+  ],
+  "ship-walk-near-6": [
+   {
+    "medianMs": 13.020000004768372,
+    "minMs": 12.770000004768372
+   },
+   {
+    "medianMs": 12.970000004768371,
+    "minMs": 12.67999999523163
+   },
+   {
+    "medianMs": 12.890000009536744,
+    "minMs": 12.57000000476837
+   },
+   {
+    "medianMs": 13.079999995231628,
+    "minMs": 12.769999992847442
+   },
+   {
+    "medianMs": 13.460000002384186,
+    "minMs": 13.1
+   },
+   {
+    "medianMs": 20.689999997615814,
+    "minMs": 17.3
+   }
+  ]
+ },
+ "info": {
+  "ship": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "flat": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "flat-noop": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "walk2x": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0,
+    "meanDiff": 0,
+    "differingFrac": 0,
+    "nonZeroFrac": 1,
+    "over02": 0,
+    "over10": 0,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "no-wounds": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.0012833660316459523,
+    "differingFrac": 0.030520833333333334,
+    "nonZeroFrac": 1,
+    "over02": 421,
+    "over10": 421,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-air-gate-2": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 1.585833840072155,
+    "meanDiff": 0.003035342322619848,
+    "differingFrac": 0.06414166666666667,
+    "nonZeroFrac": 1,
+    "over02": 4471,
+    "over10": 2376,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "walk-near-2": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.00034911614077864217,
+    "differingFrac": 0.01278125,
+    "nonZeroFrac": 1,
+    "over02": 123,
+    "over10": 123,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-walk-near-2": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 2.0710902903229,
+    "meanDiff": 0.003579602311626392,
+    "differingFrac": 0.06202083333333333,
+    "nonZeroFrac": 1,
+    "over02": 4195,
+    "over10": 2236,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "walk-near-4": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 0.5139768216758966,
+    "meanDiff": 0.00002252181818475947,
+    "differingFrac": 0.005097916666666666,
+    "nonZeroFrac": 1,
+    "over02": 7,
+    "over10": 7,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-walk-near-4": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 1.5282180458307266,
+    "meanDiff": 0.0013859634455002986,
+    "differingFrac": 0.02870625,
+    "nonZeroFrac": 1,
+    "over02": 2071,
+    "over10": 1051,
+    "classes": {}
+   },
+   "errors": []
+  },
+  "ship-walk-near-6": {
+   "parity": {
+    "label": "sdf:march",
+    "maxDiff": 1.0162972901016474,
+    "meanDiff": 0.0006162163949387225,
+    "differingFrac": 0.0112625,
+    "nonZeroFrac": 1,
+    "over02": 905,
+    "over10": 469,
+    "classes": {}
+   },
+   "errors": []
+  }
+ }
+}

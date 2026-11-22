@@ -7,7 +7,7 @@ import { CLUSTER_ORDER } from './types';
 import { expandMirror } from './mirror';
 import { placePrims, resolveBones } from './resolve';
 import { assignClusters } from './clusters';
-import { validateBody, boneBreach, type ValidateOpts } from './validate';
+import { validateBody, boneBreach, fleshIndex, type ValidateOpts } from './validate';
 import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';
 import type { FaceParams } from './face';
 
@@ -180,11 +180,13 @@ export function buildBody(
   // build error instead of buildBody silently second-guessing the author.
   const authoredBones = new Set(authoredDefs.map(p => p.bone));
   const toBone = (p: Omit<Primitive, 'cluster'>): Primitive => ({ ...p, cluster: CLUSTER_ORDER.indexOf(p.limb) });
+  const flesh = { prims, clusters };
+  const index = fleshIndex(flesh);
   const bonePrims: Primitive[] = [
     ...placePrims(authoredDefs, bones).map(toBone),
     ...placePrims(deriveBones(fleshDefs.filter(p => !authoredBones.has(p.bone)), ratio), bones)
       .map(toBone)
-      .filter(b => boneBreach({ prims, clusters }, b) === null),
+      .filter(b => boneBreach(flesh, b, index) === null),
   ];
 
   const body = { prims, clusters, bonePrims };

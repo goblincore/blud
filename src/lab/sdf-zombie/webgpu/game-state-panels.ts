@@ -18,6 +18,7 @@ import type { LightLayersPanel } from './light-layers-panel';
 import type { ImpactSplashLayer } from './impact-splash';
 import type { ShutterGameLayer } from './shutter-game-layer';
 import type { ShutterPanel } from './shutter-panel';
+import type { BulletTimePanel } from './bullet-time-panel';
 
 export interface PanelsState {
   /** The goo tuning panel (goo-panel.ts). Created during init. */
@@ -40,6 +41,8 @@ export interface PanelsState {
   shutterGame: ShutterGameLayer | null;
   /** The shutter blur tuning panel (shutter-panel.ts). */
   shutterPanel: ShutterPanel | null;
+  /** The BULLET TIME tuning panel (bullet-time-panel.ts). Created during init; not a closure binding. */
+  bulletTimePanel: BulletTimePanel | null;
 }
 
 /** Fresh panels state. All nine initializers in `main()` are literals, so the
@@ -57,6 +60,7 @@ export function makePanelsState(): PanelsState {
     impactSplashLayer: null,
     shutterGame: null,
     shutterPanel: null,
+    bulletTimePanel: null,
   };
 }
 

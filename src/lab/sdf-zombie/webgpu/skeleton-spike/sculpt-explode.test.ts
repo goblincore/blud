@@ -20,6 +20,7 @@ import { headQuatOf } from '../../rig-bind';
 import { applyRig } from '../../rig-bind';
 import { headShape } from '../flame-anchors';
 import type { Vec3 } from '../../types';
+import { batchInstances, batchMatrixAt, isSegmentBatch, type SegmentBatchMesh } from './segment-instance';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
 const bound = bindRig(body);
@@ -48,8 +49,8 @@ describe('explodeSkull on a sculpted head', () => {
     expect(eyesOf(renderer, a)).toHaveLength(0);
     expect(bonesOf(renderer, b)).toHaveLength(1);
     expect(eyesOf(renderer, b).length).toBeGreaterThan(0);
-    const batch = renderer.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === 'skeleton-segments') as THREE.InstancedMesh;
-    const scales = Array.from({ length: batch.count }, (_, i) => { const m = new THREE.Matrix4(); batch.getMatrixAt(i, m); return m.getMaxScaleOnAxis(); });
+    const batch = renderer.object.children.find(c => isSegmentBatch(c) && c.name === 'skeleton-segments') as SegmentBatchMesh;
+    const scales = Array.from({ length: batchInstances(batch) }, (_, i) => batchMatrixAt(batch, i, new THREE.Matrix4()).getMaxScaleOnAxis());
     expect(scales.filter(s => s === 0)).toHaveLength(1);
     expect(scales.filter(s => s > 0.9)).toHaveLength(1);
     // Nor on any later update, though the source still says it is live; and it is thrown only once.

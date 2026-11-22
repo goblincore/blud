@@ -7,6 +7,7 @@ import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';
 import { woundWorldPos, type Wound } from '../damage';
 import { kitShedFor, type ArmorSpec } from '../plate-armor';
+import { landingFloor, type DebrisGround, type DebrisSeat } from '../debris-ground';
 
 // Memoised: attached() used to run this regex on every prim for every piece,
 // every frame. Bone names are a small closed set, so the cache stays tiny.
@@ -23,42 +24,72 @@ function boneLimb(name: string): LimbId {
   return /skull|neck|head/.test(k) ? 'head' : 'torso';
 }
 
-interface Piece {
+export interface Piece {
   source: THREE.SkinnedMesh;
   indices: number[];
   bone: string;
+  /** Index of that bone in the skeleton (kit-burst-mesh.ts). */
+  joint: number;
   /** kitSupportKey(bone), fixed at load. */
   support: string;
+  /** kitSupportKey of the limb bone it rides when its own is not one (limbBone: a tusk's forearm), the support when its
+   *  own bone has no flesh. */
+  anchor?: string;
   limb: LimbId;
   centre: THREE.Vector3;
   radius: number;
   armor: boolean;
+  /** A `tooth` island: it stands in gum, so a crater that reaches it knocks it out (the skull's own teeth are behind). */
+  tooth: boolean;
   released: boolean;
   damage: number;
 }
-interface Debris { mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean }
+interface Debris {
+  mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean;
+  /** SECTOR levels (plan 3b): the floor the piece last fell over (0 until known) and its bounds' half-diagonal, the
+   *  radius its wall bounce stops at. Read only with a ground. */
+  floorY: number; radius: number;
+}
 export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; limb:LimbId }
 /** PLATE ARMOUR MODE (the juggernaut, plate-armor.ts): the actor's plate
  *  state decides what sheds, not this file's own wound count. `hits` are the
  *  plate impacts since the last frame (sparks); `shed` the plates at zero. */
 export interface KitArmorInput { spec: ArmorSpec; shed: ReadonlySet<string>; hits: readonly Vec3[] }
 
+/** The bone a kit bone sheds with: itself, or (a horn on the skull, a tusk on the forearm: names boneLimb cannot read) the
+ *  nearest ancestor that names a limb. A bone with no such ancestor (spine, a chair's own frame) is the torso's. */
+function limbBone(bone:THREE.Object3D|undefined):THREE.Object3D|undefined {
+  for(let b=bone; b && (b as THREE.Bone).isBone; b=b.parent??undefined) if(boneLimb(b.name)!=='torso') return b;
+  return bone;
+}
+
 /** WAM keeps part shapes disconnected but merges them per material. Join
  * UV-seam duplicates by position, then collect triangle islands once at load.
  * The intact mesh keeps its original draw calls; only detached islands bake. */
-function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
+export function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
   const g = mesh.geometry, pos = g.getAttribute('position');
   const skin = g.getAttribute('skinIndex'), weight = g.getAttribute('skinWeight');
   if (!pos || !skin || !weight) return [];
   const indices = g.index ? Array.from(g.index.array) : Array.from({length:pos.count}, (_,i)=>i);
-  const parent = Array.from({length:pos.count}, (_,i)=>i);
+  const parent = Int32Array.from({length:pos.count}, (_,i)=>i);
   const root = (a:number):number => { while(parent[a]!==a) { parent[a]=parent[parent[a]!]!; a=parent[a]!; } return a; };
   const union = (a:number,b:number) => { parent[root(b)]=root(a); };
-  const vertices = new Map<string,number>();
-  for (const i of indices) {
-    const key = [pos.getX(i),pos.getY(i),pos.getZ(i)].map(v=>Math.round(v*1e6)).join(',');
-    const previous=vertices.get(key);
-    if(previous!==undefined) union(i,previous); else vertices.set(key,i);
+  // Seam duplicates share a position to the micrometre. An open-addressed table of the rounded coordinates, once per
+  // vertex: a string key per index took 0.3-2.5 s on a sculpted kit, once per spawned body.
+  const used = new Uint8Array(pos.count);
+  for (const i of indices) used[i] = 1;
+  const q = new Float64Array(pos.count*3);
+  let size = 1; while (size < pos.count*2) size <<= 1;
+  const table = new Int32Array(size).fill(-1);
+  for (let i=0; i<pos.count; i++) {
+    if (!used[i]) continue;
+    const x=Math.round(pos.getX(i)*1e6), y=Math.round(pos.getY(i)*1e6), z=Math.round(pos.getZ(i)*1e6);
+    q[i*3]=x; q[i*3+1]=y; q[i*3+2]=z;
+    for (let h=(Math.imul(x|0,73856093)^Math.imul(y|0,19349663)^Math.imul(z|0,83492791))&(size-1); ; h=(h+1)&(size-1)) {
+      const j=table[h]!;
+      if (j<0) { table[h]=i; break; }
+      if (q[j*3]===x && q[j*3+1]===y && q[j*3+2]===z) { union(i,j); break; }
+    }
   }
   for(let i=0;i<indices.length;i+=3) { union(indices[i]!,indices[i+1]!); union(indices[i]!,indices[i+2]!); }
   const islands=new Map<number,number[]>();
@@ -67,17 +98,22 @@ function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     list.push(indices[i]!,indices[i+1]!,indices[i+2]!); islands.set(key,list);
   }
   const material=Array.isArray(mesh.material)?mesh.material[0]:mesh.material;
-  return [...islands.values()].map(list=>{
+  const stamp = new Int32Array(pos.count).fill(-1);
+  return [...islands.values()].map((list,n)=>{
     const bounds=new THREE.Box3(), point=new THREE.Vector3(), votes=new Map<number,number>();
-    for(const i of new Set(list)) {
+    for(const i of list) {
+      if(stamp[i]===n) continue;
+      stamp[i]=n;
       bounds.expandByPoint(point.fromBufferAttribute(pos,i));
       for(let j=0;j<4;j++) { const bone=skin.getComponent(i,j); votes.set(bone,(votes.get(bone)??0)+weight.getComponent(i,j)); }
     }
     const joint=[...votes].sort((a,b)=>b[1]-a[1])[0]?.[0]??0;
-    const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
+    const own=mesh.skeleton.bones[joint], bone=own?.name??'pelvis';
+    const anchor=limbBone(own)?.name??bone;
     const centre=bounds.getCenter(new THREE.Vector3());
-    return {source:mesh,indices:list,bone,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
-      armor:material?.name==='plate',released:false,damage:0};
+    return {source:mesh,indices:list,bone,joint,support:kitSupportKey(bone),
+      anchor:anchor===bone?undefined:kitSupportKey(anchor),limb:boneLimb(anchor),centre,radius:bounds.getSize(point).length()*.5,
+      armor:material?.name==='plate',tooth:material?.name==='tooth',released:false,damage:0};
   });
 }
 
@@ -106,15 +142,17 @@ export function kitSupportIndex(body:BuildResult):KitSupportIndex {
 }
 
 /** A piece stays attached while its limb has a live cluster and its support
- * bone has no non-carve prims or at least one live one. */
-export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIndex):boolean {
+ * bone has no non-carve prims or at least one live one. A support with no flesh
+ * of its own (a tusk bone) falls back to its `anchor`, the limb bone it rides. */
+export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIndex, anchor?:string):boolean {
   if(!index.liveLimbs.has(limb)) return false;
-  return index.boneAlive.get(support)??true;
+  return index.boneAlive.get(support)??(anchor===undefined?undefined:index.boneAlive.get(anchor))??true;
 }
 
-/** Soldier-only kit damage. Missing anatomy always sheds its equipment;
- * clustered local impacts knock armor plates off to expose existing wounds. */
-export function createKitDamage(object:THREE.Object3D) {
+/** Breakable-kit damage (character-registry.ts armoured, kitSheds). Missing anatomy always sheds its equipment;
+ * with `armour`, clustered local impacts knock armor plates off to expose existing wounds. Without it (kitSheds) a
+ * `plate` island is only scenery: a cleaver blade is not a breastplate. */
+export function createKitDamage(object:THREE.Object3D, armour:boolean) {
   const pieces:Piece[]=[], originals=new Map<THREE.SkinnedMesh,number[]>();
   object.traverse(o=>{
     const mesh=o as THREE.SkinnedMesh;
@@ -122,7 +160,7 @@ export function createKitDamage(object:THREE.Object3D) {
     // Each glTF primitive can share attribute storage; own only its index.
     mesh.geometry=mesh.geometry.clone();
     originals.set(mesh,mesh.geometry.index?Array.from(mesh.geometry.index.array):Array.from({length:mesh.geometry.getAttribute('position').count},(_,i)=>i));
-    pieces.push(...piecesOf(mesh));
+    for(const piece of piecesOf(mesh)) { piece.armor&&=armour; pieces.push(piece); }
   });
   const debris=new THREE.Group(); debris.name='DetachedArmor';
   const drops:Debris[]=[];
@@ -134,7 +172,7 @@ export function createKitDamage(object:THREE.Object3D) {
     for(const p of pieces) { p.released=false; p.damage=0; }
     for(const [mesh,index] of originals) { mesh.geometry.setIndex(index); mesh.visible=true; }
   };
-  const bake=(piece:Piece)=>{
+  const bake=(piece:Piece,seat?:DebrisSeat|null)=>{
     const source=piece.source, g=source.geometry, pos=g.getAttribute('position'), normal=g.getAttribute('normal'), uv=g.getAttribute('uv');
     const positions:number[]=[], normals:number[]=[], uvs:number[]=[];
     const p=new THREE.Vector3(), n=new THREE.Vector3();
@@ -157,12 +195,19 @@ export function createKitDamage(object:THREE.Object3D) {
     geometry.computeBoundingBox();
     const centre=geometry.boundingBox!.getCenter(new THREE.Vector3());
     geometry.translate(-centre.x,-centre.y,-centre.z); geometry.computeBoundingBox();
+    // The wall-bounce radius is the box's half-diagonal: a tumbling plate turns its corners to the wall.
+    const half=geometry.boundingBox!.getSize(new THREE.Vector3()).multiplyScalar(.5), radius=half.length();
+    // SECTOR levels (plan 3b): a piece shed through a wall starts on this side of it, on the body's floor.
+    const at=seat?seat(centre.toArray() as Vec3,radius):null;
     const mesh=new THREE.Mesh(geometry,source.material); mesh.position.copy(centre); mesh.name=`Detached_${piece.bone}`;
+    if(at) mesh.position.set(at.pos[0],at.pos[1],at.pos[2]);
     debris.add(mesh);
     const side=piece.limb.endsWith('L')?1:-1;
-    drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false});
+    drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false,
+      floorY:at?.floorY??0,radius});
     piece.released=true;
-    return centre.toArray() as Vec3;
+    // The 'armor-shed' event's point: where the piece actually starts (the seated position on a sector level).
+    return (at ? [at.pos[0],at.pos[1],at.pos[2]] : centre.toArray()) as Vec3;
   };
   const worldBounds=(piece:Piece)=>{
     const g=piece.source.geometry,pos=g.getAttribute('position'),box=new THREE.Box3(),p=new THREE.Vector3();
@@ -170,10 +215,46 @@ export function createKitDamage(object:THREE.Object3D) {
     for(const i of new Set(piece.indices)) { p.fromBufferAttribute(pos,i); piece.source.applyBoneTransform(i,p); p.applyMatrix4(piece.source.matrixWorld); box.expandByPoint(p); }
     return box;
   };
+  /** Advance the shed pieces. Named apart from update(): a kit the body has left (kit-remains.ts) has only this to do. */
+  const stepDrops=(dt:number,ground?:DebrisGround|null)=>{
+    const step=Math.min(Math.max(dt,0),1/30);
+    for(const d of drops) {
+      if(d.resting || step===0) continue;
+      d.velocity.y-=10*step;
+      const p=d.mesh.position, start:Vec3|null=ground?[p.x,p.y,p.z]:null;
+      p.addScaledVector(d.velocity,step);
+      if(ground) {
+        const b=ground.bounce(start!,[p.x,p.y,p.z],[d.velocity.x,d.velocity.y,d.velocity.z],.22,.6,d.radius);
+        if(b) { p.set(b.pos[0],b.pos[1],b.pos[2]); d.velocity.set(b.vel[0],b.vel[1],b.vel[2]); }
+      }
+      d.mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(d.spin.x*step,d.spin.y*step,d.spin.z*step)));
+      d.mesh.updateMatrixWorld(true);
+      const bounds=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
+      if(ground) {
+        // Under a non-sky ceiling the piece's top stays under it (NaN off the map, Infinity under sky: no clamp).
+        const ceil=ground.ceilAt?.(p.x,p.z)??Infinity;
+        if(Number.isFinite(ceil) && bounds.max.y>ceil-.01) {
+          const down=bounds.max.y-(ceil-.01);
+          p.y-=down; bounds.min.y-=down; bounds.max.y-=down;
+          if(d.velocity.y>0) d.velocity.y*=-.22;
+        }
+      }
+      const lift=ground?(d.floorY=landingFloor(ground,p.x,p.z,d.floorY))+.01:.01;
+      if(bounds.min.y<lift) {
+        d.mesh.position.y+=lift-bounds.min.y;
+        d.velocity.set(d.velocity.x*.6,Math.abs(d.velocity.y)*.22,d.velocity.z*.6); d.spin.multiplyScalar(.65);
+        if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
+      }
+    }
+  };
   return {
     debris,
     reset,
-    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number,armor?:KitArmorInput|null):KitDamageEvent[] {
+    /** SECTOR levels (plan 3b) pass `ground` (shed pieces stop at its walls, stay under its ceiling and land on the
+     *  floor under them) and `seat` (they start inside the level on the body's floor); room levels pass neither and
+     *  keep the y = 0 plane, byte for byte. */
+    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number,armor?:KitArmorInput|null,
+      ground?:DebrisGround|null,seat?:DebrisSeat|null):KitDamageEvent[] {
       const events:KitDamageEvent[]=[];
       // Gibs clear their wound list before a healthy body is respawned.
       // Equipment loss, not the previous wound count, records that reset.
@@ -181,7 +262,8 @@ export function createKitDamage(object:THREE.Object3D) {
       const retained=new Set(wounds.flatMap(w=>w.eventId===undefined?[]:[w.eventId]));
       seen=new Set([...seen].filter(id=>retained.has(id)));
       const impacts=wounds.filter(w=>w.eventId!==undefined&&!seen.has(w.eventId)&&!w.injuryIgnored&&w.type!=='burn').map(w=>{
-        seen.add(w.eventId!); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
+        seen.add(w.eventId!);
+        return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),radius:w.radius,weight:w.type==='blast'?3:1};
       });
       const changed=new Set<THREE.SkinnedMesh>();
       // Plate mode: a spark per plate impact, wherever the actor says it was.
@@ -194,8 +276,8 @@ export function createKitDamage(object:THREE.Object3D) {
           // bone): the plate islands, and what is mounted on them, so the
           // helmet's lenses and snout never hang in front of a bare face.
           support??=kitSupportIndex(body);
-          if(!kitPieceAttached(piece.limb,piece.support,support) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
-            const point=bake(piece); changed.add(piece.source);
+          if(!kitPieceAttached(piece.limb,piece.support,support,piece.anchor) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
+            const point=bake(piece,seat); changed.add(piece.source);
             if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
           }
           continue;
@@ -206,9 +288,11 @@ export function createKitDamage(object:THREE.Object3D) {
             piece.damage+=hit.weight; events.push({kind:'armor-hit',point:hit.point,limb:piece.limb});
           }
         }
+        // Kit teeth float in front of the exposed skull once their gum is shot away (owner, 2026-11-02): out they come.
+        const toothOut=piece.tooth && impacts.some(hit=>worldBounds(piece).distanceToPoint(new THREE.Vector3(...hit.point))<=hit.radius);
         support??=kitSupportIndex(body);
-        if(!kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
-          const point=bake(piece); changed.add(piece.source);
+        if(toothOut || !kitPieceAttached(piece.limb,piece.support,support,piece.anchor) || piece.damage>=(piece.limb==='torso'?3:2)) {
+          const point=bake(piece,seat); changed.add(piece.source);
           if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
         }
       }
@@ -216,20 +300,20 @@ export function createKitDamage(object:THREE.Object3D) {
         const index=pieces.filter(p=>p.source===mesh && !p.released).flatMap(p=>p.indices);
         mesh.geometry.setIndex(index); mesh.visible=index.length>0;
       }
-      const step=Math.min(Math.max(dt,0),1/30);
-      for(const d of drops) {
-        if(d.resting || step===0) continue;
-        d.velocity.y-=10*step; d.mesh.position.addScaledVector(d.velocity,step);
-        d.mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(d.spin.x*step,d.spin.y*step,d.spin.z*step)));
-        d.mesh.updateMatrixWorld(true);
-        const bounds=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
-        if(bounds.min.y<.01) {
-          d.mesh.position.y+=.01-bounds.min.y;
-          d.velocity.set(d.velocity.x*.6,Math.abs(d.velocity.y)*.22,d.velocity.z*.6); d.spin.multiplyScalar(.65);
-          if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
-        }
-      }
+      stepDrops(dt,ground);
       return events;
+    },
+    stepDrops,
+    /** The pieces still on the body (kit-burst-mesh.ts). */
+    livePieces:()=>pieces.filter(p=>!p.released),
+    /** Every shed piece's x/z, its world bounds' lowest y and whether it has settled (the debris seam). Named
+     *  `dropped`, not `debris`: that is the pieces' scene group. */
+    dropped():{x:number;z:number;minY:number;resting:boolean}[] {
+      return drops.map(d=>{
+        d.mesh.updateMatrixWorld(true);
+        const b=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
+        return {x:d.mesh.position.x,z:d.mesh.position.z,minY:b.min.y,resting:d.resting};
+      });
     },
     dispose(){ clear(); debris.removeFromParent(); },
   };

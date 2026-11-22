@@ -182,3 +182,16 @@ describe('a full ring merges craters before evicting a cut', () => {
     expect(ring.filter(x => x.shape === 'cut').map(x => x.eventId)).toEqual([...Array.from({ length: 14 }, (_, i) => 7 + i), ...Array.from({ length: 12 }, (_, i) => 33 + i)]);
   });
 });
+
+describe('pushWound mergeMaxRadius (a body with scaled gun craters, gore-tuning.ts mergeMaxRadiusFor)', () => {
+  // Two teratoma-sized pellet craters (0.055 x 2.2 = 0.121 m) 0.1 m apart: the sphere covering both is 0.171 m.
+  const ring = (): Wound[] => [w(1, 0, [0, 0, 0], 0.121), w(2, 0, [0.1, 0, 0], 0.121), w(3, 1, [0, 0, 0])];
+  it('at the shared cap they cannot merge: the oldest is evicted', () => {
+    expect(pushWound(ring(), w(4, 2, [0, 0, 0]), 3).map(x => x.eventId)).toEqual([2, 3, 4]);
+  });
+  it('a scaled cap folds the oldest into its neighbour instead', () => {
+    const out = pushWound(ring(), w(4, 2, [0, 0, 0]), 3, MERGE.maxRadius * 2.2);
+    expect(out.map(x => x.eventId)).toEqual([2, 3, 4]);
+    expect(out[0]!.radius).toBeCloseTo((0.1 + 0.121 + 0.121) / 2, 9);
+  });
+});

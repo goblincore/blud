@@ -25,7 +25,7 @@ function run(state: WeaponSlotState, sec: number, press?: WeaponSlot): WeaponSlo
 }
 
 describe('slot mapping', () => {
-  it('maps 1 through 7 and nothing else', () => {
+  it('maps 1 through 8 and nothing else', () => {
     expect(slotForKey('Digit1')).toBe('flail');
     expect(slotForKey('Digit2')).toBe('shotgun');
     expect(slotForKey('Digit3')).toBe('dynamite');
@@ -33,10 +33,11 @@ describe('slot mapping', () => {
     expect(slotForKey('Digit5')).toBe('flare');
     expect(slotForKey('Digit6')).toBe('rod');
     expect(slotForKey('Digit7')).toBe('axe');
-    expect(slotForKey('Digit8')).toBeNull();
+    expect(slotForKey('Digit8')).toBe('melter');
+    expect(slotForKey('Digit9')).toBeNull();
     expect(slotForKey('KeyE')).toBeNull();
-    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(7);
-    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod', 'axe']);
+    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(8);
+    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod', 'axe', 'melter']);
   });
 });
 

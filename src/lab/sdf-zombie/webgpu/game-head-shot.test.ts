@@ -350,7 +350,7 @@ describe('the gun\'s real landing: an aimed slug is judged on its aim, wherever 
   });
 });
 
-describe('only the zombie: the character, not the motion profile', () => {
+describe('only the heads the split fits: the character, not the motion profile', () => {
   /** Every registered character that moves on the zombie's profile and is not the zombie. */
   const onZombieProfile = characterNames().filter(n => n !== 'zombie' && characterEntry(n).profile.name === 'zombie');
   it('many characters move on the zombie\'s motion profile; each answers its own name', () => {
@@ -386,6 +386,42 @@ describe('only the zombie: the character, not the motion profile', () => {
       expect(f.split.force(f.a.id, 'middle', 0, 0, 0.8), character).toBe(false);
       expect(f.split.open(f.a, [1, 0, 0], f.on(FRONT), 1), character).toBeNull();
     }
+  });
+});
+
+describe('the soldier: the split fits his head too (head-split.ts SPLIT_HEADS)', () => {
+  it('a precise slug from the front opens his head left and right; he keeps it, and the faces are the slug\'s wound', () => {
+    const f = fixture({ character: 'soldier' });
+    expect(f.a.characterName()).toBe('soldier');
+    expect(f.slug(FRONT)).toBe(true);
+    expect(f.leaf.last(f.a.id)).toMatchObject({ rule: 'split', kind: 'slug', took: true });
+    expect(f.split.state(f.a.id)).toMatchObject({ preset: 'middle', sides: 0 });
+    for (let i = 0; i < 240; i++) f.split.tick(1 / 60);
+    expect(headAlive(f.a.posed())).toBe(true);
+    const faces = f.a.wounds().filter(w => w.headRegion === 'split+' || w.headRegion === 'split-');
+    expect(faces).toHaveLength(2);
+    expect(faces.every(w => w.shot?.weapon === 'slug')).toBe(true);
+    expect(f.bleed).toHaveBeenCalled();
+    expect(f.hooks.pops).toHaveLength(0);
+  });
+  it('a second slug on his split-wide head swells and bursts it: the pop, not the flying head', () => {
+    const f = fixture({ character: 'soldier' });
+    f.slug(FRONT);
+    expect(f.slug(FRONT)).toBe(true);
+    expect(f.leaf.last(f.a.id)).toMatchObject({ rule: 'pop', took: true });
+    expect(f.a.headPopping()).toBe(true);
+    expect(f.a.advanceHeadPop(BURST_TUNING_DEFAULTS.popSwellS + 1e-6)).toBe(true);
+    expect(headAlive(f.a.posed())).toBe(false);
+    expect(f.hooks.pops).toHaveLength(1);
+    expect(f.hooks.severed).not.toContain('head');
+  });
+  it('the rest of his family is not on the list: a precise slug on the juggernaut\'s head is not judged', () => {
+    const f = fixture({ character: 'juggernaut' });
+    const at = f.on(FRONT);
+    if (!onHeadPrim(f.a.posed().prims, at)) throw new Error('fixture: the round missed the juggernaut\'s head');
+    expect(f.leaf.hit(f.a, at, FRONT, f.aimed(FRONT), 'slug')).toBe(false);
+    expect(f.leaf.last(f.a.id)).toBeNull();
+    expect(f.split.isOpen(f.a)).toBe(false);
   });
 });
 
@@ -679,9 +715,9 @@ describe('the wiring', () => {
     expect(spawnSrc).toContain('characterName: name,');
     expect(spawnSrc).toContain("...(name === 'zombie' ? {\n      onDecapitate:");
   });
-  it('the zombie is spawned with the pop and with the decapitation rule', () => {
+  it('the zombie is spawned with the pop and with the decapitation rule; every head the split fits gets the pop', () => {
     expect(spawnSrc).toContain('onDecapitate: ({ weapon }');
     expect(spawnSrc).toContain('decapitationRule(weapon)');
-    expect(spawnSrc).toContain("characterEntry(name).profile.soft || name === 'zombie'");
+    expect(spawnSrc).toContain('characterEntry(name).profile.soft || splitsHead(name)');
   });
 });

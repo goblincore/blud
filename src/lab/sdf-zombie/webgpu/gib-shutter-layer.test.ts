@@ -166,11 +166,11 @@ describe('gib shutter — the layer draw owns its render objects (engage hitch, 
   // the REAL RenderObjects cache with that key flip and counts rebuilds.
   function simulate(layerPassId: string | undefined, cycles: number): number {
     let lightsKey = 0;
-    const nodes = { getCacheKey: () => lightsKey, delete: () => {} };
+    const nodes = { getCacheKey: () => lightsKey, getCustomProgramCacheKey: () => '', delete: () => {} };
     const renderer = { contextNode: { id: 1, version: 0 }, _currentSourceMaterial: null, backend: { isWebGPUBackend: true } };
-    const objects = new RenderObjects(renderer, nodes, {}, { delete: () => {} }, { deleteForRender: () => {} }, {});
+    const objects = new RenderObjects(renderer, nodes, { deleteVertexState: () => {} }, { delete: () => {} }, { deleteForRender: () => {} }, {});
     const sharedContext = { id: 7 };   // one context: same attachment signature
-    const lightsNode = {};
+    const lightsNode = new THREE.EventDispatcher();
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardNodeMaterial());
     const seen = new Set<unknown>();
     const draw = (passId: string | undefined) => {

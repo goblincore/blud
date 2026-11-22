@@ -13,7 +13,7 @@ import { AnatomicalSkullKit, HUMANOID_SKULLS, skullFitMatrix } from './anatomica
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import type { BoneFieldSource } from './contract';
 import { meshBoneSource } from './mesh-skull';
-import { BALL_HEADS, HUMANOIDS, ballHeadFit } from './skull-cast';
+import { BALL_HEADS, HUMANOIDS, ballHeadFit, ownSkullOf } from './skull-cast';
 import { SECOND_PAINT_CHARACTERS, anatomicalFitOf, resolveSkull, sculptPaintOf } from './sculpt-variant';
 
 const REGISTERED = [...characterNames()];
@@ -81,7 +81,8 @@ describe('the skull tables agree with each other and with the registry', () => {
     const bounds = headOf('x').bounds, plain = skullFitMatrix(bounds, raw, 'cultist').elements.join();
     // Which registered characters the envelope fit sizes or places differently from the rest.
     const special = REGISTERED.filter(c => skullFitMatrix(bounds, raw, c).elements.join() !== plain);
-    expect(special.sort()).toEqual(['female', 'zombie']);
-    for (const c of special) expect(HUMANOID_SKULLS.has(c), c).toBe(true);
+    expect(special.sort()).toEqual(['female', 'imp', 'zombie']);
+    // A humanoid the human plates fit, or a character drawing its own skull asset under the envelope fit.
+    for (const c of special) expect(HUMANOID_SKULLS.has(c) || ownSkullOf(c)?.spec.fit === 'envelope', c).toBe(true);
   });
 });

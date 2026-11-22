@@ -2,6 +2,154 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The zombie's skeleton kit (a believable bare skeleton) — built 2026-11-15
+
+Owner, watching the melt strip a body: floating parts, no clavicles, gaps at the shoulder and hip.
+[Notes, numbers and sheets](../dev-notes/2026-11-15-skeleton-anatomy/NOTES.md).
+
+- [x] **Kit** `public/assets/lab/skeleton-kit.glb`, built headless in Blender by `scripts/skeleton-kit/build.sh`
+  (`build_kit.py`, against the rig `export-rig.ts` writes): one low-poly mesh for each of the zombie's 19 bone segments.
+  Vertebrae on a disc column, the old extracted cage's ribs and sternum, a sacrum, two hip bones with sockets at the rig's hip
+  joints, clavicle and scapula, humerus, radius and ulna, a fist, femur with head and neck, kneecap, tibia and
+  fibula, talus, a foot. 8,681 vertices and 16,970 triangles a body where the extraction was 15,110 and 30,284; the
+  same 19 meshes and batches.
+- [x] **Runtime** `webgpu/skeleton-spike/skeleton-kit.ts`: a piece replaces its segment's surface-nets mesh in the bone
+  cache and nothing else, so a sever hides it and the melt drops it with its segment's group (one group a piece,
+  pinned in `skeleton-kit.test.ts`). A body draws the kit whole or not at all; `?bonekit=0` is the old skeleton.
+- [x] **Joints hold when posed** (measured in the game, walk into attack): hip 3.5 mm typical and 20 worst (was 37 and
+  63; 2 and 9 before the femoral heads were lowered 8 cm to the flesh hip, 2026-11-16, off the rig's waist-high hip
+  points), knee and ankle 0 (were up to 32). The thigh and shin bones in `zombie.blob` now run joint to joint; the hip
+  bones follow the hip joints and the shoulder girdle the rig's clavicle (`KitFrame`); leg segments turn with the
+  body's yaw (`contract.ts`).
+- [x] **Colour**: a kit bone with no wound near it wears the skull's ivory with tissue in patches (the melt); one a wound
+  exposes wears the meat an extracted bone always wore. Owner's first look (2026-11-15): ten thin ivory ribs through a
+  chest wound did not feel part of the body, so the cage went back to six fat ribs and exposed bone back to meat. Second look (2026-11-16): the old ribcage was still
+  preferred (flat hoops running into the sternum), so the kit's ribs and sternum are now the old cage's own extracted
+  surface, on the kit's vertebrae and sacrum.
+- [x] **Beefier** (owner, 2026-11-16: clavicles "two thin bars", a solid frame over fine detail): every shaft, process
+  and rim scaled by a factor a bone (`build_kit.py BEEF`, clavicle 1.9 down to tibia 1.3).
+- [x] **One surface a bone, not a pile of tubes** (owner, 2026-11-16): `build_kit.py fuse` voxel-fuses, smooths and
+  thins each piece's shapes (pelvis, girdle, limb bones, hand, foot); a manubrium seats the clavicles; the shoulder
+  blades are rounded paddles.
+- [x] `__sdfGame.bareSkeleton(true)` hides the flesh and draws every body's whole skeleton; `skeletonPoses()` and
+  `kitJointGaps` measure joint separation.
+- [ ] Owner look. Not done: a detail normal map; the melt run against the kit (the melt is on its own branch);
+  corpses, ragdolls and severed bodies looked at; chunk bones (still SDF capsules); the kit fitted to the other
+  humanoids; a skeleton for non-humanoids (owner: a different session).
+
+## The tallow: a corpulent walking rendering vat (2026-11-14, fifth pass; boots approved 2026-11-15)
+
+- [x] **Body** `characters/tallow.blob`: a 2.05 m, 1.3 m wide fat man on short legs (the venus's bone names): gut,
+  apron, flank rolls, rear, a yoke of fat, forearm sleeves that swallow the cannons' breech blocks, a swollen rim of
+  back fat round the boiler. `?character=tallow`, `?spawn=tallow`. Pins in `characters/tallow-blob.test.ts`.
+- [x] **His own face** (the ogre's road, prims plus a mouth decal `scripts/make-tallow-face.py`): low broad crown, V
+  brow, red ember eyes in slanted sockets, cheekbones, hooked nose, downturned grimace.
+- [x] **Third pass (owner: the second pass's cannons were "too floral"; "heavy and industrial", "bloody decals where
+  the metal flesh interfaces", the breathing mask back).** Industrial cannons (`make_cannons.py`: octagonal breech
+  block, bolted bands, slotted brake, recoil piston, fuel tank). Gore (`gore` look, kit lumps and drips with blood
+  vertex colours) at every place metal goes into him: the breech blocks, the boiler, the hose ports, the mask edge and
+  strap, the chest ports. A shaped breathing mask with a grilled snout, cheek filters, a strap biting into the head and
+  two hoses into chest ports (`make_mask.py`). Boiler exhausts are pipes, not horns.
+- [x] **Gorilla arms** (owner: "longer, more ape gorilla like"): upper arm 0.50 m, forearm 0.44, hanging low and
+  ahead (the muzzles at y ~0.74), a deeper hunch (chest pitch 12).
+- [x] **More corpulent** (owner, fifth look: "doesnt quite read as corpulent ... legs shorter or footwear"): stumps
+  (thigh 0.30, shin 0.24; legs 29% of his height, crown 1.89), the apron hanging below the knees, heavy iron boots
+  with the ankle fat squeezed up over the cuffs (`make_boots.py`), and a waddle (`TALLOW_STOMP`: short steps, a wide
+  rock). Every kit and skin height follows the drop through one `LOWER` (0.16) in `scripts/tallow-surface.ts`.
+- [x] **Flesh detail** `characters/tallow.detail` from `scripts/tallow-detail-gen.ts`, baked into `tallow-body-n.png`
+  (1024 wide, `--torso-r0 0.95`; command in `bake-args.json`): fat rolls, the creases under the breasts and the apron,
+  a navel, cellulite, stretch marks, and veins (scaled 1.5x the recipe) radiating from the boiler and the cannon
+  blocks.
+- [x] **His own attack, the VOLLEY**: both cannons braced level (`attack.ts` 'brace', `BRACE_TUNING`) and four
+  fireballs right, left, right, left (`fireball.ts TALLOW_VOLLEY`, `enemy-mind.ts makeTallowMind`; `MindOutput.fireSide`
+  and `MotionProfile.spitL` pick the muzzle). He walks `gait.ts TALLOW_STOMP` (STOMP with reach arms: STOMP's carry
+  arms ignored every attack). Pinned by `fireball.test.ts` and `webgpu/game-actor-tallow.test.ts`.
+- [x] **Kit** `assets-source/tallow-kit/` (headless `build.py`, skin from `scripts/tallow-surface.ts`): 70k triangles
+  after the 2026-11-15 optimisation pass (was 154k; no visible change at 1.3 m). Rounded egg-shaped hoof soles on the
+  boots (owner: no rectangle soles). No kit normal atlas.
+- [x] **Wiring**: `TALLOW_PROFILE` (TALLOW_STOMP, cruise 0.7, turn 1.6, `throws: 'volley'`).
+- [x] **Owner look at the fifth pass**: stumps approved; the box soles rejected and rounded (2026-11-15).
+- [x] **The volley in the arena** (2026-11-15, played): walks in, braces, four alternating shots ~5 s apart. Shots
+  now hit for 9 (`TALLOW_VOLLEY.shotDamage`; 14 made a volley 56 and two killed a player standing still). Each shot
+  has a muzzle blast (a flash of light and a smoke plume, `webgpu/muzzle-smoke.ts`; owner: less flame, just smoke). The shots draw as
+  ROCKETS (`webgpu/rocket-view.ts`): the Blender rocket (`assets-source/tallow-kit/make_rocket.py` ->
+  `public/assets/lab/tallow-rocket.glb`, 3.4k tris: riveted iron tube, rusted warhead, welded swept fins, sooted nozzle;
+  shading baked into vertex colours, the overlay is unlit), a seamless exhaust card, a nozzle glow and
+  a smoke trail (`TRAIL_SMOKE`; the first pass, a stretched tracer, showed a seam and no projectile);
+  they LIGHT THE LEVEL as they fly (owner, 2026-11-16; `webgpu/rocket-light.ts`: a hot orange point at the nozzle,
+  ramped off the muzzle and flickering, on two permanent mesh PointLights for the nearest rockets plus the probe
+  gather and the body flashes; `?rocketlight=0` turns it off for an A/B, `__sdfGame.rocketLights()` reads the pool),
+  and a kick (attack.ts
+  `cannonKick`: the cannon snaps up 0.22 rad, its shoulder and the chest jolt back, settled before the next shot).
+  The bores are dark holes: hollow brake rings, a black liner (`forearm.l|throat`), no glowing ember disc.
+- [x] **Belly wounds swam as he fell** (owner, 2026-11-15): a wound on a POINT blob (`at=`, the gut on spine1 and the
+  apron on pelvis) took its frame from a fixed up axis, so it ignored the trunk's turn as a corpse tipped over.
+  damage.ts `frame` now carries a non-spherical point prim's frame by its pose orient (pure yaw when standing, so
+  unchanged there). Shared: every character's anisotropic point blobs. Arena probe, four belly slugs then a collapse:
+  wound drift in the trunk frame 75 cm before, 22 cm after (the rest is spine1 bending against the pelvis).
+- [x] Kit triangle budget: 154k -> 70k (decimation targets cut; hoses cut least so their ribs survive).
+- [ ] Kit normal atlas (optional: only if a later cut needs it).
+
+## Cerebrax (boss: a brain in a harness on four spider legs, a chaingun under its face) — first pass 2026-11-08
+
+- [x] **Body** `characters/cerebrax.blob` at `scale 1.60`: a brain of 24 SDF prims (mass, hemispheres, frontal,
+  temporal and occipital lobes, cerebellum, a small snarling face low on the front), on the gibbet's four-legged rig
+  with spider legs (knees 2.75 m up, poled up and out by the new `GaitProfile.kneePole` / `elbowPole`). The brain rides
+  `skull`, so the aim chain turns it in its ring. It pulses on the `swell` morph (`MotionProfile.joystick.swell`,
+  no throw). `?character=cerebrax`, `?spawn=cerebrax`.
+- [x] **Folds** `characters/cerebrax.detail` from `scripts/cerebrax-detail-gen.ts`: gyri along the nodal lines of a
+  random-wave field, fissure banks, cortical veins, the snarl's wrinkles. Baked round a vertical axis; the bake
+  gained `--torso-r0` (region 0's ray start, fixed at 0.6 m before).
+- [x] **Kit** `assets-source/cerebrax-kit/` (headless `butcher-kit/build.py`, skin from `scripts/cerebrax-skin.ts`): the
+  harness band dipping to a mandible point under the face, talons over the brain, socket bosses; skullmetal struts
+  with crests and rams, black knee caps with horns, silver shins in sculpted collars, talon feet; eye embers,
+  teeth, glowing tendrils; the under-barrel chaingun. ~256k tris: the kit triangle pass is still to come.
+- [x] **Attack**: `gunner: chaingun` + `spit` from the hips: the soldier brain on the juggernaut's sweeping-burst tuning,
+  fired from the under-barrel (`webgpu/game-actor-cerebrax.test.ts`).
+- [ ] Owner look; a death (it uses the authored falls); drone or swarm variants; kit triangle optimisation; kit shedding.
+
+## Imp (gaunt fireball-throwing demon: burning socket fists, a forge-heart feeding them) — first pass 2026-10-24
+
+- [x] **Body** `characters/imp.blob`: a gaunt, hunched, pale-hide demon on the butcher's digitigrade legs (flesh, not
+  machine), long arms with a `hand` bone, a deep hunch. The head is flesh over a simplified version of the twinhead's
+  demon skull (owner): V brow, slanted sunken sockets with red embers, cheekbones, flared nostrils, long muzzle,
+  chin point. `?character=imp`, `?spawn=imp`.
+- [x] **Kit** `assets-source/imp-kit/` (headless `build.py`, skin probed by `scripts/imp-skin.ts`): socket fists
+  (a knuckled skullmetal cup round a burning coal, caged by five curled talons, glowing from a baked `_glow`), fangs
+  rooted in the flesh round a dark gape, forward-hooking horns, a forge-heart in the chest wound (a crested housing
+  with a burning slit, prised-open ribs round it), dark fuel conduits with burning seams from the heart down each arm
+  into the fists, back and shoulder spines, splayed foot talons and a hock spur. ~116k tris; optimisation is the
+  later pass.
+- [x] **Body normal map** from `characters/imp.detail` (`scripts/imp-detail-gen.ts`): a starved rib cage, spine
+  knuckles, sinew cords down the forearms, shins and metatarsals, veins; torso baked round the hunched spine axis.
+- [x] **Attacks**: `IMP_PROFILE` (PROWL_QUICK at 1.6 m/s, quick turn). Up close the zombie mind's swing as a claw
+  rake; at range `makeImpMind` winds up and throws overhand (`attack.ts` `throw`): `fireball.ts` flies from the right
+  socket (`spit` from `handTipR`) at 11 m/s, 14 on a hit, 5 on a near miss, a small fire burst. Seen in the arena.
+- [x] **Second pass 2026-11-02** (owner): bigger head (x1.25), shorter legs (pelvis 0.94 -> 0.76) and arms, big
+  splayed claw feet (flesh toes, kit claws), and an exposed skull of its own: the twinhead's demon skull mesh
+  (`public/assets/lab/imp-skull.glb`, built by `scripts/build_imp_skull.py`, loaded through `OWN_SKULLS`).
+- [x] **Third pass 2026-11-02** (owner): the exposed skull dirtied (baked hollows, blood, clinging flesh, black
+  sockets), a snout under the muzzle so no flesh floats, red-pupil eyes from the skull's modelled eyeballs; loose low
+  arms that swing (`IMP_PROWL`); a throw with a long cock, a whip and a follow-through (`THROW_TUNING`).
+- [x] **Teeth and cables 2026-11-02** (owner): the exposed skull's jaw swung open, thrust and narrowed and its tooth
+  row drawn out so the kit's teeth stand on bone (`build_imp_skull.py` `JAW_*`, `SNOUT_ROW`; `IMP_FIT` re-solved, the
+  cranium unmoved, still under the hide); the chest hose split at a coupling so its outer run sheds with a shot-off
+  arm (`make_conduits.py`, `characters/imp-kit.test.ts`). Second look (owner: fist and cable stayed on a shot-off arm;
+  the teeth still float): the imp's kit never shed at all, only armoured kits did. New registry flag `kitSheds`
+  (imp only) runs the kit damage without the armour; a crater that reaches a `tooth` island knocks it out, so the
+  skull's own teeth show.
+- [x] **Every kit sheds 2026-11-03**: `kitSheds` on every non-armoured kit (venus, teratoma, ogre, cyberdemon, bloatmaw,
+  gnasher, the twinhead family, gorehound, gibbet, chair, gamer, warbull, goblins, clowns). A kit bone that names no
+  limb (gnasher's tusks, the horns, the clown's collar points) rides its nearest limb-naming ancestor. A `plate` island
+  takes hits only on an `armoured` kit. `piecesOf` ~5x faster (13-49 ms per kit load in the browser, was 4-5x that); a
+  sculpted kit still bursts by bone on the gib frame. Pinned per kit by `characters/kit-sheds.test.ts`.
+- [ ] Follow-up: the flayer's spine-to-shoulder coupling reaches 7.3 cm into the left shoulder (and the butcher's and
+  deadeye's, ~3 cm, into the right), and a twinhead skull cable 9 cm over the right shoulder: they stay on the torso
+  when the arm goes. Split them at a coupling, as the imp's chest hose was.
+- [ ] Owner review. Open: the cut horn knob on each temple; metal skull parts
+  on the head (a version is kept locally, to revisit); toes have no normal-map detail; a charging fireball visible in the socket through the wind-up; the in-flight look of the
+  ball (a tinted tracer, like the bile); kit optimisation.
+
 ## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22
 
 - [x] **Body** `characters/venus.blob`: a heavy, full-figured flesh body (hips 0.55 m across, a 0.17 waist, a rear
@@ -361,6 +509,25 @@ only if an idea below earns it.
   / -34% zombie prim evals, pixel-identical). Findings + next steps: [PERF.md](../../docs/dev-notes/2026-09-23-cultist/PERF.md). Original plan:
   cut hidden flesh under the robe, merge robe shells, consider baking the hands (owner: no digit-level damage needed).
   Owner open to a mesh/baked robe if SDF can't get near ~1.5x a zombie.
+- [x] **SDF-cloth cost spike (2026-10-26)**: [notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md). Counters, game close-up,
+  zombie = 1.00: paint or flesh-OFFSET trousers 1.00-1.01x, five shell trousers 1.48x, the cultist's robe 2.07x (arena 1.30x).
+  The robe's cost is STEPS near its silhouette, not prims. Landed: taper-aware outer-hull chain (-7% robe close-up).
+- [x] **Rasterised cloth proxy** (`cloth-proxy.ts`): each shell's own fitted mesh in the outer hull instead of spheres.
+  Robe close-up -21% -> **1.64x** a zombie (1.55x without `warp=`), arena 1.18x. `?clothproxy=0` for A/B.
+- [x] **Cloth that reads as cloth** (owner: the robe "moves and looks like SDF flesh"): painted shells now shade as
+  fabric (no scatter/wet/skin noise, wrap + sheen, dye mottle), shading-only pleats round each shell's axis, and
+  walking drifts the folds (`CLOTH_WALK_DRIFT`). Zero march cost. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md).
+- [x] **Cultist hood as cloth** (owner: "drape on the head ... not a hard helmet"): a back drape onto the shoulders,
+  a slumped shell peak (the solid one caused the "onion" rings in the opening), dark linings, thinner sheets, and a
+  cloth-only tight accept for real-thickness edges. Robe zombie 1.70x a zombie close-up.
+- [ ] Next for cloth: a bending hem (`hem2`/`hem3` chain) instead of one rigid cone; folds that answer turning; a
+  per-prim cuff (hem lip from the flesh offset); `?shadebound` after an owner look at its outliers.
+- [x] **Analytic normals working again** (dead since 2026-09-29: the zombie's tapered foot bar failed `ngBody` on
+  every pixel). Tapers, shells and chamfers now have gradients, and skipped groups no longer veto. Close-up prim
+  work −31% bare zombie, −25% robe, −29% trousers; arena −13 to −15%. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md),
+  follow-up 4. Still on the taps: strands, hem rims.
+- [x] Analytic gradients for bends (coneBend) and boxes (2026-10-27, follow-up 4b): the soldier has no reason-1
+  pixels left. The saving is small (−1 to −2%), because only 5% of its hit pixels were failing.
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
   travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
 - [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.

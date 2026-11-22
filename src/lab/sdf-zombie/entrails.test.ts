@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { makeGutChain, stepGutChain, pinGutChain, detachGutChain, GUT_TUNING } from './entrails';
+import { makeGutChain, stepGutChain, pinGutChain, detachGutChain, seatGutChain, GUT_TUNING, type GutChain } from './entrails';
+import type { Vec3 } from './types';
+import type { DebrisGround } from './debris-ground';
 
 const near = (a: number, b: number, eps = 1e-3) => Math.abs(a - b) < eps;
 
@@ -146,5 +148,136 @@ describe('an ATTACHED chain coils too (organs r3 fix)', () => {
     const a = c.nodes[0]!.pos, b = c.nodes[c.nodes.length - 1]!.pos;
     const span = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     expect(span).toBeLessThan(GUT_TUNING.restLength * 0.55);
+  });
+});
+
+describe('stepGutChain on a debris ground (plan 3b Task 4)', () => {
+  // A 1 m ledge at x < 0. Its riser is a wall to a node below the ledge top (as a sector riser is to `bounce`), so a
+  // node down there cannot be popped up onto the ledge by the floor clamp.
+  const ledge: DebrisGround = {
+    floorAt: (x) => (x < 0 ? 1 : 0),
+    bounce: (prev, next, vel, restitution, friction, radius = 0) => (prev[0] >= 0 && prev[1] < 1 && next[0] - radius < 0
+      ? { pos: [Math.max(radius, 0.01), next[1], next[2]], vel: [vel[0] < 0 ? -vel[0] * restitution : vel[0], vel[1], vel[2] * friction],
+        normal: [1, 0, 0] }
+      : null),
+  };
+  const flung = (x0: number, vx: number): GutChain => {
+    const c = detachGutChain(makeGutChain([x0, 1.3, 0]));
+    return { ...c, nodes: c.nodes.map((n) => ({ pos: n.pos, prev: [n.prev[0] - vx, n.prev[1], n.prev[2]] as Vec3 })) };
+  };
+  it('a detached rope lies on the floor under each node: one dropped on the ledge stays on it', () => {
+    let c = flung(-0.1, 0.005);
+    for (let i = 0; i < 600 && !c.settled; i++) {
+      c = stepGutChain(c, 1 / 60, ledge, 0.05);
+      for (const n of c.nodes) expect(n.pos[1]).toBeGreaterThanOrEqual(ledge.floorAt(n.pos[0], n.pos[2]) - 1e-9);
+    }
+    expect(c.settled).toBe(true);
+    for (const n of c.nodes) expect(n.pos[1]).toBeCloseTo(1, 6);
+  });
+  it('one thrown over the edge falls to the lower floor and settles there (no hovering, no jitter at the riser)', () => {
+    let c = flung(-0.1, 0.02);
+    for (let i = 0; i < 600 && !c.settled; i++) {
+      c = stepGutChain(c, 1 / 60, ledge, 0.05);
+      for (const n of c.nodes) expect(n.pos[1]).toBeGreaterThanOrEqual(ledge.floorAt(n.pos[0], n.pos[2]) - 1e-9);
+    }
+    expect(c.settled).toBe(true);
+    for (const n of c.nodes) { expect(n.pos[0]).toBeGreaterThan(0); expect(n.pos[1]).toBeCloseTo(0, 6); }
+  });
+  it('without a ground the floor is y = 0 as before', () => {
+    let a = detachGutChain(makeGutChain([0, 0.5, 0])), b = a;
+    for (let i = 0; i < 120; i++) { a = stepGutChain(a, 1 / 60); b = stepGutChain(b, 1 / 60, undefined); }
+    expect(b).toEqual(a);
+    expect(a.nodes.every((n) => !('floorY' in n))).toBe(true);
+  });
+  it('a node never passes a sector wall: a rope flung at it piles up on the near side', () => {
+    const WALL_X = 0.3, R = 0.05;
+    const crossings: number[] = [];
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel, restitution, friction, radius = 0) => {
+        if (!(prev[0] < WALL_X && next[0] + radius > WALL_X - 1e-12)) return null;
+        crossings.push(radius);
+        const vn = vel[0];
+        return { pos: [WALL_X - Math.max(radius, 0.01), next[1], next[2]],
+          vel: [vn > 0 ? -vn * restitution : vn, vel[1], vel[2] * friction], normal: [-1, 0, 0] };
+      },
+    };
+    let c: GutChain = detachGutChain(makeGutChain([0, 1.0, 0]));
+    // Fling it hard at the wall: every node carries +x velocity (verlet: pos - prev).
+    c = { ...c, nodes: c.nodes.map((n) => ({ pos: n.pos, prev: [n.prev[0] - 0.12, n.prev[1], n.prev[2]] as Vec3 })) };
+    let maxX = -Infinity;
+    for (let i = 0; i < 600 && !c.settled; i++) {
+      c = stepGutChain(c, 1 / 60, wall, R);
+      for (const n of c.nodes) maxX = Math.max(maxX, n.pos[0]);
+    }
+    expect(crossings.length).toBeGreaterThan(0);                 // it did reach the wall
+    expect(crossings.every((r) => r === R)).toBe(true);          // probed with the node's thickness
+    expect(maxX).toBeLessThanOrEqual(WALL_X - R + 1e-9);         // and no node centre got past it
+    for (const n of c.nodes) expect(n.pos[1]).toBeGreaterThanOrEqual(-1e-9);
+  });
+  it('an attached rope whose constraints drag a STOPPED node back across a wall keeps it on its side (2nd pass)', () => {
+    // The pin sits past a wall at x = 0 (a body pressed to it, its wound poking through); the rest of the rope lies
+    // still on the near side. Integration moves the still nodes only in y, so the first wall pass sees no crossing:
+    // every crossing logged here is the constraints' pull, caught by the second pass.
+    const WALL_X = 0, R = 0.03;
+    const crossings: Vec3[] = [];
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel, restitution, friction, radius = 0) => {
+        if (!(prev[0] < WALL_X && next[0] + radius > WALL_X - 1e-12)) return null;
+        crossings.push([...prev] as Vec3);
+        const vn = vel[0];
+        return { pos: [WALL_X - Math.max(radius, 0.01), next[1], next[2]],
+          vel: [vn > 0 ? -vn * restitution : vn, vel[1], vel[2] * friction], normal: [-1, 0, 0] };
+      },
+    };
+    const base = makeGutChain([0.4, 0.5, 0]);
+    let c: GutChain = {
+      ...base,
+      nodes: base.nodes.map((n, i) => {
+        const pos: Vec3 = i === 0 ? [0.4, 0.5, 0] : [-R - 0.06 * i, 0, 0.02 * i];
+        return { pos, prev: [...pos] as Vec3 };
+      }),
+    };
+    expect(c.attached).toBe(true);
+    for (let i = 0; i < 120; i++) {
+      c = stepGutChain(pinGutChain(c, [0.4, 0.5, 0]), 1 / 60, wall, R);
+      for (const n of c.nodes.slice(1)) {
+        expect(n.pos[0]).toBeLessThanOrEqual(WALL_X - R + 1e-9);
+        expect(n.pos.every(Number.isFinite)).toBe(true);
+      }
+      expect(c.nodes[0]!.pos).toEqual([0.4, 0.5, 0]);          // the pin is the caller's
+    }
+    expect(crossings.length).toBeGreaterThan(0);                // the pull did reach the wall
+  });
+  it('off the map a node keeps its last floor (spawned with the body floor as floorY)', () => {
+    const hole: DebrisGround = { floorAt: () => NaN, bounce: () => null };
+    let c = detachGutChain(makeGutChain([0, 1.5, 0], { floorY: 0.5 }));
+    expect(c.nodes.every((n) => n.floorY === 0.5)).toBe(true);
+    for (let i = 0; i < 600 && !c.settled; i++) c = stepGutChain(c, 1 / 60, hole);
+    for (const n of c.nodes) expect(n.pos[1]).toBeGreaterThanOrEqual(0.5 - 1e-9);
+    expect(Math.min(...c.nodes.map((n) => n.pos[1]))).toBeCloseTo(0.5, 6);
+  });
+  it('a ground that matches y = 0 everywhere lands the rope where the room path does', () => {
+    const flat: DebrisGround = { floorAt: () => 0, bounce: () => null };
+    let a = detachGutChain(makeGutChain([0, 0.8, 0])), b = a;
+    for (let i = 0; i < 300; i++) { a = stepGutChain(a, 1 / 60); b = stepGutChain(b, 1 / 60, flat); }
+    expect(b.nodes.map((n) => n.pos)).toEqual(a.nodes.map((n) => n.pos));
+  });
+});
+
+describe('seatGutChain (the sector spawn seat, plan 3b)', () => {
+  it('moves the whole chain with its motion and gives every node the body floor', () => {
+    const c = makeGutChain([1, 1.2, 0]);
+    const s = seatGutChain(c, [0.8, 1.1, 0.1], 0.25);
+    for (let i = 0; i < c.nodes.length; i++) {
+      const a = c.nodes[i]!, b = s.nodes[i]!;
+      expect(b.pos[0] - a.pos[0]).toBeCloseTo(-0.2, 12);
+      expect(b.pos[1] - a.pos[1]).toBeCloseTo(-0.1, 12);
+      expect(b.pos[2] - a.pos[2]).toBeCloseTo(0.1, 12);
+      expect(b.pos[1] - b.prev[1]).toBeCloseTo(a.pos[1] - a.prev[1], 12);   // the unspool velocity is kept
+      expect(b.floorY).toBe(0.25);
+    }
+    expect(c.nodes[0]!.floorY).toBeUndefined();                            // the input is untouched
   });
 });

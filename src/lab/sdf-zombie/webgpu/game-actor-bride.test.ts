@@ -9,8 +9,7 @@ import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import brideSrc from '../characters/bride.blob?raw';
-import { BRIDE_PROFILE, runWeight } from '../motion-profile';
-import { BURN_BEHAVIOUR } from '../burn-behaviour';
+import { BRIDE_PROFILE, BURN_TIER_DEFAULT, runWeight } from '../motion-profile';
 import { makeSwordMind } from './enemy-mind';
 import { createZombieActor } from './game-actor';
 import { makeMotionJoints } from '../motion';
@@ -85,7 +84,7 @@ describe('bride actor (game path)', () => {
   // when any swing starts is always the guard. If this fails, make
   // swordCarryAt start from the carry pose at swing start instead.
   it('never runs in the game, so a swing always starts from the guard', () => {
-    const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_BEHAVIOUR.zombieSpeed, 1);
+    const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_TIER_DEFAULT.speed, 1);
     expect(runWeight(BRIDE_PROFILE, fastest)).toBe(0);
   });
 
@@ -210,5 +209,23 @@ describe('bride actor (game path)', () => {
       expect(a.motionFrame()!.posePins ?? []).toContain(J.handR);
       expect(hits).toBeGreaterThan(0);
     }
+  });
+});
+
+// JOINT TOUGHNESS (2026-11-02) makes the elbow the usual cut, so a lost
+// forearm must count as a lost arm: before, only a whole-cluster sever did,
+// and she kept her sword in a hand that was no longer there.
+describe('bride: a lost forearm is a lost arm', () => {
+  it('cutting the sword arm at the elbow drops the sword', () => {
+    let released = 0;
+    const a = bride(undefined, () => released++);
+    for (let i = 0; i < 30; i++) a.step(1 / 60);
+    const arm = a.posed().prims.filter(p => p.limb === 'armR' && p.op !== 'sub' && !p.dead);
+    const elbow = arm.findIndex(p => /^fore[aA]rm\.r$/.test(p.bone ?? ''));
+    expect(elbow).toBeGreaterThan(0);
+    expect(a.debugSever('armR', elbow)).toBe(true);
+    for (let i = 0; i < 2; i++) a.step(1 / 60);
+    expect(a.posed().clusters.find(cl => cl.limb === 'armR')!.alive).toBe(true);
+    expect(released).toBe(1);
   });
 });

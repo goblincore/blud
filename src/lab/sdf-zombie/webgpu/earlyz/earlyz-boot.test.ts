@@ -82,11 +82,11 @@ describe('bootEarlyz', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('stays off when the patch is refused, without touching the device', async () => {
-    install.mockReturnValue({ installed: false, reason: 'three r999; the patch is written for r186' });
+    install.mockReturnValue({ installed: false, reason: 'three r999; the patch is written for r187' });
     const { device } = makeDevice();
     const { ctx, earlyz } = makeCtx({ device });
     await bootEarlyz(ctx);
-    expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'three r999; the patch is written for r186' });
+    expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'three r999; the patch is written for r187' });
     expect(device.addEventListener).not.toHaveBeenCalled();
     expect(detect).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);

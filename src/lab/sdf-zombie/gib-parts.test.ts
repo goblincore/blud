@@ -232,10 +232,13 @@ describe('gibParts — the cut does not eat the body', () => {
     // within-cluster cuts. The bound is set just above the split set's own
     // number: this is a regression fence, not a target.
     expect(miss.missed / miss.total).toBeLessThan(0.07);
-    // And nothing may be missing by more than about a centimetre and a half:
-    // the residual is the smooth-min fillet lost at a seam, which is a
-    // thinner-looking waist, not a hole.
-    expect(miss.worst).toBeLessThan(0.03);
+    // And nothing may be missing by more than a few centimetres: the residual
+    // is the smooth-min fillet lost at a seam, which is a thinner-looking
+    // waist, not a hole. 0.04 since 2026-11-05: the thigh now blends 30 mm into
+    // the pelvis (zombie.blob NO FLESH BALL AT THE HIP), and that fillet across
+    // the leg/torso seam is lost at the front of the hip crease on the frame of
+    // release (worst 37 mm, x +-0.08-0.19, y 0.94-1.02, z 0.10-0.12).
+    expect(miss.worst).toBeLessThan(0.04);
   });
 });
 

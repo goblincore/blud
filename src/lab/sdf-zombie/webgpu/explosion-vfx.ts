@@ -13,6 +13,9 @@
 //   ring   1   additive expanding shockwave annulus
 //   ─────────
 //   35 per burst at the default tuning (the brief's "well under ~40").
+//   lick 0-6   `?blastfx=front`, in the FIRE layer's spare slots (14 of 20): they
+//              live about 0.24 s, so the game's burst is 41 for its first quarter
+//              of a second and 35 after. Same draw, same material, same pipeline.
 // Hard caps are 20 + 12 + 18 + 1 = 51 per burst and at most
 // EXPLOSION_VFX_LIMITS.maxBursts (6) bursts are ever live, so the module can
 // never draw more than 306 billboards.
@@ -203,6 +206,20 @@ export interface ExplosionVfxTuning {
    * [0, 2] metres.
    */
   softFade: number;
+  /**
+   * THE VISIBLE FRONT (`?blastfx=front`, blast-fx.ts): fire licks per burst that run out from the blast and reach
+   * the gib radius as the body gibs, in the fire layer's spare slots, so fireCount + lickCount is capped at
+   * maxFirePerBurst. 0 (the module's default) writes none and draws no rng, so a burst with them off is the old burst.
+   */
+  lickCount: number;
+  /** Where a lick's head ends up, in half-heights. See lickEnvelope. */
+  lickReachH: number;
+  /** A lick's whole life in SECONDS, not a share of `lifeSec`: it is timed to the gib swap (about 100 ms), and `?fxlife`
+   *  stretching the plume must not make it late. */
+  lickLifeSec: number;
+  /** `?blastfx=timing`: how many of the neck's billboards ignite with no stagger and carry coreIgnition. 0 = the old
+   *  ignition; the rng sequence is the same either way, so the plume they join is the same plume. */
+  coreIgnite: number;
 }
 
 export const EXPLOSION_VFX_TUNING: ExplosionVfxTuning = {
@@ -242,6 +259,14 @@ export const EXPLOSION_VFX_TUNING: ExplosionVfxTuning = {
   curlStrength: 0,
   curlScale: 18,
   softFade: 0,
+  // OFF here: the page's `?blastfx=` turns them on (game-main.ts), so the lab and the spike keep their burst.
+  lickCount: 0,
+  // 2.5 half-heights, the head of a lick at the shipped size (halfH 0.84 m): 2.1 m, the distance from the blast within
+  // which a body gibs (measured from the body's SURFACE, 2026-10-29). NOT the ring, which owner measurement keeps at
+  // 1.4 half-heights (see ringReachH): a lick is a thin tongue gone in a quarter of a second, not an annulus.
+  lickReachH: 2.5,
+  lickLifeSec: 0.24,
+  coreIgnite: 0,
 };
 
 export interface ExplosionVfx {
@@ -281,7 +306,7 @@ export interface ExplosionVfx {
    * stray pixel (so any band split by height reorders between boots). This is
    * deterministic, per layer, in world units, and it needs no GPU readback.
    */
-  readonly layerExtents: Record<'fire' | 'smoke' | 'ember' | 'ring', LayerExtent>;
+  readonly layerExtents: Record<'fire' | 'smoke' | 'ember' | 'ring' | 'lick', LayerExtent>;
   /** The half-height this frame's bursts were laid out against, in metres —
    *  the number every extent above should be read RELATIVE to. */
   readonly burstHalfHeightM: number;
@@ -567,6 +592,71 @@ export function ringEnvelope(
   };
 }
 
+/** One fire lick's state at local age `u` (0..1). Distances are in half-heights from the burst's centre line. */
+export interface LickSample {
+  /** How far out the lick's head is. */
+  head: number;
+  /** How far out its tail is: the distance between them is its length. */
+  tail: number;
+  /** Half its width, across the lick. */
+  width: number;
+  /** Height above where it set off, so it lifts off the floor as it dies. */
+  rise: number;
+  /** 0..1 heat. */
+  intensity: number;
+}
+
+/**
+ * THE FRONT THAT REACHES THE BODY. Measured (.lab-tmp/blast-gib, 2026-10-29): a body gibs within about 2.1 m of its
+ * surface and the swap lands at about 100 ms, while the fireball stays within about 1.3 m through that window. So at
+ * 1.5-2.3 m nothing visibly crosses from the blast to the body that comes apart. Refraction cannot be that link either:
+ * it is invisible against a dark or flat wall.
+ *
+ * The head is a fast-out curve that spends 42% of the life reaching `reachH`: about 100 ms at the shipped 0.24 s. The
+ * tail sits at the core while the head runs, then catches up, so a lick starts as a tongue attached to the fireball and
+ * ends as a thinning streak out at the body, and is gone by about 0.22 s. It never adds to the plume's silhouette: nothing of
+ * it outlives the flash the plume comes out of.
+ */
+export function lickEnvelope(u: number, reachH = 2.5): LickSample {
+  const t = clamp01(u);
+  const run = clamp01(t / 0.42);
+  return {
+    head: reachH * (1 - (1 - run) * (1 - run) * (1 - run)),
+    // 0.5, not more: at 0.74 the tails tore loose and six separate little fireballs hung in the air for 50 ms (the
+    // 2.0 m strip, 2026-11-01). A tongue that dies still reaching back toward the burst reads as the same explosion.
+    tail: reachH * 0.5 * smoothstep01(0.15, 0.9, t),
+    // Thin. At 0.2-0.33 half-heights the six merged into a low wide slab of fire, the look ringReachH records the owner
+    // rejecting; at this width they stay six tongues with the dark room between them.
+    width: 0.12 + 0.07 * smoothstep01(0, 0.4, t),
+    rise: 0.3 * t * t,
+    intensity: smoothstep01(0, 0.05, t) * (1 - smoothstep01(0.36, 0.92, t)),
+  };
+}
+
+/** What `coreIgnition` adds to one core billboard at this burst age. */
+export interface CoreIgnition {
+  /** The envelope's intensity may not fall below this. */
+  intensityFloor: number;
+  /** Nor its radius below this. */
+  radiusFloor: number;
+  /** Heat multiplier on top. */
+  heatGain: number;
+}
+
+/**
+ * THE FIRE ON THE HIT FRAME. In SECONDS of burst age, not of a billboard's local age, because it is timed against the
+ * gib swap rather than the plume. The shipped fire takes `delay` (up to 78 ms at fxlife 1.55) plus `smoothstep(0,
+ * .06, t)` (another 84 ms) to light and is still small when it does, so its bright mass peaks after the swap. A core
+ * billboard is lit in two frames at most of its later size and holds until the gib has landed, then hands back: from
+ * 0.32 s every term below is neutral, so the plume that follows is the plume: same quads, same end of life, within
+ * about 2 cm of where they were (a billboard's local age is ahead by up to its old delay).
+ */
+export function coreIgnition(ageSec: number): CoreIgnition {
+  const on = smoothstep01(0, 0.033, ageSec);
+  const hold = 1 - smoothstep01(0.1, 0.32, ageSec);
+  return { intensityFloor: on * hold, radiusFloor: 0.72 * hold, heatGain: 1 + 0.3 * hold };
+}
+
 /** The dynamic-light envelope: a near-instant spike, then a fall. */
 export function lightEnvelope(u: number): number {
   const t = clamp01(u);
@@ -667,6 +757,11 @@ export function clampTuning(t: ExplosionVfxTuning): ExplosionVfxTuning {
     // body scale and beyond.
     curlScale: clampNum(t.curlScale, 0.25, 64),
     softFade: clampNum(t.softFade, 0, 2),
+    // Spare fire slots only: the licks share the fire layer's per-burst budget.
+    lickCount: clampCount(t.lickCount, Math.max(0, L.maxFirePerBurst - clampCount(t.fireCount, L.maxFirePerBurst))),
+    lickReachH: clampNum(t.lickReachH, 0, 8),
+    lickLifeSec: clampNum(t.lickLifeSec, 0.05, 1),
+    coreIgnite: clampCount(t.coreIgnite, L.maxFirePerBurst),
   };
 }
 
@@ -1135,11 +1230,20 @@ function writeRing(
 
 // Fire/smoke billboard params: dirX,dirY,dirZ, dist, sizeJitter, delay, span,
 // roll0, rollSpeed, intensityJitter, role.
-// `role` is fire only (0 = the neck, 1 the cap — see capFireEnvelope); smoke
-// reads 0 there and ignores it.
+// `role` is fire only (0 = the neck, 1 the cap — see capFireEnvelope, 2 a neck
+// billboard that carries coreIgnition); smoke reads 0 there and ignores it.
 const PARTICLE_STRIDE = 11;
 /** Fire billboards that ride the cap rather than forming the neck. */
 const FIRE_CAP_ROLE = 1;
+/** Neck billboards lit on the hit frame (`coreIgnite`). */
+const FIRE_CORE_ROLE = 2;
+// Lick params: dirX,dirY,dirZ, reachJitter, delaySec, widthJitter, heatJitter, seed.
+const LICK_STRIDE = 8;
+/** XOR'd into the burst seed so the licks have their own stream, and the burst's own sequence stays a straight line
+ *  whether they are on or not. The golden ratio's 32 bits. */
+const LICK_SEED_SALT = 0x9e3779b9;
+/** A ground burst's licks set off this high (× half-height), so the floor does not cut their lower half off. */
+const LICK_GROUND_LIFT = 0.2;
 // Ember params: dirX,dirY,dirZ, speed, halfLen, lifeFrac, seed, intensityJitter.
 const EMBER_STRIDE = 8;
 
@@ -1258,6 +1362,8 @@ export function createExplosionVfx(): ExplosionVfx {
   const smokeCounts = new Uint8Array(L.maxBursts);
   const emberCounts = new Uint8Array(L.maxBursts);
   const ringLive = new Uint8Array(L.maxBursts);
+  const lickCounts = new Uint8Array(L.maxBursts);
+  const lickParams = new Float32Array(L.maxBursts * L.maxFirePerBurst * LICK_STRIDE);
   const fireParams = new Float32Array(L.maxBursts * L.maxFirePerBurst * PARTICLE_STRIDE);
   const smokeParams = new Float32Array(L.maxBursts * L.maxSmokePerBurst * PARTICLE_STRIDE);
   const emberParams = new Float32Array(maxEmbers * EMBER_STRIDE);
@@ -1289,7 +1395,7 @@ export function createExplosionVfx(): ExplosionVfx {
    * a GPU readback or a bounding box.
    */
   const extentAcc = {
-    fire: newExtentAcc(), smoke: newExtentAcc(), ember: newExtentAcc(), ring: newExtentAcc(),
+    fire: newExtentAcc(), smoke: newExtentAcc(), ember: newExtentAcc(), ring: newExtentAcc(), lick: newExtentAcc(),
   };
   let extentHalfHeight = 0;
 
@@ -1305,6 +1411,7 @@ export function createExplosionVfx(): ExplosionVfx {
 
   function spawnFireParams(slot: number, count: number, rng: () => number): void {
     const base = slot * L.maxFirePerBurst * PARTICLE_STRIDE;
+    let cores = 0;
     for (let i = 0; i < count; i++) {
       const o = base + i * PARTICLE_STRIDE;
       const dir = randomInUnitSphere(rng);
@@ -1332,8 +1439,84 @@ export function createExplosionVfx(): ExplosionVfx {
         // ...a touch later than the column, and it lives longer.
         fireParams[o + 5] = 0.12 + 0.1 * rng();
         fireParams[o + 6] = 0.8 + 0.3 * rng();
+      } else if (cores < tuning.coreIgnite) {
+        // THE CORE (`coreIgnite`): no stagger, and the delay it gives up goes on its span, so it dies when it would have
+        // and the plume is no shorter. No rng drawn or skipped, so everything else in the burst is unchanged.
+        cores++;
+        fireParams[o + 6] = fireParams[o + 6]! + fireParams[o + 5]!;
+        fireParams[o + 5] = 0;
+        fireParams[o + 10] = FIRE_CORE_ROLE;
       }
     }
+  }
+
+  /** Draw one burst's licks: spread evenly round the azimuth, so they read as a front and not a stray spark. */
+  function spawnLickParams(slot: number, count: number, kind: 'air' | 'ground', rng: () => number): void {
+    const base = slot * L.maxFirePerBurst * LICK_STRIDE;
+    const start = rng() * TAU;
+    for (let i = 0; i < count; i++) {
+      const o = base + i * LICK_STRIDE;
+      const az = start + ((i + (rng() - 0.5) * 0.8) / count) * TAU;
+      // A ground burst hugs the floor, an airburst has room in every direction.
+      const el = kind === 'ground' ? 0.02 + 0.2 * rng() : (rng() - 0.5) * 1.1;
+      const c = Math.cos(el);
+      lickParams[o] = Math.cos(az) * c;
+      lickParams[o + 1] = Math.sin(el);
+      lickParams[o + 2] = Math.sin(az) * c;
+      // Uneven on purpose: six equal tongues on an even azimuth drew a flower.
+      lickParams[o + 3] = 0.72 + 0.4 * rng();
+      lickParams[o + 4] = 0.02 * rng();
+      lickParams[o + 5] = 0.8 + 0.5 * rng();
+      lickParams[o + 6] = 0.8 + 0.4 * rng();
+      lickParams[o + 7] = noiseSeedOf(slot, 30 + i);
+    }
+  }
+
+  /**
+   * Emit one burst's licks into the fire layer, each a quad laid along its own screen-projected length (the ember
+   * streak's idea on a fire billboard): a lick running at the camera shortens to a ball of flame on its way toward you,
+   * which is what it would look like, where a billboard locked to the burst's plume basis would draw every lick flat.
+   */
+  function emitLicks(
+    slot: number, a: BurstAnchor, age: number, camera: THREE.Camera,
+  ): number {
+    const base = slot * L.maxFirePerBurst * LICK_STRIDE;
+    const H = a.halfHeightM;
+    const y0 = a.ring === 'flat' ? a.at[1] + LICK_GROUND_LIFT * H : a.centreY;
+    const camX = camera.position.x, camY = camera.position.y, camZ = camera.position.z;
+    let written = 0;
+    for (let i = 0; i < lickCounts[slot]!; i++) {
+      const o = base + i * LICK_STRIDE;
+      const u = (age - lickParams[o + 4]!) / tuning.lickLifeSec;
+      if (u <= 0 || u >= 1) continue;
+      const s = lickEnvelope(u, tuning.lickReachH * lickParams[o + 3]!);
+      const heat = s.intensity * lickParams[o + 6]!;
+      if (heat <= 0.002) continue;
+      const dx = lickParams[o]!, dy = lickParams[o + 1]!, dz = lickParams[o + 2]!;
+      const mid = (s.head + s.tail) * 0.5 * H;
+      const cx = a.at[0] + dx * mid;
+      const cy = y0 + dy * mid + s.rise * H;
+      const cz = a.at[2] + dz * mid;
+      // The view ray at the lick, and the lick's direction with the ray's share taken out: the quad's two axes.
+      let vx = cx - camX, vy = cy - camY, vz = cz - camZ;
+      const vl = Math.hypot(vx, vy, vz) || 1;
+      vx /= vl; vy /= vl; vz /= vl;
+      const along = dx * vx + dy * vy + dz * vz;
+      let ax = dx - along * vx, ay = dy - along * vy, az = dz - along * vz;
+      const al = Math.hypot(ax, ay, az);
+      if (al > 1e-3) { ax /= al; ay /= al; az /= al; } else { ax = camRight.x; ay = camRight.y; az = camRight.z; }
+      const wx = vy * az - vz * ay, wy = vz * ax - vx * az, wz = vx * ay - vy * ax;
+      const halfW = s.width * H * lickParams[o + 5]!;
+      const halfL = (s.head - s.tail) * 0.5 * H * al + halfW;
+      noteQuad(extentAcc.lick, a.at[0] + dx * s.head * H, cy, a.at[2] + dz * s.head * H);
+      writeQuad(
+        fire, fire.count + written, cx, cy, cz, halfL, halfW, 0,
+        ax, ay, az, wx, wy, wz,
+        lickParams[o + 7]!, u, heat, 0,
+      );
+      written++;
+    }
+    return written;
   }
 
   function spawnSmokeParams(slot: number, count: number, rng: () => number): void {
@@ -1433,6 +1616,11 @@ export function createExplosionVfx(): ExplosionVfx {
           : fireEnvelope(t, tuning.plumeNeckH);
         intensity = s.intensity; radius = s.radius; rise = s.rise;
         stretchY = s.stretchY; flare = s.flare; flatten = s.flatten;
+        if (params[o + 10] === FIRE_CORE_ROLE) {
+          const c = coreIgnition(age);
+          intensity = Math.max(intensity, c.intensityFloor) * c.heatGain;
+          radius = Math.max(radius, c.radiusFloor);
+        }
       } else {
         const s = smokeEnvelope(t, tuning.plumeCapH, tuning.capFlatten);
         intensity = s.density * tuning.smokeOpacity;
@@ -1467,8 +1655,9 @@ export function createExplosionVfx(): ExplosionVfx {
       const roll = params[o + 7]! + params[o + 8]! * age;
       noteQuad(extentAcc[layer], cx, cy, cz, radiusM, radiusM * stretchY * flatten);
       if (a.halfHeightM > extentHalfHeight) extentHalfHeight = a.halfHeightM;
+      // After what earlier bursts wrote this frame (`buffers.count`), or a second live burst overwrites the first.
       writeQuad(
-        buffers, written, cx, cy, cz, radiusM, radiusM * stretchY * flatten, roll,
+        buffers, buffers.count + written, cx, cy, cz, radiusM, radiusM * stretchY * flatten, roll,
         rX, rY, rZ, uX, uY, uZ,
         noiseSeedOf(slot, i), t, intensity, glow,
       );
@@ -1483,7 +1672,7 @@ export function createExplosionVfx(): ExplosionVfx {
     get layerExtents() {
       return {
         fire: extentOf(extentAcc.fire), smoke: extentOf(extentAcc.smoke),
-        ember: extentOf(extentAcc.ember), ring: extentOf(extentAcc.ring),
+        ember: extentOf(extentAcc.ember), ring: extentOf(extentAcc.ring), lick: extentOf(extentAcc.lick),
       };
     },
     /** Read from the LIVE bursts' anchors rather than from what they happened
@@ -1536,6 +1725,9 @@ export function createExplosionVfx(): ExplosionVfx {
       spawnFireParams(slot, fireN, burstRng);
       spawnSmokeParams(slot, smokeN, burstRng);
       spawnEmberParams(slot, emberN, burstRng);
+      const lickN = clampCount(tuning.lickCount, Math.max(0, L.maxFirePerBurst - fireN));
+      lickCounts[slot] = lickN;
+      if (lickN > 0) spawnLickParams(slot, lickN, visual.kind, mulberry32((s ^ LICK_SEED_SALT) >>> 0));
     },
 
     update(dtSec: number, camera: THREE.Camera): void {
@@ -1555,7 +1747,7 @@ export function createExplosionVfx(): ExplosionVfx {
       smoke.count = 0;
       ember.count = 0;
       ring.count = 0;
-      for (const k of ['fire', 'smoke', 'ember', 'ring'] as const) {
+      for (const k of ['fire', 'smoke', 'ember', 'ring', 'lick'] as const) {
         extentAcc[k] = newExtentAcc();
       }
       extentHalfHeight = 0;
@@ -1600,6 +1792,7 @@ export function createExplosionVfx(): ExplosionVfx {
           'fire', fire, fireParams, slot, fireCounts[slot]!,
           a, life, rX, rY, rZ, uX, uY, uZ,
         );
+        if (lickCounts[slot]! > 0) fire.count += emitLicks(slot, a, still, camera);
         smoke.count += emitParticles(
           'smoke', smoke, smokeParams, slot, smokeCounts[slot]!,
           a, life, rX, rY, rZ, uX, uY, uZ,

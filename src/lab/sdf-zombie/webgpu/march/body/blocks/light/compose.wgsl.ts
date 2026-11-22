@@ -7,6 +7,7 @@
 import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
 import { SKIN_POST, SKIN_PRE } from './skin-detail-proto';
 import { SPLIT_GLISTEN_BLOCK } from './split-glisten.wgsl';
+import { ROW_PRIM_A, ROW_PRIM_CLIP, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHELL, ROW_PRIM_STRAND } from '../../../layout';
 
 /** A WGSL f32 literal (always a decimal point). */
 const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
@@ -84,6 +85,12 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                // soldier and torn (flail) wounds only; applied at the consumer so the hoisted wet statement stays pinned.
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, max(soldierWound, tornWound))
                + scatter;
+  // CLOTH SHEEN: fabric's grazing-angle sheen (fibres catching light edge-on), in the cloth's own colour lifted
+  // toward grey, lit like the diffuse. Instead of skin's wet rim, which the matte wet above has mostly removed.
+  if (cloth > 0.0) {
+    let sheen = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.4;
+    fleshLit = fleshLit + cloth * (1.0 - clothInside) * sheen * (albedo * 0.7 + vec3<f32>(0.035)) * (amb + diff * wShadow * lvl * keyI * keyC) * ao;
+  }
   // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
   // the wound/level shadow (those belong to the dominant). Zero when the list is off.
   fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;${SPLIT_GLISTEN_BLOCK}
@@ -116,7 +123,36 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.30 * lightCfg.x * keyColor),
-                 faceFlat * 0.85);${SKIN_PRE}
+                 faceFlat * 0.85);
+  // SHROUD (cultist hood, 2026-10-27; PrimDef.shroud). The owner wanted "a loose hood that shrouds the face in
+  // darkness". The main light is the player's torch, from the camera, so the hood can never shadow the face it holds;
+  // this is that shadow, authored. A prim of a hooded body carries the hood's index in its strand lanes (pack.ts,
+  // x = -(index + 1), y = strength; a real strand count is never negative). Depth is measured behind the hood's
+  // opening plane: the brim itself stays lit and the face 6-10 cm back is fully dark. Points outside the hood's ellipsoid
+  // (the chest, the capelet) are untouched; on the hood itself only the lining darkens. Glow is added after
+  // fleshLit, so the eyes still burn in the dark. One texel per hit pixel; five more only on a hooded body.
+  if (hitBest >= 0) {
+    let SR = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_STRAND} + gBand), 0);
+    if (SR.x < -0.5) {
+      let h = i32(-SR.x) - 1;
+      let HA = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_A} + gBand), 0);
+      let HS = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_SCALE} + gBand), 0);
+      let HQ = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_QUAT} + gBand), 0);
+      let HSh = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_SHELL} + gBand), 0);
+      let HC = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_CLIP} + gBand), 0);
+      var hv = p - HA.xyz;
+      if (abs(1.0 - HQ.w) > 1e-6) { let hu = -HQ.xyz; let ht = 2.0 * cross(hu, hv); hv = hv + ht * HQ.w + cross(hu, ht); }
+      let he = length(hv / (HA.w * HS.xyz));
+      // The lining is dark wherever it faces inward, right up to the hem: any ramp in from the edge read as the
+      // WALL of the hood (a lit band 3 cm wide, "a thick egg", owner 2026-10-27), and at a 3/4 view the far side's
+      // lining showed as a pale crescent. The hem's rolled bead stays lit, so the edge reads as one thin sheet.
+      // What the hood holds darkens over 6 cm behind the opening.
+      let depth = HSh.z - dot(p, HC.xyz);
+      let shroud = SR.y * select(smoothstep(-0.04, 0.04, depth) * (1.0 - smoothstep(0.92, 1.0, he)),
+                                 clothInside, hitBest == h);
+      fleshLit = fleshLit * (1.0 - shroud);
+    }
+  }${SKIN_PRE}
   if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     let shoulder = vec3<f32>(softShoulder(fleshLit.x, knee),

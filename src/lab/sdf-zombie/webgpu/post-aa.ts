@@ -95,6 +95,8 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
 import { FLASH_GRADE_WGSL } from './post-flash-grade.wgsl';
+import { ADRENALINE_EDGE_WGSL } from './post-adrenaline-edge.wgsl';
+import { ADRENALINE_BORDER_WGSL } from './post-adrenaline-border.wgsl';
 import { CONTRAST_DEFAULT, CONTRAST_PIVOT_DEFAULT, CONTRAST_WGSL } from './post-contrast.wgsl';
 import { layerOn } from './light-layers';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
@@ -330,15 +332,22 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
   dist: vec4<f32>,
   heatTex: texture_2d<f32>,
   heatSamp: sampler,
-  heat: vec4<f32>
+  heat: vec4<f32>,
+  adr: vec4<f32>,
+  depthTex: texture_depth_2d,
+  shellR: vec4<f32>,
+  shellW: vec4<f32>,
+  shellZ: vec4<f32>
 ) -> vec4<f32> {
   // BLAST REFRACTION (bounded, see postAaBlastWarp): applied to the OUTPUT
   // texCoord BEFORE the entry flip, so the ring is centred on the blast's
   // projected screen position rather than its mirror image. It composes with
   // whichever final filter is active and costs one extra loop of uniforms.
   // Inert unless the host pushes a blast and the strength gate is on, so the
-  // all-off parity path is untouched.
-  var st = postAaBlastWarp(texCoord, d0, d1, d2, d3, dist);
+  // all-off parity path is untouched. With no live blast it returns before the
+  // first depth tap (the depth step costs nothing until something explodes).
+  var st = postAaBlastWarp(texCoord, d0, d1, d2, d3, dist, lens, cfg.x, depthTex, shellR, shellW, shellZ);
+  let blastSt = st;
   // HEAT SHIMMER (heat.w on, heat.x = amplitude in UV, heat.y = time, heat.z = rise
   // band in UV): animated noise warp where the flame buffer is opaque, and in a band
   // ABOVE it (the mask samples below the pixel — hot air rises). The flame buffer is
@@ -357,6 +366,9 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
       cos(ft.x * 70.0 + tt * 8.0 + sin(ft.y * 53.0 - tt * 5.0) * 2.0));
     st = st + nz * (heat.x * m);
   }
+  // ADRENALINE EDGE (post-adrenaline-edge.wgsl.ts): the border warp. Inert at adr.x 0.
+  let adrAspect = dstSize.x / max(1.0, dstSize.y);
+  st = adrenalineEdgeWarp(st, adr, adrAspect);
   if (cfg.x > 0.5) { st.y = 1.0 - st.y; }
   let srcDims = vec2<f32>(textureDimensions(srcTex, 0));
   let maxP = vec2<i32>(srcDims) - vec2<i32>(1, 1);
@@ -410,6 +422,31 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
     let px = clamp(vec2<i32>(floor(st * srcDims)), vec2<i32>(0, 0), maxP);
     c = postAaFetch(srcTex, px, cfg.y, maxP);
   }
+  // ADRENALINE EDGE: the chromatic split (red out, blue in, along the radius; point taps, through the lens when it
+  // is on) and the warm dark border grade. Both inert at adr.x 0 and over the middle of the screen.
+  if (adr.x > 0.0) {
+    let co = adrenalineEdgeChroma(st, adr, adrAspect);
+    if (dot(co, co) > 0.0) {
+      var sr = st + co;
+      var sb = st - co;
+      if (lens.x > 0.0) { sr = fisheyeWarp(sr, lens); sb = fisheyeWarp(sb, lens); }
+      c.r = postAaFetch(srcTex, clamp(vec2<i32>(floor(sr * srcDims)), vec2<i32>(0, 0), maxP), cfg.y, maxP).r;
+      c.b = postAaFetch(srcTex, clamp(vec2<i32>(floor(sb * srcDims)), vec2<i32>(0, 0), maxP), cfg.y, maxP).b;
+    }
+    c = adrenalineEdgeGrade(c, st, adr, adrAspect);
+  }
+  // THE DEPTH VIEW (__sdfGame.setBlastDepthView, capture only; cfg.w 0 is off): what the blast warp reads and what it
+  // did. 1 = the same linear view depth postAaBlastWarp gates on, as grey (metres / 16). 2 = that grey, dimmed, with
+  // the displacement it applied in red (1 = the clamp). The one straight proof of what the depth buffer holds.
+  if (cfg.w > 0.5) {
+    let dv = clamp(postAaBlastSurface(depthTex, fisheyeWarp(texCoord, lens), cfg.x, shellZ) / 16.0, 0.0, 1.0);
+    if (cfg.w < 1.5) {
+      c = vec3<f32>(dv, dv, dv);
+    } else {
+      let moved = clamp(length(blastSt - texCoord) / max(1e-5, dist.y), 0.0, 1.0);
+      c = vec3<f32>(moved, dv * 0.35, dv * 0.35);
+    }
+  }
   return vec4<f32>(postAaEotf(c), 1.0);
 }
 
@@ -439,10 +476,38 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
  *   * the whole pass is inert (dist.w < 0.5 or no blasts) and only touches
  *     uniforms — toggling it never rebuilds this pipeline or moves a node key.
  *
- * LIMIT (honest): this reads only the colour chain, not scene depth, so a wall
- * between the camera and the blast is still warped. A partially occluded blast
- * is not depth-gated. See the dev-note for why a depth-gated version is a
- * renderer change rather than a bounded experiment.
+ * THE SPHERE (?blastfx=depth, owner 2026-10-29: "distorts everything, like if
+ * you took the final screen buffer and distorted an area"). A slot with shellR > 0
+ * is a sphere of that world radius at view depth shellW, and the band is gated on
+ * the scene's own depth (blast-refraction.ts blastShellFrontDepth / blastDepthGate
+ * mirror it): a surface in front of the shell's near side does not bend, a floor or
+ * a wall that cuts through the sphere gets a curved front along the cut, and what
+ * stands behind bends as it always did. Why this was once "a renderer change" (the
+ * 2026-09-16 report): the warp was thought to need its own target; it does not, the
+ * blit renders to the canvas, so sceneTarget's depth can simply be bound here.
+ *
+ * LENS. The depth lookup follows the same map as the colour one: the blit's texCoord
+ * is the DISPLAY, the frame and its depth are the FRUSTUM, and fisheyeWarp is the map
+ * between them. b.xy and b.z come from the camera's matrices, so they are frustum
+ * coordinates too, which means a shell slot measures its radius in frustum space: its
+ * ring lands on the sphere. A slot with shellR 0 (a burn band, or ?blastfx= without
+ * depth) keeps the old display-space ring, whose centre the 58/46 lens pulls inward
+ * (a blast at half height off-axis by about 0.11 half-heights) and whose radius it
+ * shrinks by 1/1.31. Either way the offset itself is applied in display space.
+ *
+ * SILHOUETTES. The depth around the WARPED lookup is checked too: a lookup that lands
+ * on or beside something nearer than the shell's front (the gun beside the background
+ * it would drag in, a body's edge) falls back to the unwarped pixel, so the foreground
+ * never smears across its own outline.
+ *
+ * shellZ = (P10, P14, soft width in metres, near floor in metres). The near floor is
+ * the view model's guarantee when the camera is inside the sphere (see
+ * blastShellFrontDepth).
+ *
+ * LIMITS (honest): fire, smoke and blood are not in the depth buffer (they write no
+ * depth), so they bend with whatever stands behind them. The front is the small-angle
+ * form of the ray/sphere hit, a little off at the frame's edge, which the soft width
+ * hides.
  */
 fn postAaBlastWarp(
   uvIn: vec2<f32>,
@@ -450,17 +515,32 @@ fn postAaBlastWarp(
   d1: vec4<f32>,
   d2: vec4<f32>,
   d3: vec4<f32>,
-  dist: vec4<f32>
+  dist: vec4<f32>,
+  lens: vec3<f32>,
+  flipY: f32,
+  depthTex: texture_depth_2d,
+  shellR: vec4<f32>,
+  shellW: vec4<f32>,
+  shellZ: vec4<f32>
 ) -> vec2<f32> {
   if (dist.w < 0.5 || dist.x < 0.5) { return uvIn; }
   let aspect = max(0.0001, dist.z);
   var off = vec2<f32>(0.0, 0.0);
+  // This pixel in the frustum (where the depth buffer and the shells are), and its
+  // surface: read once, on the first shell the pixel is inside, so a burn band or a
+  // pixel outside every band never taps depth at all.
+  var bp = uvIn;
+  if (shellR.x + shellR.y + shellR.z + shellR.w > 0.0) { bp = fisheyeWarp(uvIn, lens); }
+  var surface = -1.0;
+  var frontMax = -1.0;
   for (var i: i32 = 0; i < 4; i = i + 1) {
     if (f32(i) + 0.5 > dist.x) { break; }
     var b = d3;
     if (i == 0) { b = d0; } else if (i == 1) { b = d1; } else if (i == 2) { b = d2; }
     if (b.w <= 0.0 || b.z <= 0.0) { continue; }
+    let sr = shellR[i];
     var d = uvIn - b.xy;
+    if (sr > 0.0) { d = bp - b.xy; }
     d.x = d.x * aspect;
     let r = length(d);
     if (r < 1e-5 || r >= b.z) { continue; }
@@ -473,13 +553,53 @@ fn postAaBlastWarp(
     let ring = s * s;
     var dir = d / r;
     dir.x = dir.x / aspect;
-    off = off + dir * (ring * b.w);
+    // THE DEPTH GATE, mirrored by blastShellFrontDepth + blastDepthGate. Keep in step.
+    var gate = 1.0;
+    if (sr > 0.0) {
+      if (surface < 0.0) { surface = postAaBlastSurface(depthTex, bp, flipY, shellZ); }
+      let rn = r / b.z;
+      let front = max(shellZ.w, shellW[i] - sr * sqrt(max(0.0, 1.0 - rn * rn)));
+      gate = smoothstep(front, front + shellZ.z, surface);
+      if (gate > 0.0) { frontMax = max(frontMax, front); }
+    }
+    off = off + dir * (ring * b.w * gate);
   }
   let l = length(off);
   if (l > dist.y) { off = off * (dist.y / l); }
+  // The warped lookup must not land on something in front of the shell. The farthest
+  // live front is the conservative one when two shells overlap.
+  if (frontMax > 0.0 && l > 0.0) {
+    let landed = postAaBlastLanded(depthTex, fisheyeWarp(uvIn - off, lens), flipY, shellZ);
+    off = off * smoothstep(frontMax, frontMax + shellZ.z, landed);
+  }
   // This is an inverse texture lookup: sampling inward moves the visible
   // image outward. Adding off instead made the blast look like suction.
   return uvIn - off;
+}
+
+// The scene's depth under a FRUSTUM uv, in view metres (blastLinearDepth mirrors the last
+// line). The same texel the colour fetch takes for that uv, flip included, on the depth's
+// own dimensions: the capture's size, whatever the canvas is.
+fn postAaBlastSurface(depthTex: texture_depth_2d, uvF: vec2<f32>, flipY: f32, shellZ: vec4<f32>) -> f32 {
+  var q = uvF;
+  if (flipY > 0.5) { q.y = 1.0 - q.y; }
+  let dims = vec2<i32>(textureDimensions(depthTex, 0));
+  let px = clamp(vec2<i32>(floor(q * vec2<f32>(dims))), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+  return shellZ.y / (textureLoad(depthTex, px, 0) + shellZ.x);
+}
+
+// The nearest surface around where a warped lookup lands. A ring of four taps two texels out
+// as well as the centre: FXAA and the smear have spread a silhouette's colour past its depth
+// by a texel or two, so a lookup that passes the centre tap alone still lifts the body's edge
+// colour and draws it as a thin ghost outline, one offset away from the body (measured,
+// 2026-11-01, the arena soldier).
+fn postAaBlastLanded(depthTex: texture_depth_2d, uvF: vec2<f32>, flipY: f32, shellZ: vec4<f32>) -> f32 {
+  let t = 2.0 / vec2<f32>(textureDimensions(depthTex, 0));
+  var n = postAaBlastSurface(depthTex, uvF, flipY, shellZ);
+  n = min(n, postAaBlastSurface(depthTex, uvF + vec2<f32>(t.x, t.y), flipY, shellZ));
+  n = min(n, postAaBlastSurface(depthTex, uvF + vec2<f32>(-t.x, t.y), flipY, shellZ));
+  n = min(n, postAaBlastSurface(depthTex, uvF + vec2<f32>(t.x, -t.y), flipY, shellZ));
+  return min(n, postAaBlastSurface(depthTex, uvF + vec2<f32>(-t.x, -t.y), flipY, shellZ));
 }
 
 fn postAaOetf(c: vec3<f32>) -> vec3<f32> {
@@ -507,7 +627,7 @@ fn postAaFetch(srcTex: texture_2d<f32>, idx: vec2<i32>, isDisplay: f32, maxP: ve
   return postAaOetf(c);
 }
 
-` + FISHEYE_WGSL;
+` + FISHEYE_WGSL + ADRENALINE_EDGE_WGSL;
 
 /** three 0.185 types wgslFn's result as a plain Node; this keeps the swizzles honest. */
 type Swizzled = { xyz: unknown };
@@ -602,6 +722,12 @@ export interface PostAa {
   setSscsFleshTex(t: THREE.Texture): void;
   /** Per-frame matrices + flashlight feed — see the implementation note. */
   setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3): void;
+  /** The ADRENALINE screen-edge distortion at the final blit (post-adrenaline-edge.wgsl.ts): `amount` 0 off .. 1,
+   *  `timeSec` drifts its ripple, `ripple` false (?flashes=reduced) keeps the warp static. */
+  setAdrenalineEdge(amount: number, timeSec: number, ripple: boolean): void;
+  /** The low-health RED BORDER over it (post-adrenaline-border.wgsl.ts; adrenaline.ts adrenalineBorderAt):
+   *  `strength` 0 off .. 1 at the edge, `width` how far in it fades (fraction of screen height). */
+  setAdrenalineBorder(strength: number, width: number): void;
   /** The lightning grade at the final blit: flash (the strike), grade (with its afterglow), punch, crush. */
   setFlashGrade(flash: number, grade: number, punch: number, crush: number): void;
   /** The final S-curve (post-contrast.wgsl.ts): strength 0 off .. 1, and optionally its display-space pivot. Returns k. */
@@ -724,6 +850,15 @@ export interface PostAa {
    * camera cannot be placed on screen).
    */
   setBlastDistortCamera(camera: THREE.PerspectiveCamera): void;
+  /**
+   * `?blastfx=depth`: blast bands become spheres in the room, gated on the scene's depth
+   * (postAaBlastWarp's THE SPHERE). Uniforms only, so it can be flipped on a live frame, and
+   * no depth is read until a blast is live. Burn bands never take it.
+   */
+  setBlastDepth(on: boolean): void;
+  readonly blastDepth: boolean;
+  /** The depth view, capture only: 0 off, 1 the warp's linear depth as grey, 2 its displacement in red. */
+  setBlastDepthView(mode: number): void;
   /** Age every live blast by the SIM tick's dt (not wall time). */
   stepBlastDistort(dt: number): void;
   /** How many blasts the bounded ring is currently holding (telemetry). */
@@ -880,6 +1015,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     uniform(new THREE.Vector4(0, 0, 0, 0)));
   // (count, maxUv, aspect, on)
   const uBlastDistortCfg = uniform(new THREE.Vector4(0, BLAST_REFRACTION.maxOffsetUv, 1, 0));
+  // The depth step's per-slot sphere: world radius (0 = no gate, the old ring) and view depth,
+  // and (P10, P14, soft width, near floor). See postAaBlastWarp.
+  const uBlastShellR = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uBlastShellW = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uBlastShellZ = uniform(new THREE.Vector4(0, 1, BLAST_REFRACTION.depthSoftM, BLAST_REFRACTION.depthNearM));
+  let blastDepthOn = false;
+  let blastDepthView = 0;
   let blastDistortOn = false;
   let blastDistortStrength = 1;
   /** The camera the live bands are reprojected against, or null (inert). */
@@ -907,6 +1049,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     radiusUv: number | null;
     strength: number;
     reason: 'ok' | 'behind' | 'offscreen' | 'spent';
+    /** The sphere the depth gate used this frame; absent on a burn band or with the step off. */
+    shell?: { radiusM: number; w: number };
   };
   let lastBlastSlots: ResolvedBlastSlot[] = [];
 
@@ -1351,6 +1495,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   glowBlurMat.blending = THREE.AdditiveBlending;
   const glowBlurScene = quadScene(glowBlurMat);
 
+  // ADRENALINE EDGE (post-adrenaline-edge.wgsl.ts): (amount, time, ripple, 0); amount 0 is inert.
+  const uAdrenalineEdge = uniform(new THREE.Vector4(0, 0, 1, 0));
   const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
     srcTex: blitSrcTex,
     texCoord: uv(),
@@ -1365,10 +1511,19 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     heatTex: fireResolvedTex,
     heatSamp: fireResolvedTex,
     heat: uFireHeat,
+    adr: uAdrenalineEdge,
+    depthTex: texture(sceneTarget.depthTexture!),
+    shellR: uBlastShellR,
+    shellW: uBlastShellW,
+    shellZ: uBlastShellZ,
   }) as unknown as Swizzled;
   // The lightning grade (post-flash-grade.wgsl.ts): (flash, grade, punch, crush); 0,0 is inert.
   const uFlashGrade = uniform(new THREE.Vector4(0, 0, 0, 0));
-  const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
+  // The low-health RED BORDER (post-adrenaline-border.wgsl.ts): (strength, width, aspect, 0), layered over the
+  // adrenaline edge distortion; strength 0 is inert.
+  const uAdrenalineBorder = uniform(new THREE.Vector4(0, 0, 1, 0));
+  const bordered = wgslFn(ADRENALINE_BORDER_WGSL)({ c: blitOut.xyz as never, uv: uv(), b: uAdrenalineBorder }) as unknown as Swizzled;
+  const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: bordered.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
   // The final S-curve (post-contrast.wgsl.ts), after the lightning grade; 0 is inert.
   const uContrast = uniform(layerOn('sCurve') ? CONTRAST_DEFAULT : 0);   // LIGHT LAYERS 'final S-curve'
   const uContrastPivot = uniform(CONTRAST_PIVOT_DEFAULT);
@@ -1681,7 +1836,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // covered, and a clear would only risk wiping what came before.
       blitSrcTex.value = src.texture;
       renderer.getDrawingBufferSize(drawSize);
-      uBlitCfg.value.set(uFlipY.value, srcIsDisplay ? 1 : 0, sharpOn ? 1 : 0, 0);
+      uBlitCfg.value.set(uFlipY.value, srcIsDisplay ? 1 : 0, sharpOn ? 1 : 0, blastDepthView);
       blitSrcIsDisplay = srcIsDisplay;
       uBlitDst.value.set(drawSize.x, drawSize.y);
       // BLAST REFRACTION uniforms, resolved fresh each frame from the bounded
@@ -1727,12 +1882,28 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
               radiusUv,
               Math.max(0, strength),
             );
-            resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv, strength: Math.max(0, strength), reason: 'ok' });
+            // A burn band is heat haze around a body, not a wave in the room: it keeps its look.
+            const shell = blastDepthOn && b.kind === 'blast'
+              ? { radiusM: b.birthRadiusM * phase.radiusScale, w: p.w } : undefined;
+            uBlastShellR.value.setComponent(active, shell ? shell.radiusM : 0);
+            uBlastShellW.value.setComponent(active, shell ? shell.w : 0);
+            resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv, strength: Math.max(0, strength), reason: 'ok', ...(shell ? { shell } : {}) });
             active++;
           }
         }
         lastBlastSlots = resolved;
-        for (let i = active; i < BLAST_DISTORT_MAX; i++) uBlastDistort[i]!.value.set(0, 0, 0, 0);
+        for (let i = active; i < BLAST_DISTORT_MAX; i++) {
+          uBlastDistort[i]!.value.set(0, 0, 0, 0);
+          uBlastShellR.value.setComponent(i, 0);
+          uBlastShellW.value.setComponent(i, 0);
+        }
+        // The projection's own depth terms, every frame, so a fov or near/far change cannot leave
+        // the gate reading a stale curve. (Also read by the depth view with no blast live.)
+        if (blastCamera !== null) {
+          const pe = blastCamera.projectionMatrix.elements;
+          uBlastShellZ.value.x = pe[10]!;
+          uBlastShellZ.value.y = pe[14]!;
+        }
         const aspect = drawSize.y > 0 ? drawSize.x / drawSize.y : 1;
         uBlastDistortCfg.value.set(
           active, BLAST_REFRACTION.maxOffsetUv, aspect,
@@ -1800,6 +1971,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       blastDistortStrength = Number.isFinite(v) ? Math.max(0, Math.min(4, v)) : 1;
     },
     setBlastDistortCamera(camera: THREE.PerspectiveCamera) { blastCamera = camera; },
+    setBlastDepth(on: boolean) { blastDepthOn = on; },
+    get blastDepth() { return blastDepthOn; },
+    setBlastDepthView(mode: number) { blastDepthView = mode === 1 || mode === 2 ? mode : 0; },
     pushBlastDistort(world, birthRadiusM, strength) {
       if (world.length < 3) return;
       const [x, y, z] = world;
@@ -1898,6 +2072,14 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     setFlashGrade(flash: number, grade: number, punch: number, crush: number) {
       uFlashGrade.value.set(flash, grade, punch, crush);
+    },
+    setAdrenalineEdge(amount: number, timeSec: number, ripple: boolean) {
+      uAdrenalineEdge.value.set(Number.isFinite(amount) ? Math.min(1, Math.max(0, amount)) : 0, timeSec % 1000, ripple ? 1 : 0, 0);
+    },
+    setAdrenalineBorder(strength: number, width: number) {
+      const u = (x: number) => (Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0);
+      const d = uBlitDst.value;
+      uAdrenalineBorder.value.set(u(strength), u(width), d.x / Math.max(1, d.y), 0);
     },
     setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3) {
       _sscsView.copy(camera.matrixWorld).invert();

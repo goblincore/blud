@@ -22,11 +22,21 @@ function joints(body: BuildResult, rig: RigState, side: 'l' | 'r') {
   return [upper.head, upper.tail, fore.tail].map(p =>
     rig.restPose.findIndex(q => len(sub(p, q)) < 1e-6));
 }
+/** The fold's side: positive when the forearm is on the stop's allowed side. An elbow with a live hinge
+ *  (RigBendConstraint.axis) is measured against that hinge, the shoulder line; otherwise against `normal` carried by
+ *  the upper arm's swing. */
 function signedBend(rig: RigState, ids: number[], normal: Vec3) {
   const [s, e, w] = ids.map(i => rig.points[i]!.pos);
+  const upper = sub(e!, s!);
+  const bend = rig.bends?.find(b => b.root === ids[0] && b.mid === ids[1]);
+  if (bend?.axis && (!bend.axisWhenDown || rig.collapsed)) {
+    const ax = sub(rig.points[bend.axis[1]]!.pos, rig.points[bend.axis[0]]!.pos);
+    const pole = scale(cross(upper, ax), bend.axisSign ?? 1);
+    return dot(cross(upper, sub(w!, e!)), cross(upper, pole));
+  }
   const restUpper = sub(rig.restPose[ids[1]!]!, rig.restPose[ids[0]!]!);
-  const movingNormal = qRotate(qFromTo(normalize(restUpper), normalize(sub(e!, s!))), normal);
-  return dot(cross(sub(e!, s!), sub(w!, e!)), movingNormal);
+  const movingNormal = qRotate(qFromTo(normalize(restUpper), normalize(upper)), normal);
+  return dot(cross(upper, sub(w!, e!)), movingNormal);
 }
 
 
@@ -106,6 +116,29 @@ describe('intact elbow bend direction', () => {
     }
   });
 
+  // The live hinge (joint audit 2026-11-05): the stop's front is the chest's, from the shoulder line, not the standing
+  // body's yaw. A corpse's chest turned 120 deg from its yaw (lying, twisted) folded its elbows backward. Only on a
+  // body that is down (RigState.collapsed); a live arm keeps the yaw's.
+  for (const side of ['l', 'r'] as const) it(`${side}: keeps the chest's front when the chest turns away from the yaw`, () => {
+    const body = zombie(), bound = bindRig(body);
+    const arm = [...joints(body, bound.rig, 'l'), ...joints(body, bound.rig, 'r')];
+    const [sl, sr] = [arm[0]!, arm[3]!].map(i => bound.rig.points[i]!.pos);
+    const mid: Vec3 = [(sl![0] + sr![0]) / 2, 0, (sl![2] + sr![2]) / 2];
+    const turn = (2 * Math.PI) / 3;
+    const turned = (p: Vec3) => add(rotateYaw(sub(p, mid), turn), mid);
+    bound.rig = { ...bound.rig, collapsed: true, points: bound.rig.points.map((p, i) =>
+      arm.includes(i) ? { ...p, pos: turned(p.pos), prev: turned(p.prev) } : p) };
+    const ids = joints(body, bound.rig, side);
+    const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
+    const u = normalize(sub(e!, s!));
+    const front = forwardFlex(u, turn);
+    // The wrist driven toward the chest's back: the yaw's front (+z) would still call that side allowed.
+    expect(dot(scale(front, -1), forwardFlex(u, 0))).toBeGreaterThan(0.3);
+    const hit = impulseAt(bound, w!, scale(front, -0.18));
+    const fore = sub(hit.rig.points[ids[2]!]!.pos, hit.rig.points[ids[1]!]!.pos);
+    expect(dot(fore, front)).toBeGreaterThanOrEqual(-1e-6);
+  });
+
   it('keeps the allowed side after a live body turn and translation', () => {
     const body = zombie(), bound = bindRig(body);
     const ids = joints(body, bound.rig, 'r');
@@ -170,6 +203,20 @@ describe('intact elbow bend direction', () => {
     const fore = sub(solved.points[2]!.pos, solved.points[1]!.pos);
     expect(len(fore)).toBeCloseTo(Math.sqrt(1.01), 8);
     expect(dot(fore, rig.bends[0]!.restPole)).toBeGreaterThanOrEqual(-1e-8);
+  });
+
+  // Plan 3b Task 6: on a sector level the fallback reads the floor under the wrist.
+  it('lets a collapsed forearm over a lower floor hang below the body plane', () => {
+    const rig = makeRig([{pos: [-1, 1, 0], pinned: false},
+      {pos: [0, 0.1, 0], pinned: false}, {pos: [1, 0, 0], pinned: false}], []);
+    rig.bends = [{root: 0, mid: 1, end: 2,
+      restUpper: normalize([1, -0.9, 0]), restPole: normalize([-0.9, -1, 0])}];
+    const flat = constrainRigBends(rig, 0);
+    const ledge = constrainRigBends(rig, 0, x => (x > 0 ? -1 : 0));
+    expect(flat.points[2]!.pos[1]).toBeGreaterThanOrEqual(0);
+    expect(ledge.points[2]!.pos[1]).toBeLessThan(0);
+    expect(ledge.points[2]).toEqual(constrainRigBends(rig).points[2]);
+    expect(constrainRigBends(rig, 0, undefined)).toEqual(flat);
   });
 
   it('does not constrain an elbow whose forearm has already detached', () => {

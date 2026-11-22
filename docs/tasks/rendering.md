@@ -2,6 +2,182 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The march's ceiling: research and the cost ladder — 2026-11-09
+
+Notes: [`NOTES.md`](../dev-notes/2026-11-09-sdf-perf-research/NOTES.md) (research: what has been tried, the literature,
+the upscaler as an algorithm) and [`LADDER.md`](../dev-notes/2026-11-09-sdf-perf-research/LADDER.md) (the measurement).
+Driver: `scripts/native-spike/ladder.mjs` (a captured `sdf:march` pass replayed with its shader text edited rung by rung).
+
+- [x] **Measured, clean zombie close-up (0.6 m, 73 % cover):** the field itself is about a seventh of the walk-only
+  frame. A field call costs 11 ns through `mapBody` and 3.6 ns through a stripped `mapLean` (the tile-list fold and
+  the carves), with the same picture to the bit. The wound, re-fold and bone code is never taken on this body and
+  its presence costs 26 to 30 % of the walk. The shipped pass with the walk on `mapLean`: 20.6 → 14.6 ms (−24 to
+  −29 % over three runs); with the call chosen per pixel inside the loop, −16 to −22 %.
+- [x] Rays that walk and miss: 15 % of the walked pixels, 60 % of the steps, 48 % of the folds (24 steps a ray).
+- [x] The per-pixel setup without the temporal start's probe is 0.2 ms.
+- [x] **Corrected the same day:** the capture harness's `applyShipDefaults` switches the hull exit bound OFF; the
+  game ships it ON. On the shipped setting the stripped walk is −11 to −20 % of the pass on a clean close-up, and
+  missed rays are a third of the walk (22 % of walked pixels, 7 steps a ray, 97 % of them never within 1 cm of
+  the body: rays in the hull's slack). `march-hash` and `march-parity` use the same helper: their pins are the
+  bound-off setting.
+- [x] **Wounded bodies** ([`WOUNDS.md`](../dev-notes/2026-11-09-sdf-perf-research/WOUNDS.md)): 20 pellet and slug
+  wounds add 4.9 ms to a 16.4 ms close-up and none of it is the walk. It is the finite-difference normal: the
+  analytic one gives up on about 90 % of a wounded body's hit pixels (an owned wound within reach, and the reach
+  still carries the old fixed 0.25 m). The AO and scatter probes are 2 to 3 ms on every body. The split head's
+  walk costs 67 % more per pixel.
+- [x] **Every hit pixel of a wounded body takes the four-tap normal today** (reason code 1, exact count). With
+  `ngWounds` on the exact reach, analytic near owned wounds, and a cut bounded by its slab: 85 % of a pellet body's
+  pixels and 68 % of a chopped one's go back to the analytic normal, −13 % and −8 % of the pass. The skin's
+  mottling shifts over the wounded area ([sheet](../dev-notes/2026-11-09-sdf-perf-research/look/pelship-ng-both.png));
+  owner 2026-11-09: not a big deal. **Not built in the game yet** (ladder rungs only).
+- [x] **The soldier's grey mottling was its skin detail layer, not the analytic normal** (2026-11-10). The layer
+  restored the 20 cm shell lumps only on analytic pixels, so the skin changed with the normal path and went smooth
+  at the first wounds. Soldier k is now 0; no character uses the layer.
+  [Note](../dev-notes/2026-11-10-soldier-skin-detail/NOTES.md).
+- [ ] The open head's region sphere keeps half of a split frame's pixels on the taps (no analytic normal there by
+  design). The probes on the stripped call for clean pixels. The hull's fit, for the missed rays.
+- [x] **The walk's time is a fixed cost per fragment, not its steps**
+  ([`ONE-CALL.md`](../dev-notes/2026-11-09-sdf-perf-research/ONE-CALL.md)). The first field call of a pixel is
+  about 7 ms of a 9.5 ms clean walk; every later step together about 2 ms. The cost is the seven private arrays
+  of 64 that hold a copy of the pixel's tile list (3.3 KB a fragment): sized to 16, the shipped pass is 37 to
+  40 % faster on a clean close-up and 13 to 16 % on wounded ones with the picture identical, and a 12-body crowd
+  pass is 26 % faster at 32 (207 px move) and 53 % at 16 (wrong: its tiles list more).
+- [x] **Built: the tile reference list** (on by default since 2026-11-10, next item; `?tileref=0` is off)
+  ([`TILE-REF.md`](../dev-notes/2026-11-09-sdf-perf-research/TILE-REF.md)). A pixel keeps one `u32` a tile entry
+  (slot and the group's index in its body) and the fold reads the group's bound and range from the body's data
+  rows; no slot table. 3.3 KB a fragment becomes 256 bytes. Same picture to the bit: `march-hash` in its three
+  modes, clean and wounded, and a 12-body frame with one wounded body (0 texels differ). The `sdf:march` pass,
+  flag on against off (replayed, exit bound on, lean walk on in both): clean close-up 10.6 ms, −5.4 ms (−51 %);
+  20 wounds −31 %; chop and split head −40 %; 12-body crowd −25 % (the last three on a busy machine: the sign
+  held in every repeat, the sizes are loose).
+- [x] **The tile reference list is on by default** (owner, 2026-11-10, after a playtest: a dense close mob on
+  `doom-map28`, 22 bodies drawn, went from 104.6 ms a frame to about 70 at worst). `?tileref=0` is the arrays,
+  byte for byte (the golden test holds that text). The lab page's tile-list check now compares the body index and
+  not the raw meta lane.
+- [ ] **Next to try (owner, 2026-11-10): the march as a compute pass, one tile a workgroup**
+  ([`NOTES.md` §3 D](../dev-notes/2026-11-09-sdf-perf-research/NOTES.md)). A tile's pixels share one copy of its
+  list; empty tiles are never dispatched. Nothing measured. First step is a spike in the replay harness, timed
+  against the fragment pass on the close-up and crowd captures; no game code. Goal behind it: dense close mobs at
+  30 FPS on an M3 (the playtest mob is at about 70 ms).
+  - **Spike done, 2026-11-10: faster** ([`NOTES.md`](../dev-notes/2026-11-10-compute-march-spike/NOTES.md)). The
+    replayed `sdf:march` pass as a compute pass from the same shader text: clean close-up 5.1 to 4.2 ms (−17 to
+    −19 %), 12-body crowd 13.6 to 7.8 (−43 to −45 %), a 22-body close mob 37.7 to 27.8 (−26 to −27 %); in 8 × 8
+    workgroups −24 to −26 %, −50 to −55 % and −33 to −35 % (the mob at about 25 ms). The gain is the stage and the
+    workgroup's size, not the shared list (skipping empty tiles, a workgroup copy of the list and a per-pixel mask add
+    0 to 2 points), and it needs the reference list (on the old arrays the port is no faster on the close-up). Not
+    to the bit: 48 to 143 texels of 120,000 over 1e-4 on shipped frames, no hit/miss change. Not built in the game;
+    why it is faster is not established. A wounded 22-body mob holds the same gain (61.1 ms to 45.0, and 40.5 in
+    8 × 8). All on three r186. Driver: `scripts/native-spike/compute-march.mjs`.
+  - **Built behind `?marchcompute`, 2026-11-10** (`march-compute.ts`; quad-dispatch crowd types only, off by
+    default, the flag-off shader text unchanged). In the game it draws the fragment march's picture but for the
+    replay's stage difference (145 texels of 120,000 over 1e-4 on a pinned mob). Whole frames, two busy-machine
+    runs: clean mob 51 to 52 ms, −5 to −10 %; wounded mob 71 ms, −12 to −15 %. Owed: a quiet-machine timing, the
+    compile moved into the background warm-up, a look in motion, the paths it does not cover.
+  - **On by default, 2026-11-10** (owner's call after the MAP28 playtest; `?marchcompute=0` is off). The PR for it (116) was merged into a stacked branch and never reached `main`; landed on `main` 2026-11-11. With the baked wound volume on (the heavily shot mob of `prelude-mob-heavy.js`, whole frames, a noisy machine): fragment 83 ms, compute 56 ms, −30 ms (−11 to −33; the control ranged −21 to +11), and the same picture, baked craters included. The default
+    page on the clean 22-body mob, headless, whole frames: 37.5 ms off, 29.5 ms on (−21 %). The replay harness's
+    captures turn it off themselves. Owed: the compile in the background warm-up, the uncovered paths.
+- [x] **Silhouettes from the field (research note §3 B), spiked 2026-11-10: no, as a speed lever**
+  ([`NOTES.md`](../dev-notes/2026-11-10-silhouette-spike/NOTES.md)). Edge rays at output resolution fix the
+  edges (band error 0.40 to 0.06 on a close-up from 400 × 300, 300 × 225 and 200 × 150 alike; 0.24 to 0.11 on a
+  22-body mob at 400 × 300, worse below), but as masked fragment rays at the production walk's cost they are dearer
+  than the lower resolution saves: every combination is slower than the shipped pass (close-up +21 to +54 %, mob +84
+  to +121 %). The edge texels are 7 to 24 % of the frame and hold the costly rays; the inside of surfaces gets 30 to
+  50 % worse at 300 × 225 whatever the edges do. Not tried: the edge rays as a compute pass over a packed list, or a
+  lean kernel. Driver: `scripts/native-spike/silhouette.mjs`.
+  - **Census by pixel, 2026-11-10** ([`CENSUS.md`](../dev-notes/2026-11-10-silhouette-spike/CENSUS.md)): on the
+    22-body mob the hit pixels alone cost the whole pass (34.3 of 34.9 ms); the misses beside the silhouettes are
+    5.5 ms alone but about 0.6 ms in the pass. Of a hit pixel's 421 ns, the walk is 225 and the shading after the hit
+    the rest (15 ms of 35). Wounded: 1,009 ns a hit pixel. Next: take the post-hit chain apart on the mob.
+  - **Shading after the hit, 2026-11-10** ([`SHADING.md`](../dev-notes/2026-11-10-silhouette-spike/SHADING.md)): 19 of the
+    clean mob's 32 ms. The AO and scatter probes 5.6 ms, the finite-difference normal 5.0 (on a clean mob), the
+    analytic normal's stage 4.5; materials, lights and ambient about 1 ms together. Wounding the mob adds 15.5 ms
+    to the WALK: a wounded slot in a pixel's table takes the pixel off the lean walk. Leads are in the note.
+  - **Fast walk for wounded bodies, and looser shading, 2026-11-10** ([`LOOSEN.md`](../dev-notes/2026-11-10-silhouette-spike/LOOSEN.md)):
+    the lean walk per sample does not pay (wounds are 10 cm wide, 8 to a body; no sample near one is outside them).
+    Dropping the finite-difference normal is −6 ms (−17 %) on the clean mob, edges only; with the probes on `mapLean`
+    −9 ms (−25 %), a visible change. Replay only; pictures in the note for the owner to judge.
+    **The cheaper fallback normal is ON BY DEFAULT** (owner, 2026-11-10, after playing its second form:
+    "looks right now"). `?ngloose=0` is the old text. About 5 to 7 ms off a clean 22-body mob's march, nothing
+    on a wounded one. Not checked: an open head split with it, live frame time.
+  - **What wounds cost on the mob, 2026-11-11** ([`WOUNDS-WALK.md`](../dev-notes/2026-11-10-silhouette-spike/WOUNDS-WALK.md)):
+    about 26 ms of a 65 ms pass, spread (walk 15, shading 12, near flag 7, re-fold 5; they overlap). A lean field
+    with wounds would save 4 to 7 ms at most: not the next build. The crater maths is not the cost (cut by 59 %,
+    nothing saved); 34 wound rows are read a step. Lead: bake a body's wounds into a volume. Noisy machine.
+  - **A baked wound volume, replay spike, 2026-11-11** ([`WOUND-VOLUME.md`](../dev-notes/2026-11-10-silhouette-spike/WOUND-VOLUME.md)):
+    wounds read from a 3D texture: −16 ms (−27 %) on the wounded mob, 57.9 to 42.4, of a −23 ms ceiling; 1 cm and
+    2 cm cost the same. 10 of the 16 is the re-fold going away. A voxel needs four values (the bump refills the
+    carve). Not shown: per-limb rest-frame volumes, the stamp on a hit, memory. Next: a design for the game.
+  - **The in-game design, 2026-11-11** ([spec](../superpowers/specs/2026-11-11-baked-wound-volume-design.md)): not built.
+    Stage 1 is the re-fold off behind `?woundfold=0`; stage 2 is a per-body rest-pose volume behind `?woundvol`.
+    Each ends at an owner playtest.
+    Stage 1 shipped: the owner re-fold is off by default since 2026-11-11 (owner played it; `?woundfold=1` restores it), 10.8 ms off the wounded mob's 59.3 ms march pass (replayed capture).
+    Stage 2 is back on for a different reason (owner, 2026-11-11): 32 wounds a body is too few. The rest-pose layout tears at primitive boundaries (measured), so it is built per wounded primitive: the baked wound volume (**on by default since 2026-11-11, owner's call after playing E1M1 and MAP28**; `?woundvol=0` restores the old text and the merge; it costs about 5.5 ms a frame on a mob with six overflowing bodies) stamps the crater that overflows the list into a box on its primitive. Runs in the arena; not timed, not played.
+  - **The crater grid and two after-hit shortcuts, 2026-11-11/12, the default since 2026-11-12; owner played them on MAP28's closet mob
+    2026-11-12: "significant improvement ... not a steady 30 but much smoother overall, worth the changes".**
+    ([spec](../superpowers/specs/2026-11-11-wound-crater-grid-design.md),
+    [notes](../dev-notes/2026-11-11-frame-breakdown/NOTES.md); PR 122 draft, stacked on 121.)
+    `?woundgrid`: 128 exact wounds a body, each sample reads only its cell's wounds; 52.6 to 45.7 ms on the heavy mob
+    (22 bodies, six shot 70 times). Replaces the baked volume while on.
+    `?ngwound=2`: no four-tap normal near wounds; march 38 to 30.5 ms on that mob. Crater lips a little softer (owner:
+    noticeable, acceptable for the trade, keep the switch). `=1` saves nothing; `=3`/`=4` are sizing rules.
+    `?probelean`: the AO and scatter probes read the bodies without their wounds; about 3 ms; craters darker (owner:
+    fine, from stills).
+    `?afterhit`: nine stops for timing the shading after the hit by stage (heavy mob: walk 19 ms, analytic normal 4,
+    four taps 9, probes 7, all else under 2).
+    **All three are the default since 2026-11-12 (owner's call), with `?ngwound=8`** (as `=2`, and the analytic
+    normal follows a soldier's ragged craters). `?woundgrid=0&ngwound=0&probelean=0` is the old text to the byte;
+    the baked volume runs only with `?woundgrid=0`. Whole frame on the heavy mob: 61 to 78 ms before, 49 to 53 after
+    (one noisy run). Open: the owner saw wounds vanish once on a soldier under `?woundgrid` (not reproduced); a
+    faint body-part outline inside list wounds that baked wounds lack (not investigated); the twinhead's authored
+    scars read as red marks (owner: ignore for now); the analytic normal itself (4 to 6 ms) not looked into; no GPU
+    gate re-taken.
+- [ ] Still owed on the reference list: the cold compile on a quiet machine (about +1 s on the loader's program in
+  two noisy pairs; the crowd program not resolved), and the split head shown exact (a pinned capture found no sign
+  of a difference, and could not prove identity).
+- [x] The one-call walk (predict a pixel's hit from last frame, verify with one field call): a third fewer
+  steps, no time, not sound for a limb that moves in front of another surface. Closed.
+- [ ] The temporal start no longer pays: off, a still frame (its best case) is 2 to 7 % faster and 500 to 800
+  pixels shift slightly. `?tstart=0` exists; needs a look in motion before any default change.
+- [x] **The clean-body fast path (the lean walk) is on by default, walk only** (owner's call 2026-11-09;
+  [notes](../dev-notes/2026-11-09-march-lean-walk/NOTES.md),
+  [spec](../superpowers/specs/2026-11-09-march-lean-walk-design.md)). `mapLean` beside `mapBody`, chosen once per
+  pixel when every body in the pixel's tile is clean; the walk calls it. `?leanwalk=0` is the march without it,
+  `?leanwalk` moves the temporal start's probe too, `__sdfGame.setLeanWalk(on)` is the runtime A/B, debug mode 23 the
+  census. The march golden snapshot was re-recorded for it (seven entries; the `?leanwalk=0` text is held to the old
+  values by a second snapshot).
+  - Same picture to the bit: `march-hash` in its three modes, clean and wounded, default page against `?leanwalk=0`
+    against the base commit; a 12-body frame with one wounded body (62 % of its pixels on the fast path), hull exit
+    bound off and on.
+  - The `sdf:march` pass on the default boot (exit bound on), paired differences over 6 repeats against
+    `?leanwalk=0` on the same frame: clean close-up 16.9 ms, −2.44 ms (−14.5 %); 12-zombie crowd 16.8 ms, −2.55 ms
+    (−15.2 %); **wounded close-up 21.9 ms, +0.43 ms (+1.9 %)**. With the exit bound off the close-up read −19 % (the
+    ladder's frame; its captures had the bound off).
+  - Cold compile of the program the loader waits for: 42.0 s → 44.9 s (the default). With the probe too
+    (`?leanwalk`): 46.8 to 48.0 s, for −16.1 % on the close-up and no more on the crowd.
+  - Measured on three r186: this worktree links the primary checkout's `node_modules`, which is behind
+    `package.json`'s r187.
+- [ ] **`march-hash` pins are stale** (Chrome 154 → 157; base `3f0c65eb` gives `07f628a3…` / `e0a128e7…` /
+  `565aaad4…`). Not re-pinned, not bisected. `MARCH_HASH_NOPIN=1` reports and carries on.
+- [x] **Per sample on wounded bodies: measured, and it skips nothing up close** (WOUNDS.md). Outside a body's
+  wound bound a sample is `mapLean`'s exactly (bit-identical on 5- and 20-wound frames), but the bound is one
+  sphere round all the wounds and at close range every walk sample is inside it.
+- [ ] Not measured: the live game's frame, other bodies (cloth, kits, the bare-bones bypass), the capture gates with
+  the flag on, why the flag-on program costs 2 % on the `mapBody` path, and why untaken code costs.
+
+## three r187 — 2026-10-30
+
+- [x] **Upgraded from r186.** Cold boot, r186 → r187, three alternating runs each: the warm 4211 → 3155 ms, the first
+  draw 3036 → 2579 ms (`scripts/boot-time.mjs`; `compileAsync` compiles pipelines in parallel). Frame time did not
+  move beyond noise (`sdf-game-bench`, rooms 1 and 4, two runs each): room 1 51.5, 56.2 → 51.4, 56.2 ms; room 4 33.3,
+  36.0 → 31.1, 35.6 ms. Room 1's soldier stood further off on r187 (2.6 m → 3.9 m), so that room's load was not the same.
+- [x] **Two breaks only the GPU gates saw:** overlapping `compileAsync` calls throw (`serial-compile.ts` queues them),
+  and `renderer.compute(node, size)` throws on a node with its own count or dispatch size (`computeKernel` now).
+- [ ] **Gates red on r186 and r187 alike:** crowd ("zombies stayed alert with the player out of the room") and shorty
+  ("muzzle flash still visible past the envelope"). Each stops at that failure, so its later checks did not run.
+- [ ] **Try:** depth-only render targets for `deferred-shadows.ts` (it writes an R32F colour beside a real depth);
+  live `castShadow` toggling (`ShadowNode.updateShadow` no longer reads the map's `depthTexture`; the crash is untested
+  on r187); a look at kit and held-prop lighting (PMREM moved to cube render targets).
+
 ## The whole frame: attribution and ranking, toward a stable 30 fps in the heavy scenes — 2026-10-08
 
 Notes, tables and the ranking: [`docs/dev-notes/2026-10-08-frame-cost/NOTES.md`](../dev-notes/2026-10-08-frame-cost/NOTES.md).

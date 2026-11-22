@@ -8,7 +8,8 @@
 // were smooth (fleshLit / r, r = the dominant light's diffuse on the bumped normal over the smooth
 // normal's), then multiplies r^k back on, so the bumps keep (k 1) or gain (k 2) contrast where the
 // compression flattened them. k is per instance in meltCfg.z (gInstMelt.z, view.setSkinDetail),
-// set per character from SKIN_DETAIL_BY_CHARACTER; 0 skips the term.
+// set per character from SKIN_DETAIL_BY_CHARACTER; 0 skips the term. NO CHARACTER USES IT since 2026-11-10
+// (the table below says why); the term and its A/B knobs stay.
 //
 // A/B knobs, read from the URL at shader build: ?skinDetail=k overrides every body's k;
 // ?skinCavity=c (PROTOTYPE, not adopted: the 20 cm shell lumps read as grey blotches, not pores)
@@ -27,8 +28,13 @@ const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x)
 
 /** Per-character skin detail k; absent = 0 (off). Owner 2026-09-28: tried zombie and soldier at 2,
  *  then "looks really weird with the flashlight on at medium distances" on the zombie: zombie off,
- *  soldier 1 (body and arms show it, subtly). To revisit. */
-export const SKIN_DETAIL_BY_CHARACTER: Readonly<Record<string, number>> = { soldier: 1 };
+ *  soldier 1 (body and arms show it, subtly).
+ *  Owner 2026-11-10: soldier off too ("gray mottling"). The term's smooth normal is the analytic base (ng0, below),
+ *  which leaves out the 20 cm shell lumps, so r^k brought the LUMPS back as grey blotches; on a tap-normal pixel
+ *  (nSmooth = n) it restores only the fine grain. So the soldier's skin changed with the normal path, and went
+ *  smooth all over at its first wounds (a wounded body's pixels take the taps). Measured in
+ *  docs/dev-notes/2026-11-10-soldier-skin-detail/NOTES.md. ?skinDetail=k still forces the term on every body. */
+export const SKIN_DETAIL_BY_CHARACTER: Readonly<Record<string, number>> = {};
 export function skinDetailFor(name: string): number {
   return SKIN_DETAIL_BY_CHARACTER[name] ?? 0;
 }

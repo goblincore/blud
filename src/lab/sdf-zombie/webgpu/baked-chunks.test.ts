@@ -198,8 +198,8 @@ describe('createBakedChunkMaterial — surface mode (M2 task 2)', () => {
     };
     expect(Object.keys(mat.mrtNode!.outputNodes).sort())
       .toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
-    const params = mat.mrtNode!.outputNodes.surfaceParams as { node: { nodes: Array<{ node: { value: number } }> } };
-    expect(params.node.nodes.map(n => n.node.value)).toEqual([0, 0, 0, 1]);
+    const params = mat.mrtNode!.outputNodes.surfaceParams as { nodes: Array<{ value: number }> };
+    expect(params.nodes.map(n => n.value)).toEqual([0, 0, 0, 1]);
     expect(mat.colorNode).toBeNull();
     expect(mat.blending).toBe(THREE.NoBlending);
     // Mesh-class receiver, 'full' default.

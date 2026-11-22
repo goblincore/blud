@@ -82,6 +82,7 @@ import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
 import { headAlive } from './flame-anchors';
 import { rngStreams } from './rng';
+import { actorSpawnCentre } from './game-hit-trace';
 import { mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, swingBlow } from '../flesh-bits';
 
@@ -617,7 +618,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           const rand = rngStreams.misc;
           // The whole brain is the modelled MESH (spec §14); the SDF brainPiece only while the GLB loads.
           const l = brainLaunch(c, dir, rand);
-          const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
+          const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel, actorSpawnCentre(ctx, a)) ?? false;
           const cracked = deps.crackSkull?.(a,c,dir) ?? 0;
           deps.gore(a, [...(thrown ? [] : [brainPiece(c, dir, rand)]), ...brainLumps(c, dir, rand), ...(cracked ? [] : skullChips(c, dir, rand))]);
           // Up, leaning out of the cracked region (0.4 × its outward normal). Straight out of a brow crack the burst
@@ -768,7 +769,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const pieces: GorePiece[] = [...skullShards(base, shardDir, plan.shards, h.rand), ...brainLumps(base, dir, h.rand).slice(0, plan.lumps)];
     if (kills) {
       const l = brainLaunch(base, dir, h.rand);
-      const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
+      const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel, actorSpawnCentre(ctx, a)) ?? false;
       if (!thrown) pieces.push(brainPiece(base, dir, h.rand));
     }
     deps.gore(a, pieces);

@@ -17,7 +17,10 @@
   lit by the flesh shader (`kit-flesh.ts`); kits are parsed once and share geometry across actors. Detail: [characters](docs/tasks/characters.md#goblin-refinement-pass-body-kit-weapons-rig-animation--phase-1-body-done-2026-10-01).
   Next: owner playtest; other weapons' grips; idle grip fidgets (needs articulated fingers); kit sever handling (a shot-off forearm's hand stays).
   The zombie redesign (shackles, body normal map, kit below the knee) runs in its own session/branch (`zombie-refine`).
-
+- [~] **Burn flail and burn death** (2026-11-16; branch `claude/burning-body-effect-optimization-4795c0`): a lit body panic-runs with an arm flail, then dies on an authored burn fall; per-character tiers. Built and tested, **owner look pending**. Next: the fire's render cost. [Combat and gore](docs/tasks/combat-and-gore.md) · [notes](docs/dev-notes/2026-11-16-burn-flail/NOTES.md)
+- [~] **Melt death in the game** (2026-11-14; branch `claude/melting-dying-animation-6cffdd`): the lab melt repaired (off-origin, ballooning pool), `beginMelt` on the game actor, slot 8 placeholder melter. Open: the look on the game's zombie (pale), kit/prop, crowd path. [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Sector levels (Doom E1M1 experiment):** sectors, pools + light, enemies, materials, (2026-10-25, plan 3b) debris on sector floors + exploding barrels, barrel grime pass, emissive screens/light panels part A and B1 (they light the room: baked coloured bounce, cheap coloured lights), two Doom-style teratoma floaters, a start-room goo pit and (2026-10-28) sci-fi split doors that open on approach for the player and enemies, the zone/portal cull + update LOD, level batching (pickups/barrels/casings, `?batch=0`) and (2026-10-29) the shot-frame pass (pellet trace + wound probes fold less, tracer pipelines pre-warmed; E1M1 hit path ~31 → ~12 ms CPU, 2 → 0 shot pipelines; `?shotfix=0`) and the gore-spread pass (first-blood warm at boot, gun gore one tick after the hit; E1M1 first-volley worst frame 30 → 23 ms CPU; `?gorespread=0`) and the meat-pool / seed-band-upload pass (torn meat verified intact after gore spread; `?meatpool=0`, `?seedupload=0`) built; next emitters part B2 (light shafts, dust). Play `npm run dev:doom`. Detail: [levels](docs/tasks/levels.md) "Sector levels" items 5b, 5c.
+- [~] **Kit occlusion: flesh under opaque kit cloth is not marched or shaded** (owner, 2026-10-26; branch `claude/intelligent-bose-856348`). Skinned distance twins of cloth/boot/leather kit meshes (`kit-occluder.ts`, `KIT_OCCLUDER_LAYER`) feed pass 1c's occT; the march's tMax clamp is back (the 09-01 "decay" was fog). Bound sits 2 cm in front of the cloth (`KIT_OCCLUDER_INSET`), so flesh clipping through trousers now shows cloth. Arena, 12 zombies: flesh hits −16% (3 m) / −23% (7 m), paired frame delta −2..−4 ms median on a loaded machine. `?kitocc=0` / `__sdfGame.setKitOccluder`, `setKitOccluderInset`, `kitOccluderXray`. Owner look pending.
 - [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
   The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
   by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
@@ -31,7 +34,19 @@
   bake parity in CI, all ten maps re-baked on the GPU and committed (gamer's and teratoma's were stale: torso axis moved).
   Left: chamfer + bend (spec question 1); optional CPU worker threads (step 4).
 
+- [~] **Bullet-time hit freakout and thrown bodies through walls** (owner, 2026-11-12; branch `claude/ragdoll-contact-fixes`, draft PR) — [combat and gore](docs/tasks/combat-and-gore.md#bullet-time-hit-freakout-thrown-bodies-through-walls--2026-11-12). The keep-out runaway, the wall-box leak and the body knock are done and tested headless; not played. A thrown corpse now stops at a standing body and knocks it (stagger and root knock). Corpses meet sector wall lines, and an authored fall stopped by a wall or body goes limp instead of thrashing (2026-11-14). Ragdoll corpses that never slept (a quarter of shotgun deaths) now do: 1 of 180 awake at 10 s. Open: the knock's feel and a per-kind weight; one travelling corpse in 180.
+
+- [~] **Damage model: elbow/knee cuts, corpse integrity, no neck stub** (owner, 2026-11-02; branch `claude/character-damage-ragdoll-9ca95f`) — [combat and gore](docs/tasks/combat-and-gore.md#limb-toughness-corpse-integrity-the-neck-stub--2026-11-02). Built and tested; owner look and slider tuning pending.
+
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
+
+- [~] **Imp built 2026-10-24, second pass 2026-11-02 (proportions, claw feet, demon skull when shot); owner look pending.** A gaunt fireball-throwing demon on the butcher's digitigrade legs, flesh over a simplified demon skull, burning socket fists; it claws up close and throws overhand at range (`fireball.ts`, `makeImpMind`). `?spawn=imp`. [Characters](docs/tasks/characters.md).
+
+- [~] **Zombie skeleton kit built 2026-11-15; owner look pending.** The bare mesh skeleton is now 19 Blender-built bone pieces (vertebrae under the old cage's own ribs, hip bones with sockets, clavicle and scapula, radius and ulna, femur with head and neck, a foot) in place of surface-nets capsules, at half the vertices; joints hold through the walk. Zombie only. [characters](docs/tasks/characters.md#the-zombies-skeleton-kit-a-believable-bare-skeleton--built-2026-11-15)
+
+- [~] **Tallow fifth pass 2026-11-14, boots and kit budget 2026-11-15; draft PR goblincore/blud#126.** A corpulent walking rendering vat: a 1.3 m wide fat man on stumps in heavy iron boots, his belly hanging to his knees, long gorilla arms grown into industrial cannons, a boiler sunk in his back, a breathing mask strapped into his face, blood wherever metal goes into him, his own mean red-eyed face, and a baked skin of fat rolls and veins. His attack is a VOLLEY: both cannons braced level, four fireballs right and left. Played in the arena 2026-11-15: volley damage lowered, muzzle blasts, recoil and dark bores added; kit 70k triangles. `?spawn=tallow`. [Characters](docs/tasks/characters.md).
+
+- [~] **Cerebrax built 2026-11-08 (boss); owner look pending.** A Spider-Mastermind-style boss: a huge pulsing brain (24 SDF prims; gyri, fissures and veins a baked random-wave normal map) turning in a bone-metal harness on four spider legs (knees poled high, `GaitProfile.kneePole`), a chaingun under its face (`gunner` + `spit`, the juggernaut's sweeping bursts). `?spawn=cerebrax`. Smaller drone variants not started. [Characters](docs/tasks/characters.md).
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
 - [~] **Built 2026-10-13/14, owner look pending.** A jaw bone with its own hinge (`hinge=0.06` at the lip line), the mouth opening at the
@@ -71,6 +86,13 @@
   (branch `claude/flat-room`). The goblin to human height (1.70 m) is built, owner look pending ([notes](docs/dev-notes/2026-10-11-goblin-human-height/NOTES.md), [characters](docs/tasks/characters.md)).
 
 **Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [x] **The march's clean-body fast path is on by default, walk only** (2026-11-09, owner's call; branch
+  `claude/march-lean-walk-40ed5e`, not merged; [notes](docs/dev-notes/2026-11-09-march-lean-walk/NOTES.md)). The
+  same picture to the bit; the march pass −15 % on a clean close-up and a 12-zombie crowd, +1.9 % on a wounded
+  close-up, 3 s more cold compile. `?leanwalk=0` turns it off. The march golden snapshot was re-recorded; the
+  `march-hash` pins are stale on Chrome 157 (not re-pinned). Next: the same choice per sample on wounded bodies.
+- [~] **Wounded mobs: the crater grid and two shading shortcuts are the default (2026-11-12, owner's call; PR 123).** The crater grid (128 exact wounds a body), `?ngwound=8` (no four-tap normal near wounds; follows a soldier's ragged craters) and `?probelean` (cheaper AO and scatter probes). Heavy mob's whole frame 61 to 78 ms before, 49 to 53 after (one noisy run). `?woundgrid=0&ngwound=0&probelean=0` restores the old text. No GPU gate re-taken; open items in [rendering](docs/tasks/rendering.md).
+
 - [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
   frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
   `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
@@ -80,6 +102,10 @@
   scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
   37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
   on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
+
+**Explosions: the blast reads in the room and reaches the body** — [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Explosion pass built; owner playtest pending.** `?blastfx=depth,front,timing` (`none` = old): the refraction is
+  gated on scene depth, fire licks reach the gib radius by the swap, the core lights on the hit frame.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the

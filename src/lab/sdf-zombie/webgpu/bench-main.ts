@@ -53,6 +53,7 @@ import zombieBlobSrc from '../characters/zombie.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
 import cultistBlobSrc from '../characters/cultist.blob?raw';
+import { CLOTH_VARIANTS, clothVariantSrc, type ClothVariant } from './bench-cloth';
 import type { FaceParams } from '../face';
 import type { BlobDoc } from '../blob-ast';
 import type { Vec3 } from '../types';
@@ -119,6 +120,14 @@ function sceneC(character: string, name: string): BenchScene {
     bodies: [-0.9, 0, 0.9].map(x => ({ character, x, z: 0 })),
     camera: { dist: 2.2, targetY: 1.2 },
   };
+}
+
+/**
+ * Scene Z1 — the close-up worst case (SDF-cloth cost spike, 2026-10-26): ONE
+ * zombie, camera 1.3 m off, the body filling the frame from the knees up.
+ */
+function sceneZ1(): BenchScene {
+  return { name: 'Z1', bodies: [{ character: 'zombie', x: 0, z: 0 }], camera: { dist: 1.3, targetY: 0.95 } };
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +300,12 @@ async function main() {
   // ?laststep=K enables MARCH_BODY's last-step secant accept (perfCfg.w);
   // 0 = off, the ship default.
   const lastStep = Math.max(0, Math.min(16, Number(params.get('laststep') ?? 0) || 0));
+  // ?cloth=<variant> dresses every zombie in a bench-cloth.ts garment (the
+  // SDF-cloth cost spike, docs/dev-notes/2026-10-26-sdf-cloth-cost/).
+  const clothParam = params.get('cloth');
+  if (clothParam !== null && !CLOTH_VARIANTS.includes(clothParam as ClothVariant)) {
+    throw new Error(`?cloth=${clothParam}: not one of ${CLOTH_VARIANTS.join('|')}`);
+  }
 
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
@@ -351,7 +366,7 @@ async function main() {
   // would silently bench the wrong character.
   // ---------------------------------------------------------------------
   const CHARACTERS: Record<string, string> = {
-    zombie: zombieBlobSrc,
+    zombie: clothParam ? clothVariantSrc(zombieBlobSrc, clothParam as ClothVariant) : zombieBlobSrc,
     cyclops: cyclopsBlobSrc,
     schoolgirl: schoolgirlBlobSrc,
     cultist: cultistBlobSrc,
@@ -553,6 +568,47 @@ async function main() {
     }
   });
 
+  /**
+   * THE COST CENSUS of the held frame (debug-counters.wgsl.ts mode 13: the ray
+   * walk, returned before the miss discard; mode 14: the whole pixel, the
+   * post-hit chain included). Summed over the float march target: texels
+   * marched, hit, steps and prim evaluations. Machine load cannot move it.
+   */
+  async function census(): Promise<Record<string, Record<string, number>>> {
+    const sum = async (mode: number) => {
+      for (const v of views) v.uniforms.debugCfg.value.x = mode;
+      for (let i = 0; i < 4; i++) await new Promise(r => requestAnimationFrame(r));
+      const t = sdfLayer.marchTarget;
+      const f = await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height) as Float32Array;
+      let marched = 0, hits = 0, steps = 0, prims = 0, hitPrims = 0, hitSteps = 0;
+      for (let i = 0; i < f.length; i += 4) {
+        const b = f[i + 2]!;
+        if (!(b >= 0.5)) continue;   // the clear colour: no fragment marched this texel
+        marched++; prims += f[i]!;
+        const st = b % 1000; steps += st;
+        if (b >= 1000) { hits++; hitPrims += f[i]!; hitSteps += st; }
+      }
+      return { marched, hits, steps, prims, hitPrims, hitSteps };
+    };
+    const walk = await sum(13);
+    const all = await sum(14);
+    for (const v of views) v.uniforms.debugCfg.value.x = debugMode;
+    return { walk, all, target: { w: sdfLayer.marchTarget.width, h: sdfLayer.marchTarget.height } };
+  }
+
+  /** One debug mode's raw march target (rgba32f, base64) for a per-texel diff off the page. */
+  async function counters(mode: number): Promise<{ w: number; h: number; rgba32f: string }> {
+    for (const v of views) v.uniforms.debugCfg.value.x = mode;
+    for (let i = 0; i < 4; i++) await new Promise(r => requestAnimationFrame(r));
+    const t = sdfLayer.marchTarget;
+    const f = await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height) as Float32Array;
+    for (const v of views) v.uniforms.debugCfg.value.x = debugMode;
+    const u8 = new Uint8Array(f.buffer, f.byteOffset, f.byteLength);
+    let bin = '';
+    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+    return { w: t.width, h: t.height, rgba32f: btoa(bin) };
+  }
+
   // Driver surface: the headless poller reads __sdfBench.ready (debug
   // screenshots) or __bench.done (timed runs).
   (window as unknown as { __sdfBench: unknown }).__sdfBench = {
@@ -562,11 +618,14 @@ async function main() {
     get finished() { return finished; },
     start,
     stats: () => stats.summary(),
+    census,
+    counters,
   };
 
   start(sceneName === 'B' ? sceneB()
     : sceneName === 'C' ? sceneC('cultist', 'C')
     : sceneName === 'CZ' ? sceneC('zombie', 'CZ')
+    : sceneName === 'Z1' ? sceneZ1()
     : sceneA());
 
   // Decal/PNG faces load asynchronously — a face not yet uploaded is a

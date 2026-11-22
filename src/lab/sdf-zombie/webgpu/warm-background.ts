@@ -19,7 +19,9 @@
 // `87b8f71c` was written to prevent. So the consumer must never submit the draw
 // until this tracker says ready. `failed` degrades forever for the same reason:
 // we would rather show nothing (gibs still simulate; they re-appear once a
-// future boot compiles the program) than freeze the game.
+// future boot compiles the program) than freeze the game. Three's skip covers
+// only a QUEUED pipeline, so `pending` and `failed` need the object hidden from
+// the draw (`withHidden`): a pipeline nobody queued is the synchronous build.
 //
 // PURE, renderer-free, port-ready: the release is a Rust + wgpu port, so the
 // "is this program ready / what do I do if not" decision is a plain state
@@ -99,4 +101,19 @@ export function createWarmBackgroundTracker(): WarmBackgroundTracker {
     crowdPath: () => (state('crowd') === 'ready' ? 'crowd' : 'fallback'),
     snapshot: () => ({ gib: state('gib'), crowd: state('crowd') }),
   };
+}
+
+/**
+ * Runs `draw` with `objects` hidden, then puts back each one's own visibility. How
+ * a consumer skips a program that is not ready: only a hidden object is out of the
+ * render (three builds a missing pipeline for anything it can see).
+ */
+export function withHidden(objects: readonly { visible: boolean }[], draw: () => void): void {
+  const was = objects.map((o) => o.visible);
+  for (const o of objects) o.visible = false;
+  try {
+    draw();
+  } finally {
+    objects.forEach((o, i) => { o.visible = was[i]!; });
+  }
 }

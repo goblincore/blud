@@ -13,6 +13,7 @@ import {
 import { FPV_TUNING, throwDirection, throwSpeedMps } from './fpv';
 import { BALLISTIC_BOUNDS, DYNAMITE_COOK } from '../../game/gibs/tuning';
 import type { Vec3 } from './types';
+import type { DebrisGround } from './debris-ground';
 
 /** Wide-open bounds so walls never interfere with range measurements. */
 const HUGE: FlightBounds = { minX: -1000, maxX: 1000, minZ: -1000, maxZ: 1000 };
@@ -299,5 +300,84 @@ describe('dungeon world — box collision', () => {
       return JSON.stringify(f);
     })();
     expect(withDefault).toBe(withEmptyWorld);
+  });
+});
+
+describe('sector ground (plan 3b Task 8)', () => {
+  const LEDGE: DebrisGround = { floorAt: (x) => (x < 0 ? 1 : 0), bounce: () => null };
+  const fly = (s: FlightState, sec: number, world: FlightWorld) => {
+    for (let i = 0; i < sec * 60 && !detonated(s); i++) s = stepFlight(s, 1 / 60, null, world);
+    return s;
+  };
+
+  it('a bundle rolls off a ledge and rests on the lower floor', () => {
+    const s = fly(makeFlight([-0.5, 1.2, 0], [2, 0, 0], { impactMode: false, fuseSec: 30 }), 4, { ground: LEDGE });
+    expect(s.pos[0]).toBeGreaterThan(0);
+    expect(s.pos[1]).toBe(0);
+    expect(s.floorY).toBe(0);
+  });
+  it('a bundle lobbed onto the ledge rests on it', () => {
+    const s = fly(makeFlight([-2, 3, 0], [0.5, 0, 0], { impactMode: false, fuseSec: 30 }), 4, { ground: LEDGE });
+    expect(s.pos[1]).toBe(1);
+  });
+  it('a thrown bundle bounces off a sector wall', () => {
+    const wall: DebrisGround = { floorAt: () => 0, bounce: (prev, next, vel, r) => (prev[0] < 1 && next[0] >= 1
+      ? { pos: [0.99, next[1], next[2]], vel: [-vel[0] * r, vel[1], vel[2]], normal: [-1, 0, 0] } : null) };
+    let s = makeFlight([0, 1, 0], [25, 2, 0], { impactMode: false, fuseSec: 30 });
+    for (let i = 0; i < 120; i++) { s = stepFlight(s, 1 / 60, null, { ground: wall }); expect(s.pos[0]).toBeLessThan(1); }
+  });
+  it('the wall probe gets the bundle radius, the elastic restitution and full friction', () => {
+    const seen: number[][] = [];
+    const g: DebrisGround = { floorAt: () => 0, bounce: (_p, _n, _v, r, f, rad) => { seen.push([r, f, rad ?? -1]); return null; } };
+    stepFlight(makeFlight([0, 1, 0], [3, 0, 0]), 1 / 120, null, { ground: g });
+    expect(seen).toEqual([[FLIGHT_TUNING.elastic, 1, FLIGHT_TUNING.bundleRadiusM]]);
+    seen.length = 0;
+    stepFlight(makeFlight([0, 1, 0], [3, 0, 0]), 1 / 120, null, { ground: g, bundleRadiusM: 0.2 });
+    expect(seen[0]![2]).toBe(0.2);
+  });
+  it('a wall hit counts as an impact (impact mode detonates past the safe distance)', () => {
+    const wall: DebrisGround = { floorAt: () => 0, bounce: (prev, next, vel, r) => (prev[0] < 2 && next[0] >= 2
+      ? { pos: [1.99, next[1], next[2]], vel: [-vel[0] * r, vel[1], vel[2]], normal: [-1, 0, 0] } : null) };
+    const s = fly(makeFlight([0, 1.5, 0], [20, 0, 0], { impactMode: true }), 1, { ground: wall });
+    expect(detonated(s)).toBe(true);
+    expect(s.pos[0]).toBeLessThan(2);
+  });
+  it('off the map the bundle keeps its last floor', () => {
+    const HOLE: DebrisGround = { floorAt: (x) => (x > 1 ? NaN : 0.5), bounce: () => null };
+    const s = fly(makeFlight([0, 1, 0], [3, 0, 0], { impactMode: false, fuseSec: 30 }), 3, { ground: HOLE });
+    expect(s.pos[0]).toBeGreaterThan(1);
+    expect(s.pos[1]).toBe(0.5);
+    expect(s.floorY).toBe(0.5);
+  });
+  it('the ceiling over the bundle (ceilAt) caps a lob every sub-step; sky is open, off-map falls back to ceilM', () => {
+    const LOW: DebrisGround = { floorAt: () => 0, ceilAt: (x) => (x > 1 ? 1.5 : x > 0.5 ? Infinity : NaN), bounce: () => null };
+    let maxY = 0;
+    let s = makeFlight([1.2, 1, 0], [0, 12, 0], { impactMode: false, fuseSec: 30 });
+    for (let i = 0; i < 120; i++) { s = stepFlight(s, 1 / 120, null, { ground: LOW, ceilM: 10 }); maxY = Math.max(maxY, s.pos[1]); }
+    expect(maxY).toBe(1.5);
+    const top = (x: number) => {
+      let m = 0;
+      let f = makeFlight([x, 1, 0], [0, 30, 0], { impactMode: false, fuseSec: 30 });
+      for (let i = 0; i < 240; i++) { f = stepFlight(f, 1 / 120, null, { ground: LOW, ceilM: 4 }); m = Math.max(m, f.pos[1]); }
+      return m;
+    };
+    expect(top(0.8)).toBeGreaterThan(10);                       // under sky: no cap, not the caller's ceilM
+    expect(top(0.2)).toBe(4);                                   // off the map: the caller's ceilM
+  });
+  it('a lob from under a lintel into a sky sector meets no false ceiling there (impact mode stays armed, no hit)', () => {
+    // x < 1: a 2.2 m lintel sector (the frame's ceilM); x >= 1: sky. The bundle flies at 3 m out over the sky sector.
+    const LINTEL: DebrisGround = { floorAt: () => 0, ceilAt: (x) => (x < 1 ? 2.2 : Infinity), bounce: () => null };
+    let s = makeFlight([0.9, 2.0, 0], [8, 4, 0], { impactMode: true, fuseSec: 30 });
+    s = { ...s, age: 1, spawn: [-10, 0, 0] };                    // past the grace window and the safe distance
+    for (let i = 0; i < 24; i++) {
+      s = stepFlight(s, 1 / 120, null, { ground: LINTEL, ceilM: 2.2 });
+      if (s.pos[0] >= 1.05) expect(s.detonated).toBe(false);
+    }
+    expect(s.pos[0]).toBeGreaterThan(1.05);
+    expect(s.pos[1]).toBeGreaterThan(2.2);                       // it rose past the start sector's ceiling height
+  });
+  it('no ground: no floorY key, the same flight as before', () => {
+    const a = fly(makeFlight([0, 1, 0], [3, 2, 1]), 2, {});
+    expect('floorY' in a).toBe(false);
   });
 });

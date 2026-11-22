@@ -120,7 +120,7 @@ body
   # the plane cut nothing and it read as a closed saucer round the neck.
   # Round cone: r 0.08 at the neck, r2 0.29 at the chest; the shoulder balls
   # (x reach 0.244 at y 1.53) sit inside the flare.
-  shell torso on spine at=1.00 offset=(0,0.045,-0.025) tip=(0,-0.25,0.02) r=0.080 r2=0.285 wide=1.12 deep=0.84 thick=0.008 clip=(0,-1,0) clipd=-1.23 rim=0.008 blend=0.010 color=6e5c40 warp=0.006 warpFreq=(30,6,30) rigid
+  shell torso on spine at=1.00 offset=(0,0.045,-0.025) tip=(0,-0.25,0.02) r=0.080 r2=0.285 wide=1.12 deep=0.84 thick=0.005 clip=(0,-1,0) clipd=-1.23 rim=0.004 blend=0.010 color=6e5c40 warp=0.006 warpFreq=(30,6,30) rigid
 
   # BELL CUFFS: the sleeve flares open past the wrist, dark inside, the bony
   # hand coming out of the black.
@@ -136,7 +136,47 @@ body
   # front in FRONT of the chin — most of the lower face was hidden (owner). Rides the skull rigidly (a head sphere always does).
   # tall 1.30: at 1.18 it read from behind as a round ball — a hood is
   # taller than the head it holds, and the extra height is the peak.
-  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,-0.35,0.9368) clipd=-0.4339 rim=0.010 blend=0.006 color=6e5c40 warp=0.004 warpFreq=(40,10,40) when=alive
+  # CLOTH PASS (owner 2026-10-26: "the hood should read as a cloth hoodie,
+  # not a hard helmet ... drape on the head and have some surface movement").
+  # thick 0.008 -> 0.005 and rim 0.010 -> 0.005: a 16 mm sheet with a 10 mm
+  # bead read as a slab at the opening. The warp's 4 mm folds are gone; the
+  # pleats are the shading's now (gathered round the opening, shading-normal
+  # CLOTH FOLDS), and the lining shades dark (the gold "onion" rings were the
+  # inside lit like the outside).
+  # LOOSE PASS (owner 2026-10-27: "a thick glove around the head with a hole
+  # cut for the face ... I was imagining a loose hood that shrouds the face
+  # in darkness"). The sheet hugged the head and the opening sat AT the face
+  # (cut z ~0.17, face front 0.16-0.20). Now it stands off: r 0.150 -> 0.170,
+  # wide 0.95 -> 1.00, deep 1.18 -> 1.40, centre 4 cm forward (z 0.044 ->
+  # 0.084), and the opening (same lean) moved ~10 cm out, clipd -0.4339 ->
+  # -0.342 (z 0.27 at the eyes), so the face sits 7-10 cm back inside a cowl.
+  # shroud=0.85 makes that inside DARK (compose.wgsl.ts SHROUD): the torch is
+  # at the camera, so the hood could never shadow the face by itself. The
+  # eyes glow through it. The crown rose 2.6 cm, so the peak's cut followed.
+  # THIN PASS (owner 2026-10-27: still "a thick egg", "perfectly oval", "the
+  # beveled edge"; wanted it irregular, thin and moving). The bevel was the
+  # LINING lit for 3 cm in from the edge (now dark right up to the hem); the
+  # egg is a plane through an ellipsoid, an exact ellipse. thick 0.005 ->
+  # 0.0035, rim 0.005 -> 0.003: a 7 mm sheet. ruffle=0.060 lets the cut
+  # wander up to 6 cm into the sheet on the warp's lattice, so the opening is
+  # ragged and lopsided; warp=0.006 at (30,7,24) slumps the sheet itself. Both
+  # ride the body-anchored lattice, which swings back as he walks (an eased
+  # spring, cloth-sway.ts) and settles when he stops.
+  # FIT PASS (owner 2026-10-27: "a bit big ... I can see the full top of his
+  # head inside", and "giant egg head from afar"). r 0.170 -> 0.158, wide
+  # 1.00 -> 0.95, tall 1.30 -> 1.05, centre 3 cm down (offset y 0.035 ->
+  # 0.005): the crown falls 1.93 -> ~1.85, a few cm over the (now shorter,
+  # face headHeight 1.14 -> 1.02) skull. deep 1.40 -> 1.45 keeps the opening
+  # standing off the face. The peak came down with it.
+  shell head on skull at=0.45 offset=(0,0.005,0.010) r=0.158 wide=0.95 tall=1.05 deep=1.45 thick=0.0035 clip=(0,-0.35,0.9368) clipd=-0.342 rim=0.003 blend=0.006 color=6e5c40 shroud=0.85 warp=0.006 warpFreq=(30,7,24) ruffle=0.060 when=alive
+  # THE DRAPE: the hood's back falling onto the shoulders, so from behind
+  # the silhouette runs from the crown to the capelet instead of a ball on a
+  # neck. NOT rigid on purpose: its top end binds to the head's joint and its
+  # bottom to the shoulders', so it stretches and shifts when the head turns,
+  # as cloth between the two would. A flattened cone (wide 1.25, deep 0.8)
+  # from the back of the hood (y ~1.63, z ~-0.13) to the upper back
+  # (y ~1.39, z ~-0.18); cut at z 0.04 so its front never crosses the throat.
+  shell torso on neck at=1.00 offset=(0,0.030,-0.130) tip=(0,-0.240,-0.050) r=0.100 r2=0.170 wide=1.25 deep=0.80 thick=0.005 clip=(0,0,1) clipd=0.04 rim=0.005 blend=0.012 color=6e5c40 when=alive
   # The hood's peak — a cone off the crown, up and back, so the hood reads
   # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
   # Owner (2026-09-23): "the hoodie should have a more pointy top". The v1
@@ -144,7 +184,16 @@ body
   # 1.905), so it never showed. Now rooted just under the crown (y 1.86,
   # z 0.00) and rising 13 cm up and 9 cm back to a point, with a wide blend
   # so the sheet flows into it instead of a horn stuck on a dome.
-  blob head on skull at=0.90 offset=(0,0.114,-0.080) tip=(0,0.130,-0.090) r=0.070 r2=0.005 blend=0.045 color=6e5c40 when=alive
+  # CLOTH PASS: the peak SLUMPS now — it leans back ~60 degrees and bows so
+  # the tip droops, a fabric point with nothing holding it up. The upright
+  # spike (tip (0,0.130,-0.090)) read as a helmet's crest. And it is CLOTH:
+  # a solid robe-painted blob rooted inside the crown filled the top of the
+  # hood's inside, and through the face opening its flesh-shaded base stacked
+  # against the lining and the rim — the "onion" rings. A shell cut at
+  # y 1.91 (just under the hood's outer crown, y ~1.93) keeps only the part
+  # standing out of the hood. FIT PASS: the crown fell ~8.6 cm, so the
+  # peak's root (offset y 0.100 -> 0.014) and cut (-1.910 -> -1.830) followed.
+  shell head on skull at=0.90 offset=(0,0.014,-0.085) tip=(0,0.070,-0.140) bend=(0,0.030,0) r=0.066 r2=0.006 thick=0.005 clip=(0,-1,0) clipd=-1.830 rim=0.004 blend=0.030 color=6e5c40 when=alive
   # HOOD DOWN (owner playtest 2026-09-24: a shot should drop the hood, not
   # carve it, "his head would be completely exposed"). The two lines above
   # are `when=alive`; these are `when=dead` — hidden until he dies, then the
@@ -219,7 +268,8 @@ bones
 face
   headRadius 0.112
   headWidth  0.72
-  headHeight 1.14
+  # 1.14 -> 1.02 (owner 2026-10-27: a tall head under the hood read as an egg).
+  headHeight 1.02
   headDepth  0.88
   jawWidth   0.86
   jawHeight  0.92

@@ -5,6 +5,7 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 import { TILE_MAX_ENTRIES } from '../../../../tile-cull';
 import { DATA_ROWS, QUAD_ENTRY_SLACK, RAY_CULL_SLACK } from '../../../layout';
+import { TILE_REF as TR, TILE_REF_GROUPS } from '../../../tile-ref-flag';
 
 export const TILE_PRELOAD_BLOCK = /* wgsl */ `  // TILE-LIST PRELOAD (perf task 5 step 2). Read ONCE per pixel, here at the
   // march entry — never per step. The entry's groups then ride every mapBody
@@ -73,13 +74,19 @@ export const TILE_PRELOAD_BLOCK = /* wgsl */ `  // TILE-LIST PRELOAD (perf task 
       // screen. mapBody's per-step cull tests a point in the group's own frame (an open head split's piece folds at
       // its un-warped point), and takes the sphere the entry names by its offset (tile-cull.ts cullOffset): the
       // largest sphere about b's centre + offset inside b. No offset (every body without a split) is b itself.
+${TR ? `      // THE TILE REFERENCE LIST (tile-ref-flag.ts): the entry is kept as (slot << 8) | its group's index in the body,
+      // which the meta lane carries as slot + index / ${TILE_REF_GROUPS} (tile-cull.ts tileMetaX). The per-step cull's
+      // sphere is then the group's own data row, not a copy rebuilt from this entry's offset.
       let entMeta = (*tileEnt)[lin + 2u];
+      gTileRef[w] = u32(floor(entMeta.x)) * 256u + u32(fract(entMeta.x) * ${TILE_REF_GROUPS}.0 + 0.5);
+      w = w + 1;
+` : `      let entMeta = (*tileEnt)[lin + 2u];
       gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw, b.w - length(entMeta.yzw));
       gTileGrp[w] = g;
       gTileBand[w] = entMeta.x * ${DATA_ROWS}.0;
       gTileSlot[w] = entMeta.x;
       w = w + 1;
-    }
+`}    }
     gTileN = f32(w);
     // QUAD DISPATCH (stage a-2): a quad fragment whose tile list is EMPTY can
     // have no surface — discard before the wound list and before any stepping.
@@ -94,7 +101,17 @@ export const TILE_PRELOAD_BLOCK = /* wgsl */ `  // TILE-LIST PRELOAD (perf task 
     // pixel, and MAP_BODY's per-step loop walks gPixN slots with a bounded
     // range fold instead of scanning all MAX_CROWD_INSTANCES slots.
     gPixN = 0;
+${TR ? `    // THE TILE REFERENCE LIST: no table, only how many slot runs the list holds. A run is found again by walking
+    // the list (tileRunEnd), by mapBody and mapLean at every call.
     {
+      var prev = 0xffffffffu;
+      for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
+        if (f32(e) >= gTileN) { break; }
+        let s = gTileRef[e] >> 8u;
+        if (s != prev) { gPixN = gPixN + 1; prev = s; }
+      }
+    }
+` : `    {
       var prev = -1;
       for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
         if (f32(e) >= gTileN) { break; }
@@ -110,7 +127,7 @@ export const TILE_PRELOAD_BLOCK = /* wgsl */ `  // TILE-LIST PRELOAD (perf task 
         }
       }
     }
-  } else if (quadMode) {
+`}  } else if (quadMode) {
     // QUAD DISPATCH (stage a-2): tiles off, so there is no tile list to take a
     // conservative entry from — march from the camera. Correct (an entry is
     // only ever a lower bound), slow, and debug-only: sync() logs once.

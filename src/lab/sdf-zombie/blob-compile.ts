@@ -310,7 +310,12 @@ function partToPrim(p: BlobPart): PrimDef {
         + 'try warpFreq=40 for a fine weave, 15 for a heavy drape, or '
         + 'warpFreq=(20,0,20) for pleats that run vertically',
         p.src.line, p.src.indent + 1);
-    if (wfLen !== 0 && wa === 0)
+    const ru = p.ruffle ?? 0;
+    if (ru < 0 || (ru > 0 && (p.kind !== 'shell' || wfLen === 0)))
+      throw new BlobError(
+        'ruffle= is a shell edge\'s wander into the sheet, in metres (>= 0): it needs a shell and a warpFreq= for '
+        + 'its lattice', p.src.line, p.src.indent + 1);
+    if (wfLen !== 0 && wa === 0 && ru === 0)
       throw new BlobError(
         'warpFreq= without warp= does nothing — set warp= to the wrinkle '
         + 'amplitude in metres', p.src.line, p.src.indent + 1);
@@ -443,6 +448,7 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.color ? { color: p.color as Vec3 } : {}),
       ...(p.gloss === null ? {} : { gloss: p.gloss }),
       ...(p.glow === null ? {} : { glow: p.glow }),
+      ...(p.shroud === null ? {} : { shroud: p.shroud }),
       ...(p.metal ? { metal: true } : {}),
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
@@ -457,6 +463,7 @@ function partToPrim(p: BlobPart): PrimDef {
               rim: p.rim,
               warpAmp: p.warpAmp ?? 0,
               warpFreq: p.warpFreq ?? ZERO_FREQ,
+              ...((p.ruffle ?? 0) > 0 ? { ruffle: p.ruffle } : {}),
             },
           }
         : {}),

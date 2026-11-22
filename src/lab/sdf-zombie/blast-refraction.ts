@@ -52,6 +52,10 @@ export interface BlastRefractionTuning {
   strengthMax: number;
   /** Attack as a fraction of life: the band reaches full strength this fast. */
   attackFrac: number;
+  /** Metres behind the shell's front over which the depth gate opens (0 at the front, 1 this far past it). */
+  depthSoftM: number;
+  /** Nothing nearer the camera than this ever bends, whatever the shell says, in view metres. See the constant. */
+  depthNearM: number;
 }
 
 export const BLAST_REFRACTION: BlastRefractionTuning = {
@@ -78,6 +82,13 @@ export const BLAST_REFRACTION: BlastRefractionTuning = {
   strengthPerHeightM: 0.012,
   strengthMax: 0.035,
   attackFrac: 0.10,
+  // 0.35: a floor crossing the shell ramps up over about a foot of depth, so the curved front reads as the edge of a
+  // wave rather than a cut line, while a body standing a metre in front of the shell is fully out of it.
+  depthSoftM: 0.35,
+  // See blastShellFrontDepth. MEASURED on the depth view (`__sdfGame.setBlastDepthView(1)`, 2026-11-01): the shorty's
+  // muzzle sits about 0.6 m from the eye, the glove 0.4 m. The margin is for the other weapons' swings, not measured
+  // one by one. A real wall this close does not bend either, and at that range nothing would read if it did.
+  depthNearM: 0.9,
 };
 
 /** Seconds the band lives. */
@@ -168,6 +179,52 @@ export function blastRefractionOffset(
   return strengthUv * blastRefractionBand(x, tuning);
 }
 
+/**
+ * THE DEPTH GATE. The band is a sphere in the room, so a surface bends only if it is not in front of it.
+ *
+ * `blastShellFrontDepth` is the depth of the sphere's near surface along the ray through a pixel at normalised screen
+ * radius `rn` (0 at the blast's centre, 1 at the band's edge), for a sphere of world radius `radiusM` whose centre
+ * sits at view depth `w`: `w - R*sqrt(1 - rn^2)`. It is the small-angle form of the ray/sphere hit, and exact where
+ * `rn = 1` meets the band's own edge (the front is `w` there, so there is no seam where the band ends).
+ *
+ * Floored at `depthNearM`: with the camera INSIDE the sphere the front is behind the eye, which would bend everything
+ * up to and including the gun (the old look). The floor is what keeps the view model straight then.
+ *
+ * `blastDepthGate` opens over `depthSoftM` past the front: 0 for a wall, a body or the gun in front of the shell, 1
+ * for what stands behind it, and a soft curve along the line where a floor or a wall cuts through the sphere. That
+ * line is what makes the wave sit in the room.
+ *
+ * post-aa.ts's `postAaBlastWarp` mirrors these three lines; keep them in step.
+ */
+export function blastShellFrontDepth(
+  w: number, radiusM: number, rn: number,
+  tuning: BlastRefractionTuning = BLAST_REFRACTION,
+): number {
+  const h = 1 - rn * rn;
+  return Math.max(tuning.depthNearM, w - radiusM * Math.sqrt(h > 0 ? h : 0));
+}
+
+/** GLSL-style smoothstep over `front .. front + depthSoftM` at a surface's view depth. */
+export function blastDepthGate(
+  surfaceW: number, frontW: number,
+  tuning: BlastRefractionTuning = BLAST_REFRACTION,
+): number {
+  const soft = tuning.depthSoftM > 1e-6 ? tuning.depthSoftM : 1e-6;
+  const x = (surfaceW - frontW) / soft;
+  const t = x < 0 ? 0 : x > 1 ? 1 : x;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * A depth-buffer value back to view metres, with the projection matrix's own two terms rather than a near/far pair, so
+ * it cannot disagree with the matrix the frame was drawn with (elements[10], elements[14]). This renderer's depth is
+ * WebGPU's forward 0..1: nothing here turns on reversed or logarithmic depth (0 = near, 1 = far; the depth view
+ * measures it). The sky clear (1) comes back as the far plane, i.e. behind every shell.
+ */
+export function blastLinearDepth(clipZ: number, p10: number, p14: number): number {
+  return p14 / (clipZ + p10);
+}
+
 export interface ProjectedPoint {
   /** Screen UV, 0..1, v up (the blit's pre-flip convention). */
   u: number;
@@ -200,6 +257,8 @@ export interface ProjectedBlast {
   v: number;
   /** Screen radius as a fraction of the viewport HEIGHT (the blit's unit). */
   radiusUv: number;
+  /** Clip-space w at the centre: the view depth the shell's sphere sits at. */
+  w: number;
 }
 
 /**
@@ -222,5 +281,5 @@ export function projectBlastRefraction(
   const proj5 = Math.abs(viewProj[5] ?? 0);
   const r = Number.isFinite(worldRadiusM) ? Math.max(0, worldRadiusM) : 0;
   const radiusUv = Math.max(0.01, 0.5 * proj5 * r / p.w);
-  return { u: p.u, v: p.v, radiusUv };
+  return { u: p.u, v: p.v, radiusUv, w: p.w };
 }

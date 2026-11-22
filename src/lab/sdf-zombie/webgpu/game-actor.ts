@@ -27,9 +27,24 @@ import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
-import { constrainRigBends, stepRig } from '../rig';
-import { relaxRopeConstraints } from '../collapse';
+import {
+  applyMelt, applyMeltOrgans, meltFrameOf, meltInitBody, progressAt, remeltClusters, stepMelt as advanceMelt, MELT_TUNING_BODY,
+  MELT_TUNING, type MeltBodyTuning, type MeltFrame, type MeltState,
+} from '../melt';
+import {
+  groupCentroid, meltGroupOf, groupReleaseProgress, limbOfGroup, meltBoneSpawnVel, mulberry32,
+  partitionBones, releaseOrder, releaseThreshold, type BoneGroup,
+} from '../melt-bones';
+import { constrainRigBends, stepRig, type RigPoint } from '../rig';
+import { joystickSwell } from '../joystick';
+import { surfaceTable, type ArcDrive } from '../brain-arcs';
+import { sdBody } from '../validate';
+import { ageJiggle, boneEndPoints, jiggleBulk, jiggleFlesh, kickJiggle, type JiggleKick } from '../flesh-jiggle';
+import { ANKLE_LIMITS, BODY_COLLIDE, carryFeet, CORPSE_POINT_R, floorGrip, FOOT_CARRY, FOOT_PLANT, HIP_LIMITS, SPINE_CONES, plantFeet, relaxAnkles, relaxBodyCollisions, relaxBraces, relaxHipCones, relaxRopeConstraints, relaxSpineCones, releaseFeet, toughnessFor } from '../collapse';
+import { addToVolley, BLOW_AIR_DAMPING, BLOW_AIR_SEC, EMPTY_VOLLEY, planBlowAway, VOLLEY_SEC, type KillVolley } from '../blow-away';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
+import { CORPSE_SHOVE, DEATH_FALL, pickBurnFall, pickDeathFall, type DeathFallChoice } from '../death-fall';
+import { BLOW_THROW } from '../blow-away';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
@@ -43,29 +58,36 @@ import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint, midJointCut, JOINT_TOUGHNESS, SOLDIER_TOUGHNESS } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
+import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
+import { createFloater, type FloaterSpace } from './floater-move';
 import {
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
-  makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
-  applyFloorContact, MOTION_TUNING, STANDING_RIG,
+  makeMotionJoints, makeMotionState, stepMotion, planSubSteps, SUBSTEP_TUNING,
+  applyFloorContact, corpseLift, FALL_DROP_M, MOTION_TUNING, STANDING_RIG, releasedRestScale,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import { scaleGunCrater, type GoreTuning } from '../gore-tuning';
-import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
+import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
+import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
+import { isGoreBody, isSoldierFamily, resolveBurnTier, wantsTorsoGuards, ZOMBIE_PROFILE, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
-import type { MotionFrame } from '../motion';
+import { judderLevel, type MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
 import { HOUND_TUNING } from '../hound-attack';
 import type { MissingLimbs } from '../collapse';
+import {
+  CORPSE_CONTACT, clearOfBoxes, clearOfSegs, pushOutOfBodies, pushOutOfBoxes, pushOutOfSegs,
+  type BodyHit, type BodyObstacle, type ContactBox, type ContactSeg,
+} from '../corpse-contact';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
@@ -73,12 +95,12 @@ import { soldierVisualWounds } from '../soldier-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
-import { add, normalize, qMul, qRotate, sub } from '../vec';
+import { add, cross, normalize, qMul, qRotate, sub } from '../vec';
+import { planSlump, slumpVelocities } from '../slump-death';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import { layerOn } from './light-layers';
-import {
-  BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
-} from '../burn-behaviour';
+import { createBurnPanic, stepBurnPanic, type BurnPanicState } from '../burn-behaviour';
+import type { LevelGround } from './level-ground';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
@@ -93,6 +115,9 @@ const CALM: Omit<MotionSignals, 'dt'> = {
 };
 
 /** Wound-type ids the shader expects — same mapping as lab-main's TYPE_ID. */
+/** A panicking burner moving slower than this (m/s) for this long (s) is blocked: it turns. */
+const BURN_STUCK_MPS = 0.25;
+const BURN_STUCK_SEC = 0.3;
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
 /** Hit shove along the shot direction, PER WOUND PROFILE — the defect this
@@ -125,6 +150,22 @@ export const SOFT_TUNING = { hitsToKill: 2, severRange: 6 } as const;
  *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
 const BLAST_KNOCK_MPS = 1.2;
 const BLAST_KNOCK_DECAY = 7;
+/** A death this soon after the last volley (sim s) is that volley's kill: it may blow him away (blow-away.ts). */
+const KILL_VOLLEY_SEC = 0.5;
+/**
+ * A THROWN CORPSE KNOCKS THE BODY IT HITS (owner playtest 2026-11-12: "a thrown body cant like knock or displace
+ * another body"). A corpse joint that meets a standing body at `minSpeed` (m/s into it) or faster gives that body the
+ * blast-class reaction (stagger.ts lurch; a soldier's medium stagger) and a root knock along the blow of `knockPerMps`
+ * of the joint's speed, capped at `knockMax` (m/s; it decays at BLAST_KNOCK_DECAY, so 3 m/s is 43 cm of travel).
+ * `gain` scales the stagger from `minSpeed` to `fullSpeed`. One knock a `cooldown` (sim s), and a corpse strikes a
+ * body only in the step it arrives (`arrival`, s: noteBodyHit). No wound, no meter: it staggers, it does not hurt.
+ * Probe (a zombie shot dead by double-barrel volleys 0.6-1.6 m in front of another, ragdoll and authored fall, 60 Hz
+ * and bullet time): the first joints arrive at 3-7 m/s, one knock of 1-2.4 m/s a throw (15-35 cm of travel), the
+ * same at both step sizes; a corpse settling against a body's shins is under 2 m/s.
+ */
+export const BODY_KNOCK = {
+  minSpeed: 3, fullSpeed: 12, gain: [0.6, 1.2], knockPerMps: 0.35, knockMax: 3, cooldown: 0.6, arrival: 0.3,
+} as const;
 
 /**
  * THE BLAST SIGNAL'S DIRECTION MUST BE A UNIT VECTOR, and handing it a VELOCITY
@@ -252,7 +293,7 @@ export function pushOutOfFurniture(
     else if (min === north) z = maxZ;
     else z = minZ;
   }
-  return [x, 0, z];
+  return [x, p[1], z];
 }
 
 /** The first furniture box the segment p→q crosses (injection order), or
@@ -284,7 +325,8 @@ export function avoidPoint(
   const dz = goal[2] - p[2];
   const d = Math.hypot(dx, dz) || 1;
   // (goal − p) rotated ±90°: side +1 → (dz, −dx), side −1 → (−dz, dx).
-  return [goal[0] + side * (dz / d) * offset, 0, goal[2] + side * (-dx / d) * offset];
+  // y: the body's own floor (a way-point is a ground-plane goal; 0 on room levels).
+  return [goal[0] + side * (dz / d) * offset, p[1], goal[2] + side * (-dx / d) * offset];
 }
 
 /** Committed avoid side for a blocked chase line: prefer the side whose
@@ -310,6 +352,8 @@ export function pickAvoidSide(
 
 export interface ZombieActor {
   readonly id: number;
+  /** A floater's float state (floater-move.ts; sector levels), else null. */
+  floatState(): { altitude: number; mode: 'idle' | 'chase'; dir: number; down: boolean } | null;
   corpseBakeEligible(): boolean;
   /** Run 5b: the refine twin is drawn only for a standing body inside the band —
    *  collapsing, settled and baked bodies never refine. */
@@ -330,6 +374,8 @@ export interface ZombieActor {
   crowd?: { type: import('./crowd-type').CrowdType; slot: number };
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
+  /** Diagnostic: the rig's joints (world) by name, as the last step solved them. */
+  readonly rigJoints: () => { names: readonly string[]; points: Vec3[] };
   /**
    * The body the march is ACTUALLY drawing this frame: `posed()` in ordinary
    * play, or the rupture-displaced body while the window is running. The face
@@ -373,6 +419,28 @@ export interface ZombieActor {
   endTear(): void;
   /** Retune the window for this actor (the page's `?gibtear*` knobs). */
   setTearTuning(t: Partial<TearTuning>): void;
+  /**
+   * MELT (melt.ts): the body liquefies where it stands. The flesh sags into a pool, the skeleton
+   * falls out of it group by group (opts.onMeltBone) and what is left is a puddle. This IS the
+   * death: from here on the body does not step, think or take hits, `motionFrame().collapsed` is
+   * true (every "is it a corpse" reader), and `posed()` is the melted body (a shot meets the goo,
+   * not a statue of where it stood). The caller owns the clock (stepMelt), like the rupture's.
+   * False, and nothing done, when it is already melting, tearing or paused for a bake.
+   * `hitWorld`: where it was hit. The melt then also opens THERE and spreads out through the body from it, as well
+   * as rising from the feet.
+   */
+  beginMelt(hitWorld?: Vec3 | null): boolean;
+  /** Advance the melt by `dt` and re-draw the body. Once the pool has set (progress 1) this is
+   *  free: nothing is packed or uploaded again. */
+  stepMelt(dt: number): void;
+  /** True from beginMelt on, the finished puddle included. */
+  readonly melting: () => boolean;
+  /** 0..1, 0 when not melting. */
+  readonly meltProgress: () => number;
+  /** The pool has set AND stopped creeping: stepMelt has nothing left to do. */
+  readonly meltDone: () => boolean;
+  /** The bone groups (melt-bones.ts BoneGroup) this melt has let go of so far; empty when not melting. */
+  readonly meltReleased: () => ReadonlySet<string>;
   /** Current ground position + facing. */
   readonly pose: () => { pos: Vec3; yaw: number };
   /** Ground-plane shove from crowd separation (crowd.ts), bounds- and
@@ -385,15 +453,16 @@ export interface ZombieActor {
    * BURNING PANIC (2026-09-18). Called by game-burning.ts on registry
    * transitions: true on the frame the body starts burning, false when it is
    * extinguished, burnt down or retired. While on, the mind's verdict is
-   * overridden (the `doomed` pattern) — a soldier flees the player without
-   * firing, a zombie keeps chasing with a jittered heading, both stumble.
+   * overridden (the `doomed` pattern): the body stops attacking and panic-runs
+   * from the player with flailing arms, falters, then (if its BurnTier dies)
+   * burns to death on an authored burn fall (burn-behaviour.ts, burn-flail.ts).
    * Idempotent: repeating the current state is a no-op.
    */
   setBurning(on: boolean): void;
-  /** Monotonic count of burn stumbles since the current ignite began (0 when
-   *  not burning). The capture-trace oracle — pose-level `staggerKind` cannot
-   *  tell a burn stumble from a hit reaction. */
-  burnStumbles(): number;
+  /** Where this body is in its burn (burn-behaviour.ts): 'none' = not panicking; 'resumed' = its tier
+   *  does not die and its panic is over; 'dead' = it burned to death. The capture trace's oracle, and
+   *  what game-burning.ts polls to start the burn-down. */
+  burnPhase(): 'none' | 'panic' | 'falter' | 'resumed' | 'dead';
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
@@ -434,16 +503,39 @@ export interface ZombieActor {
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
+  /** The bodies a corpse of this actor's can hit this frame (corpse-contact.ts), everyone's bodyObstacles(). Set
+   *  BEFORE step(), like setRingInput. Optional: a fake without it has none. */
+  setBodyObstacles?(obstacles: readonly BodyObstacle[]): void;
+  /** What a thrown corpse hits of this body: an upright cylinder while it stands, its trunk once it is down. */
+  bodyObstacles?(): BodyObstacle[];
+  /** The standing bodies this actor's corpse struck since the last call (drained): whose, the way the blow drives it
+   *  (unit, level) and the joint's speed into it (m/s), the fastest per body. game-tick hands each to bodyKnock. */
+  takeBodyHits?(): { id: number; dir: Vec3; speed: number }[];
+  /** A thrown corpse struck this body (BODY_KNOCK): stagger and a root knock along `dir`. False when it took none
+   *  (too slow, knocked a moment ago, or already down or dying). */
+  bodyKnock?(dir: Vec3, speed: number): boolean;
   /** True while game-main should submit this body to crowd separation at the
    *  wider engaged radius. */
   engagedForCrowd(): boolean;
   /** True while the ring may not revoke this body's token (mid-swing). */
   committed(): boolean;
   step(dt: number): void;
+  /** UPDATE LOD (actor-lod.ts): true when nothing transient is under way — no damage pending or in the last
+   *  2 s of its own sim time, no knock, not dying, doomed, burning, tearing, popping or collapsed — so a body
+   *  out of sight may step less often. Optional: a fake without it is treated as restless (always stepped). */
+  settled?(): boolean;
+  /** VIEW SYNC (sector perf, 2026-10-25). false: step() still moves, poses and thinks, but skips the GPU
+   *  view's per-frame upload (the body pack, the head rotation, the wound rows) — for a body no view can
+   *  see. true: back on, and a view left stale is uploaded at once from the current pose, so it is right
+   *  before it is drawn (catchUp false: leave it to the next step(), which uploads anyway). Default true.
+   *  Hits, blasts, the rupture and the corpse baker write the view as always, and settle what is owed. */
+  setViewSync(on: boolean, catchUp?: boolean): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
   /** Rendered carve spheres, also used to exclude occluder hulls. */
   visualWounds: () => readonly Wound[];
+  /** The wounds baked into the wound volume (WoundRing.baked): off the ring, still holes in the body. */
+  bakedWounds: () => readonly Wound[];
   /** Preview transitions advance even while the motion/rig is frozen. */
   advanceWoundPreview(dt: number): boolean;
   /** Where `wound` was placed at stamp time, before the recoil shove — see
@@ -466,6 +558,12 @@ export interface ZombieActor {
     blend: number;
     speed: number;
     staggerKind: string | null;
+    /** The authored fall this body is playing (death-fall.ts), or null. */
+    fallKind: string | null;
+    /** The burn flail's amplitude handed to motion on the last step (motion.ts cfg.burnFlail), or null for none. */
+    burnFlail: number | null;
+    /** The swing variant handed to motion on the last step (the mind's attack after every override), or null. */
+    attack: string | null;
     target: Vec3 | null;
     idle: number;
     state: string;
@@ -498,6 +596,9 @@ export interface ZombieActor {
    * effects (bleed emitters) off the exact wound without ring-index sniffing.
    */
   hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null;
+  /** The brain's electricity this frame (brain-arcs.ts), for a profile with a fleshJiggle: how hard it seizes
+   *  (motion.ts judderLevel), where its brain is and how big. Null for every other body. */
+  arcDrive(): ArcDrive | null;
   /**
    * A SLUG (one big projectile) lands at `hitWorld`: same choreography as
    * hit() but stamps the slug calibre crater. Separate method on purpose —
@@ -593,10 +694,77 @@ export interface ActorBlastEffect {
    *  impulse's size cannot carry it — the reaction takes only its direction (unitOrZero). The flail's
    *  bigger shove (flail-impact.ts FLAIL_IMPACT_FEEL.zombie.reactionGain). */
   gain?: number;
+  /** The root knock even on a body that normally only staggers (a soldier): the doomed body's hit beat
+   *  (gib-switch.ts `beat`), which must read as a shove on every kind. Default false. */
+  forceKnock?: boolean;
 }
+
+/** Melt progress (0..1) up to which a melting body's motion still steps (step()). 0.45: the front has taken the
+ *  shins and is into the thighs; from there the body is sinking, not standing. (0.3 at the 2 s melt: 0.6 s.) */
+export const MELT_MOTION_UNTIL = 0.3;
+const NO_GROUPS: ReadonlySet<string> = new Set();
+
+/**
+ * ONE MELT'S OWN NUMBERS (owner, 2026-11-15: "some random variance to make it more exciting repeated"). Rolled once
+ * when it starts, from a seeded rng: how fast it goes, how unevenly it sags and how far it runs, which way the body
+ * pours off, when (and now and then whether late) it slumps, and which of the early flesh gobs drop.
+ */
+export function rollMelt(rng: () => number): { rate: number; tuning: MeltBodyTuning; slumpAt: number; gobs: number[] } {
+  const span = (lo: number, hi: number) => lo + (hi - lo) * rng();
+  const dir = rng() * Math.PI * 2, lean = span(0, 0.22);
+  return {
+    rate: span(0.8, 1.25),
+    tuning: {
+      ...MELT_TUNING_BODY,
+      seed: Math.floor(rng() * 1000),
+      stagger: MELT_TUNING_BODY.stagger * span(0.6, 1.4),
+      stretch: MELT_TUNING_BODY.stretch * span(0.6, 1.5),
+      spread: MELT_TUNING_BODY.spread * span(0.8, 1.35),
+      lean: [Math.cos(dir) * lean, Math.sin(dir) * lean],
+    },
+    // Usually part-way; one melt in five it holds on, standing as a skeleton in a column of goo, and drops late.
+    slumpAt: rng() < 0.2 ? span(0.6, 0.7) : span(0.34, 0.5),
+    gobs: MELT_GOB_AT.filter(() => rng() < 0.65),
+  };
+}
+/** Counts melts on this page: with the actor's seed it seeds each melt's variation, so the same character melted
+ *  twice (a respawn keeps its seed) does not melt the same way twice. */
+let meltSerial = 0;
+/** Whether a melting body is let go to slump as a ragdoll at MELT_SLUMP_AT (setMeltSlump; __sdfGame.setMeltSlump).
+ *  Off, it holds its last pose while the bones drop out of it. A page-wide switch for A/B, not per body. */
+let meltSlump = true;
+export function setMeltSlump(on: boolean): void { meltSlump = on; }
+export function meltSlumpOn(): boolean { return meltSlump; }
+/** The set pool's afterlife: it creeps `spread` (a share of its spread) further over `sec` seconds, easing out. */
+export const MELT_AFTER = { sec: 2.5, spread: 0.3 } as const;
+/** Drips: one every `every` of progress, between `from` and `to`. */
+export const MELT_DRIP = { from: 0.1, to: 0.85, every: 0.07 } as const;
+/** false (the game): a melting body packs no SDF bone rows, and game-main shows its MESH skeleton behind the flesh
+ *  as it runs off (the skull, its eyes, the ribs), each group leaving the mesh as it is let go. The reveal is
+ *  gradual by construction, which the SDF path's bare fold never was. true keeps the old SDF path. */
+export const MELT_SDF_BONES = false;
+/** Melt progress from which the skeleton folds bare (shows through the thinning flesh). 0.3: the legs and
+ *  forearms are running by then. */
+export const MELT_BARE_AT = 0.3;
+/** Melt progress at which each early flesh gob drops (opts.onMeltGob). */
+export const MELT_GOB_AT: readonly number[] = [0.04, 0.09, 0.14, 0.2, 0.27, 0.35];
 
 export function createZombieActor(opts: {
   navigation?: EncounterNavigation;
+  /** What the body stands on, on a SECTOR level (ctx.world.level.ground): the motion step eases
+   *  its feet to the floor under it. Absent on room levels (FLAT_GROUND), where the motion step
+   *  gets no floorAt and every frame is exactly what it was. */
+  ground?: LevelGround;
+  /** SECTOR levels only, with `ground`: true when the segment a→b is blocked by the sector walls,
+   *  floors or ceilings (sector-ray.ts sectorSightBlocker). A ranged mind with no encounter order
+   *  then sees from 1.4 m over its floor to 1.4 m over the player's, through open sector space. */
+  sectorSight?: (a: Vec3, b: Vec3) => boolean;
+  /** SECTOR levels only, with `ground`: this body FLOATS (the teratoma; floater-move.ts, Doom's MF_FLOAT).
+   *  Its motion floor is its float altitude, not the floor under it: idle it cruises high and wanders on
+   *  chase-dir legs, chasing it glides down toward the player; moves are refused only where the body does
+   *  not fit (walls, low openings), never for a step or a drop. `navigation` should be this space's. Dead
+   *  (collapsed, doomed), it falls to the real floor. */
+  floater?: FloaterSpace;
   id: number;
   room: number;
   body: BuildResult;
@@ -621,6 +789,9 @@ export function createZombieActor(opts: {
   seed: number;
   bounds: WanderBounds;
   furniture: readonly Aabb[];
+  /** The level's solid boxes (walls, solids, gates, barrels: ctx.world.colliders), read each corpse step: a corpse's
+   *  points are pushed out of them (corpse-contact.ts). Absent: a corpse meets only the floor. */
+  colliders?: () => readonly ContactBox[];
   /** The decision layer. Absent = the zombie's, so every existing call site
    *  and every pin is untouched by construction. */
   mind?: EnemyMind;
@@ -642,6 +813,13 @@ export function createZombieActor(opts: {
    *  and calls this with the head's world centre, the shot direction and the
    *  neck's stump wound, for the caller's burst and bleed. */
   onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
+  /** MELT: a rigid bone group (melt-bones.ts: skull, cage, pelvis, the eight long bones) has let go of the
+   *  melting body. World-space bone prims, their centroid, and the gentle outward clatter to launch them with. */
+  onMeltBone?: (piece: { group: string; limb: LimbId; origin: Vec3; bones: Primitive[] }, vel: Vec3) => void;
+  /** MELT: a gob of flesh drops off the melting body at `at` (world), about `radius` metres across. */
+  onMeltGob?: (at: Vec3, radius: number) => void;
+  /** MELT: goo runs off the melting body at `at` (world): a drip for the blood sim. */
+  onMeltDrip?: (at: Vec3) => void;
   /** A DECAPITATION ASKS FIRST. The wounds have cut the head off (the sever checks): `weapon` is what the hit that
    *  did it was ('other': a blast, a blade, anything that is not a gun round), `dir` its direction (world). Answer
    *  the seconds of swell to POP the head instead (beginHeadPop; 0 bursts at once), or null for the ordinary flying
@@ -659,8 +837,33 @@ export function createZombieActor(opts: {
     ...bound,
     rig: { ...bound.rig, points: bound.rig.points.map(p => ({ ...p, pinned: false })) },
   };
-  const mj = makeMotionJoints(body, bound.rig.restPose);
+  // The body was built standing at `start`, its spawn floor included (translateBody), but motion
+  // measures the joints from the floor and adds MotionState.floorY (= start y) back: rebase them, or
+  // a body spawned on a 2 m ledge would stand 4 m up. Room levels spawn at y = 0: the array as is.
+  const startY = opts.start[1] || 0;
+  const mj = makeMotionJoints(body, startY === 0 ? bound.rig.restPose
+    : bound.rig.restPose.map(v => [v[0], v[1] - startY, v[2]] as Vec3));
   if (!mj) throw new Error(`zombie ${opts.id}: no motion joints`);
+  // The motion step's floor (sector levels only; the key stays ABSENT otherwise, see motion.ts).
+  const ground = opts.ground;
+  // Sector levels: the floor a body stands on is the highest its disc touches (floorUnder, the rule
+  // sector navigation stands it on), so it falls only once clear of a ledge, and a rise over
+  // SECTOR_STEP_M (a wall) never lifts it. A ground without floorUnder reads the floor at the centre.
+  // Mid-fall, a lip the disc touches is no landing: fallFloorAt (the centre floor) is.
+  const floater = opts.floater && ground ? createFloater(opts.floater, opts.start, opts.seed) : null;
+  /** A floater stops floating once it is dead: from then on it falls to, and lies on, the real floor. */
+  let floaterDown = false;
+  const floating = (): boolean => floater !== null && !floaterDown;
+  const motionFloor = floater ? (x: number, z: number) => (floaterDown ? ground!.floorAt(x, z) : floater.altitude)
+    : ground ? (ground.floorUnder
+    ? (x: number, z: number) => ground.floorUnder!(x, z, SECTOR_BODY_RADIUS_M)
+    : (x: number, z: number) => ground.floorAt(x, z)) : undefined;
+  // A floater has no step rule (it floats to fit) and no lip to fall past: floorAt alone.
+  const floorAt = floater ? { floorAt: motionFloor! } : ground && motionFloor ? {
+    floorAt: motionFloor,
+    maxStepUp: SECTOR_STEP_M,
+    fallFloorAt: (x: number, z: number) => ground.floorAt(x, z),
+  } : {};
   const joints: MotionJoints = mj;
   let state: MotionState = makeMotionState(opts.seed, opts.start);
   // Starting-phase variety: seed the initial heading so spawns don't parade.
@@ -699,9 +902,11 @@ export function createZombieActor(opts: {
   /** The one re-pose: applyRig, then the head deform (if any), then the pop's swell (if one is running), then the
    *  head split (if open). Every pose site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
-    const p = applyRig(current, bound, bodyYaw);
+    const p = applyRig(current, corpseDrawn(), bodyYaw);
     const d0 = headDeform ? headDeform(p) : p;
-    const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
+    const d1 = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
+    const d = fleshSpec && fleshKicks.length
+      ? jiggleFlesh(d1, fleshKicks, fleshSpec, fleshOf, skullEnds ? bound.rig.points[skullEnds[1]]?.pos ?? null : null) : d1;
     const s = headSplit?.(d) ?? null;
     return s ? { ...d, split: s } : d;
   };
@@ -737,6 +942,30 @@ export function createZombieActor(opts: {
   const ruptureFrameNow = (): RuptureFrame | null =>
     tear && tearPlan ? rupturePosed(posed, tearPlan, tear, tearTuning) : null;
   const drawnPose = (): BuildResult => ruptureFrameNow()?.body ?? posed;
+  /**
+   * THE MELT (beginMelt). Non-null from the moment it starts and for the rest of the body's life:
+   * the finished puddle is this state at progress 1. `frame` is where the posed body melts (its own
+   * axis and floor), `restFrame` the same for the rest body the noise anchor reads. `drawn` is the
+   * melted posed body as last uploaded; `set` is true once the progress-1 pool has been uploaded,
+   * after which stepMelt does no work at all.
+   */
+  let melt: {
+    state: MeltState; frame: MeltFrame; restFrame: MeltFrame;
+    parts: Map<BoneGroup, Primitive[]>; order: BoneGroup[]; released: Set<BoneGroup>;
+    rng: () => number; drawn: BuildResult; set: boolean;
+    /** The hit, as a point of the REST body, or null: the melt also spreads from here (hitHeight). */
+    hitRest: Vec3 | null;
+    /** hitHeight's weight of the hit (0 feet .. 1 head) and the farthest flesh from it (body heights). */
+    hitW: number; hitMax: number;
+    /** THIS melt's own numbers (rollMelt): the body tuning it melts with, when it slumps, which gobs drop. */
+    tuning: MeltBodyTuning; slumpAt: number; gobs: readonly number[];
+    /** The skeleton has been let go to slump (slumpAt). */
+    slumped: boolean;
+    /** Seconds the set pool has gone on creeping (MELT_AFTER). */
+    after: number;
+  } | null = null;
+  /** setViewSync: whether step() uploads the view, and whether a skipped upload is owed. */
+  let viewSync = true, viewStale = false;
   /** A body mid-rupture is DOOMED: it is already dead for gameplay (the blast
    *  resolved the kill), it just has not finished coming apart. It must not keep
    *  attacking or moving while it tears. */
@@ -746,14 +975,43 @@ export function createZombieActor(opts: {
    * set alight until it is put out. The per-substep step overrides the mind's
    * target/fire verdict — the `doomed` pattern — so neither brain learns a
    * "burning" state. `burnCruiseScale` is the speed multiplier handed to
-   * motion; `burnFlailT` counts down to the next flail shudder (the arm-flail
-   * stand-in, since motion.ts has no additive arm channel).
+   * motion; `burnFlail` is this frame's arm/trunk flail overlay (motion.ts).
    */
   let burnPanic: BurnPanicState | null = null;
   let burnCruiseScale = 1;
-  let burnFlailT = 0;
-  /** Monotonic count of burn stumbles — the trace's unambiguous oracle. */
-  let burnStumbles = 0;
+  /** setBurning(true) has been called and not yet undone (the edge guard). */
+  let burningOn = false;
+  /** This frame's flail for stepMotion; null = none. */
+  let burnFlail: { t: number; seed: number; amp: number; fold: number } | null = null;
+  let burnPhaseNow: 'none' | 'panic' | 'falter' | 'resumed' | 'dead' = 'none';
+  /** The body burned to death: the collapse is forced and the fall is a burn fall. */
+  let burnDied = false;
+  /** Seconds the panicking body has been trying to run and getting nowhere (a wall, a corner). */
+  let burnStuckT = 0;
+  /** Can this body walk from where it stands to `p`? (The burn panic's blocked-turn probe.) */
+  const burnClear = (p: Vec3): boolean => {
+    // Inside the bounds by a margin, but never asked to be further from a wall than the body already
+    // is: a run ALONG the wall it is pressed against must count as clear.
+    const b = opts.bounds, m = 0.3, at = state.wander.pos;
+    const loX = Math.min(at[0], Math.min(b.minX, b.maxX) + m), hiX = Math.max(at[0], Math.max(b.minX, b.maxX) - m);
+    const loZ = Math.min(at[2], Math.min(b.minZ, b.maxZ) + m), hiZ = Math.max(at[2], Math.max(b.minZ, b.maxZ) - m);
+    // With slack: a body standing just outside its bounds (a corner spawn) may run along the edge.
+    const slack = 0.25;
+    if (p[0] < loX - slack || p[0] > hiX + slack || p[2] < loZ - slack || p[2] > hiZ + slack) return false;
+    // The END of the probe and its midpoint must be standable. Not the path from where the body is:
+    // it is pressed against something (that is why it is asking), and a segment that starts on a
+    // crate's padded face reads as blocked in every direction.
+    const mid: Vec3 = [(at[0] + p[0]) / 2, at[1], (at[2] + p[2]) / 2];
+    for (const q of [mid, p]) {
+      if (insideFurniture(q)) return false;
+      if (opts.navigation && !opts.navigation.canTravel(q, q)) return false;
+    }
+    return true;
+  };
+  const burnTier = resolveBurnTier(opts.profile);
+  /** It burned to death AND its tier dies on a burn fall (BurnTier.fall); otherwise a burn death is its ordinary death. */
+  const burnFell = (): boolean => burnDied && burnTier.fall;
+  const burnSeed = opts.id * 7919 + 1;
   /**
    * Last world position the actor saw the player at. game-main does not call
    * setBrainInput (the encounter director feeds the mind instead), so the
@@ -769,6 +1027,8 @@ export function createZombieActor(opts: {
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
+  /** This body dies on the free physics ragdoll, not an authored fall (MotionProfile.physicsDeath: the zombie). */
+  const physicsDeath = !!(opts.profile ?? ZOMBIE_PROFILE).physicsDeath;
   /** Gun craters on this body take the wet red lip, and on its head the low lip (gunWetLip, headLip). */
   const goreBody = isGoreBody(opts.profile);
   let softKilled = false;
@@ -778,6 +1038,35 @@ export function createZombieActor(opts: {
   let deathPlan: DeathPlan | null = null;
   let deathDir: Vec3 = [0, 0, 0];
   let deathThrown = false;
+  /** BLOWN AWAY (blow-away.ts): the rounds of the latest volley, how long ago it landed (sim s), and whether
+   *  this death has rolled and thrown. A thrown corpse goes limp at once, like the soft target's. */
+  let volley: KillVolley = EMPTY_VOLLEY;
+  let volleyAge = Infinity;
+  let blowAwayRolled = false;
+  /** A slump's feet hold a straight leg (a forward pitch pulling them taut is the rump up in the air); they let go
+   *  only when the knee is folded out of range or would go under the floor (rig.ts). */
+  const SLUMP_PLANT = { ...FOOT_PLANT, stretch: 1.01 };
+  /** This corpse slumps forward over planted feet (slump-death.ts): the feet plant only for it. */
+  let slumping = false;
+  /** The killing volley struck the head (picks the fall; death-fall.ts). */
+  let volleyHead = false;
+  /** AUTHORED DEATHS (death-fall.ts): motion.ts asks once, on the first frame he is down dead. A heavy volley
+   *  still rolls the blow-away chance (blow-away.ts); a hit now plays the 'blown' fall instead of a free throw. */
+  const deathFall = (): DeathFallChoice => {
+    // Burned to death: one of the three burn falls, seeded per body (death-fall.ts). It is the whole death: the
+    // physics death's slump and blow-away are never rolled for it (they would launch the rig and cut the fall's pull).
+    if (burnFell()) { blowAwayRolled = true; return pickBurnFall(burnSeed + 2, burnForward()); }
+    blowAwayRolled = true;
+    const t = volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+    const struck = !volley.upper && volleyAge < KILL_VOLLEY_SEC ? 'legs' : volleyHead ? 'head' : 'body';
+    const choice = pickDeathFall({ blown: t ? t.base / BLOW_THROW.gun.base : null, struck }, blowRng);
+    return Math.hypot(volley.dirWorld[0], volley.dirWorld[2]) > 1e-6 && volleyAge < KILL_VOLLEY_SEC
+      ? { ...choice, impact: [...volley.dirWorld] as Vec3 } : choice;
+  };
+  let blownAway = false;
+  /** Sim seconds since the blow-away throw. */
+  let blownT = 0;
+  const blowRng: Rng = makeRng((opts.seed ^ 0xb10aa7a7) >>> 0);
   let dyingT = 0;
   let burstLeft = 0;
   let burstClock = 0;
@@ -828,6 +1117,10 @@ export function createZombieActor(opts: {
   }
   let soldierFatal = false;
   let propReleaseRequested = false;
+  /** The body is down or dying by a cause other than its fire: collapsed (a zombie's collapse is its death), a soft
+   *  target's death reel, a fatal soldier. Its burn panic ends and its burn clock can no longer kill it. */
+  const downOtherwise = (): boolean =>
+    softKilled || soldierFatal || dyingT > 0 || state.collapse.phase !== 'standing' || !!lastFrame?.collapsed;
 
   // ---- damage state -------------------------------------------------------
   /** THE shared wound ring (character-view.ts). The character's own when the
@@ -837,6 +1130,7 @@ export function createZombieActor(opts: {
    *  One implementation, whoever owns it: the drift this refactor exists to
    *  kill came from two hand-written copies of the same sequence. */
   const woundRing = opts.character?.wounds ?? createWoundRing();
+  woundRing.setMergeMaxRadius(mergeMaxRadiusFor(opts.profile?.gore));
   // Visual slots evict at MAX_WOUNDS; injury must not heal when a crater
   // disappears. Live regional histories stop growing after severing/death.
   const soldierWounds: Wound[] = soldierDamage ? [...woundRing.all()] : [];
@@ -870,6 +1164,29 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
+  /** THE FLESH JIGGLE (MotionProfile.fleshJiggle, flesh-jiggle.ts): the kicks still ringing, the skull bone's two rig
+   *  points (the kit on the flesh rides them), and which prims quiver (the frame's own flesh). */
+  const fleshSpec = opts.profile?.fleshJiggle;
+  const fleshKicks: JiggleKick[] = [];
+  const skullEnds = fleshSpec ? boneEndPoints(opts.body.bones, 'skull') : null;
+  const fleshOf = (p: Primitive): boolean => p.limb === 'torso' && p.bone === 'pelvis' && !p.metal;
+  /** The brain the arcs crawl over: its core prim, and its semi-axes about that core at rest (the flesh's extent). */
+  const brainCore = fleshSpec ? opts.body.prims.findIndex(p => fleshOf(p) && p.core) : -1;
+  const brainRadii: Vec3 = (() => {
+    const c = brainCore >= 0 ? opts.body.prims[brainCore]!.a : [0, 0, 0];
+    const r = [0.3, 0.3, 0.3];
+    for (const p of opts.body.prims) {
+      if (!fleshOf(p)) continue;
+      for (let k = 0; k < 3; k++) for (const e of [p.a, p.b]) r[k] = Math.max(r[k]!, Math.abs(e[k]! - c[k]!) + p.radius * p.scale[k]! * 0.85);
+    }
+    return [r[0]!, r[1]!, r[2]!];
+  })();
+  /** The brain's measured surface (brain-arcs.ts surfaceTable), once, against the rest body (a ray that meets a
+   *  leg's root first seats its arc there: the current jumps to the frame). */
+  const brainSurface = brainCore >= 0 ? (() => {
+    const c = opts.body.prims[brainCore]!.a;
+    return surfaceTable(p => sdBody([c[0] + p[0], c[1] + p[1], c[2] + p[2]], opts.body), brainRadii);
+  })() : undefined;
   let reactionTime = 0;
   let shotWindow: number[] = [];
   const seenReactionShots = new Map<string, number>();
@@ -910,6 +1227,8 @@ export function createZombieActor(opts: {
   })();
   /** See debug().fistGrip / fistGripAuthored. */
   let lastFistGrip: number | null = null;
+  /** debug().attack: the attack the last step handed motion. */
+  let lastAttack: string | null = null;
   let lastFistGripAuthored: number | null = null;
 
   // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
@@ -934,6 +1253,24 @@ export function createZombieActor(opts: {
   const armWeapon = opts.profile?.armWeapon;
   const mind: EnemyMind = opts.mind ?? makeZombieMind(armWeapon ? { ...BRAIN_TUNING, swingSide: armWeapon.side } : undefined);
   let brainPlayer: BrainPlayer | null = null;
+  /** A ranged mind's own sight to the player (no encounter order). Room levels: 1.4 m at both ends,
+   *  furniture only, exactly as before. Sector levels: 1.4 m over the body's floor to 1.4 m over the
+   *  player's feet (BrainPlayer.y, else the floor under the player), furniture and sector geometry. */
+  const sightA: [number, number, number] = [0, 0, 0], sightB: [number, number, number] = [0, 0, 0];   // scratch: nothing keeps them
+  const rangedSight = (pl: BrainPlayer): boolean => {
+    const sx = state.wander.pos[0], sz = state.wander.pos[2];
+    if (!opts.ground || !opts.sectorSight) {
+      sightA[0] = sx; sightA[1] = 1.4; sightA[2] = sz;
+      sightB[0] = pl.x; sightB[1] = 1.4; sightB[2] = pl.z;
+      return !opts.furniture.some(box => segmentHitsBox(sightA, sightB, box));
+    }
+    // The player's real feet when the caller gave them (BrainPlayer.y), else the floor under them.
+    const feet = pl.y ?? opts.ground.floorAt(pl.x, pl.z);
+    if (!Number.isFinite(feet)) return false;
+    sightA[0] = sx; sightA[1] = state.wander.pos[1] + 1.4; sightA[2] = sz;
+    sightB[0] = pl.x; sightB[1] = feet + 1.4; sightB[2] = pl.z;
+    return !opts.furniture.some(box => segmentHitsBox(sightA, sightB, box)) && !opts.sectorSight(sightA, sightB);
+  };
   let brainAlerted = false;
   let ringToken = false;
   let ringDrift: -1 | 0 | 1 = 0;
@@ -945,10 +1282,16 @@ export function createZombieActor(opts: {
   // block inside step().
   let detourSide: -1 | 0 | 1 = 0;
 
+  /** Every hole in the body: the ring's wounds and the ones baked into the wound volume (WoundRing.baked). The sever
+   *  rules and the wounded limbs read this; a baked wound has left the ring, not the body. */
+  const woundsWithBaked = (): readonly Wound[] => {
+    const baked = woundRing.baked?.() ?? [];
+    return baked.length ? [...baked, ...woundRing.all()] : woundRing.all();
+  };
   function woundedLimbs() {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).wounded;
     const w = { armL: false, armR: false, legL: false, legR: false };
-    for (const wound of woundRing.all()) {
+    for (const wound of woundsWithBaked()) {
       const prim = current.prims[wound.primIdx];
       if (!prim) continue;
       if ((prim.limb === 'armL' || prim.limb === 'armR'
@@ -965,13 +1308,16 @@ export function createZombieActor(opts: {
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
     const gone = (l: LimbId) => bornWith.has(l) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
-    // A leg with ANY distal cut has lost its foot (severDistal kills the prim
-    // and everything outward), so it can no longer bear weight: count it as
-    // missing for the gait/collapse. Otherwise two shot-off shins left the
-    // torso standing on air (the cluster stays alive on a mid-limb cut).
-    const legGone = (l: LimbId) => gone(l)
+    // A limb with ANY distal cut has lost its foot or hand (severDistal kills
+    // the prim and everything outward), so it can no longer bear weight or
+    // hold anything: count it as missing for the gait, collapse and carry.
+    // Otherwise two shot-off shins left the torso standing on air, and (with
+    // the elbow the usual cut since joint toughness, 2026-11-02) a forearm cut
+    // left the prop in a hand that was gone. The cluster stays alive on a
+    // mid-limb cut, so the stump still renders.
+    const limbGone = (l: LimbId) => gone(l)
       || current.prims.some(p => p.limb === l && p.dead && p.op !== 'sub');
-    return { legL: legGone('legL'), legR: legGone('legR'), armL: gone('armL'), armR: gone('armR') };
+    return { legL: limbGone('legL'), legR: limbGone('legR'), armL: limbGone('armL'), armR: limbGone('armR') };
   }
 
   /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
@@ -1045,7 +1391,7 @@ export function createZombieActor(opts: {
         ...next,
         // jawGape carries over so a limb severed mid-swing does not shut the
         // bride's jaw for a frame (absent on every other body).
-        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, headFollow: bound.rig.headFollow, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -1125,6 +1471,144 @@ export function createZombieActor(opts: {
   /** What every pose change outside step() ends with: the pose, the view, the head's rotation, the wound rows. */
   function showPose() {
     posed = repose();
+    uploadPose();
+  }
+
+  /** The rupture's view upload (stepTear's): the rupture frame, the gore ramp, the wounds riding their
+   *  regions, the face riding the head region. Settles viewStale like uploadPose. */
+  function uploadTear() {
+    if (!tear) return;
+    viewStale = false;
+    // One frame computed once: the body, the wound carry and the face anchor must all read the SAME
+    // transforms, or they disagree by a frame.
+    const frame = ruptureFrameNow();
+    view.update(frame?.body ?? posed, current);
+    // ...and the material ramp rides the SAME clock, so at release the drawn
+    // body is already wearing the gore strength the spawned chunks carry and
+    // there is no one-frame material switch (see ruptureGore).
+    view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
+    // Wounds ride their rotating region (task 4).
+    refreshWounds(frame);
+    // THE FACE RIDES THE HEAD REGION. The head is one region; its displayed
+    // orientation is composed over the rig's own head quat, so the projection
+    // frame turns with the skull instead of staying pinned to the clean pose.
+    // The CENTRE is handled by the per-frame `headShape(a.drawnBody())` in the
+    // draw loop.
+    if (frame && tearPlan) {
+      const hi = tearPlan.pieces.findIndex(p => p.limb === 'head');
+      const hq = hi >= 0 ? frame.quats[hi] : undefined;
+      if (hq && !(hq[0] === 0 && hq[1] === 0 && hq[2] === 0 && hq[3] === 1)) {
+        const base = headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1];
+        view.setHeadRotation(qMul(hq, base));
+      }
+    }
+  }
+
+  /** The melted posed body and the melted rest body (the noise anchor's), for this progress. Released
+   *  bone groups leave the bone rows (they are chunks now); organs melt with the flesh at half rate. */
+  function meltBodies(m: NonNullable<typeof melt>): { drawn: BuildResult; rest: BuildResult } {
+    const rows = (bps: readonly Primitive[], frame: MeltFrame): Primitive[] => bps.flatMap(p => {
+      if (p.op === 'organ') return applyMeltOrgans([p], m.state, undefined, m.tuning, frame);
+      if (p.op === 'bone') {
+        const g = meltGroupOf(p.bone);
+        if (m.released.has(g)) return [];
+        // A BONE STAYS THIN UNTIL THE FLESH ROUND IT IS GOING. The skeleton folds bare for the whole melt, and at
+        // full size the bones that lie close under the skin (the arm bones, the skull under the face) took the
+        // surface at once: the body striped and lost its face on the first frame. Thin, they sit inside the flesh
+        // and grow out through it as the melt front reaches their group.
+        const k = boneShow(m, g);
+        return k >= 1 ? [p] : [{ ...p, radius: p.radius * k, ...(p.radiusB !== undefined ? { radiusB: p.radiusB * k } : {}) }];
+      }
+      return [p];
+    });
+    // THE POOL CREEPS ON after it has set (MELT_AFTER): a little more spread, easing out.
+    const creep = m.after > 0 ? 1 - Math.pow(1 - Math.min(1, m.after / MELT_AFTER.sec), 2) : 0;
+    const tuning = creep > 0 ? { ...m.tuning, spread: m.tuning.spread * (1 + MELT_AFTER.spread * creep) } : m.tuning;
+    const pp = applyMelt(posed.prims, m.state, tuning, m.frame);
+    return {
+      // No split: the head split describes the clean pose, and that head is running down the body.
+      drawn: { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp), bonePrims: rows(posed.bonePrims, m.frame), split: null },
+      // THE REST ROWS STAY AS THEY WERE (2026-11-14). They are the surface pattern's anchor (restPoint), and melted
+      // along with the body they carried the anchor down through the noise: the pattern swam. Unmelted, a point of
+      // flesh keeps its place in the pattern all the way into the pool, and the shader reads each prim's melt off
+      // the radius its rest row still has (melt.wgsl.ts). Only the released bone rows leave, to keep the two lists
+      // row for row.
+      // Each rest row carries its prim's POSED, unmelted radius, not the authored one: the shader divides the two
+      // radii to read the melt, and the pose alone changes a radius (a stretched arm, the head's deform), which it
+      // took for melt and reddened on the first frame. (The rest radius is otherwise only tested for > 0.)
+      rest: {
+        ...current,
+        prims: current.prims.map((p, i) => (posed.prims[i] && posed.prims[i]!.radius !== p.radius ? { ...p, radius: posed.prims[i]!.radius } : p)),
+        bonePrims: current.bonePrims.filter(p => !(p.op === 'bone' && m.released.has(meltGroupOf(p.bone)))),
+      },
+    };
+  }
+
+  /** The normalised height (0..1) the melt front has to reach for a REST-space point. Never above 1, so the whole
+   *  body still finishes by progress 1. */
+  function hitHeight(m: NonNullable<typeof melt>, rest: Vec3): number {
+    const h = (rest[1] - m.state.floorY) / m.state.span;
+    if (!m.hitRest) return h;
+    const d = Math.hypot(rest[0] - m.hitRest[0], rest[1] - m.hitRest[1], rest[2] - m.hitRest[2]) / m.state.span;
+    // THE MELT STARTS WHERE IT WAS SHOT (owner, 2026-11-15: a head shot still melted feet first, and "doesn't feel
+    // as good"). The front's height for a point is a blend of its own height and its distance from the hit
+    // (normalised so the farthest flesh is 1), weighted by how high the hit is: a shot at the feet is the plain
+    // feet-up melt, a shot at the head runs from the head DOWN, a chest shot opens the chest and goes both ways.
+    // (0.15 + 0.85 x: the shot flesh itself starts a beat in. From 0 it was a third gone on the first frames, and a
+    // head shot showed a bare skull and ribs by 12%.)
+    // The distance is eased (power 0.6) because most of the body's flesh is NEAR a head or chest hit: linear, the
+    // whole trunk and both arms went in the first third and the rest of the melt was a bare skeleton.
+    return h * (1 - m.hitW) + (0.15 + 0.85 * Math.pow(d / m.hitMax, 0.6)) * m.hitW;
+  }
+
+  /** 0.3..1: how much of its radius a bone of group `g` shows (meltBodies). */
+  function boneShow(m: NonNullable<typeof melt>, g: BoneGroup): number {
+    const ps = m.parts.get(g);
+    if (!ps) return 1;
+    const u = progressAt(m.state, hitHeight(m, groupCentroid(ps)));
+    const x = Math.min(1, u / 0.3);
+    return 0.3 + 0.7 * x * x * (3 - 2 * x);
+  }
+
+  /** Let go of every bone group the melt front has passed (melt-bones.ts): out of the body's rows, into opts.onMeltBone. */
+  function releaseMeltBones(m: NonNullable<typeof melt>) {
+    for (const g of m.order) {
+      if (m.released.has(g)) continue;
+      if (progressAt(m.state, hitHeight(m, groupCentroid(m.parts.get(g)!))) <= releaseThreshold(g)) continue;
+      // Shot high, the flesh goes from the top down: the skull, ribs and pelvis are bared first but still stand on
+      // the legs. They hold until the body slumps, so a head shot shows the skull and its eyes before it falls.
+      if (m.hitW > 0.5 && (g === 'skull' || g === 'cage' || g === 'pelvis') && m.state.t < m.slumpAt + 0.12) continue;
+      m.released.add(g);
+      const bones = posed.bonePrims.filter(p => p.op === 'bone' && !p.dead && meltGroupOf(p.bone) === g);
+      if (bones.length === 0) continue;
+      const origin = groupCentroid(bones);
+      opts.onMeltBone?.({ group: g, limb: limbOfGroup(g), origin, bones }, meltBoneSpawnVel(origin, m.rng, m.frame));
+    }
+  }
+
+  /** The melt's view upload: the melted body, the wet-red ramp. Settles viewStale like uploadPose. */
+  function uploadMelt() {
+    if (!melt) return;
+    viewStale = false;
+    // While it still moves, it melts about where it NOW stands.
+    if (melt.state.t < MELT_MOTION_UNTIL) {
+      const at = meltFrameOf(posed.prims, state.floorY);
+      melt.frame = { ...at, floorY: motionFloor ? motionFloor(at.x, at.z) : state.floorY };
+    }
+    const b = meltBodies(melt);
+    melt.drawn = b.drawn;
+    view.update(b.drawn, b.rest);
+    view.setMelt(melt.state.t);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    melt.set = melt.state.t >= 1 && melt.after >= MELT_AFTER.sec;
+  }
+
+  /** THE view upload of a pose change: the body pack, the head rotation, the wound rows. Every write of
+   *  the view settles what setViewSync owes (viewStale). */
+  function uploadPose() {
+    // A melting body is drawn melted by every path that would re-draw it.
+    if (melt) { uploadMelt(); return; }
+    viewStale = false;
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1140,6 +1624,7 @@ export function createZombieActor(opts: {
   }
 
   function beginHeadPop(dir: Vec3, swellS: number): boolean {
+    if (melt) return false;
     if (pop || !opts.onHeadPop || !current.clusters.find(c => c.limb === 'head')?.alive) return false;
     const l = Math.hypot(dir[0], dir[1], dir[2]);
     const unit: Vec3 = l > 1e-9 ? [dir[0] / l, dir[1] / l, dir[2] / l] : [0, 0, 0];
@@ -1186,13 +1671,22 @@ export function createZombieActor(opts: {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
-    const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
+    const cuttingWounds = soldierDamage ? woundsWithBaked().filter(w => !w.injuryIgnored) : [...woundsWithBaked()];
+    // The injury rules sever an arm or leg by points, not by where the shots cut: that takes it at the
+    // elbow/knee (midJointCut), the same short piece a cut there makes — the shoulder stays hard.
+    const injuryCuts = (injury?.sever ?? []).map(limb => (limb === 'head' || limb === 'torso' ? null : midJointCut(current, limb)) ?? limb);
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC, 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)),
+      ...injuryCuts.filter((c): c is LimbId => typeof c === 'string')])];
     for (const limb of fullCuts) {
       if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
+    for (const cut of injuryCuts) {
+      if (typeof cut === 'string' || fullCuts.includes(cut.limb)) continue;
+      detach(cut.limb, severDistal(current, cut));
+    }
+    for (const cut of cutChains(current, cuttingWounds, 0, soldierDamage ? SOLDIER_TOUGHNESS : JOINT_TOUGHNESS)) {
+      if (injuryCuts.some(c => typeof c !== 'string' && c.limb === cut.limb)) continue;
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
@@ -1220,10 +1714,241 @@ export function createZombieActor(opts: {
     return false;
   }
 
+  // FIXED CORPSE STEPS (owner playtest 2026-11-03, "breakdancing": a corpse
+  // kicking itself upright, worst in bullet time). The ragdoll's limits (bone
+  // lengths, the knee and hip stops, the floor) are position shoves of a fixed
+  // size per STEP, and the floor turns a shove into the floor into a bounce. A
+  // short step makes the same shove a faster speed: at quarter speed the probe
+  // corpses hit 145-465 m/s and threw their legs 4-16 m up (at full speed under
+  // 0.4 m/s, 1.3 m); half speed, which a 120 Hz screen gives every frame, was
+  // already 72-133 m/s. The hit-stop is worse again: stepRig carries a step's
+  // displacement scaled by dt / stepDt (up to 20x), so the first step after a
+  // near-zero one multiplied the shoves into a kick. So once the body is down
+  // it always steps 1/60 s (the rate it was tuned at), banking the frame time
+  // for the next step, and repose() draws it between its last two steps.
+  const CORPSE_STEP = 1 / 60;
+  /** Most one knee or elbow stop pass moves a corpse's foot or hand per step (rig.ts THE CAPPED STOP). Five passes a
+   *  step (stepRig's four, the last word below): at most 5 cm, 3 m/s. 24 probe deaths dying mid-stride: 372 joint
+   *  jumps over 15 cm a step without it, 56 with it (with the hip and ankle caps, collapse.ts, 19), and 42 of 48
+   *  legs left bent instead of 9. */
+  const CORPSE_BEND_STEP_M = 0.01;
+  /** CORPSE_STEP_CAPS: the same for the hip cones and the ankle springs (collapse.ts). Uncapped, a hip cone threw a knee
+   *  25-34 cm in a step (and in a slump fought the planted knee every step), and an ankle pulled a toe 13 cm and the
+   *  bones dragged the foot after it: the still corpse that kicked a leg up to vertical. */
+  const CORPSE_HIP_STEP_M = 0.005, CORPSE_ANKLE_STEP_M = 0.02;
+  /** Most one self-collision pass moves a corpse point (m; collapse.ts THE CORPSE IS SOLID). */
+  const CORPSE_BODY = { ...BODY_COLLIDE, maxStep: 0.015 };
+  /** The pelvis and neck cones (collapse.ts relaxSpineCones), capped like the hip cones so a folded pelvis or neck
+   *  swings back over a few steps instead of snapping. */
+  const CORPSE_CONES = { ...SPINE_CONES, maxStep: 0.02 };
+  /** This frame's bodies round this one (setBodyObstacles). */
+  let nearBodies: readonly BodyObstacle[] = [];
+  /** Where each of the corpse's rig points last was clear of the level's boxes (corpse-contact.ts pushOutOfBoxes):
+   *  the side of a wall a point inside it goes back out on. Empty while the body stands. */
+  let corpseSafe: (Vec3 | undefined)[] = [];
+  // CORPSE SLEEP (owner playtest 2026-11-03: corpses that never stop crawling). A corpse's constraints never quite
+  // agree: the bones, the stops, the hip cones, the ankles and the floor each nudge it a little every step, and a
+  // body lying still drifted 2-7 cm a second at 7 s (the hip cones and the solver's own loop carried it sideways). So
+  // a corpse whose every joint has moved under `speed` for `time` falls asleep: its rig keeps its pose, with no
+  // speed, until something stirs it (a shot, a blast, a sever: the damage revision; or any impulse: a point whose
+  // pos and prev part). 24 probe deaths each way: 21-24 asleep a median 2.7-3.1 s after the blow, at 60 Hz and in full
+  // bullet time; at 0.2 m/s the feet still buzzing kept 2-5 of them awake.
+  //
+  // GOING NOWHERE (owner 2026-11-14: "the ragdoll corpses that never fall asleep"). The speed test alone left 45 of
+  // 180 shotgun deaths awake at 10 s (a quarter, the same on main), all but six of them going nowhere: a toe, a head
+  // or the pelvis lifted a centimetre a step by one pass and dropped again by gravity (0.4-1 m/s, 3 cm of travel), a
+  // leg swung 10 cm to and fro by the ankle springs and the braces against the rig step's bones. So a corpse also
+  // sleeps when every joint has stayed within `stray` (m) of where it was for `time`. The speed test already lets a
+  // joint travel 26 cm in that time; a body that is falling or thrown leaves 12 cm in a sixth of a second. Awake at
+  // 10 s of 180 (90 on open floor, 90 beside a wall), by `stray`: none 45, 4 cm 7, 8 cm 3, 12 cm 2, 16 cm 2; the
+  // last two went round on the floor (collapse.ts THE FLOOR STOPS A CONE: with that, 1). Median asleep 2.6-2.8 s
+  // after the death throughout.
+  const CORPSE_SLEEP = { speed: 0.35, time: 0.75, stray: 0.12 };
+  let corpseAnchor: Vec3[] | null = null, corpseNearT = 0;
+  // THE FALL GOES LIMP (found 2026-11-14 probing sector walls). An authored fall (death-fall.ts) carries its pose
+  // 1.6-2.4 m along the shot whatever is in the way, and holds every joint to it. A wall in the way stops the joints
+  // and the pose goes on: every joint ends flat against the wall's face, the corpse re-anchors to that crushed shape,
+  // and its bones fight the hold for good (shoulders at 12-15 m/s nine seconds after the death, never asleep). So
+  // once a step's contacts (walls, bodies) move one joint more than `joint` or all of them more than `body` (m)
+  // against the pose, the fall lets go (MotionConfig.releaseFall) and the body drops from there as a ragdoll.
+  // A corpse lying with a hand against a wall is moved under a millimetre a step.
+  const FALL_WALLED = { joint: 0.03, body: 0.1 };
+  let fallWalled = false;
+  /** A corpse's wall lines are asked once per this much height (m): corpseContacts SECTOR WALLS. */
+  const CORPSE_WALL_BUCKET_M = 0.1;
+  const NO_CONTACT_SEGS: readonly ContactSeg[] = [];
+  let corpseStillT = 0, corpseSleeping = false, corpseSleepRevision = -1;
+  function corpseContacts(points: RigPoint[], pointR: readonly number[] | undefined): RigPoint[] {
+    const rad = (i: number) => pointR?.[i] ?? CORPSE_POINT_R;
+    const arrived = points;
+    corpseStepN++;
+    const boxes = opts.colliders?.() ?? [];
+    if (boxes.length || ground) {
+      // Only the boxes and wall lines near the body (a level has hundreds).
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+      for (const p of points) for (const q of [p.pos, p.prev]) {
+        x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); z0 = Math.min(z0, q[2]);
+        x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); z1 = Math.max(z1, q[2]);
+      }
+      const m = 0.3;
+      const near = boxes.filter(b => b.max[0] > x0 - m && b.min[0] < x1 + m && b.max[1] > y0 - m && b.min[1] < y1 + m
+        && b.max[2] > z0 - m && b.min[2] < z1 + m);
+      // SECTOR WALLS: the lines that block at each point's own height (a line is a wall to a point below the floor
+      // behind it and open to one above it: an arm over a ledge hangs down its face, a body thrown onto a ledge
+      // lands on it), asked once per CORPSE_WALL_BUCKET_M of height for the whole body.
+      const segsAt = new Map<number, readonly ContactSeg[]>();
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, reach = Math.hypot(x1 - x0, z1 - z0) / 2 + m;
+      const segsFor = (i: number): readonly ContactSeg[] => {
+        if (!ground) return NO_CONTACT_SEGS;
+        const k = Math.floor((points[i]!.pos[1] - rad(i)) / CORPSE_WALL_BUCKET_M);
+        let segs = segsAt.get(k);
+        if (!segs) segsAt.set(k, segs = ground.blockingNear(cx, cz, reach, k * CORPSE_WALL_BUCKET_M));
+        return segs;
+      };
+      const clear = (q: Vec3, i: number) => clearOfBoxes(q, rad(i), near) && clearOfSegs(q, rad(i), segsFor(i));
+      if (near.length || ground) {
+        // The corpse's first step: each point's clear place is where it was. One with none (the body died with it
+        // in a wall) takes the root, at the point's height: the root only ever stands where a body can.
+        points.forEach((p, i) => { if (!corpseSafe[i] && clear(p.prev, i)) corpseSafe[i] = p.prev; });
+        const root = state.wander.pos;
+        const safe = (i: number): Vec3 => corpseSafe[i] ?? [root[0], points[i]!.pos[1], root[2]];
+        if (near.length) points = pushOutOfBoxes(points, near, rad, undefined, safe);
+        if (ground) points = pushOutOfSegs(points, segsFor, rad, undefined, safe);
+        points.forEach((p, i) => { if (clear(p.pos, i)) corpseSafe[i] = p.pos; });
+      } else points.forEach((p, i) => { corpseSafe[i] = p.pos; });
+    }
+    if (nearBodies.length) points = pushOutOfBodies(points, nearBodies, opts.id, rad, undefined, undefined, undefined, noteBodyHit);
+    if (points !== arrived && !fallWalled && state.fallKind) {
+      let most = 0, sum = 0;
+      for (let i = 0; i < points.length; i++) {
+        const a = arrived[i]!.pos, b = points[i]!.pos, d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        most = Math.max(most, d); sum += d;
+      }
+      if (most > FALL_WALLED.joint || sum > FALL_WALLED.body) fallWalled = true;
+    }
+    return points;
+  }
+  /** The standing bodies this corpse struck (BODY_KNOCK), by actor id: the fastest blow each. A blow counts only on
+   *  ARRIVAL: an authored fall's pose pulls its joints at a body in the way 17 cm a step for as long as it stands
+   *  there (10 m/s "into" it, every step, with the corpse not moving at all), so a body this corpse was already
+   *  pressing within `BODY_KNOCK.arrival` is not struck again. */
+  const bodyHits = new Map<number, { dir: Vec3; speed: number }>();
+  const bodyPressT = new Map<number, number>(), bodyArrivedN = new Map<number, number>();
+  let corpseStepN = 0;
+  const noteBodyHit: BodyHit = (o, n, into) => {
+    if (o.kind !== 'upright') return;
+    const speed = into / CORPSE_STEP;
+    if (speed < BODY_KNOCK.minSpeed) return;
+    const last = bodyPressT.get(o.id);
+    bodyPressT.set(o.id, corpseStepN);
+    if (last === undefined || (corpseStepN - last) * CORPSE_STEP >= BODY_KNOCK.arrival) bodyArrivedN.set(o.id, corpseStepN);
+    // Only the step it arrived in strikes (the fastest joint of that step).
+    if (bodyArrivedN.get(o.id) !== corpseStepN) return;
+    if (speed > (bodyHits.get(o.id)?.speed ?? 0)) bodyHits.set(o.id, { dir: [-n[0], 0, -n[2]], speed });
+  };
+  let bodyKnockCool = 0;
+  function bodyKnock(dir: Vec3, speed: number): boolean {
+    const l = Math.hypot(dir[0], dir[2]);
+    if (speed < BODY_KNOCK.minSpeed || l < 1e-6 || bodyKnockCool > 0) return false;
+    if (melt || doomed || softKilled || dyingT > 0 || state.collapse.phase !== 'standing' || lastFrame?.collapsed) return false;
+    bodyKnockCool = BODY_KNOCK.cooldown;
+    const k = Math.min(1, (speed - BODY_KNOCK.minSpeed) / (BODY_KNOCK.fullSpeed - BODY_KNOCK.minSpeed));
+    const gain = BODY_KNOCK.gain[0] + (BODY_KNOCK.gain[1] - BODY_KNOCK.gain[0]) * k;
+    const dirWorld: Vec3 = [dir[0] / l, 0, dir[2] / l];
+    selectPendingShot({
+      type: 'blast', dirWorld, woundWorld: bodyCentreWorld(), torso: true,
+      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
+      gain: SLUG_GAIN * gain,
+    });
+    if (soldierDamage) mind.stagger(soldierStaggerDuration('medium'));
+    knockV = Math.max(knockV, Math.min(BODY_KNOCK.knockMax, speed * BODY_KNOCK.knockPerMps));
+    knockDir = dirWorld;
+    return true;
+  }
+  function corpseAsleep(): boolean {
+    if (!corpseSleeping) return false;
+    const stirred = damageRevision !== corpseSleepRevision || bound.rig.points.some(p =>
+      p.pos[0] !== p.prev[0] || p.pos[1] !== p.prev[1] || p.pos[2] !== p.prev[2]);
+    if (stirred) { corpseSleeping = false; corpseStillT = 0; corpseAnchor = null; corpseNearT = 0; }
+    return corpseSleeping;
+  }
+  /** After a corpse step: counts the time every joint has stayed slow, and puts the body to sleep once it is enough. */
+  function noteCorpseMotion(before: readonly RigPoint[], dt: number): void {
+    const now = bound.rig.points;
+    let most = 0;
+    for (let i = 0; i < now.length; i++) {
+      const a = now[i]!.pos, b = before[i]?.pos ?? a;
+      most = Math.max(most, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    }
+    corpseStillT = most <= CORPSE_SLEEP.speed * dt ? corpseStillT + dt : 0;
+    // GOING NOWHERE: every joint within `stray` of where it was when the clock started.
+    let strayed = !corpseAnchor || corpseAnchor.length !== now.length;
+    for (let i = 0; !strayed && i < now.length; i++) {
+      const a = now[i]!.pos, b = corpseAnchor![i]!;
+      strayed = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > CORPSE_SLEEP.stray;
+    }
+    if (strayed) { corpseAnchor = now.map(p => p.pos); corpseNearT = 0; } else corpseNearT += dt;
+    if (corpseStillT < CORPSE_SLEEP.time && corpseNearT < CORPSE_SLEEP.time) return;
+    corpseSleeping = true;
+    corpseSleepRevision = damageRevision;
+    bound = { ...bound, rig: { ...bound.rig, points: now.map(p => ({ ...p, prev: p.pos })) } };
+  }
+  let corpseBank = 0;
+  /** The corpse's points one fixed step back, and how far on toward the latest the drawn pose sits. */
+  let corpseBefore: readonly RigPoint[] | null = null;
+  let corpseBlend = 1;
+  function corpseDrawn(): BoundRig {
+    const before = corpseBefore, now = bound.rig.points;
+    if (!before || corpseBlend >= 1 || before.length !== now.length) return bound;
+    const t = corpseBlend;
+    const points = now.map((p, i) => {
+      const b = before[i]!.pos;
+      return { ...p, pos: [b[0] + (p.pos[0] - b[0]) * t, b[1] + (p.pos[1] - b[1]) * t, b[2] + (p.pos[2] - b[2]) * t] as Vec3 };
+    });
+    return { ...bound, rig: { ...bound.rig, points } };
+  }
+  /** The body's forward, level: the way the left knee bends (the knee hinge's pole reversed, rig.ts livePole), so
+   *  it follows the body as it stands now. Null on a body without a hinged knee. */
+  function kneeForward(): Vec3 | null {
+    const knee = joints.index.kneeL;
+    const bend = knee === undefined ? undefined : bound.rig.bends?.find(b => b.mid === knee);
+    if (!bend?.axis) return null;
+    const p = bound.rig.points;
+    const back = cross(sub(p[bend.mid]!.pos, p[bend.root]!.pos), sub(p[bend.axis[1]]!.pos, p[bend.axis[0]]!.pos));
+    const s = -(bend.axisSign ?? 1);
+    const l = Math.hypot(back[0], back[2]);
+    return l < 1e-6 ? null : [back[0] * s / l, 0, back[2] * s / l];
+  }
+  function subSteps(dt: number): number[] {
+    if (!(lastFrame?.collapsed ?? false)) {
+      corpseBank = 0;
+      corpseBefore = null;
+      corpseBlend = 1;
+      if (corpseSafe.length) corpseSafe = [];
+      fallWalled = false;
+      return planSubSteps(dt);
+    }
+    corpseBank = Math.min(corpseBank + Math.max(0, dt), SUBSTEP_TUNING.maxCatchup);
+    const n = Math.floor(corpseBank / CORPSE_STEP + 1e-9);
+    corpseBank = Math.max(0, corpseBank - n * CORPSE_STEP);
+    return Array.from({ length: n }, () => CORPSE_STEP);
+  }
+
   let bakePaused = false;
   let damageRevision = 0;
+  /** UPDATE LOD: the damage revision step() last saw, and its own sim seconds since it changed. */
+  let lodRevision = 0, sinceDamage = Infinity;
   function step(dt: number) {
     if (bakePaused) return;
+    // A MELTING BODY KEEPS MOVING UNTIL ITS LEGS GO (owner, 2026-11-14: melting while the animation plays out,
+    // not a statue). It is doomed, so it keeps no agenda: it finishes the motion it was in and comes to a stand
+    // while the flesh runs off it. Past MELT_MOTION_UNTIL it holds its last pose: there is nothing left to stand on,
+    // and a rig still solving under a puddle would drag the pool around. Its clock is stepMelt's (the caller's).
+    // ...and then the skeleton SLUMPS (MELT_SLUMP_AT): the body is let go as the ragdoll it would have been, so what
+    // is left of it sags and folds as one thing for a beat before its bones drop out group by group.
+    if (melt && melt.state.t >= 1) return;
+    if (melt && !melt.slumped && melt.state.t >= melt.slumpAt) { melt.slumped = true; if (meltSlump) forceCollapseNext = true; }
+    if (damageRevision !== lodRevision) { lodRevision = damageRevision; sinceDamage = 0; } else sinceDamage += Math.max(0, dt);
     // A MELEE prop falls with its sword arm (the bride): motion.ts stops the
     // carry (canHold), so drop the sword rather than leave it hanging in air.
     if (opts.profile?.melee && opts.profile.prop && !propReleaseRequested && missingLimbs().armR) {
@@ -1231,6 +1956,7 @@ export function createZombieActor(opts: {
       opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
     reactionTime += Math.max(0, dt);
+    bodyKnockCool = Math.max(0, bodyKnockCool - Math.max(0, dt));
     let firstSub = true;
     let forceCollapseFed = false;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
@@ -1240,7 +1966,11 @@ export function createZombieActor(opts: {
     // pose without the attack, and the photographed frame would not show it.)
     const swingPin = forcedSwing;
     forcedSwing = null;
-    for (const sdt of planSubSteps(dt)) {
+    const steps = subSteps(dt);
+    // The drawn corpse sits the banked share of a step past the one before the latest (corpseDrawn).
+    if (lastFrame?.collapsed) corpseBlend = corpseBank / CORPSE_STEP;
+    for (const sdt of steps) {
+      if (lastFrame?.collapsed) corpseBefore = bound.rig.points;
       // Heavy-hit choreography (see the state block): knock the ROOT before
       // the motion step so this sub-step's targets ride the moved root.
       // Bounds-clamped like stepWander's own integration, so a knock cannot
@@ -1255,7 +1985,7 @@ export function createZombieActor(opts: {
             ...w,
             pos: [
               Math.min(Math.max(nx, opts.navigation?.bounds.minX ?? opts.bounds.minX), opts.navigation?.bounds.maxX ?? opts.bounds.maxX),
-              0,
+              w.pos[1],
               Math.min(Math.max(nz, opts.navigation?.bounds.minZ ?? opts.bounds.minZ), opts.navigation?.bounds.maxZ ?? opts.bounds.maxZ),
             ],
           },
@@ -1303,28 +2033,27 @@ export function createZombieActor(opts: {
         missing: missingLimbs(),
         ...(!mind.meleeCapable && !encounterOrder ? {
           bounds: opts.bounds,
-          lineOfSight: brainPlayer !== null && !opts.furniture.some(box => segmentHitsBox(
-            [state.wander.pos[0], 1.4, state.wander.pos[2]],
-            [brainPlayer!.x, 1.4, brainPlayer!.z], box)),
+          lineOfSight: brainPlayer !== null && rangedSight(brainPlayer),
           canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
         } : {}),
       });
-      // The MIND's own target, captured before the encounter director's halt
-      // (a ring hold with `holdSecs > 0` nulls the post-encounter target). A
-      // burning zombie's chase must follow the mind's intent, not a ring hold
-      // that would freeze it at range.
-      const mindTarget = think.target;
       // A DOOMED BODY KEEPS NO AGENDA. It is already dead for gameplay — the
       // blast resolved that on impact — it just has not finished coming apart,
       // so it must not keep chasing, swinging or shooting during the window.
       // The mind still ran (its own debug/timing stays coherent); its verdict is
       // overridden here, which keeps this to ONE place rather than teaching the
       // brain a new "rupturing" state.
-      if (doomed) {
+      if (doomed && !melt) {
         think = {
           ...think, target: null, halt: true,
           attack: null, fire: false, weaponUp: false, contact: false, advance: null,
         };
+      } else if (melt) {
+        // A MELTING BODY WALKS INTO ITS MELT (owner, 2026-11-14: halted, it read as paused for a second before
+        // anything happened). It keeps going where it was going, slower and slower (the cruise scale below), and
+        // only loses its verbs: no swing, no shot, no contact.
+        think = { ...think, attack: null, fire: false, weaponUp: false, contact: false };
+        if (melt.state.t >= MELT_MOTION_UNTIL) think = { ...think, target: null, halt: true, advance: null };
       }
       if (encounterOrder) {
         if (encounterOrder.moveTarget) think={...think,target:encounterOrder.moveTarget,halt:think.committed && think.halt,
@@ -1345,53 +2074,66 @@ export function createZombieActor(opts: {
       // purpose: the director emits `halt: true` for an idle actor and a
       // moveTarget in combat, either of which would erase the flee / chase
       // target on nearly every frame if the override ran first.
-      if (burnPanic && !doomed) {
+      burnFlail = null;
+      // Shot dead (or downed) mid-panic: the panic ends there and the clock never gives the corpse a second death.
+      if (burnPanic && !burnDied && downOtherwise()) {
+        burnPanic = null;
+        burnStuckT = 0;
+        burnPhaseNow = 'none';
+      }
+      if (burnPanic && !doomed && !burnDied) {
         // The encounter director (not setBrainInput) feeds the game's minds,
         // so read the player from the order when present and remember the
         // last seen point for when sight is lost.
         const playerNow = encounterOrder?.player ?? brainPlayer;
-        if (playerNow) lastPlayerPos = [playerNow.x, 0, playerNow.z];
+        // BrainPlayer has no height: the flee point is ground-plane, on this body's floor.
+        if (playerNow) lastPlayerPos = [playerNow.x, state.floorY, playerNow.z];
+        const blocked = burnStuckT > BURN_STUCK_SEC;
+        if (blocked) burnStuckT = 0;
         const bp = stepBurnPanic(burnPanic, {
-          kind: mind.kind,
-          self: state.wander.pos,
-          player: lastPlayerPos,
-          // A held zombie (ring token / blast recovery) reports a null mind
-          // target; its chase falls back to the last seen player point so the
-          // panic keeps it closing instead of freezing at range.
-          chaseTarget: mindTarget ?? lastPlayerPos,
+          self: state.wander.pos, player: lastPlayerPos, forward: burnForward(),
+          // Blocked: the turn probes for a direction this body can walk (inside its bounds, clear of
+          // furniture, and a step the level's navigation allows).
+          ...(blocked ? { blocked, clear: burnClear } : {}),
         }, sdt);
-        think = {
-          ...think,
-          target: bp.target,
-          halt: bp.target === null,
-          fire: false,
-          weaponUp: false,
-          // A zombie keeps its swipe; a soldier drops the attack (no aiming).
-          attack: mind.kind === 'zombie' ? think.attack : null,
-          faceHeading: null,
-        };
-        burnCruiseScale = bp.cruiseScale;
-        burnFlailT -= sdt;
-        // A soldier's `small` soldier reaction must lap before it can restart
-        // (equal level does not restart an active one) — see burn-behaviour.ts.
-        const flailPeriod = soldierDamage
-          ? BURN_BEHAVIOUR.soldierFlailPeriodSec : BURN_BEHAVIOUR.flailPeriodSec;
-        if (bp.stumble) {
-          burnStumbles++;
-          signals.shot = burnStumbleShot();
-          burnFlailT = flailPeriod;
-        } else if (burnFlailT <= 0 && signals.shot === null) {
-          // The arm-flail stand-in (see burn-behaviour.ts's note): a burn
-          // shudder re-emitted on a timer. A real hit signal wins the frame.
-          signals.shot = burnFlailShot();
-          burnFlailT = flailPeriod;
+        if (bp.phase === 'done') {
+          burnPanic = null;
+          burnCruiseScale = 1;
+          if (bp.die) {
+            burnDied = true;
+            burnPhaseNow = 'dead';
+            // A soldier reaches the authored fall through his own path: cfg.deathFall()
+            // is asked when the collapse is fatal (motion.ts excludes him from authoredDeath).
+            if (soldierDamage) soldierFatal = true;
+          } else {
+            burnPhaseNow = 'resumed';
+          }
+        } else {
+          burnPhaseNow = bp.phase;
+          // Blocked and turned: a panicking body WHIPS round to the new heading. At its ordinary turn
+          // rate a shambler spends a second and a half walking into the wall while it comes about.
+          if (blocked && bp.target) {
+            const hx = bp.target[0] - state.wander.pos[0], hz = bp.target[2] - state.wander.pos[2];
+            if (Math.hypot(hx, hz) > 1e-6) state = { ...state, wander: { ...state.wander, heading: Math.atan2(hx, hz) } };
+          }
+          think = { ...think, target: bp.target, halt: false, fire: false, weaponUp: false, attack: null, faceHeading: null };
+          burnCruiseScale = bp.cruiseScale;
+          const amp = bp.flail * burnTier.flail;
+          if (amp > 0) burnFlail = { t: burnPanic.t, seed: burnSeed, amp, fold: bp.fold };
         }
       } else {
         burnCruiseScale = 1;
       }
+      // Burned to death: no agenda, and the collapse is forced every frame until it is down.
+      if (burnDied) {
+        think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+        signals.forcedCollapse = true;
+      }
       // The burn override's speed multiplier rides the same signals object
       // stepMotion consumes; 1 (absent-equivalent) when not burning.
       signals.cruiseScale = burnCruiseScale
+        // Melting: from full speed down to a quarter by the time its legs go.
+        * (melt ? 1 - 0.75 * Math.min(1, melt.state.t / MELT_MOTION_UNTIL) : 1)
         // The warbull's charge runs at its own speed (MindOutput.runSpeed).
         * (think.runSpeed !== undefined && opts.profile ? think.runSpeed / opts.profile.cruise : 1);
       brainAlerted = false;   // one-shot: the first sub-step consumes it
@@ -1423,7 +2165,7 @@ export function createZombieActor(opts: {
       }
       // A burning soldier must never fire, whatever the mind or the injury
       // path computed above (the panic override is the last word).
-      if (burnPanic && !doomed) signals.fire = false;
+      if ((burnPanic && !doomed) || burnDied) signals.fire = false;
       if (softKilled) {
         // A STAGGER stays up for dyingT, reeling, and may clench the trigger:
         // one round every 70 ms, sprayed high (see the onFire site).
@@ -1443,6 +2185,22 @@ export function createZombieActor(opts: {
       if (forceCollapseNext) { signals.forcedCollapse = true; forceCollapseFed = true; }
       // A dying soft target keeps no agenda (the same override as `doomed`).
       if (softKilled) think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+      // FLOATERS (floater-move.ts): the float altitude follows the state (cruise idle, down to the player
+      // chasing); idle, the body wanders Doom's chase-dir legs instead of holding still.
+      if (floater) {
+        floaterDown ||= doomed || softKilled || burnDied || (lastFrame?.collapsed ?? false);
+        if (!floaterDown) {
+          const pl = encounterOrder ? encounterOrder.player : brainPlayer;
+          const seen = pl !== null && (encounterOrder ? encounterOrder.visible : rangedSight(pl));
+          const feetY = pl ? pl.y ?? ground!.floorAt(pl.x, pl.z) : NaN;
+          floater.step(sdt, { pos: state.wander.pos, seen, player: pl ? { x: pl.x, z: pl.z, feetY } : null });
+          if (floater.mode === 'idle' && !burnPanic) {
+            const leg = floater.legTarget(state.wander.pos, sdt);
+            think = { ...think, target: leg, halt: leg === null };
+            if (leg) state = { ...state, wander: { ...state.wander, target: leg, idle: 0 } };
+          }
+        }
+      }
       if (think.halt && (soldierDamage || !mind.meleeCapable)) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
       }
@@ -1488,21 +2246,31 @@ export function createZombieActor(opts: {
       if (think.advance) {
         const p = state.wander.pos;
         const next: Vec3 = [p[0] + think.advance[0], p[1], p[2] + think.advance[2]];
-        if (clearCombatMove(p, next, opts.furniture)) {
+        // Sector levels: the surge must also be a walk the sector ground allows, so a lunge never
+        // carries the body up a ledge or through a wall line.
+        if (clearCombatMove(p, next, opts.furniture)
+          && (!opts.ground || !opts.navigation || opts.navigation.canTravel(p, next))) {
           state = { ...state, wander: { ...state.wander, pos: next } };
         }
       }
       const beforeMove = state.wander.pos;
+      lastAttack = think.attack?.variant ?? null;
       const stepR = stepMotion(
         state, joints,
         {
           enabled: true,
           wander: !think.halt,
           ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
+          ...(DEATH_FALL.on && !softTarget && (!physicsDeath || burnFell()) ? { deathFall } : {}),
+          // A physics-death body (the zombie) burned to death plays its burn fall, not the ragdoll.
+          ...(burnFell() && !softTarget ? { authoredDeath: true } : {}),
+          ...(burnFlail ? { burnFlail } : {}),
+          ...(fallWalled ? { releaseFall: true } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
           ...(opts.profile !== undefined ? { profile: opts.profile } : {}),
+          ...floorAt,
           // Spread, not `attack: think.attack ?? undefined`: motion.ts's
           // bit-identity contract is about the key being ABSENT.
           // swingPin is forceSwing()'s one-frame capture pin (see step());
@@ -1541,16 +2309,39 @@ export function createZombieActor(opts: {
       // Collision resolves after motion authored world-space targets. Keep
       // this frame's rig, held prop and future fall anchor with the root.
       // Footwork rebases its world contacts from wander on the next step.
-      const correctFrame = (pos: Vec3) => {
+      // Undoing a move onto a step also undoes its rise (dy): the feet go back to the floor they
+      // came from. dy is 0 on room levels (y is 0 throughout), and branched so -0 stays -0.
+      // A FALLING body (sector levels: falling, or this step dropped its feet) reverts x/z only: it
+      // keeps its new height, clamped up to the floor under the reverted spot when it can step onto
+      // it (a body that never left the ledge goes back onto it, and stops falling). Otherwise a body pushing toward a lip
+      // navigation refuses would hover, its drop undone every frame.
+      const correctFrame = (to: Vec3) => {
+        let pos = to;
+        if (motionFloor && !floating() && ((state.floorVel ?? 0) < 0 || state.wander.pos[1] < to[1])) {
+          const feet = state.wander.pos[1];
+          // The floor there as motion's fall reads it: the disc floor, unless that is a lip it
+          // cannot step onto, then the floor under the centre.
+          let floor = motionFloor(to[0], to[2]);
+          if (!(floor <= feet + SECTOR_STEP_M)) floor = ground!.floorAt(to[0], to[2]);
+          const y = Number.isFinite(floor) && floor > feet && floor <= feet + SECTOR_STEP_M ? floor : feet;
+          pos = [to[0], y, to[2]];
+          if (y !== state.wander.pos[1]) state = { ...state, floorVel: 0 };
+        }
         const dx = pos[0] - state.wander.pos[0], dz = pos[2] - state.wander.pos[2];
-        const translate = (p: Vec3): Vec3 => [p[0] + dx, p[1], p[2] + dz];
+        const dy = pos[1] - state.wander.pos[1];
+        const translate = (p: Vec3): Vec3 => [p[0] + dx, dy === 0 ? p[1] : p[1] + dy, p[2] + dz];
         f.rootShift = translate(f.rootShift);
         f.restPose = f.restPose.map(translate);
         if (f.gun) f.gun = { ...f.gun, root: translate(f.gun.root) };
+        if (dy !== 0) f.floorY += dy;
         state = { ...state, lastShift: translate(state.lastShift),
-          wander: { ...state.wander, pos } };
+          wander: { ...state.wander, pos }, ...(dy !== 0 ? { floorY: state.floorY + dy } : {}) };
       };
-      if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
+      if (floating()) {
+        // Doom's P_TryMove for MF_FLOAT: refused where the body does not fit; it floats toward the fit
+        // (floater.tryMove sets that target) and goes on, so the chase keeps its target.
+        if (!floater!.tryMove(beforeMove, state.wander.pos)) correctFrame([beforeMove[0], state.wander.pos[1], beforeMove[2]]);
+      } else if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
         correctFrame(beforeMove);
         state={...state,wander:{...state.wander,speed:0,target:null}};
       }
@@ -1570,8 +2361,17 @@ export function createZombieActor(opts: {
         }
         state = { ...state, wander: w };
       }
+      // A panicking burner that is not getting anywhere (it fled into a wall; measured AFTER the
+      // furniture and navigation corrections) is told so, and turns (burn-behaviour.ts `blocked`).
+      // The first 0.3 s is its turn-and-accelerate, not a wall.
+      if (burnPanic && burnPanic.t > 0.3) {
+        const moved = Math.hypot(state.wander.pos[0] - beforeMove[0], state.wander.pos[2] - beforeMove[2]);
+        burnStuckT = moved < BURN_STUCK_MPS * sdt ? burnStuckT + sdt : 0;
+      } else {
+        burnStuckT = 0;
+      }
       bodyYaw = f.bodyYaw;
-      view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
+      view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw, sdt);
       // LIFE-STATE PRIMS: the first collapsed sub-step swaps the body to its
       // dead look (the cultist's hood drops off his head; death-state.ts).
       if (f.collapsed && !deathStateApplied) {
@@ -1589,19 +2389,87 @@ export function createZombieActor(opts: {
         const hv = hand !== undefined ? vel[hand]! : [0, 0, 0] as Vec3;
         if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
       }
+      volleyAge += sdt;
+      if (blownAway) blownT += sdt;
+      // A hard target's death off a heavy volley: thrown along it, over onto his back (blow-away.ts).
+      // A burn death is an authored fall, never this (deathFall above marks it rolled; the guard holds whatever order).
+      if (f.collapsed && !blowAwayRolled && !burnFell()) {
+        blowAwayRolled = true;
+        // The free-ragdoll throw, for a body on the physics death (death-fall.ts plays 'blown' for the rest).
+        const t = (!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage && volleyAge < KILL_VOLLEY_SEC ? planBlowAway(volley, blowRng) : null;
+        if (t) {
+          blownAway = true;
+          const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+          const vel = addSpin(bound.rig.points, deathThrowVelocities(bound.rig.points, volley.dirWorld, t, hemI), (blowRng() - 0.5) * 2.4);
+          bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        } else if ((!DEATH_FALL.on || physicsDeath) && !deathPlan && !soldierDamage) {
+          // Not thrown: a share slump forward over their knees instead (slump-death.ts).
+          const plan = planSlump(blowRng);
+          const forward = plan && kneeForward();
+          if (plan && forward) {
+            slumping = true;
+            const vel = addSpin(bound.rig.points, slumpVelocities(bound.rig.points, forward, plan), plan.spin);
+            // The feet stand where they are from the first step: a standing leg is near its full length, past where
+            // plantFeet would ever plant it.
+            const feet = new Set(joints.footPlants.map(pl => pl.foot));
+            bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt)
+              .map((p, i) => feet.has(i) ? { ...p, pinned: true, prev: p.pos } : p) } };
+          }
+        }
+      }
+      // A sleeping corpse (CORPSE SLEEP) steps as usual below and keeps the pose it had.
+      if (!f.collapsed) { corpseSleeping = false; corpseStillT = 0; corpseAnchor = null; corpseNearT = 0; }
+      const rigBefore = bound.rig, restingRig = f.collapsed && corpseAsleep() ? rigBefore : null;
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
-          torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
+          bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed,
+          ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
+          // The arm guards sit where an UPRIGHT torso would be: a corpse with self-collision drops them (collapse.ts THE CORPSE IS SOLID).
+          torsoGuards: wantsTorsoGuards(opts.profile) && !(f.collapsed && f.corpseBody) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
-          damping: 0.06,
+          damping: blownAway && blownT < BLOW_AIR_SEC ? BLOW_AIR_DAMPING : 0.06,
           iterations: 4,
           // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
           // ramp dragged the thrown body back upright and ate the throw.
-          restStiffness: STANDING_RIG.restStiffness * (softKilled && f.collapsed ? 0 : f.restPull),
+          restStiffness: STANDING_RIG.restStiffness * ((softKilled || blownAway || slumping) && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+      // SECTOR LEVELS (plan 3b): a corpse meets the floor under each point (an arm over a ledge hangs
+      // down it). The rise is judged PER POINT, against where that point was: a floor more than
+      // FALL_DROP_M above it is a wall, not a floor, and the point keeps the floor it had (the one
+      // under its previous position, else the body's plane, else its own height). Independent of the
+      // root, so points lying on a ledge stay on it when the root goes over the lip. The contact
+      // plane sits the body's pad (f.floorY - state.floorY) above each floor. Room levels (no
+      // ground): undefined, the one-plane calls.
+      const pad = f.floorY - state.floorY;
+      const pointFloor = ground && f.collapsed ? (x: number, z: number, from: Vec3): number => {
+        const reach = from[1] + FALL_DROP_M;
+        const here = ground.floorAt(x, z) + pad;
+        if (Number.isFinite(here) && here <= reach) return here;
+        const was = ground.floorAt(from[0], from[2]) + pad;
+        if (Number.isFinite(was) && was <= reach) return was;
+        return f.floorY <= reach ? f.floorY : from[1];
+      } : undefined;
+
+      // The foot turns with the shin (collapse.ts THE FOOT TURNS WITH THE SHIN): straight after the rig step.
+      if (f.collapsed && f.hipCones.length) {
+        const lift = corpseLift(f);
+        points = carryFeet(rigBefore.points, points, f.hipCones,
+          (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : f.floorY) + (lift?.[i] ?? 0),
+          FOOT_CARRY);
+      }
+      // Corpse integrity (collapse.ts braces): the trunk and head keep their shape.
+      if (f.braces.length) points = [...relaxBraces(points, f.braces, f.integrity)];
+      // The corpse is solid: limbs out of the trunk and out of each other (collapse.ts relaxBodyCollisions). Before the
+      // hip cones, so a joint limit has the last word over a contact.
+      // The pelvis and neck keep a human range (collapse.ts relaxSpineCones), before the contacts that lean on them.
+      // The floor a point rests at: a spine cone stops there (collapse.ts THE FLOOR STOPS A CONE).
+      const restLift = f.collapsed ? corpseLift(f) : undefined;
+      const restFloor = (i: number, p: RigPoint) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : f.floorY) + (restLift?.[i] ?? 0);
+      if (f.collapsed) points = relaxBodyCollisions(relaxSpineCones(points, f.corpseBody, CORPSE_CONES, restFloor), f.corpseBody, CORPSE_BODY);
+      if (f.hipCones.length) points = [...relaxHipCones(points, f.hipCones, undefined, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M })];
       // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
       // game rig never pins tips (only the lab's stepActorMotion does), so the
       // hand tip reached its grip-line target only through the soft rest pull:
@@ -1611,14 +2479,67 @@ export function createZombieActor(opts: {
       if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
         points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
       }
+
       if (f.collapsed) {
-        points = applyFloorContact(points, f.floorY);
+        const lift = corpseLift(f), floorY = f.floorY;
+        // The ankle springs just before the floor, which has the last word (collapse.ts relaxAnkles), capped per step (CORPSE_STEP_CAPS).
+        points = relaxAnkles(points, f.hipCones, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0),
+          { ...ANKLE_LIMITS, maxStep: CORPSE_ANKLE_STEP_M });
+        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor, lift);
+        // One more brace pass after the floor moved points, then the floor again
+        // so the last word keeps the corpse out of the ground.
+        if (f.braces.length) points = applyFloorContact(relaxHipCones(relaxBodyCollisions(relaxSpineCones(relaxBraces(points, f.braces, f.integrity, 1), f.corpseBody, CORPSE_CONES, restFloor), f.corpseBody, { ...CORPSE_BODY, iterations: 1 }), f.hipCones, 1, { ...HIP_LIMITS, maxStep: CORPSE_HIP_STEP_M }), f.floorY, undefined, undefined, pointFloor, lift);
+        // A CORPSE MEETS THE WORLD (corpse-contact.ts): the walls and the bodies round it, last, so a thrown body
+        // stops at a wall even where its bones would pull it on through.
+        points = corpseContacts(points, f.corpseBody?.pointR);
       }
+      // A BREATHING body (MotionProfile.joystick.swell, the cerebrax): the `swell` morph weight from the gait clock.
+      // actor.ts does the same for the lab; the game had none, so its brain never pulsed. Stops on the corpse.
+      const joy = opts.profile?.joystick;
+      const swellMorphs = joy?.swell && !f.collapsed ? {
+        swell: joystickSwell(state.gait.time, null, joy),
+      } : undefined;
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
-          f.collapsed ? f.floorY : undefined),
+        // stepDt: the step just taken (rig.ts TIME-CORRECTED VERLET) — the next step and impulseAt read it.
+        rig: constrainRigBends({ ...bound.rig, points, stepDt: sdt, bendStepCap: f.collapsed ? CORPSE_BEND_STEP_M : undefined, collapsed: f.collapsed, headFollowsRig: soldierDamage && f.collapsed, headFollow: f.headFollow, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+          ...(swellMorphs ? { morphs: { ...bound.rig.morphs, ...swellMorphs } } : {}) },
+          f.collapsed ? f.floorY : undefined, pointFloor),
       };
+      // THE FLESH JIGGLE's clock, and its whole-mass shove laid on the skull bone's points (pinned to the rigid frame,
+      // MotionProfile.rigidFrame), so the kit on the flesh (eyes, teeth, tendrils) moves with the brain it sits on.
+      // The prims themselves quiver in repose(). A corpse lets go of it.
+      if (fleshSpec && fleshKicks.length) {
+        if (f.collapsed) fleshKicks.length = 0;
+        else {
+          ageJiggle(fleshKicks, sdt, fleshSpec);
+          if (skullEnds && fleshKicks.length) {
+            const b = jiggleBulk(fleshKicks, fleshSpec);
+            const pts = bound.rig.points.slice();
+            for (const i of skullEnds) {
+              const q = pts[i];
+              if (q) pts[i] = { ...q, pos: [q.pos[0] + b[0], q.pos[1] + b[1], q.pos[2] + b[2]], prev: [q.prev[0] + b[0], q.prev[1] + b[1], q.prev[2] + b[2]] };
+            }
+            bound = { ...bound, rig: { ...bound.rig, points: pts } };
+          }
+        }
+      }
+      // A slumping corpse's feet plant for the next step (collapse.ts plantFeet); all let go when the body is up.
+      {
+        const lift = corpseLift(f), floorY = f.floorY;
+        const feet = slumping && f.footPlants.length
+          ? plantFeet(bound.rig.points, f.footPlants, (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0), sdt, SLUMP_PLANT, true)
+          : releaseFeet(bound.rig.points, joints.footPlants);
+        if (feet !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: feet } };
+        // The floor grips what rests on it (collapse.ts THE FLOOR GRIPS): last, over the whole step's move.
+        if (f.collapsed && !restingRig) {
+          const gripped = floorGrip(rigBefore.points, bound.rig.points,
+            (i, p) => (pointFloor ? pointFloor(p.pos[0], p.pos[2], p.prev) : floorY) + (lift?.[i] ?? 0));
+          if (gripped !== bound.rig.points) bound = { ...bound, rig: { ...bound.rig, points: gripped } };
+        }
+      }
+      if (restingRig) bound = { ...bound, rig: restingRig };
+      else if (f.collapsed) noteCorpseMotion(rigBefore.points, sdt);
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
@@ -1667,7 +2588,8 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      const spit = opts.profile?.spit;
+      // A two-gun body (the tallow) tags each round with its muzzle; the left one is profile.spitL.
+      const spit = think.fireSide === 'L' && opts.profile?.spitL ? opts.profile.spitL : opts.profile?.spit;
       const spitFrom = spit ? joints.index[spit.from] : undefined;
       if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
         // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along
@@ -1714,9 +2636,8 @@ export function createZombieActor(opts: {
         posed = inflateHead(posed, u, swellClock);
       }
     }
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    if (viewSync) uploadPose();
+    else viewStale = true;
     const d = lastFrame;
     if (d) {
       // The decision fields are the MIND's now. holdSecs rides MindDebug so
@@ -1732,6 +2653,9 @@ export function createZombieActor(opts: {
         blend: d.blend,
         speed: d.speed,
         staggerKind: d.staggerKind,
+        fallKind: state.fallKind?.kind ?? null,
+        burnFlail: burnFlail?.amp ?? null,
+        attack: lastAttack,
         target: state.wander.target ? [...state.wander.target] as Vec3 : null,
         idle: state.wander.idle,
         state: md.state, alert: md.alert,
@@ -1754,7 +2678,7 @@ export function createZombieActor(opts: {
     const w = state.wander;
     const next: Vec3 = [
       Math.min(Math.max(w.pos[0] + dx, opts.navigation?.bounds.minX ?? opts.bounds.minX), opts.navigation?.bounds.maxX ?? opts.bounds.maxX),
-      0,
+      w.pos[1],
       Math.min(Math.max(w.pos[2] + dz, opts.navigation?.bounds.minZ ?? opts.bounds.minZ), opts.navigation?.bounds.maxZ ?? opts.bounds.maxZ),
     ];
     if (opts.navigation && !opts.navigation.canTravel(w.pos,next)) return;
@@ -1763,11 +2687,14 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
+    if (melt) return null;   // goo takes no wound
     // Stamped at the live yaw `posed` was built with — see refreshWounds — and
     // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
     // and the blood below keep the world hit.
     const u = unwarpHit(posed, hitWorld);
     const wound = scaleGunCrater(woundFromPellet(posed.prims, u.hit, bodyYaw, u.field), opts.profile?.gore);
+    // RANGE FALLOFF (pellet-falloff.ts): the player's pellets weigh less, bite smaller and sever less past fullM.
+    pelletFalloffWound(wound, pelletFalloffAt(shot?.weapon === 'shotgun' ? shot.origin : undefined, hitWorld));
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
     headLip(wound);
@@ -1775,6 +2702,7 @@ export function createZombieActor(opts: {
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
+    if (melt) return null;
     const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
     const wound = scaleGunCrater(woundFromSlug(posed.prims, u.hit, u.field, bodyYaw), opts.profile?.gore);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
@@ -1801,6 +2729,7 @@ export function createZombieActor(opts: {
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
+    if (melt) return;
     damageRevision++; bakePaused = false;
     // The caller must have resolved these with this actor's pose().yaw
     // (ExplosionBody.bodyYaw) so they sit in the body frame like every other
@@ -1816,9 +2745,7 @@ export function createZombieActor(opts: {
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
   }
 
   /**
@@ -1852,6 +2779,7 @@ export function createZombieActor(opts: {
    * death and gibs outright), which also means no sever claims are wanted.
    */
   function blast(effect: ActorBlastEffect): void {
+    if (melt) return;
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
     const reaction = effect.reaction ?? 'blast';
@@ -1869,10 +2797,12 @@ export function createZombieActor(opts: {
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
 
     // (2) The meter, credited directly — see the doc block.
+    //     A tough body (MotionProfile.toughness) takes it at its blast divisor, as stepCollapse takes a slug's wound.
     if (meterCredit > 0 && state.collapse.phase === 'standing') {
+      const credit = meterCredit / toughnessFor(opts.profile?.toughness, 'blast');
       state = {
         ...state,
-        collapse: { ...state.collapse, meter: Math.min(1, state.collapse.meter + meterCredit) },
+        collapse: { ...state.collapse, meter: Math.min(1, state.collapse.meter + credit) },
       };
     }
 
@@ -1905,7 +2835,8 @@ export function createZombieActor(opts: {
       });
       if (soldierDamage) {
         mind.stagger(soldierStaggerDuration('medium'));
-      } else {
+      }
+      if (!soldierDamage || effect.forceKnock) {
         const l = Math.hypot(dirWorld[0], dirWorld[2]);
         if (l > 1e-6) {
           knockV = Math.max(knockV, BLAST_KNOCK_MPS * (effect.gain ?? 1));
@@ -1920,9 +2851,7 @@ export function createZombieActor(opts: {
     //     together, including the pinned foot. The pose/upload refresh below is
     //     still wanted because the sever tail must see a current pose.
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
     if (blastWounds.length > 0) runSeverChecks();
   }
 
@@ -1938,47 +2867,9 @@ export function createZombieActor(opts: {
     return [x / n, y / n, z / n];
   }
 
-  // ---- burning panic motion signals (Task 2) ------------------------------
-  // These are POSE reactions only. They ride `signals.shot`, which stepMotion
-  // routes to stagger.ts (lurch / shudder) and the localized recoil — no
-  // wound is stamped and `freshWounds` is never touched, so a burn stumble
-  // cannot bleed or gib the body.
+  // ---- burning panic ------------------------------------------------------
   /** The burning body's forward (unit), world space. */
   const burnForward = (): Vec3 => headingDir(bodyYaw);
-  /**
-   * The stumble: a `blast` signal → stagger.ts's directional lurch. For a
-   * soldier it is `medium`, not `small`: the periodic flail already keeps a
-   * `small` soldier reaction alive, and `stepSoldierStagger` will not restart
-   * an equal-level reaction, so a `small` stumble would vanish behind the
-   * flail. `medium` ranks up and lands; it is still a lurch (fullStagger is
-   * false), never a knockdown.
-   */
-  function burnStumbleShot(): NonNullable<MotionSignals['shot']> {
-    return {
-      type: 'blast',
-      dirWorld: burnForward(),
-      woundWorld: [...bodyCentreWorld()] as Vec3,
-      torso: true,
-      gain: BURN_BEHAVIOUR.stumbleGain,
-      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
-    };
-  }
-  /**
-   * The arm-flail stand-in: a `burn` signal → stagger.ts's shudder (and, for
-   * a soldier, a `small` soldier arm-open on the same signal). `small` keeps
-   * it a wave, not a stagger; motion.ts has no additive arm channel, so this
-   * is the seam the plan names as the stand-in.
-   */
-  function burnFlailShot(): NonNullable<MotionSignals['shot']> {
-    return {
-      type: 'burn',
-      dirWorld: burnForward(),
-      woundWorld: [...bodyCentreWorld()] as Vec3,
-      torso: true,
-      gain: BURN_BEHAVIOUR.flailGain,
-      ...(soldierDamage ? { soldierLevel: 'small' as const } : {}),
-    };
-  }
 
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
@@ -2011,6 +2902,8 @@ export function createZombieActor(opts: {
   }
   /** Preserve the strongest pending Soldier impact and its source. */
   function selectPendingShot(shot: NonNullable<MotionSignals['shot']>): void {
+    // Every landed shot kicks the flesh (a volley's pellets fold into one kick, flesh-jiggle.ts kickJiggle).
+    if (fleshSpec) kickJiggle(fleshKicks, shot.woundWorld, shot.dirWorld, shot.type === 'pellet' ? 0.35 : (shot.gain ?? 1));
     const rank = (s: NonNullable<MotionSignals['shot']>) =>
       s.fullStagger ? 3 : s.soldierLevel === 'heavy' ? 2 : s.soldierLevel === 'medium' ? 1 : 0;
     // Keep strength and impact source together until motion consumes them.
@@ -2036,9 +2929,7 @@ export function createZombieActor(opts: {
     hitCause = 'other';
     runSeverChecks(cause, dir);
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
   }
   /** A round the armour stopped: sparks (queued above), no wound, no injury.
    *  A slug still rocks him (a medium stagger); a pellet only shoves the rig
@@ -2077,6 +2968,16 @@ export function createZombieActor(opts: {
     }
     damageRevision++; bakePaused = false;
     const bySlug = wound.shot?.weapon === 'slug';
+    if (wound.type !== 'burn') {
+      if (volleyAge > VOLLEY_SEC) { volley = EMPTY_VOLLEY; volleyHead = false; }
+      if (posed.prims[wound.primIdx]?.limb === 'head') volleyHead = true;
+      const struck = posed.prims[wound.primIdx]?.limb;
+      const gun = wound.shot?.weapon === 'shotgun' ? wound.shot : undefined;
+      const origin = gun?.origin;
+      const rangeM = origin ? Math.hypot(hitWorld[0] - origin[0], hitWorld[1] - origin[1], hitWorld[2] - origin[2]) : Infinity;
+      volley = addToVolley(volley, bySlug ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet', dirWorld, struck === 'torso' || struck === 'head', rangeM, gun?.barrels ?? 1);
+      volleyAge = 0;
+    }
     if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
@@ -2152,7 +3053,9 @@ export function createZombieActor(opts: {
     // Scaled BY WOUND KIND: a slug stamps a blast-profile wound and must
     // shove like one, not like a single pellet (the defect this task was
     // opened for).
-    const push = IMPULSE[wound.type];
+    // A corpse lying in its authored death goes limp under the hit (death-fall.ts corpseHoldStep) with no spring to
+    // bring it back, so the full shove slid it most of a metre per double barrel.
+    const push = IMPULSE[wound.type] * (state.corpseHold ? CORPSE_SHOVE : 1);
     bound = impulseAt(bound, hitWorld, [
       dirWorld[0] * push,
       dirWorld[1] * push,
@@ -2178,10 +3081,91 @@ export function createZombieActor(opts: {
     view,
     beginHits,
     endHits,
-    posed: () => posed,
-    drawnBody: () => drawnPose(),
+    posed: () => melt?.drawn ?? posed,
+    rigJoints: () => ({ names: joints.names, points: bound.rig.points.map(p => [...p.pos] as Vec3) }),
+    drawnBody: () => melt?.drawn ?? drawnPose(),
+    beginMelt: (hitWorld?: Vec3 | null) => {
+      if (melt || tear || bakePaused) return false;
+      const roll = rollMelt(mulberry32(((opts.seed ^ 0x3e17ed) + ++meltSerial * 0x9e3779b1) >>> 0));
+      // The hit, carried to the rest body: the middle of the rest prim whose posed twin is nearest to it.
+      let hitRest: Vec3 | null = null;
+      if (hitWorld) {
+        let best = Infinity;
+        posed.prims.forEach((p, i) => {
+          const rp = current.prims[i];
+          if (p.dead || p.op === 'sub' || !rp) return;
+          const d = Math.hypot((p.a[0] + p.b[0]) / 2 - hitWorld[0], (p.a[1] + p.b[1]) / 2 - hitWorld[1], (p.a[2] + p.b[2]) / 2 - hitWorld[2]);
+          if (d < best) { best = d; hitRest = [(rp.a[0] + rp.b[0]) / 2, (rp.a[1] + rp.b[1]) / 2, (rp.a[2] + rp.b[2]) / 2]; }
+        });
+      }
+      damageRevision++;
+      // Where it melts: about the flesh's own axis (a corpse lies away from its root), onto the floor under it.
+      const at = meltFrameOf(posed.prims, state.floorY);
+      const frame: MeltFrame = { ...at, floorY: motionFloor ? motionFloor(at.x, at.z) : state.floorY };
+      const restFloor = opts.start[1] || 0;
+      const parts = partitionBones(current.bonePrims.filter(p => !p.dead));
+      melt = {
+        state: meltInitBody(current.prims, restFloor, { ...MELT_TUNING, rate: MELT_TUNING.rate * roll.rate }), frame,
+        restFrame: meltFrameOf(current.prims, restFloor),
+        parts, order: releaseOrder(parts), released: new Set(),
+        rng: mulberry32((opts.seed ^ 0x3e17ed) >>> 0), drawn: posed, set: false,
+        hitRest, slumped: false, after: 0, hitW: 0, hitMax: 1,
+        tuning: roll.tuning, slumpAt: roll.slumpAt, gobs: roll.gobs,
+      };
+      // The front's heights, with the hit's spread folded in (hitHeight): flesh near the hit goes first.
+      if (hitRest) {
+        const m = melt;
+        const hr: Vec3 = hitRest;
+        m.hitW = Math.min(1, Math.max(0, (hr[1] - m.state.floorY) / m.state.span));
+        m.hitMax = Math.max(1e-3, ...current.prims.flatMap(p => [p.a, p.b].map(e => Math.hypot(e[0] - hr[0], e[1] - hr[1], e[2] - hr[2]) / m.state.span)));
+        melt.state = { ...melt.state, heights: current.prims.flatMap(p => [hitHeight(m, p.a), hitHeight(m, p.b)]) };
+      }
+      doomed = true;
+      // The craters close: a carve sphere left where the standing body was would bite the pool.
+      woundRing.set([]);
+      refreshWounds();
+      // The skeleton shows through the thinning flesh and then falls out of it: its rows are packed into
+      // this body's field whatever the bone mode is (the segment meshes cannot follow a melt), and fold bare.
+      if (MELT_SDF_BONES) view.setPackBones(true);
+      // The skeleton folds bare from MELT_BARE_AT on (stepMelt), not from the first frame: the bare fold changes how
+      // the whole body shades at once (dark bands along the arms, the face gone to the skull under it), which was
+      // the "pixely patches before anything melts" (owner, 2026-11-14; measured: with it off the first frames are
+      // the untouched zombie). Thinning the bones (boneShow) did not remove it.
+      // Kit and prop are rigid and do not melt: the caller drops them as loose pieces (game-melter.ts).
+      uploadMelt();
+      return true;
+    },
+    stepMelt: (dt: number) => {
+      if (!melt || melt.set) return;
+      const before = melt.state.t;
+      // Set, and creeping: only the clock and the upload.
+      if (before >= 1) { melt.after = Math.min(MELT_AFTER.sec, melt.after + Math.max(0, dt)); uploadMelt(); return; }
+      melt.state = advanceMelt(melt.state, Math.max(0, dt));
+      // DRIPS: goo runs off the lowest flesh of the arms and the head while it melts.
+      if (melt.state.t > MELT_DRIP.from && melt.state.t < MELT_DRIP.to
+        && Math.floor(before / MELT_DRIP.every) !== Math.floor(melt.state.t / MELT_DRIP.every)) {
+        const hang = melt.drawn.prims.filter(p => !p.dead && p.op !== 'sub' && (p.limb === 'armL' || p.limb === 'armR' || p.limb === 'head'));
+        const p = hang[Math.floor(melt.rng() * hang.length)];
+        if (p) opts.onMeltDrip?.(p.a[1] < p.b[1] ? [...p.a] as Vec3 : [...p.b] as Vec3);
+      }
+      if (MELT_SDF_BONES && before < MELT_BARE_AT && melt.state.t >= MELT_BARE_AT) view.setBonesBare(true);
+      // CHUNKS COME OFF FIRST (owner, 2026-11-14): a few gobs of flesh drop from the arms and trunk as it starts.
+      for (const at of melt.gobs) {
+        if (before < at && melt.state.t >= at) {
+          const flesh = posed.prims.filter(p => !p.dead && p.op !== 'sub' && (p.limb === 'armL' || p.limb === 'armR' || p.limb === 'torso'));
+          const p = flesh[Math.floor(melt.rng() * flesh.length)];
+          if (p) opts.onMeltGob?.([(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2], Math.min(0.06, p.radius * 0.5));
+        }
+      }
+      releaseMeltBones(melt);
+      uploadMelt();
+    },
+    melting: () => melt !== null,
+    meltProgress: () => melt?.state.t ?? 0,
+    meltDone: () => melt?.set ?? false,
+    meltReleased: () => melt?.released ?? NO_GROUPS,
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
-      tear = { at: [...at] as Vec3, falloff, age: 0 };
+      tear = { at: [...at] as Vec3, falloff, age: 0, refPrims: posed.prims };
       tearPlan = plan;
       // The head split describes the CLEAN pose in world space, and rupturePosed spreads `posed`: it must not ride onto
       // the regions as they pull apart. The split closes here (the plan's pieces are the closed head's prims anyway),
@@ -2198,7 +3182,8 @@ export function createZombieActor(opts: {
       // A live body whose procedure skeleton is packed folds it bare while the
       // flesh pulls away (counts2.y, march.wgsl.ts) — the mesh-skeleton path
       // (`setPackBones(false)`, the forward default) draws its bones separately
-      // and needs none of this. Harmless when there are no packed bones.
+      // and needs none of this: a view that packs no inside-flesh rows writes the flag as 0
+      // (crowd-records.ts bareBonesFlag), so the body keeps its analytic shading normal through the window.
       view.setBonesBare(true);
       // The material ramp starts at 0: the recoil frames are the intact body.
       view.setGoreStrength(0);
@@ -2217,36 +3202,14 @@ export function createZombieActor(opts: {
       // would never advance. Uploading the same pose twice on a frame the actor
       // DID step is one wasted pack for one body; a body stuck mid-rupture
       // forever is a hole in the world.
-      //
-      // One frame computed once: the body, the wound carry and the face anchor
-      // must all read the SAME transforms, or they disagree by a frame.
-      const frame = ruptureFrameNow();
-      view.update(frame?.body ?? posed, current);
-      // ...and the material ramp rides the SAME clock, so at release the drawn
-      // body is already wearing the gore strength the spawned chunks carry and
-      // there is no one-frame material switch (see ruptureGore).
-      view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
-      // Wounds ride their rotating region (task 4).
-      refreshWounds(frame);
-      // THE FACE RIDES THE HEAD REGION. The head is one region; its displayed
-      // orientation is composed over the rig's own head quat, so the projection
-      // frame turns with the skull instead of staying pinned to the clean pose.
-      // The CENTRE is handled by the per-frame `headShape(a.drawnBody())` in the
-      // draw loop.
-      if (frame && tearPlan) {
-        const hi = tearPlan.pieces.findIndex(p => p.limb === 'head');
-        const hq = hi >= 0 ? frame.quats[hi] : undefined;
-        if (hq && !(hq[0] === 0 && hq[1] === 0 && hq[2] === 0 && hq[3] === 1)) {
-          const base = headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1];
-          view.setHeadRotation(qMul(hq, base));
-        }
-      }
+      uploadTear();
     },
     tearing: () => tear !== null && tear.age < tearTuning.sec,
     tearAge: () => tear?.age ?? 0,
     tearFrame: ruptureFrameNow,
     endTear: () => {
       tear = null; tearPlan = null; tearPrimRegion = null; doomed = false;
+      burnDied = false; burnPanic = null; burningOn = false; burnPhaseNow = 'none'; burnFlail = null; burnCruiseScale = 1;
       // Restore the ordinary packed-bone layout for a body returned to play
       // (a reset mid-window). A retired body keeps its view hidden either way.
       view.setBonesBare(false);
@@ -2255,7 +3218,9 @@ export function createZombieActor(opts: {
       view.setGoreStrength(0);
     },
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
-    motionFrame: () => lastFrame,
+    // A melting body reads as a corpse to everything that asks (doors, the encounter, the ring, crowd boxes).
+    // (once it has stopped moving: while it still walks into the melt it is a body, with no verbs.)
+    motionFrame: () => (melt && melt.state.t >= MELT_MOTION_UNTIL && lastFrame ? { ...lastFrame, collapsed: true } : lastFrame),
     sinceFire: () => state.sinceFire,
     barrelSpin: () => (indexes ? tubes.angle : barrel.angle),
     statusLights: () => {
@@ -2280,6 +3245,11 @@ export function createZombieActor(opts: {
     boundRig: () => bound,
     rigImpulse: (at: Vec3, delta: Vec3) => { bound = impulseAt(bound, at, delta); },
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
+    arcDrive: () => {
+      if (!fleshSpec || brainCore < 0) return null;
+      const level = judderLevel(state);
+      return level > 0 ? { level, centre: [...posed.prims[brainCore]!.a] as Vec3, radii: brainRadii, yaw: bodyYaw, surface: brainSurface } : null;
+    },
     nudge,
     setEncounterOrder: (order: EncounterOrder) => { encounterOrder = order; },
     setBrainInput: (p: BrainPlayer | null, alerted: boolean) => {
@@ -2288,28 +3258,50 @@ export function createZombieActor(opts: {
       if (alerted) brainAlerted = true;
     },
     setBurning: (on: boolean) => {
-      // Edge-triggered: game-burning only calls this on transitions, but a
-      // repeated call must not re-seed the panic (that would reset the RNG
-      // and restart every stumble/repick clock).
-      if (on === (burnPanic !== null)) return;
-      // Soldier panic is switched off for now (BURN_BEHAVIOUR.soldierPanic):
-      // a burning soldier keeps his mind, speed and gun, with no stumbles.
-      if (on && mind.kind === 'soldier' && !BURN_BEHAVIOUR.soldierPanic) return;
+      // Edge-triggered: a repeated call must not restart the clock, and a body that has already
+      // burned to death or resumed stays that way until it is put out.
+      if (on === burningOn) return;
+      burningOn = on;
       if (on) {
+        // A body that already burned to death, or is down by another cause, is not lit into a panic.
+        if (burnDied || downOtherwise()) return;
         // The id seed keeps two bodies lit on the same frame out of phase.
-        burnPanic = createBurnPanic(opts.id * 7919 + 1);
-        burnFlailT = 0;
-        burnStumbles = 0;
+        burnPanic = createBurnPanic(burnSeed, burnTier);
+        burnPhaseNow = 'panic';
       } else {
         burnPanic = null;
         burnCruiseScale = 1;
+        burnFlail = null;
+        if (!burnDied) burnPhaseNow = 'none';
       }
     },
-    burnStumbles: () => burnStumbles,
+    burnPhase: () => burnPhaseNow,
     mind: () => mind,
     kind: mind.kind,
     gore: opts.profile?.gore ?? null,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
+    setBodyObstacles: (obstacles: readonly BodyObstacle[]) => { nearBodies = obstacles; },
+    bodyObstacles: (): BodyObstacle[] => {
+      if (melt) return [];   // a thrown corpse passes over a puddle
+      const pts = bound.rig.points, ix = joints.index;
+      if (!lastFrame?.collapsed) {
+        let lo = Infinity, hi = -Infinity;
+        for (const p of pts) { lo = Math.min(lo, p.pos[1]); hi = Math.max(hi, p.pos[1]); }
+        const at = state.wander.pos;
+        return [{ id: opts.id, kind: 'upright', x: at[0], z: at[2], r: CORPSE_CONTACT.uprightR, y0: lo + CORPSE_CONTACT.kneeY, y1: hi }];
+      }
+      return (['pelvis', 'chest', 'head'] as const).flatMap(n => {
+        const k = ix[n];
+        return k === undefined || !pts[k] ? [] : [{ id: opts.id, kind: 'sphere' as const, c: pts[k]!.pos, r: CORPSE_CONTACT.trunkR }];
+      });
+    },
+    takeBodyHits: () => {
+      if (!bodyHits.size) return [];
+      const hits = [...bodyHits].map(([id, h]) => ({ id, ...h }));
+      bodyHits.clear();
+      return hits;
+    },
+    bodyKnock,
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;
@@ -2320,19 +3312,36 @@ export function createZombieActor(opts: {
     engagedForCrowd: () => !doomed && lastEngaged,
     committed: () => !doomed && lastCommitted,
     step,
+    settled: () => !bakePaused && damageRevision === lodRevision && sinceDamage > 2
+      && pendingShot === null && pendingWounds.length === 0 && pendingSevered.length === 0 && pendingPelletHits === 0
+      && knockV <= 1e-4 && !doomed && !softKilled && dyingT <= 0 && burnPanic === null && !headPop && pop === null
+      && tear === null && melt === null && !forceCollapseNext && forcedSwing === null && !(lastFrame?.collapsed ?? false),
+    setViewSync(on: boolean, catchUp = true) {
+      viewSync = on;
+      // A body paused for its corpse bake: the baker owns the view (the head-only partition); never
+      // overwrite it. pauseForBake already settled what was owed.
+      if (!on || !catchUp || !viewStale || bakePaused) return;
+      // Exactly what the skipped frames' last step would have left: its upload, then stepTear's.
+      uploadPose();
+      uploadTear();
+    },
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
     refineEligible: () => state.collapse.phase === 'standing',
     damageRevision: () => damageRevision,
     injuryHistorySize: () => soldierWounds.length,
-    pauseForBake: (paused: boolean) => { bakePaused = paused; },
+    // The baker writes the view itself both ways (the head-only partition, then the full pose on
+    // restore): nothing is owed to setViewSync after either.
+    pauseForBake: (paused: boolean) => { bakePaused = paused; viewStale = false; },
     wounds: () => woundRing.all(),
-    visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
+    bakedWounds: () => woundRing.baked?.() ?? [],
+    visualWounds: () => melt ? [] : torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
+    floatState: () => floater ? { altitude: floater.altitude, mode: floater.mode, dir: floater.dir, down: floaterDown } : null,
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,
-      staggerKind: null, target: null, idle: 0,
+      staggerKind: null, fallKind: state.fallKind?.kind ?? null, burnFlail: burnFlail?.amp ?? null, attack: lastAttack, target: null, idle: 0,
       state: mind.debug().state, alert: mind.debug().alert,
       swingT: mind.debug().swingT,
       side: mind.debug().side, variant: mind.debug().variant,

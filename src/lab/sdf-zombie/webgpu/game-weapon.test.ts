@@ -10,7 +10,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { sdBody, sdPrimitive } from '../validate';
 import {
-  GRAPESHOT, SLUG, applyRigidYaw, carryFreshShots, expired, fitRestToPose, mulberry32,
+  GRAPESHOT, PLAYER_GRAPESHOT, SLUG, applyRigidYaw, segmentBoxHit, segmentPointDistance, carryFreshShots, expired, fitRestToPose, mulberry32,
   spawnPellets, spawnRound, CHAINGUN_ROUND, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
@@ -69,11 +69,11 @@ describe('mulberry32', () => {
 });
 
 describe('spawnPellets', () => {
-  it('fires 8 pellets per barrel', () => {
+  it('fires 8 pellets per barrel by default (the enemy volley)', () => {
     expect(spawnPellets([0, 0, 0], FWD, 1, 5)).toHaveLength(GRAPESHOT.pelletsPerBarrel);
   });
 
-  it('alt-fire doubles the count with an independent pattern', () => {
+  it('two barrels double the count with an independent pattern', () => {
     const both = spawnPellets([0, 0, 0], FWD, 2, 5);
     expect(both).toHaveLength(GRAPESHOT.pelletsPerBarrel * 2);
     const single = spawnPellets([0, 0, 0], FWD, 1, 5);
@@ -89,6 +89,70 @@ describe('spawnPellets', () => {
       expect(p.pos).toEqual([1, 2, 3]);
       expect(angleFrom(p.vel, FWD)).toBeLessThanOrEqual(GRAPESHOT.spreadRad + 1e-9);
     }
+  });
+});
+
+describe("the player's volley (PLAYER_GRAPESHOT)", () => {
+  it('both barrels carry perBarrel x 2 pellets; one barrel perBarrel', () => {
+    expect(spawnPellets([0, 0, 0], FWD, 2, 5, PLAYER_GRAPESHOT)).toHaveLength(PLAYER_GRAPESHOT.pelletsPerBarrel * 2);
+    expect(spawnPellets([0, 0, 0], FWD, 1, 5, PLAYER_GRAPESHOT)).toHaveLength(PLAYER_GRAPESHOT.pelletsPerBarrel);
+    expect(PLAYER_GRAPESHOT.pelletsPerBarrel).toBeGreaterThan(GRAPESHOT.pelletsPerBarrel);
+  });
+
+  it('flies at the player speed and carries its own drop', () => {
+    for (const p of spawnPellets([0, 1, 0], FWD, 2, 9, PLAYER_GRAPESHOT)) {
+      expect(Math.hypot(...p.vel)).toBeCloseTo(PLAYER_GRAPESHOT.speed, 4);
+      expect(p.gravity).toBe(PLAYER_GRAPESHOT.gravity);
+      expect(angleFrom(p.vel, FWD)).toBeLessThanOrEqual(GRAPESHOT.spreadRad + 1e-9);
+    }
+    const [p] = spawnPellets([0, 1, 0], FWD, 1, 9, PLAYER_GRAPESHOT);
+    const vy = p!.vel[1];
+    stepProjectiles([p!], 0.1);
+    expect(p!.vel[1]).toBeCloseTo(vy + PLAYER_GRAPESHOT.gravity * 0.1, 9);
+  });
+
+  it('reads near-straight at room range: under 2 cm of drop at 10 m, under 6 cm at 20 m (was ~25 cm / ~1 m)', () => {
+    const drop = (speed: number, g: number, dist: number) => {
+      const p = { pos: [0, 10, 0] as Vec3, vel: [0, 0, -speed] as Vec3, ageSec: 0, radius: 0.05, kind: 'pellet' as const, gravity: g };
+      while (p.pos[2] > -dist) stepProjectiles([p], 1 / 60);
+      return 10 - p.pos[1];
+    };
+    expect(drop(PLAYER_GRAPESHOT.speed, PLAYER_GRAPESHOT.gravity, 10)).toBeLessThan(0.02);
+    expect(drop(PLAYER_GRAPESHOT.speed, PLAYER_GRAPESHOT.gravity, 20)).toBeLessThan(0.06);
+    expect(drop(GRAPESHOT.speed, GRAPESHOT.gravity, 10)).toBeGreaterThan(0.2);
+  });
+
+  it('leaves the ENEMY volley alone: 8 a barrel, 35 m/s, GRAPESHOT drop', () => {
+    const enemy = spawnPellets([0, 1, 0], FWD, 1, 9);
+    expect(enemy).toHaveLength(8);
+    expect(GRAPESHOT.speed).toBe(35);
+    expect(GRAPESHOT.gravity).toBe(-6);
+    for (const p of enemy) {
+      expect(Math.hypot(...p.vel)).toBeCloseTo(35, 4);
+      expect(p.gravity).toBeUndefined();
+    }
+    const vy = enemy[0]!.vel[1];
+    stepProjectiles([enemy[0]!], 0.1);
+    expect(enemy[0]!.vel[1]).toBeCloseTo(vy - 0.6, 9);
+  });
+});
+
+describe('segmentBoxHit', () => {
+  const min: Vec3 = [-1, 0, -0.15], max: Vec3 = [1, 3, 0.15]; // a 0.3 m wall across z
+
+  it('catches a frame step that starts and ends either side of a thin wall', () => {
+    const h = segmentBoxHit([0, 1.5, 1], [0, 1.5, -0.4], min, max); // 1.4 m: an 80 m/s pellet at 60 Hz
+    expect(h).not.toBeNull();
+    expect(h![2]).toBeCloseTo(0.15, 9);
+  });
+
+  it('misses a segment beside the box, and one stopping short of it', () => {
+    expect(segmentBoxHit([2, 1.5, 1], [2, 1.5, -1], min, max)).toBeNull();
+    expect(segmentBoxHit([0, 1.5, 1], [0, 1.5, 0.2], min, max)).toBeNull();
+  });
+
+  it('a segment starting inside hits at its start', () => {
+    expect(segmentBoxHit([0, 1.5, 0], [0, 1.5, -2], min, max)).toEqual([0, 1.5, 0]);
   });
 });
 
@@ -124,6 +188,14 @@ describe('stepProjectiles', () => {
     stepProjectiles(ps, dt);
     stepProjectiles(ps, dt); // strictly past lifeSec — no float-equality edge
     expect(expired(ps[0]!)).toBe(true);
+  });
+
+  it('room levels kill a round under y -0.5; sector levels (floors to -4.25 m on E1M1) only age it out', () => {
+    const [p] = spawnPellets([0, -2, 0], FWD, 1, 3);
+    expect(expired(p!)).toBe(true);
+    expect(expired(p!, true)).toBe(false);
+    p!.ageSec = GRAPESHOT.lifeSec + 0.01;
+    expect(expired(p!, true)).toBe(true);
   });
 });
 
@@ -378,5 +450,21 @@ describe('spawnRound (the chaingun)', () => {
   it('is deterministic per seed and differs across seeds', () => {
     expect(spawnRound([0, 0, 0], FWD, 7).vel).toEqual(spawnRound([0, 0, 0], FWD, 7).vel);
     expect(spawnRound([0, 0, 0], FWD, 7).vel).not.toEqual(spawnRound([0, 0, 0], FWD, 8).vel);
+  });
+});
+
+describe('segmentPointDistance (the pellet-vs-actor broad phase)', () => {
+  it('finds a body on the line far along a long step (the old double division rejected it)', () => {
+    // A 3.3 m step (80 m/s at ~24 fps, or a sector first step from the eye): torso 2.5 m along it.
+    expect(segmentPointDistance([0, 1, 0], [0, 1, 3.3], [0, 1, 2.5])).toBeCloseTo(0, 9);
+    // The old maths put the closest point at 2.5/3.3 m along → 1.74 m off: past the 1.35 m reject.
+  });
+  it('clamps to the ends and measures off-line distance', () => {
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [0, 0, 6])).toBeCloseTo(2, 9);
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [0, 0, -1])).toBeCloseTo(1, 9);
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [1, 0, 2])).toBeCloseTo(1, 9);
+  });
+  it('a zero-length step measures from its point', () => {
+    expect(segmentPointDistance([1, 2, 3], [1, 2, 3], [1, 2, 5])).toBeCloseTo(2, 9);
   });
 });

@@ -12,6 +12,15 @@ import type { GameContext } from './game-context';
 import { type DeferredDebugView } from './deferred-layer';
 import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
+import { sectorOcclusion } from './actor-sight';
+import { levelBatchOn } from './level-batch';
+import { levelBatchLive, setLevelBatchLive } from './game-level-batch';
+import { applyBulletTimeTuning } from '../bullet-time';
+import {
+  adrenalineBorderAt, adrenalineDrive, adrenalineEdgeAt, adrenalinePhase, adrenalineScalesAt, applyAdrenalineTuning,
+  lowHealthDanger,
+} from '../adrenaline';
+import type { SectorGround } from './sector-ground';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
 // Type aliases copied from game-main.ts, where they are module-scope and
@@ -101,6 +110,67 @@ export function createBootSeams(ctx: GameContext) {
       }
       return ms.sort((a, b) => a - b)[n >> 1]!;
     },
+    /** SECTOR CULL A/B (sector perf, 2026-10-25): false drops the sector occluder from the render culls
+     *  (bodies behind sector walls drawn again, kits shown by frustum only, the pre-fix behaviour); true
+     *  restores it. Returns whether it is on. A room level has none: always false. */
+    setSectorCull: (on: boolean) => {
+      // Rebuilt from the CURRENT level each time (never a stash that could outlive a level change).
+      const map = ctx.world.level.def?.sectors;
+      if (on && map) {
+        if (!ctx.world.sightOccluder) ctx.world.sightOccluder = sectorOcclusion(map, ctx.world.level.ground as SectorGround);
+      } else if (ctx.world.sightOccluder) {
+        ctx.world.sightOccluder = null;
+        for (const a of ctx.world.actors) {
+          a.setViewSync(true);
+          if (a.character?.kit) a.character.kit.object.visible = true;
+          if (a.character?.prop) a.character.prop.object.visible = true;
+        }
+      }
+      return !!ctx.world.sightOccluder;
+    },
+    /** FRAME SPLIT (sector perf, 2026-10-25): `n` hand-stepped frames with the rAF loop STOPPED, each
+     *  split into the tick's CPU ms, the draw's CPU ms (encode + submit) and the wait for the GPU fence
+     *  after it; medians, plus the tick's telemetry phases (median per phase, inclusive). `drawOnly`
+     *  repeats `timeDraws` with the loop stopped (no rAF frame can land inside the fence wait). The sim
+     *  advances `dt` per frame. The loop is restarted afterwards. */
+    frameSplit: async (n = 21, dt = 1 / 30) => {
+      const med = (v: number[]) => [...v].sort((a, b) => a - b)[v.length >> 1] ?? NaN;
+      const handle = ctx.boot.handle, tel = ctx.telemetry.telemetry;
+      const wasActive = tel.active;
+      handle.setLoopRunning(false);
+      const tick: number[] = [], draw: number[] = [], fence: number[] = [], drawOnly: number[] = [];
+      const phases: Record<string, number[]> = {};
+      try {
+        tel.active = true;
+        for (let i = 0; i < n; i++) {
+          tel.drainPhases();
+          const t = handle.stepTimed(dt);
+          tel.lap('region', null); tel.lap('pass', null);   // close the open laps before the fence wait
+          const f0 = performance.now();
+          await handle.resolveGpu();
+          tick.push(t.tickMs); draw.push(t.drawMs); fence.push(performance.now() - f0);
+          for (const [k, v] of Object.entries(tel.drainPhases())) (phases[k] ??= []).push(v);
+        }
+        tel.active = wasActive;
+        for (let i = 0; i < n; i++) {
+          const t0 = performance.now();
+          handle.drawOnce();
+          await handle.resolveGpu();
+          drawOnly.push(performance.now() - t0);
+        }
+      } finally {
+        tel.active = wasActive;
+        handle.setLoopRunning(true);
+      }
+      const phaseMed: Record<string, number> = {};
+      for (const [k, v] of Object.entries(phases)) {
+        // Phases that ran on only some frames: median over all n (absent = 0).
+        while (v.length < n) v.push(0);
+        const m = med(v);
+        if (m >= 0.05) phaseMed[k] = +m.toFixed(2);
+      }
+      return { tickMs: med(tick), drawMs: med(draw), fenceMs: med(fence), drawOnlyMs: med(drawOnly), phases: phaseMed };
+    },
     // ---------------------------------------------------------------
     // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
     // uncaps and restores the raw rAF behaviour. Default 30, matching
@@ -132,6 +202,54 @@ export function createBootSeams(ctx: GameContext) {
       for (const [k, v] of Object.entries(by)) if (v > 0) out[k] = Math.round(v / n);
       return out;
     },
+    /** DRAWS BY OBJECT (level batching pass, 2026-10-28): every object three actually renders over `n` drawn
+     *  frames, per frame, keyed by its nearest named ancestor's name (digits and ids stripped) and the camera
+     *  (`main` = the game camera, else the camera's type: shadow and layer passes). Borrows the render-object
+     *  function for its duration. `objects` counts distinct objects drawn by the main camera. */
+    drawsByObject: async (n = 4, detail = false) => {
+      const det: Record<string, Set<THREE.Object3D>> = {}, detN: Record<string, number> = {};
+      const r = ctx.boot.handle.renderer, main = ctx.boot.handle.camera;
+      const prev = r.getRenderObjectFunction();
+      const by: Record<string, number> = {};
+      const seen = new Set<THREE.Object3D>();
+      const keyOf = (o: THREE.Object3D) => {
+        let q: THREE.Object3D | null = o, k = '';
+        while (q && !k) { k = q.name; q = q.parent; }
+        return (k || `(${o.type})`).replace(/[:#].*$/, '').replace(/-?\d+/g, '#');
+      };
+      r.setRenderObjectFunction((object, scene, camera, geometry, material, group, lightsNode, clip, passId) => {
+        const k = `${camera === main ? 'main' : camera.type}|${keyOf(object)}`;
+        by[k] = (by[k] ?? 0) + 1;
+        if (camera === main) seen.add(object);
+        if (detail) { const rt = r.getRenderTarget(); const t = `${camera === main ? 'main' : camera.type}@${rt ? (rt.texture?.name || `rt${rt.width}x${rt.height}`) : 'screen'}|${keyOf(object)}`; (det[t] ??= new Set()).add(object); detN[t] = (detN[t] ?? 0) + 1; }
+        r.renderObject(object, scene, camera, geometry, material, group, lightsNode, clip, passId);
+      });
+      ctx.boot.handle.setLoopRunning(false);   // no rAF frame inside the awaits
+      try {
+        for (let i = 0; i < n; i++) { ctx.boot.handle.drawOnce(); await ctx.boot.handle.resolveGpu(); }
+      } finally {
+        r.setRenderObjectFunction(prev);
+        ctx.boot.handle.setLoopRunning(true);
+      }
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(by).sort((a, b) => b[1] - a[1])) out[k] = +(v / n).toFixed(1);
+      const targets = detail ? Object.fromEntries(Object.entries(det).map(([k, v]) => [k, { objects: v.size, draws: +(detN[k]! / n).toFixed(1) }])) : undefined;
+      return { objects: seen.size, draws: out, targets };
+    },
+    /** LEVEL BATCHING (level-batch.ts, 2026-10-28): whether it is on (`?batch=0` off), the pickup batches (members,
+     *  instances drawn this frame) and the casing pools (all, and those in the render). Pair with drawsByObject. */
+    levelBatch: () => {
+      let pools = 0, shown = 0;
+      ctx.boot.handle.scene.traverse(o => {
+        if (o.name !== 'spent-shotgun-shells') return;
+        pools++;
+        if (o.children.some(c => c.visible)) shown++;
+      });
+      return { on: levelBatchLive(), booted: levelBatchOn(location.search), pickups: ctx.world.loop?.batches?.report() ?? null, barrels: ctx.world.barrels?.batches() ?? null, casingPools: pools, casingPoolsDrawn: shown };
+    },
+    /** In-boot A/B of the level batching (game-level-batch.ts setLevelBatchLive): false = the per-object path.
+     *  Returns whether batching is on. A level booted with `?batch=0` cannot switch. */
+    setLevelBatch: (on: boolean) => setLevelBatchLive(ctx, on),
     /** What the main camera's polygonal pass can draw: visible meshes on its layers, grouped by
      *  the nearest named ancestor (optimisation pass census). */
     /** Diagnostics: visible objects whose name matches `re`, with world position, scale and bounds. */
@@ -257,9 +375,48 @@ export function createBootSeams(ctx: GameContext) {
     gpuDiagnostics: () => ctx.boot.handle.gpuDiagnostics,
     loopRunning: () => ctx.boot.handle.loopRunning,
     uptime: () => (performance.now() - ctx.boot.time) / 1000,
-    /** BULLET TIME (bullet-time.ts; Q in game): the toggle, the eased intensity and the live droplet count. */
-    bulletTime: () => ({ ...ctx.player.bulletTime, droplets: ctx.vfx.bloodSim.droplets.length, pellets: ctx.weapon.pellets.map(p => p.pos) }),
+    /** BULLET TIME (bullet-time.ts; Q in game): the toggle, the eased intensity, the live droplet count, and the
+     *  live TUNING. Pass a partial to retune it (validated: a finite number inside BULLET_TIME_RANGES, else listed
+     *  in `rejected` and left alone; `reset: true` restores the defaults):
+     *    __sdfGame.bulletTime({ moveScale: 0.66, reloadScale: 0.6 })
+     *    __sdfGame.bulletTime({ reset: true })
+     *  Knobs: worldScale moveScale aimScale fireScale reloadScale shotScale airScale rampSec wakeStrength ownWakeMul.
+     *  The same knobs boot from ?bt_move= ?bt_aim= ?bt_fire= ?bt_reload= ?bt_shot= ?bt_world= ?bt_air= ?bt_ramp=. */
+    bulletTime: (partial?: Record<string, unknown>) => {
+      const { tuning, rejected } = applyBulletTimeTuning(partial);
+      if (partial) ctx.panels.bulletTimePanel?.refresh();
+      return {
+        ...ctx.player.bulletTime, droplets: ctx.vfx.bloodSim.droplets.length, pellets: ctx.weapon.pellets.map(p => p.pos),
+        tuning, ...(rejected.length ? { rejected } : {}),
+      };
+    },
     setBulletTime: (on: boolean) => { ctx.player.bulletTime.on = on; return { ...ctx.player.bulletTime }; },
+    /** ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off — a sustained state that
+     *  glides in, holds while hits land, and glides out `sustainSec` after the last one. Returns the envelope
+     *  (phase, level, sinceHit, triggers), this tick's scales and edge FX amount, and the live tuning. Pass a partial
+     *  to retune it, validated as bulletTime's (`reset: true` restores the defaults):
+     *    __sdfGame.adrenaline({ worldScale: 0.45, sustainSec: 10 })   __sdfGame.adrenaline({ on: false })
+     *  Knobs: on flail lowHealthAlways (true/false) worldScale playerScale shotScale rampInSec sustainSec rampOutSec
+     *  edgeFx, and LOW HEALTH's lowHealthStart lowHealthFull lowHealthWorldScale lowHealthPlayerScale
+     *  lowHealthSlewSec lowHealthEdgeFx lowHealthBorder lowHealthBorderWidth lowHealthPulseHz. `danger` is the slewed
+     *  low-health amount (`dangerTarget` the current health's), `drive` the level the scales follow, `border` the
+     *  red border's {strength, width} this frame (pulse included; ?flashes=reduced not).
+     *  URL: ?adrenaline=0 ?adr_flail=0 ?adr_world= ?adr_player= ?adr_shot= ?adr_in= ?adr_sustain= ?adr_out= ?adr_fx=
+     *  ?adr_low_always=0|1 ?adr_low_start= ?adr_low_full= ?adr_low_world= ?adr_low_player= ?adr_low_slew=
+     *  ?adr_low_fx= ?adr_low_border= ?adr_low_width= ?adr_low_pulse=. */
+    adrenaline: (partial?: Record<string, unknown>) => {
+      const { tuning, rejected } = applyAdrenalineTuning(partial);
+      if (partial) ctx.panels.bulletTimePanel?.refresh();
+      const adr = ctx.player.adrenaline, drive = adrenalineDrive(adr);
+      const health = ctx.world.loop?.vitals.health ?? null;
+      return {
+        ...adr, phase: adrenalinePhase(adr, ctx.player.bulletTime.on), drive, health,
+        dangerTarget: lowHealthDanger(health ?? Infinity),
+        scales: adrenalineScalesAt(drive, undefined, adr.danger), edge: adrenalineEdgeAt(drive, undefined, adr.danger),
+        border: adrenalineBorderAt(drive, adr.danger, adr.pulse, false),
+        tuning, ...(rejected.length ? { rejected } : {}),
+      };
+    },
     /**
      * THE SURFACE 'bodies' COMPOSITES INTO, read back (2026-09-10).
      *

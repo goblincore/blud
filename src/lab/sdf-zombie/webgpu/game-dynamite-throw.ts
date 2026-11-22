@@ -14,9 +14,11 @@ import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
 import { type ZombieActor } from './game-actor';
 import { eyeOf } from './game-player';
-import { makeFlight } from '../dynamite-flight';
+import { FLIGHT_TUNING, makeFlight } from '../dynamite-flight';
 import { throwDirection } from '../fpv';
 import { aimDir } from './game-weapon-rig';
+import { sectorHitBetween } from './game-hit-trace';
+import { WALL_SKIN_M } from './sector-debris';
 
 /** Take a prop for a bundle that is leaving the hand: the held one if it is
  *  there, else a spare, else the OLDEST flying bundle's (its state keeps
@@ -139,7 +141,18 @@ export function throwBundle(ctx: GameContext, speedMps: number): void {
   // that hands the flight the scene ORIGIN — a point inside the level's solid
   // centre block — so the bundle was born buried in geometry, pushed out
   // downward, and left sliding along the floor. Caught by the slot gate.
-  const origin = propWorld(ctx, ctx.weapon.heldProp);
+  let origin = propWorld(ctx, ctx.weapon.heldProp);
+  // SECTOR LEVELS (plan 3b): a hand past the wall the player hugs would start
+  // the bundle in the void (or inside the wall), where the flight's wall probe
+  // has nothing to judge against. Start it on the eye's side of the wall, its
+  // own radius plus the wall skin back toward the eye. Room levels: no hit.
+  const eye = eyeOf(ctx.player.player);
+  const wallHit = sectorHitBetween(ctx, eye, origin);
+  if (wallHit) {
+    const d = Math.hypot(origin[0] - eye[0], origin[1] - eye[1], origin[2] - eye[2]) || 1;
+    const k = Math.max(0, wallHit.t - (FLIGHT_TUNING.bundleRadiusM + WALL_SKIN_M) / d);
+    origin = [eye[0] + (origin[0] - eye[0]) * k, eye[1] + (origin[1] - eye[1]) * k, eye[2] + (origin[2] - eye[2]) * k];
+  }
   const prop = takePropForThrow(ctx);
   // The reticle IS the aim under both schemes (aimDir handles free aim), and
   // fpv.ts's throwDirection applies the game's upward lob on top — the same

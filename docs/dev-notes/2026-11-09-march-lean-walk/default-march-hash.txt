@@ -1,0 +1,12 @@
+== DEFAULT default page
+{"room1":"07f628a371205615475a3d8d97d84374b34d704a","room1-repeat":"07f628a371205615475a3d8d97d84374b34d704a","room1-wounded":"9bedb27ca8e6444e74371427817f7f124939bdc3"}
+== BOXES default page
+{"room1":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-repeat":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-wounded":"97cb53f41e876dc6bf0dcb41495c243844089949"}
+== PERBODY default page
+{"room1":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-repeat":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-wounded":"31996c1a4611aebf3fa0f265500a7bad569d88ea"}
+== DEFAULT leanwalk=0
+{"room1":"07f628a371205615475a3d8d97d84374b34d704a","room1-repeat":"07f628a371205615475a3d8d97d84374b34d704a","room1-wounded":"9bedb27ca8e6444e74371427817f7f124939bdc3"}
+== BOXES leanwalk=0
+{"room1":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-repeat":"e0a128e76ad4afda31906c169e94618ffdb93068","room1-wounded":"97cb53f41e876dc6bf0dcb41495c243844089949"}
+== PERBODY leanwalk=0
+{"room1":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-repeat":"565aaad4c6b937cc27e0e3c447e20f2c022e1677","room1-wounded":"31996c1a4611aebf3fa0f265500a7bad569d88ea"}

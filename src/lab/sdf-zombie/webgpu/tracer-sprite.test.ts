@@ -142,6 +142,9 @@ describe('tracerLength', () => {
     expect(tracerLength(35)).toBeCloseTo(35 * TRACER.lengthSec, 6);
     expect(tracerLength(0)).toBe(TRACER.minLength);
     expect(tracerLength(35)).toBeGreaterThan(tracerLength(30));
+    // The player's 80 m/s pellet is capped, not drawn 3.2 m long.
+    expect(tracerLength(80)).toBe(TRACER.maxLength);
+    expect(tracerLength(35)).toBeLessThan(TRACER.maxLength);
   });
 });
 

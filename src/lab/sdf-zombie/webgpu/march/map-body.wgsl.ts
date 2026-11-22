@@ -3,13 +3,24 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): the signed-distance body field and its normal.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { SHADE_BOUND as SHADE } from './shade-bound-flag';
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
+import { LEAN_WALK as LEAN } from './lean-walk-flag';
+import { TILE_REF as TR } from './tile-ref-flag';
+import { WOUND_FOLD } from './wound-fold-flag';
+import { WOUND_VOL } from './wound-volume-flag';
+import { MAP_LEAN } from './lean-walk.wgsl';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 import { REGION_MARGIN } from '../../head-split';
 import { SPLIT_ABL, ablWgsl } from '../split-ablate';
 import { CUT_NEAR } from '../../cut-wound';
+import { MELT_WAVE_AMP, MELT_WAVE_FREQ, MELT_WAVE_FULL_T, MELT_WAVE_STEP } from './melt';
+/** A number as a WGSL float literal. */
+const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 
+// The tail also carries mapLean (lean-walk.wgsl.ts), the walk's clean-body fast path, the way FOLD_GROUP's tail
+// carries limbLoad under `?limbs`. `?leanwalk=0` (lean-walk-flag.ts) leaves it out.
 export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
   gWalkGapNew = 1e9;
@@ -56,10 +67,17 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
   let base = i32(instCfg.z);
   let tiled = gTileActive > 0.5;
   let nIter = select(nInst, gPixN, tiled);
-  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
+${TR ? `  // THE TILE REFERENCE LIST (tile-ref-flag.ts): the k-th slot's run of the pixel's list is [rFirst, rEnd), found by
+  // walking the list from where the last run ended.
+  var tRun = 0;
+` : ''}  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
     if (k >= nIter) { break; }
-    let s = select(k, gPixSlot[k], tiled);
-    loadInstance(inst, base + s);
+${TR ? `    var rFirst = 0;
+    var rEnd = 0;
+    if (tiled) { rFirst = tRun; rEnd = tileRunEnd(rFirst); tRun = rEnd; }
+    let s = select(k, i32(gTileRef[rFirst] >> 8u), tiled);
+` : `    let s = select(k, gPixSlot[k], tiled);
+`}    loadInstance(inst, base + s);
     if (gInstAlive < 0.5) { continue; }
     let counts = gInstCounts;
     let counts2 = gInstCounts2;
@@ -128,6 +146,15 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
     // wounds, the bones and the rest anchor all live on the closed head.
     var pMoved = pIn;
     if (piece.y != 0.0) { pMoved = splitMoveBack(pIn, gInstSplitH.xyz, gInstSplitA.xyz, piece.y); }
+    // THE MELT WAVE (march/melt.ts MELT_WAVE_*): a melting instance is read at a point pushed about by three sines of
+    // its position on the ground plane (never its height: falling flesh must not swim through it). 0 on every other body: the branch is not taken and p is pMoved.
+    var meltStep = 1.0;
+    if (gInstMelt.x > 0.0) {
+      let wq = pMoved * ${f(MELT_WAVE_FREQ)};
+      pMoved = pMoved + ${f(MELT_WAVE_AMP)} * smoothstep(0.0, ${f(MELT_WAVE_FULL_T)}, gInstMelt.x)
+        * vec3<f32>(sin(wq.z * 1.3 + wq.x * 0.5), 0.6 * sin(wq.x * 0.9 + wq.z * 1.1 + 2.1), sin(wq.x * 1.3 - wq.z * 0.5 + 1.7));
+      meltStep = ${f(MELT_WAVE_STEP)};
+    }
     let p = pMoved;
     var d = 1e9;
     // Argmin tracking now lives in private globals shared with foldGroup
@@ -193,7 +220,11 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
   // the body's). A split slot's pieces fold at different un-warped points, so
   // the bound holds for the PIECE it was measured on only: its point at the
   // last sample and at this one are the same rigid motion of the ray's.
-  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);
+${SHADE ? `  // POST-HIT BOUND (shade-bound-flag.ts): outside the walk (gCullUB unset), after a hit, the accepting sample's
+  // fold bounds this one's by the walk's Lipschitz rule.
+  let shadeOn = gCullUB > 1e8 && gShadeFold < 1e8;
+  let ubRef = select(gCullUB, gShadeFold + 3.0 * length(pIn - gShadeAt) + 0.002, shadeOn);
+  gCullRef = select(1e9, ubRef, base + s == select(gCullSlot, gShadeSlot, shadeOn) && i32(piece.z) == select(gCullPiece, gShadePiece, shadeOn) && !limbMode);` : `  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);`}
   if (tiled) {
     // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
     // preloaded this pixel's tile entries into gTile* ONCE, before any
@@ -202,11 +233,16 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
     // through the SAME foldGroup the cluster walk uses, so the two paths
     // cannot drift. No per-step bound texel reads before the prim work and
     // no per-step slot scan — one table lookup plus the run's own fold.
-    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
+${TR ? `    for (var e = rFirst; e < rEnd; e = e + 1) {
+      let tRange = tileRange(data, e, band);
+${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(tRange.w) * 32.0 + 0.5) - 1); }
+` : ''}      d = foldGroup(d, p, data, counts, band, tileBounds(data, e, band), tRange);
+    }
+` : `    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
 ${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.5) - 1); }
 ` : ''}      d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
-  } else {
+`}  } else {
   // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
   // always been; a cluster that survives walks its own BOUND GROUPS
   // (pack.ts boundGroups) — contiguous runs of two to four prims in fold
@@ -255,7 +291,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
 ` : ''}  gCullRef = 1e9;
   let foldSlot = d;
   let carved = applyCarves(d, p, data, counts, band);
-  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
+  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band${WOUND_VOL ? ', segVolumeAtlas' : ''});
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
   // Preserve independently moving limbs under somebody else's wound.
@@ -293,7 +329,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // Never on an open split slot: the gap was measured on the pieces the LAST sample evaluated, and the early skip
   // may have left this one out.
   let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0 && !splitOpen;
-  if (!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if (${WOUND_FOLD ? '' : 'false && '}!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
@@ -389,7 +425,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
 `}      gWoundCluster = f32(c + 1);
       if (gDebugMode > 0.5) { gDebugRefolds = gDebugRefolds + 1.0; }
       let limbCarved = applyCarves(limb, p, data, counts, band);
-      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
+      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band${WOUND_VOL ? ', segVolumeAtlas' : ''}).x;
       gWalkAttempted = 1.0;
       gWalkGapNew = min(gWalkGapNew, max(limbDamage - dmg, 0.0));
       if (limbDamage < dmg) {
@@ -459,6 +495,8 @@ ${LIMBS ? `      let savedBest = gFoldBest;
     // bones and the normal's noise alike.
     var dPiece = dmgFinal;
     if (splitOpen) { dPiece = max(dmgFinal, piece.x); }
+    // The wave stretches the field: step a melting body short (MELT_WAVE_STEP).
+    if (meltStep < 1.0) { dPiece = dPiece * meltStep; }
     // UNION MIN. .w keeps the PRE-WOUND carved field value, exactly as the
     // one-slot entry returned it; POST's tissue-depth read is unchanged.
     if (dPiece < dUnion) {
@@ -503,7 +541,12 @@ var<private> gCullSlot: i32 = -1;
 var<private> gCullPiece: i32 = 0;
 var<private> gLastFold: f32 = 1e9;
 var<private> gLastFoldSlot: i32 = -1;
-var<private> gLastFoldPiece: i32 = 0;`;
+var<private> gLastFoldPiece: i32 = 0;${SHADE ? `
+// POST-HIT BOUND (shade-bound-flag.ts): the walk's accepting sample, for every mapBody after it. 1e9 = none.
+var<private> gShadeFold: f32 = 1e9;
+var<private> gShadeAt: vec3<f32> = vec3<f32>(0.0);
+var<private> gShadeSlot: i32 = -1;
+var<private> gShadePiece: i32 = 0;` : ''}${LEAN ? `\n${MAP_LEAN}` : ''}`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the

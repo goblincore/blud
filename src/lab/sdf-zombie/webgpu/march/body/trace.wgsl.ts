@@ -3,7 +3,10 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): march trace setup/loop/post and assembled trace.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { WOUND_STEP_MUL } from '../layout';
+import { SHADE_BOUND as SHADE } from '../shade-bound-flag';
+import { LEAN_WALK as LEAN } from '../lean-walk-flag';
+import { LEAN_TEST_BLOCK } from '../lean-walk.wgsl';
+import { ROW_PRIM_SHAPE, WOUND_STEP_MUL } from '../layout';
 import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
 import { TILE_PRELOAD_BLOCK } from './blocks/setup/tile-preload.wgsl';
@@ -29,6 +32,7 @@ import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
 import { BURN_BLOCK } from './blocks/post/burn.wgsl';
 import { MELT_BLOCK } from './blocks/post/melt.wgsl';
+import { afterHitStop } from '../after-hit-flag';
 
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
@@ -66,7 +70,8 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
   if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugRefolds = 0.0; gDebugRefoldWins = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
 ${TILE_PRELOAD_BLOCK}
 ${WOUND_LIST_BLOCK}
-${HULL_BOUNDS_BLOCK}
+${LEAN ? `${LEAN_TEST_BLOCK}
+` : ''}${HULL_BOUNDS_BLOCK}
 ${RAY_WINDOW_BLOCK}
 ${STEP_CONFIG_BLOCK}
 ${START_BOUNDS_BLOCK}
@@ -128,7 +133,8 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
     gCullUB = select(1e9, cullFold + 3.0 * abs(t - cullT) + 0.002, i > 0 && cullFold < 1e8);
     gCullSlot = cullSlot;
     gCullPiece = cullPiece;
-    let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+${LEAN ? `    var dres = vec4<f32>(0.0);
+    if (leanOk) { dres = mapLean(camPos + rd * t, data, inst, instCfg); } else { dres = ` : '    let dres = '}mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);${LEAN ? ' }' : ''}
     gWalkStep = 0.0;
     gCullUB = 1e9;
     cullFold = gLastFold;
@@ -263,7 +269,18 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
+        // CLOTH ACCEPT (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): the footprint accept (aaKt, up to 6x
+        // a pixel's footprint up close) lands a hit up to ~1 cm short of the surface — thicker than a cloth sheet,
+        // so a shell was shaded from a point between its faces: a slab-thick edge, and bands and blotches inside a
+        // hood's opening. When the sample's dominant prim is a SHELL, keep stepping until d is within ONE
+        // footprint. One texel read, only on a sample that would otherwise accept; flesh never reaches it.
+        var clothTight = false;
+        if (hitBest >= 0 && d > max(hitEpsBase, t * aaCfg.x / distort)) {
+          clothTight = (i32(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0).y) & 4) != 0;
+        }
+        if (clothTight) {
+          stepLen = d;
+        } else if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {
@@ -332,7 +349,9 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
       clamped = true;
     }
   }
-${DEBUG_COUNTERS_BLOCK}
+${SHADE ? `  // POST-HIT BOUND (shade-bound-flag.ts): the accepting sample bounds every field call after it.
+  if (hit && cullFold < 1e8) { gShadeFold = cullFold; gShadeAt = camPos + rd * cullT; gShadeSlot = cullSlot; gShadePiece = cullPiece; }
+` : ''}${DEBUG_COUNTERS_BLOCK}
 `;
 
 export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
@@ -383,15 +402,15 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
   let debugSteps = gDebugSteps;
   let debugPrims = gDebugPrims;
 
-  let p = camPos + rd * t;
+  let p = camPos + rd * t;${afterHitStop(30, 'baseColor + p * 0.0')}
 ${SPLIT_HIT_BLOCK}
 ${PRIM_MATERIAL_BLOCK}
-${SHADING_NORMAL_BLOCK}
-${WOUND_MASKS_BLOCK}
+${SHADING_NORMAL_BLOCK}${afterHitStop(31, 'n')}
+${WOUND_MASKS_BLOCK}${afterHitStop(32, 'n + vec3<f32>(wm, wmRim + wmCav, cm)')}
 ${TISSUE_BLOCK}
 ${CUT_FACE_BLOCK}
 
-${ORGAN_BLOCK}
+${ORGAN_BLOCK}${afterHitStop(33, 'albedo + n * (wmRim + cm + hitMat)')}
 
 ${MOTTLE_BLOCK}
 
@@ -409,7 +428,7 @@ ${PAINT_CHAR_BLOCK}
 
 ${BURN_BLOCK}
 
-${MELT_BLOCK}
+${MELT_BLOCK}${afterHitStop(34, 'albedo + n * (wmRim + cm + gore)')}
 `;
 
 export const MARCH_BODY_TRACE = /* wgsl */ `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
