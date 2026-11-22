@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 32 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 33 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -931,6 +931,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `kit-burst.ts` — A KIT THAT OUTLIVES ITS BODY (owner, 2026-10-29: "kit vanishes when a body gibs").
 - `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
 - `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
+- `launcher-grenade.ts` — The slot-4 launcher's 40 mm GRENADE as plain data.
 - `march.glsl.ts` — Shader source as strings.
 - `meat-pool.ts` — MEAT POOL: the bookkeeping behind the torn meat mesh pool (meat pool pass, 2026-10-29).
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…

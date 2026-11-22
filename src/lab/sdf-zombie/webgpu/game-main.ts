@@ -3862,10 +3862,16 @@ async function main() {
   ctx.weapon.slotState = makeWeaponSlotState(
     !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'flail') ? 'flail' : 'shotgun');
   // Art pass only: asset/material compilation is opt-in and the start-slot rule above remains the default.
-  if (new URLSearchParams(location.search).get('launcher') === '1') {
-    ctx.weapon.launcher = await createLauncherView(ctx);
-    ctx.weapon.slotState = makeWeaponSlotState('launcher');
-    ctx.weapon.launcher.updateRig();
+  // The test arena loads it too, on key 4, without changing the start slot;
+  // ?launcher=1 also starts with it in hand.
+  {
+    const q = new URLSearchParams(location.search);
+    const startOnLauncher = q.get('launcher') === '1';
+    if (startOnLauncher || q.get('level') === 'arena') {
+      ctx.weapon.launcher = await createLauncherView(ctx);
+      if (startOnLauncher) ctx.weapon.slotState = makeWeaponSlotState('launcher');
+      ctx.weapon.launcher.updateRig();
+    }
   }
 
   // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
