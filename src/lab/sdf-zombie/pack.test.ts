@@ -428,8 +428,10 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
     // 27: + ankle-reshaped, heel and sole per side since the zombie's feet (2026-09-29), all flesh.
     // Re-pinned 2026-11-05: the flank blob over each hip bone (zombie.blob) is two more plain flesh prims.
+    // Re-pinned 2026-11-22: the SDF hands (zombie.blob HANDS) -- per side a palm, two far LOD stand-ins (straight, 0)
+    // and five BENT digits (bend bit, 2), in place of the fist orb. No metal anywhere.
     expect(packedProf('zombie.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2]);
   });
 });
 

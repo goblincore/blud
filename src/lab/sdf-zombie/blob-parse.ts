@@ -142,6 +142,13 @@ function dirArg(l: BlobLine): DirName {
 }
 
 /** `when=alive|dead` -> the value; absent -> null; anything else is an error. */
+function parseLodArg(l: BlobLine): 'near' | 'far' | null {
+  const v = strArg(l, 'lod');
+  if (v === null) return null;
+  if (v === 'near' || v === 'far') return v;
+  throw new BlobError(`lod= takes near or far, got "${v}"`, l.line, l.indent + 1);
+}
+
 function parseWhenArg(l: BlobLine): 'alive' | 'dead' | null {
   const v = strArg(l, 'when');
   if (v === null) return null;
@@ -538,6 +545,8 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     rigid: l.words.includes('rigid'),
     // `when=alive|dead`: shown only while alive / only once dead. See BlobPart.when.
     when: parseWhenArg(l),
+    // `lod=near|far`: a detail prim and its cheap far stand-in. See BlobPart.lod.
+    lod: parseLodArg(l),
     // `organ`: a bones-block line opting into viscera (organs r3). Same bare-
     // word mechanism as `hard`/`mirror`/`both`; compileBlob turns it into
     // `op: 'organ'`, which differs from bone only in material code.

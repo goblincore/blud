@@ -12,7 +12,8 @@
 //   (about 30 s on the GPU; run `npm install` first if it says it is baking on the CPU). The limb regions are BANDS
 //   round the seams only: a hit no region claims (mid upper arm, mid shin) simply wears no map. The foreArm region
 //   carries both the elbow (t < 0 reaches back over the upper arm's end; same cluster) and the wrist, and runs
-//   past the hand (its sphere ends at t ~1.21) so both sides of the wrist suture wear it; the shin
+//   past the palm (its sphere ends at t ~1.21) so both sides of the wrist suture wear it (the MITTEN trial,
+//   2026-11-22, ran it to t 1.70:0.10:376 with --lod-far, so the curled fingers baked onto the mitten); the shin
 //   region carries the knee from both sides the same way. Texels are ~1-1.6 mm.
 //
 // THE TEMPLATE is scripts/twinhead-detail-gen.ts (probe the skin, sit each element a set number of mm proud, bind it

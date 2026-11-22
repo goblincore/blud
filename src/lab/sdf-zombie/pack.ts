@@ -213,7 +213,17 @@ export interface PackOpts {
    * for 'cluster' when boneCullMode is absent.
    */
   boneCullMode?: 'off' | 'cluster' | 'segment';
+  /**
+   * DISTANCE LOD (PrimDef.lod; zombie hands, 2026-11-22): this body is SMALL on screen. Its `lod=near` groups are
+   * written culled (count 0, sphere parked far away: no ray folds them) and its `lod=far` stand-ins are written live
+   * (W_ADD) while the prim before them -- the palm their hand hangs off -- is. Default false: near groups live, far
+   * stand-ins dead (as built). boundGroups never mixes lod and non-lod prims in one group, so a group is all one kind.
+   */
+  lodFar?: boolean;
 }
+
+/** Where a culled group's sphere is parked (PackOpts.lodFar): no ray or tile comes within this of it. */
+const PARKED = 1e6;
 
 /** Optional scratch must be a previous packBody result owned by this caller.
  * Its arrays are overwritten, including ALL unused tails and disabled rows.
@@ -321,6 +331,14 @@ export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number
   }
 }
 
+/** A far LOD stand-in's anchor: the nearest prim before it with no `lod` (the palm). The stand-in is drawn only while
+ *  the anchor lives, so a severed hand takes its stand-in with it. */
+export function lodAnchorAlive(prims: readonly Primitive[], i: number): boolean {
+  const cluster = prims[i]!.cluster;
+  for (let j = i - 1; j >= 0 && prims[j]!.cluster === cluster; j--) if (prims[j]!.lod === undefined) return !prims[j]!.dead;
+  return false;
+}
+
 /** A flesh prim's role code for primScale.w: dead outranks every op. */
 export function primRole(p: Primitive): number {
   return p.dead ? W_DEAD
@@ -354,7 +372,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
 
   body.prims.forEach((p, i) => {
     if (p.op === 'sub' && !p.dead) carveCount++;
-    writePrim(p, i, primRole(p), (rest ?? body).prims[i]);
+    writePrim(p, i, p.lod === 'far' && opts.lodFar && lodAnchorAlive(body.prims, i) ? W_ADD : primRole(p), (rest ?? body).prims[i]);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
@@ -554,7 +572,11 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
       : boundGroups(body.prims, c.start, c.count);
     for (const g of groups) {
       const o = groupCount * CLUSTER_STRIDE;
-      groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
+      // A whole group of the other LOD's prims is parked (PackOpts.lodFar): count 0 below, sphere nowhere.
+      const lod = body.prims[g.start]!.lod;
+      const parked = lod !== undefined && (lod === 'near') === !!opts.lodFar;
+      if (parked) groupBounds.set([PARKED, PARKED, PARKED, 0], o);
+      else groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
       const gOwn = body.prims.slice(g.start, g.start + g.count);
       const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6 && orientShapesField(p));
       // shell and box MUST be tested here too, same as the cluster-level
@@ -575,7 +597,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
       // The fraction of w is the owning cluster + 1 over 32 (option 4 of the wound-cost
       // work, 2026-09-21: foldGroup's per-limb accumulators). Every reader decodes the
       // bitfield as i32(w + 0.5), which a fraction up to 0.25 cannot move.
-      groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0) + (ci + 1) / 32], o);
+      groupRange.set([g.start, parked ? 0 : g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0) + (ci + 1) / 32], o);
       groupCount++;
     }
     clusterGroups.set([first, groupCount - first, cDistort, 0], ci * CLUSTER_STRIDE);
@@ -750,7 +772,9 @@ export function boundGroups(prims: Primitive[], start: number, count: number): B
   for (let i = start; i < start + count; i++) {
     add(i);
     const next = fitOpen(gStart, i + 1);
-    if (fit !== null && next.radius > GROUP_RADIUS_MAX) {
+    // A group is all one LOD kind (PrimDef.lod): packBody parks a whole group of the other kind.
+    const lodBreak = i > gStart && prims[i]!.lod !== prims[i - 1]!.lod;
+    if (fit !== null && (next.radius > GROUP_RADIUS_MAX || lodBreak)) {
       out.push({ start: gStart, count: i - gStart, ...fit, distort: distortRange(prims, gStart, i) });
       gStart = i;
       all.fill(0); solid.fill(0); anySolid = false;

@@ -312,6 +312,14 @@ export interface PrimDef {
    */
   when?: 'alive' | 'dead';
   /**
+   * DISTANCE LOD (zombie hands, 2026-11-22). 'near': fine detail the march draws only on a body big on screen (the
+   * zombie's curled fingers: thin bent prims, +4 ms of march for a crowd of 12). 'far': the cheap stand-in drawn
+   * only on a small one (one straight capsule for the four fingers). A far prim is built DEAD (placePrims), so every
+   * CPU reader -- hits, hulls, gibs, sever -- sees the near shape only; packBody revives it for a far body
+   * (PackOpts.lodFar) while the prim before it (the palm) is alive. Absent = always drawn.
+   */
+  lod?: 'near' | 'far';
+  /**
    * PER-PRIM MORPHS (goblin expressions Task 12; morph.ts): a delta per face channel that the channel's weight
    * (RigState.morphs) scales, applied by applyRig to the rest geometry before any rotation. Absent, or every weight 0, changes
    * nothing. `.blob`: `morph=<channel>:<terms>`. NEVER packed: packBody does not read it, so a body's bytes do not depend on it.
@@ -463,8 +471,16 @@ export interface Primitive {
   core?: boolean;
   /** See PrimDef.rigid. */
   rigid?: boolean;
+  /**
+   * Set by placePrims: the prim lies wholly past the tail of a LEAF bone (from/at > 1 on a bone nothing hangs off),
+   * i.e. it is part of what hangs off the limb's end -- the zombie's hand on its forearm (2026-11-22). cutChains
+   * cuts no joint past the first one, so such a hand severs as one piece and a finger wound cannot split it.
+   */
+  extremity?: boolean;
   /** See PrimDef.when. */
   when?: 'alive' | 'dead';
+  /** See PrimDef.lod. */
+  lod?: 'near' | 'far';
   /** See PrimDef.morphs. Carried through mirror and resolve; applyRig reads it, packBody never does. */
   morphs?: readonly PrimMorph[];
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */

@@ -8,6 +8,8 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { withCtx, type GameContext } from './game-context';
+import { characterEntry, hasCharacter } from '../character-registry';
+import { detailFarSticky, screenHeightPx } from '../lod';
 import * as THREE from 'three/webgpu';
 import { woundEmitAnchorAndNormal } from '../bleed-registry';
 import { emitTrails, spawnWoundDroplets, stepBlood } from '../blood-sim';
@@ -66,6 +68,10 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { setShellHold } from './game-arms';
 /** The rig's toward-the-viewer direction: the fore hand's turn rolls its thumb this way. */
 const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
+/** Last frame's detail-LOD answer per actor id (detailFarSticky's hysteresis). */
+const lodFarOf = new Map<number, boolean>();
+/** Diagnostic: whether an actor drew its far LOD set last frame (null before its first visual frame). */
+export function actorLodFar(id: number): boolean | null { return lodFarOf.get(id) ?? null; }
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';
@@ -495,6 +501,18 @@ export function tick(ctx: GameContext, dt: number) {
       // leaving and re-entering the set just picks the current time up.
       if (!ctx.render.visualActors.has(a)) continue;
       a.view.setTime(now);
+      // DISTANCE LOD (PrimDef.lod; zombie hands, 2026-11-22): a body small on screen swaps its detail prims (curled
+      // fingers) for their cheap stand-ins. Height 1.8 m and the waist (1 m up) stand in for every body: the
+      // threshold is a few px either way, and bodies without lod prims ignore the call.
+      if (a.view.setLodFar) {
+        const cam = ctx.boot.handle.camera;
+        const pos = a.pose().pos;
+        const dist = Math.hypot(cam.position.x - pos[0], cam.position.y - (pos[1] + 1), cam.position.z - pos[2]);
+        const always = hasCharacter(a.characterName()) ? characterEntry(a.characterName()).lodAlways : undefined;
+        const far = always === 'far' || detailFarSticky(screenHeightPx(1.8, dist, cam.fov, innerHeight), lodFarOf.get(a.id) ?? false);
+        lodFarOf.set(a.id, far);
+        a.view.setLodFar(far);
+      }
       // Face projection tracks the posed skull through the gait jiggle — and
       // the RUPTURE's displaced head while a doomed body is coming apart, so
       // the face does not stay pinned to the clean pose as the head rotates
@@ -521,7 +539,10 @@ export function tick(ctx: GameContext, dt: number) {
       // — this is what makes the hull "posed" at no extra cost. (Visual-
       // actor cull: an off-screen body's hull instances cannot be seen;
       // its exclusion spheres only ever touched its own hull.)
-      ctx.world.outerHull.update(hullActors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
+      // The hull chains each body's drawn LOD set (OuterHullOpts.lodFar; PrimDef.lod).
+      const posedHull = hullActors.map(a => a.posed());
+      const lodFar = new Set(posedHull.filter((_, i) => lodFarOf.get(hullActors[i]!.id) === true));
+      ctx.world.outerHull.update(posedHull, { shellAmp: shellAmpOf(ctx), lodFar });
     }
     ctx.render.occluderHull.update(
       hullActors.map(a => a.posed()),

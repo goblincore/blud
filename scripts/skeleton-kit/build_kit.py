@@ -432,26 +432,53 @@ def build_forearm():
     return s
 
 
+# The flesh hand's fingers and thumb, copied from zombie.blob's HANDS block (2026-11-22; rolled palm-back, as there): (from, to, flesh r, flesh r2,
+# offset, tip, bend), on the forearm (J[7] -> J[9]) past its tail, left side. A flesh finger is a quadratic Bezier
+# capsule: a = forearm(from) + offset, b = forearm(to) + offset + tip, control = (a + b) / 2 + bend. Keep in step with
+# the .blob: check-kit.ts fails a bone that leaves the flesh.
+HAND_DIGITS = [
+    (1.27, 1.55, 0.0120, 0.0080, (-0.0307, -0.0046, 0.0003), (-0.0189, 0.0157, -0.0348), (-0.0015, -0.0156, 0.0168)),     # index
+    (1.27, 1.57, 0.0125, 0.0085, (-0.0089, -0.0013, 0.0001), (-0.0072, 0.0183, -0.0379), (0.0016, -0.0161, 0.0178)),     # middle
+    (1.27, 1.55, 0.0120, 0.0080, (0.0129, 0.0019, -0.0001), (0.0048, 0.0192, -0.0360), (0.0044, -0.0147, 0.0167)),  # ring
+    (1.25, 1.47, 0.0105, 0.0072, (0.0336, 0.0050, -0.0003), (0.0154, 0.0171, -0.0289), (0.0059, -0.0116, 0.0136)),  # little
+]
+HAND_THUMB = (1.06, 1.30, 0.0145, 0.0095, (-0.0455, -0.0074, -0.0115), (-0.0117, 0.0091, -0.0265), (-0.0047, -0.0084, 0.0084))
+
+
+def flesh_curve(digit, n=6):
+    """Points along a flesh digit's centre line, root to tip."""
+    t0, t1, _, _, off, tip, bend = digit
+    fa = lambda t: J[7] + (J[9] - J[7]) * t
+    a = fa(t0) + V(*off)
+    b = fa(t1) + V(*off) + V(*tip)
+    c = (a + b) * 0.5 + V(*bend)
+    return [a * (1 - u) ** 2 + c * (2 * u * (1 - u)) + b * u * u for u in (i / (n - 1) for i in range(n))]
+
+
 def build_hand():
-    """A loose fist: the flesh hand is a 6 cm ball on the wrist joint, and the bones stay inside it."""
+    """The hand's bones inside the flesh hand (zombie.blob HANDS, 2026-11-22): carpals under the wrist, a metacarpal
+    down the palm to each knuckle, then each finger's phalanges along its own hooked flesh curve, ending short of the
+    flesh tip; the thumb the same off the palm's front edge. Bone radius ~40% of the flesh's (x BEEF)."""
     s = Shells()
     w = J[9]
     d = (J[9] - J[7]).normalized()               # down the forearm
-    pm = V(-1, 0, 0); pm = (pm - d * pm.dot(d)).normalized()     # the palm's side: toward the body
+    pm = V(0, 0, -1); pm = (pm - d * pm.dot(d)).normalized()     # the palm's side: BACK (the hand is rolled palm-back, zombie.blob)
     kz = d.cross(pm).normalized()
-    if kz.z < 0:
+    if kz.x > 0:                                 # the thumb side: toward the thigh (-x), the hand rolled palm-back
         kz = -kz
-    s.add(*ellipsoid(w - d * 0.020, (0.012, 0.012, 0.022), segs=8, rings=4, axes=(pm, d, kz)))           # carpals
-    for o in (-0.018, -0.006, 0.006, 0.018):
-        k0, k1 = w - d * 0.012 + kz * o, w + d * 0.018 + kz * (o * 1.2)
-        s.add(*loft([k0, k1], [0.0048, 0.0052], sides=5, beef=BEEF['hand']))                                                 # metacarpal
-        p1 = k1 + d * 0.016 + pm * 0.010
-        s.add(*loft([k1, p1], [0.0046, 0.004], sides=5, beef=BEEF['hand']))                                                  # finger, two bones
-        s.add(*loft([p1, p1 + d * 0.002 + pm * 0.013], [0.0038, 0.003], sides=5, beef=BEEF['hand']))
-    t0 = w - d * 0.016 + kz * 0.022
-    t1 = t0 + d * 0.012 + kz * 0.014 + pm * 0.008
-    s.add(*loft([t0, t1], [0.005, 0.0048], sides=5, beef=BEEF['hand']))                                                      # thumb
-    s.add(*loft([t1, t1 + d * 0.012 + pm * 0.010 - kz * 0.004], [0.0044, 0.0034], sides=5, beef=BEEF['hand']))
+    s.add(*ellipsoid(w + d * 0.024, (0.007, 0.012, 0.019), segs=8, rings=4, axes=(pm, d, kz)))            # carpals
+    for digit in HAND_DIGITS:
+        pts = flesh_curve(digit)
+        root = pts[0]
+        k0 = w + d * 0.030 + (root - w - d * (root - w).dot(d)) * 0.55
+        s.add(*loft([k0, root], [0.0028, 0.0030], sides=5, beef=BEEF['hand']))                                            # metacarpal
+        tip = pts[-1] + (pts[-2] - pts[-1]).normalized() * digit[3] * 0.55   # stop short of the flesh's rounded tip
+        s.add(*loft(pts[:-1] + [tip], [0.0040, 0.0036, 0.0033, 0.0030, 0.0027, 0.0024], sides=5, beef=BEEF['hand']))   # phalanges
+    pts = flesh_curve(HAND_THUMB)
+    t0 = w + d * 0.028 + kz * 0.006 + pm * 0.002
+    tip = pts[-1] + (pts[-2] - pts[-1]).normalized() * HAND_THUMB[3] * 0.55
+    s.add(*loft([t0, pts[1]], [0.0032, 0.0034], sides=5, beef=BEEF['hand']))                                              # thumb metacarpal
+    s.add(*loft(pts[1:-1] + [tip], [0.0034, 0.0034, 0.0032, 0.0029, 0.0026], sides=5, beef=BEEF['hand']))                # thumb
     return s
 
 
@@ -518,7 +545,7 @@ KIT = {
 }
 for lkey, rkey, shells in (
     ('limb:armL:5-5', 'limb:armR:6-6', fuse(build_shoulder(sternum_top), 350)), ('limb:armL:5-7', 'limb:armR:6-8', fuse(build_humerus(), 260)),
-    ('limb:armL:7-9', 'limb:armR:8-10', fuse(build_forearm(), 200)), ('limb:armL:9-9', 'limb:armR:10-10', fuse(build_hand(), 240, voxel=0.003, smooth=2)),
+    ('limb:armL:7-9', 'limb:armR:8-10', fuse(build_forearm(), 200)), ('limb:armL:9-9', 'limb:armR:10-10', fuse(build_hand(), 480, voxel=0.003, smooth=2)),
     ('limb:legL:11-12', 'limb:legR:13-14', fuse(build_femur(), 340)), ('limb:legL:12-15', 'limb:legR:14-16', fuse(build_shin(), 280)),
     ('limb:legL:15-15', 'limb:legR:16-16', build_ankle()), ('limb:legL:15-17', 'limb:legR:16-18', fuse(build_foot(), 240, voxel=0.003, smooth=2)),
 ):

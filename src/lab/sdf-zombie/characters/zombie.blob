@@ -46,7 +46,7 @@ body
   # pelvis drawn with tip=: that stretched the pelvis piece 13x (gib-asset-deform-regression.test.ts).
   blob torso on pelvis at=0.95 offset=(0.11,0,0) r=0.070 blend=0.03 both rigid
 
-  # Arms — shoulder blob, then upper and forearm capsules, then a fist.
+  # Arms — shoulder blob, then upper and forearm capsules, then a hand (HANDS below).
   # THE SHOULDER IS ONE MOUND (owner playtest 2026-11-05: the shoulder "seems to pop out visually"). The shoulder
   # ball rides the shoulder POINT, so the arm never turns it, and it was blended into the upper arm over 7-10 mm: a
   # raised arm came up out of a ball that stayed put, with a crease round its root and the ball hanging out under
@@ -56,8 +56,50 @@ body
   # surface the wounds land on, so 30 slugs no longer took the shoulder while 40 pellets did.
   blob arm on clavicle at=0.90 r=0.072 blend=0.030 mirror
   bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.015 mirror
-  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
-  blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
+  # HANDS (owner playtest 2026-11-22, the second try). The first try put mesh grabber hands (a kit, kit-flesh.ts) on a
+  # small wrist knob, and the owner turned it down three ways: the fat SDF wrist beside a tiny mesh hand read wrong,
+  # the mesh never matched the marched flesh's light, and the game felt slower. So the hand is FLESH again, marched
+  # with the arm (one field, one light, no kit draw), but a hand now rather than the r 0.062 fist orb.
+  # No hand bone: everything rides foreArm, past its tail (from/to > 1), so the bind gives it the forearm's frame
+  # (rig-bind.ts armFrame) and the hand turns with the arm as the orb did, without a new rig point for gait.ts.
+  # THE WRIST TAPERS (r 0.048 -> 0.034, 9.6 -> 6.8 cm across): the hand reads as a hand only if the wrist is narrower
+  # than the palm. Wrist ~0.84 (the bar's end); the palm is 10 cm across and 5 cm thick, as a big man's is.
+  # THE HAND IS ROLLED PALM-BACK (owner playtest 2026-11-22): the forearm frame only SWINGS (armFrame: shortest arc from
+  # the rest direction), never rolls, so the hand keeps its rest roll in every pose. Authored palm-to-thigh, thumb
+  # forward, the reach swung it on edge, thumb up and pinky down. The owner wants the classic outstretched zombie hand,
+  # palm down and thumb level. So every hand line below is the palm-to-thigh hand turned 90 deg about the forearm
+  # axis (-x -> -z, +z -> -x; wide and deep swapped): hanging, the palm faces back and the thumb the
+  # thigh; reaching forward, the palm faces the floor and the thumb points in, parallel to it, the fingers hooking down.
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 r2=0.034 blend=0.007 mirror
+  # Palm: an ellipsoid hung 3 cm below the wrist (at 1.10 of the 0.30 forearm), palm facing back (thin in z), the
+  # width across the body (x), the thumb toward the thigh. Blended over the orb's 12.5 mm into the wrist. 1.10, not
+  # 1.14: the SHADOW hull's palm sphere (sized by its thinnest axis, 2.3 cm) stood 1 cm off the wrist's, so each hand
+  # cast a shadow apart from its arm; at 1.10 the two overlap (occluder-hull.test.ts, one connected figure).
+  blob arm on foreArm  at=1.10 r=0.040 wide=1.22 deep=0.50 tall=1.20 blend=0.0125 mirror
+  # Four fingers off the knuckle line (1.27, ~8 cm below the wrist), index toward the thigh (-x), ~21 mm apart. Each
+  # tapers 12 -> 8 mm and HOOKS toward the palm (tip -z, ~3.5 cm in) and fans out a little (tip x): the grabber of the look-dev
+  # (docs/dev-notes/2026-10-26-zombie-hands-lookdev, concept A), curled, never a flat paddle. THE CURL IS CONCAVE
+  # (owner, 2026-11-22: a hand about to curl): `bend` puts each finger's Bezier control point on the BACK of the hand
+  # (+z) and down, under the knuckle, so the finger leaves the knuckle straight down and turns in toward its tip, the
+  # back of the finger the convex side. Bent toward the palm it bowed the other way. Blend 4 mm: wider webs the
+  # four into a mitt (they are a few mm apart at the root). OPEN, NOT A FIST: hooked 5 cm in, the in-game reach pose
+  # read the hands as two small fists at 2 m (captures 2026-11-22); hooked 3.5 cm and fanned they read as a claw.
+  # No knuckle ridge: one prim fewer in the hand's march group (perf, 2026-11-22), and the noise covers the back.
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(-0.0307,-0.0046,0.0003) bend=(-0.0015,-0.0156,0.0168) tip=(-0.0189,0.0157,-0.0348) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.57 r=0.0125 r2=0.0085 offset=(-0.0089,-0.0013,0.0001) bend=(0.0016,-0.0161,0.0178) tip=(-0.0072,0.0183,-0.0379) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 offset=(0.0129,0.0019,-0.0001) bend=(0.0044,-0.0147,0.0167) tip=(0.0048,0.0192,-0.036) lod=near blend=0.004 mirror
+  bar  arm on foreArm  from=1.25 to=1.47 r=0.0105 r2=0.0072 offset=(0.0336,0.005,-0.0003) bend=(0.0059,-0.0116,0.0136) tip=(0.0154,0.0171,-0.0289) lod=near blend=0.004 mirror
+  # Thumb: off the palm's thigh-side edge near the wrist, down and in, its tip turned toward the fingers.
+  bar  arm on foreArm  from=1.06 to=1.30 r=0.0145 r2=0.0095 offset=(-0.0455,-0.0074,-0.0115) bend=(-0.0047,-0.0084,0.0084) tip=(-0.0117,0.0091,-0.0265) lod=near blend=0.006 mirror
+  # DISTANCE LOD (lod=, PrimDef.lod; 2026-11-22). The curled digits above are `lod=near`: five bent prims, thin, and
+  # the march paid +4.4 ms for them on a crowd of 12 at 3-5 m, where a finger is 1-2 px (scripts/zombie-hands-bench.mjs).
+  # A body under DETAIL_MIN_PX (lod.ts, ~2 m) draws these two `lod=far` stand-ins instead: one straight capsule over
+  # the four fingers' mean root and tip, flattened across them (wide), and the thumb unbent. Same hand length and
+  # hook at a glance, two cheap prims. They are built dead, so hits, hulls and gibs only ever see the fingers.
+  # ~20% BIGGER than the fingers' own mass (owner playtest 2026-11-22: the far hand read "a little small"): radii
+  # and length x1.2 (to= past the fingers', tip x1.2), so at 2+ m, where a finger is 2-3 px, the hand still reads.
+  bar  arm on foreArm  from=1.27 to=1.60 r=0.0150 r2=0.0134 wide=3.4 deep=0.9 offset=(0.0018,0.0013,-0.0001) tip=(-0.0011,0.0209,-0.0419) lod=far blend=0.006 mirror
+  bar  arm on foreArm  from=1.06 to=1.35 r=0.0174 r2=0.0114 offset=(-0.0455,-0.0074,-0.0115) tip=(-0.014,0.0109,-0.0318) lod=far blend=0.006 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # NO FLESH BALL AT THE HIP (owner playtest 2026-11-05: the thigh tubes "go up too high on the side", the pelvis

@@ -543,6 +543,26 @@ Rules:
 - Meshes face +z by glTF convention; `--front -z` if the bake shows the
   back of the head.
 
+## Detail that costs only up close: `lod=near` / `lod=far` (added 2026-11-22)
+
+Thin prims are expensive where they are invisible. The zombie's curled fingers (five bent, tapered bars per hand)
+cost a crowd of 12 at 3-5 m +4.4 ms of march, for fingers 1-2 px wide (`scripts/zombie-hands-bench.mjs`). Tag such
+detail `lod=near` and give it a cheap `lod=far` stand-in:
+
+```
+bar  arm on foreArm  from=1.27 to=1.55 r=0.0120 r2=0.0080 ... bend=(...) tip=(...) lod=near blend=0.004 mirror
+bar  arm on foreArm  from=1.27 to=1.54 r=0.0125 r2=0.0112 deep=3.4 wide=0.9 ... lod=far blend=0.006 mirror
+```
+
+- A body under `DETAIL_MIN_PX` (lod.ts, ~2 m on the game's view, sticky by 8%) draws its `lod=far` prims and parks
+  its `lod=near` ones; a bigger one the reverse (game-tick.ts -> `view.setLodFar` -> `PackOpts.lodFar`).
+- `lod=far` prims are built DEAD: hits, hulls, gibs, sever and every other CPU reader see only the near shape. The
+  packer revives a stand-in only while the nearest non-`lod` prim before it (the palm) is alive, so a hand cut off
+  at the wrist takes its stand-in with it. Author stand-ins right AFTER the detail they replace, behind that anchor.
+- Bound groups never mix `lod` and non-`lod` prims (`pack.ts boundGroups`), so the swap is whole groups.
+- Make the stand-in carry the same MASS (length, width, hook) as the detail, not a smaller blob: at the switch
+  distance the hand is still ~40 px tall, and a hand that halves in length pops.
+
 ## Primitive budget: 256 per body, 64 per cluster (updated 2026-09-24)
 
 Two ceilings, both enforced by `validateBody` (`validate.ts`):

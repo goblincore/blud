@@ -157,7 +157,8 @@ describe('hanging-arm anatomy regressions', () => {
   const arm = body.clusters.find(c => c.limb === 'armL')!;
   const armAdds: number[] = [];
   for (let i = arm.start; i < arm.start + arm.count; i++) {
-    if (body.prims[i]!.op !== 'sub') armAdds.push(i);
+    // Live adds: a far LOD stand-in (PrimDef.lod) is built dead and never joins the chain.
+    if (body.prims[i]!.op !== 'sub' && !body.prims[i]!.dead) armAdds.push(i);
   }
 
   it('chainOrder covers EVERY add prim of the arm, in authored root→tip order', () => {
@@ -165,27 +166,51 @@ describe('hanging-arm anatomy regressions', () => {
     expect(order).toEqual(armAdds);
   });
 
-  it('consecutive chain prims actually share a joint', () => {
+  // The joints cutChains tests: up to and INTO the limb's extremity (the hand, Primitive.extremity), not between
+  // its fingers.
+  const handIdx = armAdds.find(i => body.prims[i]!.extremity)!;
+
+  it('the hand is the extremity: the palm and every digit past the forearm, nothing before it', () => {
+    expect(handIdx).toBeDefined();
+    const pos = armAdds.indexOf(handIdx);
+    expect(armAdds.slice(pos).every(i => body.prims[i]!.extremity)).toBe(true);
+    expect(armAdds.slice(0, pos).some(i => body.prims[i]!.extremity)).toBe(false);
+  });
+
+  it('consecutive chain prims actually share a joint (up to the wrist)', () => {
     const order = chainOrder(body, arm, torso.center);
-    for (let j = 0; j + 1 < order.length; j++) {
+    const end = order.indexOf(handIdx);
+    for (let j = 0; j < end; j++) {
       const p = body.prims[order[j]!]!;
       const q = body.prims[order[j + 1]!]!;
       let best = Infinity;
       for (const e of [p.a, p.b]) for (const f of [q.a, q.b]) {
         best = Math.min(best, Math.hypot(e[0] - f[0], e[1] - f[1], e[2] - f[2]));
       }
-      expect(best).toBeLessThan(JOINT_EPS);
+      // Into the hand, measure to the palm's SURFACE: it is an ellipsoid hung below the wrist, its centre 7 cm from the
+      // forearm bar's end with the flesh continuous between them.
+      const into = q.extremity ? q.radius * Math.max(...q.scale) : 0;
+      expect(best - into).toBeLessThan(JOINT_EPS);
     }
   });
 
   it('a wrist blast severs the hand (the floating-forearm repro)', () => {
-    const handIdx = armAdds[armAdds.length - 1]!;
-    const wrist = body.prims[handIdx]!.a;
+    // The palm's top, where it meets the forearm (the hand is a palm ellipsoid now, its centre 4 cm below the wrist).
+    const palm = body.prims[handIdx]!;
+    const wrist: Vec3 = [palm.a[0], palm.a[1] + palm.radius * palm.scale[1], palm.a[2]];
     const wounds = [woundAt([wrist[0], wrist[1] + 0.01, wrist[2]], 0.13)];
     const cuts = cutChains(body, wounds);
     const armCut = cuts.find(c => c.limb === 'armL');
     expect(armCut).toBeDefined();
     expect(armCut!.fromPrim).toBe(handIdx);
+  });
+
+  it('a wound among the fingers never cuts between them', () => {
+    const digits = armAdds.filter(i => body.prims[i]!.extremity && i !== handIdx);
+    const mid = body.prims[digits[1]!]!.a;
+    const cuts = cutChains(body, [woundAt(mid, 0.05)]);
+    const armCut = cuts.find(c => c.limb === 'armL');
+    if (armCut) expect(armCut.fromPrim).toBe(handIdx);
   });
 
   it('an elbow blast severs forearm+hand, not the whole arm', () => {

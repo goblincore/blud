@@ -97,6 +97,10 @@ export interface CharacterEntry {
    *  tooth row knocks it out (webgpu/kit-damage.ts). Implied by `armoured`. Absent: the kit stays on the bones, which
    *  characters/kit-sheds.test.ts allows no kit. */
   kitSheds?: boolean;
+  /** DISTANCE LOD OVERRIDE (PrimDef.lod): 'far' draws the `lod=far` set at every distance -- the zombie's MITTEN hand,
+   *  its fingers baked into the body normal map (the bake takes the far set as the plain skin and the `lod=near`
+   *  set as the detail: body-normal-bake/regions.ts bakeBodies). Absent: the sticky screen-size switch (lod.ts). */
+  lodAlways?: 'far';
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -168,6 +172,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // from scripts/zombie-detail-gen.ts; baked, never marched). They sit on the lines where the skin noise tears in
     // motion (the dominant prim flips there; the generator's header has the probe), so the tear reads as the seam.
     bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
+    // The hand is curl + distance LOD (zombie.blob HANDS). A MITTEN trial (2026-11-22: lodAlways 'far', the curled
+    // fingers baked into the normal map with bake-body-normal.ts --lod-far and the foreArm region run to t 1.70) read
+    // as a mitt with faint streaks in the game's light; it stays one flag away.
     profile: ZOMBIE_PROFILE,
   },
   goblin: {

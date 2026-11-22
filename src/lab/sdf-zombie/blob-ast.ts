@@ -142,6 +142,8 @@ export interface BlobPart {
    *  lives, or only once it has died (a hood that falls back off the head).
    *  Null = always. See PrimDef.when. */
   when: 'alive' | 'dead' | null;
+  /** `lod=near` / `lod=far`: drawn only on a near (big on screen) / a far body. Null = always. See PrimDef.lod. */
+  lod: 'near' | 'far' | null;
   /** The bare word `organ` (bones block only): soft viscera, not bone.
    *  Rides the same array and gates as bone; differs only in material. */
   organ: boolean;

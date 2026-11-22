@@ -120,6 +120,10 @@ export interface ZombieGpuView {
    * which is right for never-rigged bodies.
    */
   update(body: BuildResult, rest?: BuildResult): void;
+  /** DISTANCE LOD (PrimDef.lod): whether this body is small on screen. Its `lod=near` detail is parked and its
+   *  `lod=far` stand-ins drawn (PackOpts.lodFar). Repacks at once when it changes. Optional: views without lod
+   *  prims ignore it. */
+  setLodFar?(far: boolean): void;
   /** Uploads wounds already transformed to world space by the caller.
    *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES); for a cut wound
    *  (see `cuts`) the offsetScales entry is its sag, not a rim scale;
@@ -2622,6 +2626,8 @@ export function createZombieGpuView(
   // usually rides is skipped). Stored here; the pose does not change on a
   // re-pack, so the frame is bit-identical to the pre-toggle frame.
   let lastUploadNext: BuildResult | undefined;
+  /** setLodFar: the body is small on screen (PackOpts.lodFar). */
+  let lodFar = false;
   // MOTION VECTORS (2026-09-22, MOTION-VECTORS-PLAN.md): this body's prim rows as last UPLOADED (cur)
   // and as of the previous per-frame update (prev). prev -> ROW_PREV_A/B/QUAT, which prevPosed inverts
   // restPoint with. Only update() advances prev (advanceMotion = true); re-packs from setters keep it,
@@ -2790,7 +2796,7 @@ export function createZombieGpuView(
   function upload(next: BuildResult, rest?: BuildResult, advanceMotion = false) {
     lastUploadNext = next;
     lastUploadRest = rest;
-    const p = packBody(next, rest, { packBones, packOrgans, boneCullMode }, uploadScratch);
+    const p = packBody(next, rest, { packBones, packOrgans, boneCullMode, lodFar }, uploadScratch);
     uploadScratch = p;
     // The texture is sink.stride prims wide (sized from the body at creation,
     // or from the crowd type's first body). A body that outgrew it — a
@@ -3234,6 +3240,11 @@ export function createZombieGpuView(
       if (recordSplit() !== splitDrawn) syncRecord();
     },
     get splitDrawn() { return splitDrawn; },
+    setLodFar(far: boolean) {
+      if (far === lodFar) return;
+      lodFar = far;
+      if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
+    },
     update(next, rest) {
       headSplit = next.split ?? null;
       const p = upload(next, rest, true);

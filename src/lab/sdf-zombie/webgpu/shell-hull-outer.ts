@@ -70,6 +70,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { positionWorld, cameraPosition, vec4, length, sub } from 'three/tsl';
 import { bendCtrl, qRotate, type Quat } from '../vec';
 import { boxReach, shellReach, strandReach } from '../extent';
+import { lodAnchorAlive } from '../pack';
 import type { BuiltBody, Vec3 } from '../types';
 import { HEAD_SPLIT, splitFrame, splitSphereImages } from '../head-split';
 import { CUT_SHADE } from '../cut-wound';
@@ -214,6 +215,10 @@ export interface OuterHullOpts {
   /** CLOTH PROXIES (cloth-proxy.ts): when given, each straight shell prim of a body with a closed head is pushed
    *  here as its round cone, grown by its reach, INSTEAD of a sphere chain. The caller rasterises them. */
   shellProxies?: ProxyCone[];
+  /** DISTANCE LOD (PrimDef.lod): the bodies drawn FAR this frame (PackOpts.lodFar). Given, each body's `lod` prims
+   *  are chained like any prim, for the set it draws: a far body its stand-ins, a near one its detail. Absent (a
+   *  caller that does not know), each cluster's `lod` prims share one sphere that holds both sets. */
+  lodFar?: ReadonlySet<BuiltBody>;
 }
 
 /**
@@ -249,10 +254,46 @@ export function buildOuterHullInstances(
     const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
     const tightCopies = split !== null && (splitAblate.boundsOff & SPLIT_BOUND.hullOld) === 0;
     const turning: HullSphere[] = [];
+    // LOD PRIMS (PrimDef.lod; zombie hands, 2026-11-22): a cluster's `lod=near` detail and `lod=far` stand-ins are
+    // covered by ONE sphere, not a chain each. Which set the march draws is chosen per frame on the GPU side
+    // (PackOpts.lodFar) while this hull is built from the CPU body, where the stand-ins are dead: chains of the
+    // fingers alone would leave a far body's stand-in uncovered (a hole), and chains of thin bent fingers were
+    // the cost (profile: this update 171 -> 455 ms over 240 steps with 12 zombies). A hand-sized sphere holds both.
+    const lodCover = new Map<number, { pts: Vec3[]; reach: number[] }>();
+    // Per-body sets (opts.lodFar given): the far stand-ins this body draws, chained below despite being dead.
+    const isFar = opts.lodFar?.has(body) ?? false;
+    const drawnFar = new Set<number>();
+    if (opts.lodFar) body.prims.forEach((p, pi) => { if (isFar && p.lod === 'far' && lodAnchorAlive(body.prims, pi)) drawnFar.add(pi); });
 
-    for (const p of body.prims) {
-      // Cutters and severed flesh contribute no surface to contain.
-      if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
+    if (!opts.lodFar) body.prims.forEach((p, pi) => {
+      if (p.lod === undefined || p.op === 'sub' || p.op === 'groove' || !live.has(p.cluster)) return;
+      if (p.lod === 'near' ? p.dead : !lodAnchorAlive(body.prims, pi)) return;
+      const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
+      const reach = Math.max(p.radius, p.radiusB ?? p.radius) * maxScale + blendReach(p.blendK ?? 0, p.blendProfile) + shellAmp + margin;
+      const c = lodCover.get(p.cluster) ?? { pts: [], reach: [] };
+      const ends: Vec3[] = p.bend === undefined ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+      for (const e of ends) { c.pts.push(e); c.reach.push(reach); }
+      lodCover.set(p.cluster, c);
+    });
+    for (const c of lodCover.values()) {
+      const n = c.pts.length;
+      let cx = 0, cy = 0, cz = 0;
+      for (const e of c.pts) { cx += e[0] / n; cy += e[1] / n; cz += e[2] / n; }
+      const centre: Vec3 = [cx, cy, cz];
+      let radius = 0;
+      // The control point bounds a quadratic Bezier (convex hull), so the ends and controls bound every curve.
+      c.pts.forEach((e, i) => { radius = Math.max(radius, Math.hypot(e[0] - centre[0], e[1] - centre[1], e[2] - centre[2]) + c.reach[i]!); });
+      out.push({ centre, radius });
+    }
+
+    for (let pi = 0; pi < body.prims.length; pi++) {
+      const p = body.prims[pi]!;
+      if (p.lod !== undefined) {
+        if (!opts.lodFar) continue; // one sphere above
+        if (p.lod === 'near' ? isFar : !drawnFar.has(pi)) continue; // not the set this body draws
+      }
+      // Cutters and severed flesh contribute no surface to contain (a drawn far stand-in is dead only to the CPU).
+      if (p.op === 'sub' || p.op === 'groove' || (p.dead && !drawnFar.has(pi))) continue;
       if (!live.has(p.cluster)) continue;
 
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
@@ -261,6 +302,10 @@ export function buildOuterHullInstances(
         rMax * maxScale
         + shellReach(p)
         + blendReach(p.blendK ?? 0, p.blendProfile)
+        // A drawn LOD prim takes a SECOND blend reach: the CHAIN case the header names. The hand's prims all blend
+        // into the palm and each other, and a far body's stand-ins stacked their undercuts 1.6 mm past one reach
+        // at the palm's front edge (lod-prims.test.ts).
+        + (p.lod !== undefined ? blendReach(p.blendK ?? 0, p.blendProfile) : 0)
         + shellAmp
         + margin;
       if (reach < MIN_HULL_RADIUS) continue;
