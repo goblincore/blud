@@ -8,6 +8,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { FLOAT_TUNING } from './floater-move';
+import { actorLodFar } from './game-tick';
 import { setChunkListGain } from './chunk-light-pick';
 import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
@@ -508,6 +509,8 @@ export function createWorldSeams(ctx: GameContext) {
      *  this is safe to poll between stepped frames. */
     /** Life-state prims (`when=`, death-state.ts) of one actor: index,
      *  when, dead — for checking the hood swap from a driver. */
+    /** Diagnostic: whether an actor drew its far detail-LOD set last frame (PrimDef.lod; game-tick.ts). */
+    actorLodFar: (id: number) => actorLodFar(id),
     /** Diagnostic: one actor's rig joints (world) by name. */
     actorRigJoints: (id: number) => ctx.world.actors.find(q => q.id === id)?.rigJoints() ?? null,
     /** Diagnostic: one actor's posed prims (limb, ends, radius, op, bone, dead). */

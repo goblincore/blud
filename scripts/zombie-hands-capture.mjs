@@ -8,7 +8,9 @@
 // read the light along it: a mesh hand that does not take the flesh light shows as a step at the wrist.
 //
 //   node scripts/zombie-hands-capture.mjs <vitePort> <cdpPort> <outDir>
-// Env: DIST (0.9), LIVE (4 frames of the approach; 0 to skip)
+// Env: DIST (0.9), LIVE (6 frames of the approach; 0 to skip), LIVE_FROM (4.0 m: where the approach starts, so its
+//   first frames are past the detail LOD's switch and its last ones inside it), LIVE_STEP (25 ticks between frames),
+//   FLASH (1; 0 switches the flashlight off with its key, so close flesh is not blown out for the light probe)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connectGame, bootCloseupPage, sleep } from './lib/sdf-closeup-stage.mjs';
 
@@ -16,7 +18,10 @@ const VITE = Number(process.argv[2] ?? 5292);
 const CDP = Number(process.argv[3] ?? 9292);
 const OUT = process.argv[4] ?? '.lab-tmp/hands-capture';
 const DIST = Number(process.env.DIST ?? 0.9);
-const LIVE = Number(process.env.LIVE ?? 4);
+const LIVE = Number(process.env.LIVE ?? 6);
+const LIVE_FROM = Number(process.env.LIVE_FROM ?? 4.0);
+const LIVE_STEP = Number(process.env.LIVE_STEP ?? 25);
+const FLASH = process.env.FLASH !== '0';
 const W = 1280, H = 800, EYE_H = 1.62;
 const fail = (m) => { console.error(`FAIL: ${m}`); process.exit(1); };
 mkdirSync(OUT, { recursive: true });
@@ -30,6 +35,11 @@ for (let i = 0; i < 600; i++) {
 // Pose the kit once (a frozen boot parks it at the bind pose: bride-game-frames.mjs), then hold.
 await evaluate('__sdfGame.freeze(false); __sdfGame.step(2); __sdfGame.freeze(true);');
 await sleep(5000); // the READY card fades
+if (!FLASH) {
+  // The player's own toggle (game-player-input.ts KeyF), so the page is in a state play can reach.
+  for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, code: 'KeyF', key: 'f', windowsVirtualKeyCode: 70 });
+  await evaluate('__sdfGame.freeze(false); __sdfGame.step(90); __sdfGame.freeze(true);');
+}
 const actors = JSON.parse(await evaluate('JSON.stringify(__sdfGame.actorTrace())'));
 const target = actors.find((a) => a.kind !== 'soldier') ?? fail('no zombie');
 
@@ -56,7 +66,10 @@ async function shot(name, place) {
   }
   const png = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(`${OUT}/${name}.png`, Buffer.from(png.result.data, 'base64'));
-  writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ forearm: fa, points: pts }));
+  const lodFar = await evaluate(`__sdfGame.actorLodFar ? __sdfGame.actorLodFar(${target.id}) : null`);
+  const actorPos = JSON.parse(await evaluate(`JSON.stringify(__sdfGame.actorTrace().find(x => x.id === ${target.id})?.pos ?? null)`));
+  writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ forearm: fa, points: pts, lodFar, actorPos }));
+  console.log(`  ${name}: lodFar ${lodFar}`);
   console.log(`wrote ${OUT}/${name}.png`);
 }
 
@@ -73,9 +86,9 @@ await shot('three-quarter', at(Math.PI / 4));
 await shot('side', at(Math.PI / 2));
 await shot('full', { ...at(Math.PI / 8, 2.2), pitch: -0.25 });
 if (LIVE > 0) {
-  await evaluate(`__sdfGame.placePlayer(${JSON.stringify({ ...at(0, 2.0), pitch: -0.15 })}); __sdfGame.freeze(false);`);
+  await evaluate(`__sdfGame.placePlayer(${JSON.stringify({ ...at(0, LIVE_FROM), pitch: -0.12 })}); __sdfGame.freeze(false);`);
   for (let i = 0; i < LIVE; i++) {
-    await evaluate('__sdfGame.step(20)');
+    await evaluate(`__sdfGame.step(${LIVE_STEP})`);
     await shot(`live-${i}`, null);
   }
 }

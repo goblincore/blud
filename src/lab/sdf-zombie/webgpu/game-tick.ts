@@ -69,6 +69,8 @@ import { setShellHold } from './game-arms';
 const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
 /** Last frame's detail-LOD answer per actor id (detailFarSticky's hysteresis). */
 const lodFarOf = new Map<number, boolean>();
+/** Diagnostic: whether an actor drew its far LOD set last frame (null before its first visual frame). */
+export function actorLodFar(id: number): boolean | null { return lodFarOf.get(id) ?? null; }
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';

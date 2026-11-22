@@ -432,17 +432,17 @@ def build_forearm():
     return s
 
 
-# The flesh hand's fingers and thumb, copied from zombie.blob's HANDS block (2026-11-22): (from, to, flesh r, flesh r2,
+# The flesh hand's fingers and thumb, copied from zombie.blob's HANDS block (2026-11-22; rolled palm-back, as there): (from, to, flesh r, flesh r2,
 # offset, tip, bend), on the forearm (J[7] -> J[9]) past its tail, left side. A flesh finger is a quadratic Bezier
 # capsule: a = forearm(from) + offset, b = forearm(to) + offset + tip, control = (a + b) / 2 + bend. Keep in step with
 # the .blob: check-kit.ts fails a bone that leaves the flesh.
 HAND_DIGITS = [
-    (1.27, 1.55, 0.0120, 0.0080, (0, 0, 0.031), (-0.034, 0.020, 0.016), (0.016, -0.016, 0.004)),     # index
-    (1.27, 1.57, 0.0125, 0.0085, (0, 0, 0.009), (-0.037, 0.021, 0.004), (0.017, -0.017, 0.001)),     # middle
-    (1.27, 1.55, 0.0120, 0.0080, (0, 0, -0.013), (-0.035, 0.020, -0.008), (0.016, -0.016, -0.002)),  # ring
-    (1.25, 1.47, 0.0105, 0.0072, (0, 0, -0.034), (-0.028, 0.016, -0.018), (0.013, -0.013, -0.004)),  # little
+    (1.27, 1.55, 0.0120, 0.0080, (-0.0307, -0.0046, 0.0003), (-0.0189, 0.0157, -0.0348), (-0.0015, -0.0156, 0.0168)),     # index
+    (1.27, 1.57, 0.0125, 0.0085, (-0.0089, -0.0013, 0.0001), (-0.0072, 0.0183, -0.0379), (0.0016, -0.0161, 0.0178)),     # middle
+    (1.27, 1.55, 0.0120, 0.0080, (0.0129, 0.0019, -0.0001), (0.0048, 0.0192, -0.0360), (0.0044, -0.0147, 0.0167)),  # ring
+    (1.25, 1.47, 0.0105, 0.0072, (0.0336, 0.0050, -0.0003), (0.0154, 0.0171, -0.0289), (0.0059, -0.0116, 0.0136)),  # little
 ]
-HAND_THUMB = (1.06, 1.30, 0.0145, 0.0095, (-0.012, 0, 0.046), (-0.026, 0.012, 0.010), (0.008, -0.008, 0.006))
+HAND_THUMB = (1.06, 1.30, 0.0145, 0.0095, (-0.0455, -0.0074, -0.0115), (-0.0117, 0.0091, -0.0265), (-0.0047, -0.0084, 0.0084))
 
 
 def flesh_curve(digit, n=6):
@@ -462,9 +462,9 @@ def build_hand():
     s = Shells()
     w = J[9]
     d = (J[9] - J[7]).normalized()               # down the forearm
-    pm = V(-1, 0, 0); pm = (pm - d * pm.dot(d)).normalized()     # the palm's side: toward the body
+    pm = V(0, 0, -1); pm = (pm - d * pm.dot(d)).normalized()     # the palm's side: BACK (the hand is rolled palm-back, zombie.blob)
     kz = d.cross(pm).normalized()
-    if kz.z < 0:
+    if kz.x > 0:                                 # the thumb side: toward the thigh (-x), the hand rolled palm-back
         kz = -kz
     s.add(*ellipsoid(w + d * 0.024, (0.007, 0.012, 0.019), segs=8, rings=4, axes=(pm, d, kz)))            # carpals
     for digit in HAND_DIGITS:
