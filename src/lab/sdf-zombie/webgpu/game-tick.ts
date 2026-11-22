@@ -8,6 +8,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { withCtx, type GameContext } from './game-context';
+import { characterEntry, hasCharacter } from '../character-registry';
 import { detailFarSticky, screenHeightPx } from '../lod';
 import * as THREE from 'three/webgpu';
 import { woundEmitAnchorAndNormal } from '../bleed-registry';
@@ -507,7 +508,8 @@ export function tick(ctx: GameContext, dt: number) {
         const cam = ctx.boot.handle.camera;
         const pos = a.pose().pos;
         const dist = Math.hypot(cam.position.x - pos[0], cam.position.y - (pos[1] + 1), cam.position.z - pos[2]);
-        const far = detailFarSticky(screenHeightPx(1.8, dist, cam.fov, innerHeight), lodFarOf.get(a.id) ?? false);
+        const always = hasCharacter(a.characterName()) ? characterEntry(a.characterName()).lodAlways : undefined;
+        const far = always === 'far' || detailFarSticky(screenHeightPx(1.8, dist, cam.fov, innerHeight), lodFarOf.get(a.id) ?? false);
         lodFarOf.set(a.id, far);
         a.view.setLodFar(far);
       }

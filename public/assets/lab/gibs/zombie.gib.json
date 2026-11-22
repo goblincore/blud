@@ -2,7 +2,7 @@
   "kind": "blud-gib-assets",
   "schemaVersion": 3,
   "archetype": "zombie",
-  "fingerprint": "fe1f35c0900cd2f1",
+  "fingerprint": "a0134c0e7a3f22be",
   "recipe": {
     "schemaVersion": 3,
     "generator": "scripts/build-gib-assets.ts",
@@ -97,8 +97,8 @@
   },
   "source": {
     "blob": "src/lab/sdf-zombie/characters/zombie.blob",
-    "blobBytes": 24742,
-    "blobHash": "4d59fa4c78da5566"
+    "blobBytes": 24970,
+    "blobHash": "5e61adcaf8de02a1"
   },
   "bake": {
     "cellSize": 0.012,

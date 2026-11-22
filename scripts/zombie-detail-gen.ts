@@ -5,14 +5,15 @@
 // nothing here is ever raymarched, so the stitches are free at runtime).
 //
 //   npx tsx scripts/zombie-detail-gen.ts && npx tsx scripts/bake-body-normal.ts zombie 768 400 \
-//     --limb clavicle.l:0.3:1.1:0.12:104 --limb upperArm.l:-0.05:0.3:0.10:72 --limb foreArm.l:-0.15:1.25:0.10:284 \
-//     --limb clavicle.r:0.3:1.1:0.12:104 --limb upperArm.r:-0.05:0.3:0.10:72 --limb foreArm.r:-0.15:1.25:0.10:284 \
+//     --limb clavicle.l:0.3:1.1:0.12:104 --limb upperArm.l:-0.05:0.3:0.10:72 --limb foreArm.l:-0.15:1.70:0.10:376 \
+//     --limb clavicle.r:0.3:1.1:0.12:104 --limb upperArm.r:-0.05:0.3:0.10:72 --limb foreArm.r:-0.15:1.70:0.10:376 \
 //     --limb thigh.l:-0.2:0.35:0.14:168 --limb shin.l:-0.15:0.15:0.11:100 \
 //     --limb thigh.r:-0.2:0.35:0.14:168 --limb shin.r:-0.15:0.15:0.11:100 --limb neck:-0.3:0.9:0.09:128
 //   (about 30 s on the GPU; run `npm install` first if it says it is baking on the CPU). The limb regions are BANDS
 //   round the seams only: a hit no region claims (mid upper arm, mid shin) simply wears no map. The foreArm region
-//   carries both the elbow (t < 0 reaches back over the upper arm's end; same cluster) and the wrist, and runs
-//   past the hand (its sphere ends at t ~1.21) so both sides of the wrist suture wear it; the shin
+//   carries both the elbow (t < 0 reaches back over the upper arm's end; same cluster) and the wrist, and runs on
+//   over the whole HAND to t 1.70 (2026-11-22): the zombie draws a mitten (lod=far) and the bake folds its curled
+//   fingers (lod=near) into the map as the detail (body-normal-bake/regions.ts bakeBodies); the shin
 //   region carries the knee from both sides the same way. Texels are ~1-1.6 mm.
 //
 // THE TEMPLATE is scripts/twinhead-detail-gen.ts (probe the skin, sit each element a set number of mm proud, bind it

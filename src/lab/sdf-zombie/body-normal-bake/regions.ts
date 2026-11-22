@@ -41,7 +41,18 @@ export function buildFromBlob(src: string): Body { const doc = parseBlob(src); r
 
 /** The plain body and the detailed body, both at rest. */
 export function bakeBodies(blobSrc: string, detailSrc: string, name: string): { base: Body; detail: Body } {
-  return { base: buildFromBlob(blobSrc), detail: buildFromBlob(withDetail(blobSrc, detailSrc, name)) };
+  return { base: lodSet(buildFromBlob(blobSrc), 'far'), detail: lodSet(buildFromBlob(withDetail(blobSrc, detailSrc, name)), 'near') };
+}
+
+/**
+ * DISTANCE LOD IN THE BAKE (PrimDef.lod; the zombie's mitten hand, 2026-11-22). The plain skin is the `lod=far` set
+ * (the cheap stand-in the game draws), the detailed skin the `lod=near` set (the fingers): each texel's ray meets the
+ * mitten and the nearest finger, so the map shades the grooves between fingers onto the mitten. A body with no lod
+ * prims is returned as built.
+ */
+export function lodSet(body: Body, keep: 'near' | 'far'): Body {
+  if (!body.prims.some(p => p.lod !== undefined)) return body;
+  return { ...body, prims: body.prims.map(p => (p.lod === undefined ? p : { ...p, dead: p.lod !== keep })) };
 }
 
 export interface Region { label: string; limb: string; head: V; tail: V; rMax: number; rows: number; kind: 0 | 1; r0: number; row0: number }
