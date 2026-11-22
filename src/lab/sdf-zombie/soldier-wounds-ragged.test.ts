@@ -22,6 +22,16 @@ describe('soldier ragged craters (option 3)', () => {
     expect(rows[2]!.ragged).toBeUndefined();
   });
 
+  it('keeps every ring wound up to the cap it is given (the crater grid holds 128, not 32)', () => {
+    // 2026-11-22: the soldier's render list sliced to the newest MAX_WOUNDS (32) while the crater grid's ring holds
+    // 128, so two pellet volleys pushed the earlier slug craters out of the drawn rows and they vanished.
+    const ring = Array.from({ length: 40 }, (_, i) => wound('pellet', i * 0.01));
+    const rows = soldierVisualWounds(ring, 128);
+    expect(rows).toHaveLength(40);
+    expect(rows[0]!.local).toEqual(ring[0]!.local);
+    expect(soldierVisualWounds(ring)).toHaveLength(32);   // without the grid the cap is still MAX_WOUNDS
+  });
+
   it('keeps the amount inside the type texel fraction (< 0.5)', () => {
     expect(RAGGED_AMOUNT).toBeGreaterThan(0);
     expect(RAGGED_AMOUNT).toBeLessThan(0.5);

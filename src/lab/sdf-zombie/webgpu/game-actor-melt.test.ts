@@ -15,12 +15,13 @@ import { MELT_TUNING_BODY } from '../melt';
 import { BONE_GROUPS, mulberry32 } from '../melt-bones';
 import type { Primitive, Vec3 } from '../types';
 
-function actor() {
-  const uploads: { melt: number; updates: number } = { melt: 0, updates: 0 };
+function actor(withWounds = false) {
+  const uploads: { melt: number; updates: number; wounds: Vec3[][] } = { melt: 0, updates: 0, wounds: [] };
   const view = {
     setRootShift: () => {}, setHeadRotation: () => {}, setTime: () => {},
     update: () => { uploads.updates++; }, setMelt: (t: number) => { uploads.melt = t; },
     setPackBones: () => {}, setBonesBare: () => {},
+    ...(withWounds ? { setWounds: (at: Vec3[]) => { uploads.wounds.push(at.map(p => [...p] as Vec3)); } } : {}),
   };
   const bones: { group: string; origin: Vec3; bones: Primitive[]; vel: Vec3 }[] = [];
   const doc = parseBlob(zombieBlobSrc);
@@ -122,6 +123,29 @@ describe('a game actor melts where it stands', () => {
     // The feet go with the shins, not with the ribcage: a cage that reaches the floor never falls.
     const cage = bones.find(b => b.group === 'cage')!;
     expect(Math.min(...cage.bones.flatMap(p => [p.a[1], p.b[1]])) - at[1]).toBeGreaterThan(0.6);
+  });
+
+  it('keeps its craters through the melt: they go down with the flesh and close before it pools', () => {
+    const { a, uploads } = actor(true);
+    const at = a.pose().pos;
+    expect(a.hit([at[0], at[1] + 1.2, at[2] + 1], [0, 0, -1])).not.toBeNull();
+    expect(a.hit([at[0], at[1] + 0.9, at[2] + 1], [0, 0, -1])).not.toBeNull();
+    const shot = a.wounds().length;
+    expect(shot).toBeGreaterThan(0);
+    uploads.wounds.length = 0;
+    expect(a.beginMelt()).toBe(true);
+    expect(a.wounds()).toHaveLength(0);                       // the gameplay ring is goo: no wounds, as before
+    // The first melt upload still draws every crater the body had (they used to blink out here).
+    expect(uploads.wounds[0]?.length).toBe(shot);
+    const top0 = Math.max(...uploads.wounds[0]!.map(p => p[1]));
+    let lowest = top0;
+    for (let i = 0; i < 4 * 60; i++) {
+      a.stepMelt(1 / 60); a.step(1 / 60);
+      const last = uploads.wounds[uploads.wounds.length - 1]!;
+      if (last.length) lowest = Math.min(lowest, Math.max(...last.map(p => p[1])));
+    }
+    expect(lowest).toBeLessThan(top0 - 0.1);                  // they sank with the flesh
+    expect(uploads.wounds[uploads.wounds.length - 1]).toEqual([]);   // and all closed: nothing bites the pool
   });
 
   it('a set puddle costs nothing: no pack, no upload, and the body no longer steps', () => {

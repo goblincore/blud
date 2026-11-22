@@ -89,9 +89,10 @@ import {
   type BodyHit, type BodyObstacle, type ContactBox, type ContactSeg,
 } from '../corpse-contact';
 import type { ZombieGpuView } from './zombie-gpu';
-import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
+import { createWoundRing, WOUND_RING_CAP, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
 import { soldierVisualWounds } from '../soldier-wounds';
+import { meltWoundPoint, meltWoundRows } from '../melt-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
@@ -963,6 +964,9 @@ export function createZombieActor(opts: {
     slumped: boolean;
     /** Seconds the set pool has gone on creeping (MELT_AFTER). */
     after: number;
+    /** The craters the body showed when it began to melt, drawn going down with it until each closes
+     *  (melt-wounds.ts); `woundsUp` while any is uploaded. Render only: the ring itself is empty. */
+    wounds: readonly Wound[]; woundsUp: boolean;
   } | null = null;
   /** setViewSync: whether step() uploads the view, and whether a skipped upload is owed. */
   let viewSync = true, viewStale = false;
@@ -1351,7 +1355,7 @@ export function createZombieActor(opts: {
     // game push identical carve rows — including the depth-slab normals the
     // lab had ZERO references to before this. The pose is ours to supply: the
     // ring owns the wound DATA, the caller owns the rig it is stamped against.
-    const visual=torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : undefined);
+    const visual=torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all(), WOUND_RING_CAP) : undefined);
     // RUPTURE: a crater must ride the rotating region it is carved into. The
     // ring computes the position from the CLEAN prims (the stored offset lives
     // in that frame); this applies that region's rigid transform to the result.
@@ -1598,6 +1602,14 @@ export function createZombieActor(opts: {
     const b = meltBodies(melt);
     melt.drawn = b.drawn;
     view.update(b.drawn, b.rest);
+    // THE CRATERS GO DOWN WITH IT (melt-wounds.ts): placed on the unmelted pose, carried onto each prim's melted
+    // twin, shrinking as that prim melts. An empty list is uploaded once, to clear the rows.
+    const rows = meltWoundRows(melt.wounds, melt.state, melt.tuning);
+    if (rows.length || melt.woundsUp) {
+      const from = posed.prims, to = b.drawn.prims;
+      woundRing.refresh(view, posed, bodyYaw, rows, (v, i, dir) => (dir || !from[i] || !to[i] ? v : meltWoundPoint(v, from[i]!, to[i]!)));
+      melt.woundsUp = rows.length > 0;
+    }
     view.setMelt(melt.state.t);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     melt.set = melt.state.t >= 1 && melt.after >= MELT_AFTER.sec;
@@ -3111,6 +3123,9 @@ export function createZombieActor(opts: {
         rng: mulberry32((opts.seed ^ 0x3e17ed) >>> 0), drawn: posed, set: false,
         hitRest, slumped: false, after: 0, hitW: 0, hitMax: 1,
         tuning: roll.tuning, slumpAt: roll.slumpAt, gobs: roll.gobs,
+        // What refreshWounds drew, kept before the ring is emptied below.
+        wounds: torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all(), WOUND_RING_CAP) : [...woundRing.all()]),
+        woundsUp: false,
       };
       // The front's heights, with the hit's spread folded in (hitHeight): flesh near the hit goes first.
       if (hitRest) {
@@ -3121,9 +3136,9 @@ export function createZombieActor(opts: {
         melt.state = { ...melt.state, heights: current.prims.flatMap(p => [hitHeight(m, p.a), hitHeight(m, p.b)]) };
       }
       doomed = true;
-      // The craters close: a carve sphere left where the standing body was would bite the pool.
+      // The ring empties (goo has no wounds for what reads them), but the craters it drew are not dropped: they
+      // go down with the flesh and close as it melts (uploadMelt, melt-wounds.ts), so none bites the pool.
       woundRing.set([]);
-      refreshWounds();
       // The skeleton shows through the thinning flesh and then falls out of it: its rows are packed into
       // this body's field whatever the bone mode is (the segment meshes cannot follow a melt), and fold bare.
       if (MELT_SDF_BONES) view.setPackBones(true);
@@ -3334,7 +3349,7 @@ export function createZombieActor(opts: {
     pauseForBake: (paused: boolean) => { bakePaused = paused; viewStale = false; },
     wounds: () => woundRing.all(),
     bakedWounds: () => woundRing.baked?.() ?? [],
-    visualWounds: () => melt ? [] : torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
+    visualWounds: () => melt ? [] : torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all(), WOUND_RING_CAP) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
     floatState: () => floater ? { altitude: floater.altitude, mode: floater.mode, dir: floater.dir, down: floaterDown } : null,
