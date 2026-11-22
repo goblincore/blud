@@ -1,0 +1,90 @@
+{
+  "tag": "cfix",
+  "characters": {
+    "zombie": {
+      "variants": {
+        "c": {
+          "distance": 3.48,
+          "box": {
+            "center": [
+              -0.002365287554892459,
+              0.8617752917584821,
+              -9.609773635544894
+            ],
+            "half": [
+              0.3628670715110989,
+              0.8687570014788931,
+              0.4452243534259859
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 81.28,
+              "std": 63.35,
+              "blueMinusRed": 10.5
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 60.23,
+              "std": 54.94,
+              "blueMinusRed": 5.6
+            }
+          },
+          "pipelines": {
+            "before": 131,
+            "after": 131
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 1,
+            "flashedKits": 0
+          },
+          "bones": 22,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 6,
+            "joltsPerSec": 3.75,
+            "negativeShare": 0.25
+          },
+          "skullPos": {
+            "features": {
+              "pixels": 6492,
+              "mean": 166,
+              "contrast": 40.68,
+              "spread": 128.8,
+              "edge": 19.21
+            },
+            "skullBox": {
+              "mean": 73.33,
+              "std": 74.45,
+              "blueMinusRed": 9.5
+            }
+          },
+          "skullNeg": {
+            "features": {
+              "pixels": 10471,
+              "mean": 239.1,
+              "contrast": 27.63,
+              "spread": 85.9,
+              "edge": 10.89
+            },
+            "skullBox": {
+              "mean": 64.05,
+              "std": 77.65,
+              "blueMinusRed": 7.4
+            }
+          }
+        }
+      }
+    }
+  },
+  "consoleErrors": []
+}

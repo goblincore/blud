@@ -31,6 +31,7 @@ import { GORE_BLOCK } from './blocks/post/gore.wgsl';
 import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
 import { BURN_BLOCK } from './blocks/post/burn.wgsl';
+import { ZAP_BLOCK } from './blocks/post/zap.wgsl';
 import { MELT_BLOCK } from './blocks/post/melt.wgsl';
 import { afterHitStop } from '../after-hit-flag';
 
@@ -427,6 +428,8 @@ ${SOLDIER_MEAT_BLOCK}
 ${PAINT_CHAR_BLOCK}
 
 ${BURN_BLOCK}
+
+${ZAP_BLOCK}
 
 ${MELT_BLOCK}${afterHitStop(34, 'albedo + n * (wmRim + cm + gore)')}
 `;

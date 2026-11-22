@@ -41,7 +41,7 @@ describe('burn uniform plumbing', () => {
   it('carries the body burn state into the crowd record', () => {
     expect(src).toContain('burn: u.burnCfg.value.x');
     expect(src).toContain('burnSec: u.burnCfg.value.y');
-    expect(src).toContain('charAmount: u.burnCfg.value.z');
+    expect(src).toContain('charAmount: Math.max(u.burnCfg.value.z, u.zapChar.value)');
   });
 });
 

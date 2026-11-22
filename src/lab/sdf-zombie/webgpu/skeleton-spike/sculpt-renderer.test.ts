@@ -12,7 +12,7 @@ import { bindRig, applyRig, headQuatOf } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { MESH_CELL, SegmentMeshCache } from './mesh';
-import { createSegmentMeshRenderer } from './mesh-renderer';
+import { createSegmentMeshRenderer, segmentLitColour } from './mesh-renderer';
 import { forcedSplit, headFrameOf, splitWarpOf, type SplitWarp } from '../../head-split';
 import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
@@ -52,7 +52,7 @@ const calls = (nodes: readonly Graph[]) => new Set(nodes.flatMap(n => (n.functio
 /** A split material's colour as three builds it: `held` the values declared ahead of the branch on the clip (real
  *  variables), `branch` what the branch stacks. */
 const colourOf = (m: MeshBasicNodeMaterial) => {
-  const fn = (m.colorNode as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
+  const fn = (segmentLitColour(m) as unknown as { shaderNode: { jsFunc(): unknown } }).shaderNode;
   const was = getCurrentStack(), outer = stack();
   try {
     setCurrentStack(outer); fn.jsFunc();
@@ -75,7 +75,7 @@ describe('the sculpted skull\'s variants in the segment renderer', () => {
     const { cache, renderer } = make(variant);
     renderer.update([[headSrc, limbSrc]], [{ id: 1 }]);
     const m = batch(renderer, 'skeleton-segments')!.material as MeshBasicNodeMaterial;
-    expect([...calls(reach([m.colorNode!]))].sort()).toEqual([...expected]);
+    expect([...calls(reach([segmentLitColour(m)]))].sort()).toEqual([...expected]);
     // One material for every bone: a limb and the head are on the same one.
     expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.Mesh).material)).size).toBe(1);
     renderer.dispose(); cache.dispose();
@@ -139,7 +139,7 @@ describe('the second paint is drawn on the characters it is fitted to, and the f
   const cultist = as('cultist'), juggernaut = as('juggernaut');
   const rendererOf = (recipe: Parameters<typeof sculptPaintOf>[0]) => { const cache = new SegmentMeshCache(MESH_CELL, undefined, null, recipe); return { cache, renderer: createSegmentMeshRenderer(cache) }; };
   const batchOf = (r: R, geometry: THREE.BufferGeometry) => r.object.children.find(c => batchDraws(c, geometry)) as THREE.Mesh;
-  const paintOn = (m: THREE.Material | THREE.Material[]) => [(m as THREE.Material).name, (m as THREE.Material).userData.sculptPaint, [...calls(reach([(m as MeshBasicNodeMaterial).colorNode!]))].sort()];
+  const paintOn = (m: THREE.Material | THREE.Material[]) => [(m as THREE.Material).name, (m as THREE.Material).userData.sculptPaint, [...calls(reach([segmentLitColour(m as MeshBasicNodeMaterial)]))].sort()];
 
   it('full: the zombie\'s and the juggernaut\'s bones on the second paint\'s material, the cultist\'s on the first\'s, in one renderer', () => {
     const { cache, renderer } = rendererOf(sculptRecipe('full'));

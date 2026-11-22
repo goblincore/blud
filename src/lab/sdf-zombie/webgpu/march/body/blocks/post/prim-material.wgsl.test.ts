@@ -243,13 +243,16 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     expect(SHADE_BODY).toContain('faceGlow = faceGlow * (1.0 - painted);');
     const killLine = SHADE_BODY.split('\n').find(l => l.includes('faceGlow = faceGlow * (1.0 - painted);'))!;
     expect(killLine).not.toContain('primGlow');
-    // ...and primGlow is ASSIGNED exactly three times in the module: the `var
-    // primGlow = 0.0` default, the clamp read, and the burning-body fade
-    // (flame lab task 6 — a burning body's fire replaces authored glow). A
-    // FOURTH assignment — e.g. a separate `primGlow = primGlow * (1.0 -
-    // painted)` kill line — would be the resurrected sunglasses rule wearing
-    // a different hat (this exact mutation was run and killed).
-    expect((MARCH_TREE_SRC.match(/primGlow =/g) ?? []).length).toBe(3);
+    // ...and primGlow is ASSIGNED exactly four times in the module: the `var
+    // primGlow = 0.0` default, the clamp read, the burning-body fade
+    // (flame lab task 6 — a burning body's fire replaces authored glow) and
+    // the zap fade (zap.wgsl.ts, 2026-11-17 — a body that IS the light, the
+    // same rule). A FIFTH assignment — e.g. a separate `primGlow = primGlow *
+    // (1.0 - painted)` kill line — would be the resurrected sunglasses rule
+    // wearing a different hat (this exact mutation was run and killed).
+    expect((MARCH_TREE_SRC.match(/primGlow =/g) ?? []).length).toBe(4);
+    expect(MARCH_TREE_SRC).toContain('primGlow = primGlow * (1.0 - burnAmt);');
+    expect(MARCH_TREE_SRC).toContain('primGlow = primGlow * (1.0 - gZap.x);');
   });
 });
 

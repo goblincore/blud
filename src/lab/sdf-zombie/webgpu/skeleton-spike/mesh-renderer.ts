@@ -68,7 +68,7 @@ import { meshBoneSource } from './mesh-skull';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, vec2, uv, positionGeometry, positionWorld, normalWorld,
+  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, vec2, uv, positionGeometry, normalWorld,
   cameraPosition, frontFacing, Fn, If,
 } from 'three/tsl';
 import {
@@ -111,8 +111,17 @@ import {
   type SkullHeadFrame, type SkullShotStep, type SkullStrikes,
 } from './skull-split-hit';
 import {
-  SEGMENT_MATRIX_FLOATS, ensureSegmentMatrices, instancedShareOf, setSegmentMatrix, useSegmentInstance,
+  SEGMENT_MATRIX_FLOATS, SEGMENT_ZAP_ATTR, ensureSegmentMatrices, instancedShareOf, segmentWorldPosition, setSegmentMatrix,
+  useSegmentInstance,
 } from './segment-instance';
+import { ZAP_XRAY_COLOUR_WGSL } from './zap-xray';
+
+// WHERE THE BONE IS. Every material here reads the fragment's world position as segmentWorldPosition (segment-instance.ts),
+// the surface's own place, never three's positionWorld: on a zapped instance that one is the x-ray's PULLED place, up
+// to 0.6 m toward the eye, where a split copy clips to nothing (a split head drew a closed skull), a wound's exposure
+// sphere is elsewhere and the lights are measured from the wrong point. With no zap the two are the same point.
+// The local name is bound to the UN-PULLED point, in place of three's positionWorld, so no material below can read the pulled one.
+const positionWorld = segmentWorldPosition;
 
 const MAX_WOUNDS_TEX = 64;
 /** The materials' names, by what each draws: a bone segment (the sculpted skull among them), a plate of the anatomical
@@ -122,6 +131,11 @@ export const SEGMENT_MATERIALS = {
   bone: 'skeleton-bone', plate: 'skeleton-plate', eye: 'skeleton-eye',
   boneSplit: 'skeleton-bone-split', plateSplit: 'skeleton-plate-split', eyeSplit: 'skeleton-eye-split',
 } as const;
+/** A segment material's LIT colour: its colorNode as it was before the zap x-ray wrapped it (zap-xray.ts). What the
+ *  material paints with, for the tests and diagnostics that walk that graph; a material with no wrap answers its
+ *  colorNode. */
+const litColours = new WeakMap<object, unknown>();
+export const segmentLitColour = (material: MeshBasicNodeMaterial): Node => (litColours.get(material) ?? material.colorNode) as Node;
 /** Updates a segment batch may sit unused before it is dropped (a stale revision's geometry). */
 export const BATCH_IDLE_UPDATES = 120;
 /** PRE-WARM (fire-hitch fix, 2026-10-27). A batch is an InstancedMesh, and three keys an instanced mesh's render object
@@ -233,6 +247,14 @@ export interface SegmentMeshRenderer {
    *  room's fill factor, written to iFill (the list branch scales the bone ambient by it); omitted,
    *  or an owner with no picks: 1. Allocation-free. */
   syncLights(lightsOf: (owner: unknown) => PicksLike | null | undefined, fillOf?: (owner: unknown) => number): void;
+  /** THE ZAP X-RAY (zap-xray.ts): copy each drawn bone and eye instance's owner's zap glow (signed: negative on a
+   *  jolt) into its batch's iZap. `zapOf(owner)` is 0 for a body the arc is not on. An organ takes 0 whatever its
+   *  owner's: it is never pulled, so it shows only where a wound already showed it. Call it after update, on every
+   *  frame anything is zapped and for one frame after, so the last glow is cleared: a row a batch no longer draws is
+   *  cleared too (the next instance to take it may be another body's). Allocation-free. */
+  syncZap(zapOf: (owner: unknown) => number): void;
+  /** Diagnostic: the iZap values of this owner's drawn instances, eyes and organs included. */
+  ownerZap(owner: unknown): number[];
   /** Diagnostic: the iFill values of this owner's drawn instances, eyes included. */
   ownerFill(owner: unknown): number[];
   /** Diagnostic: the iLights rows (4 packed picks each) of this owner's drawn instances, eyes
@@ -632,12 +654,30 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   for (const m of [material, material2, ...skullMaterials.values(), eyeMaterial, organMaterial, splitMaterial, splitMaterial2, ...skullSplitMaterials.values(), eyeSplitMaterial]) {
     if (m) useSegmentInstance(m);
   }
+  // THE ZAP X-RAY (zap-xray.ts): where an instance's iZap is not zero its lit colour gives way to the flat
+  // bone-in-the-glow colour (an eye's too, its red pupil with it: an eye is part of the skull's dark shape). Zero on
+  // every instance of every body the arc is not on, and a mix by 0 is the lit colour exactly. After every colorNode
+  // above is assigned; each keeps its alpha. Outside the split materials' branch: it takes no derivative.
+  const zapColour = wgslFn(ZAP_XRAY_COLOUR_WGSL);
+  const zapAttr = attribute(SEGMENT_ZAP_ATTR, 'float');
+  for (const m of [material, material2, ...skullMaterials.values(), eyeMaterial, organMaterial, splitMaterial, splitMaterial2, ...skullSplitMaterials.values(), eyeSplitMaterial]) {
+    if (!m?.colorNode) continue;
+    const lit = m.colorNode as unknown as { xyz: unknown; w: unknown };
+    litColours.set(m, m.colorNode);
+    // The look variants (zap-look.ts) shade by how far the surface faces the eye, and tell an eye from bone.
+    const toEye = cameraPosition.sub(positionWorld);
+    const facing = normalWorld.dot(toEye.normalize()).abs();
+    const isEye = m === eyeMaterial || m === eyeSplitMaterial;
+    if (isEye) m.userData.zapNoThin = true;
+    m.colorNode = vec4(zapColour({ lit: lit.xyz as never, zap: zapAttr, facing: facing as never, kind: float(isEye ? 1 : 0), dist: toEye.length() as never }) as never, lit.w as never);
+  }
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
   // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
   // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
   const debrisEyeGeometry = eyeGeometry.clone();
   debrisEyeGeometry.setAttribute('iLights', new THREE.InstancedBufferAttribute(new Float32Array(4).fill(NO_OWNER_PICKS), 4));
   debrisEyeGeometry.setAttribute('iFill', new THREE.InstancedBufferAttribute(new Float32Array(1).fill(1), 1));
+  debrisEyeGeometry.setAttribute(SEGMENT_ZAP_ATTR, new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   ensureSegmentMatrices(debrisEyeGeometry, 1);
   let absent = new WeakMap<object, Set<number>>();
   const debris: { mesh: THREE.Mesh; velocity: THREE.Vector3; age: number; owner: object }[] = [];
@@ -655,7 +695,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // (instancedShareOf the segment's: the same vertex buffers) with the instance matrix as a named attribute, not an
   // InstancedMesh, which three keys by uuid: every batch of a material shares one node build and pipeline. `count` is
   // the batch's instances this update; the draw's is its geometry's `instanceCount` (the mesh's own stays 1).
-  interface Batch { mesh: THREE.Mesh<THREE.InstancedBufferGeometry>; count: number; eye: boolean; organ: boolean; split: boolean; idle: number; owners: unknown[]; warm?: boolean }
+  // `zapped`: the rows of its iZap that may hold a glow (0: every row is 0), so syncZap clears what it wrote.
+  interface Batch { mesh: THREE.Mesh<THREE.InstancedBufferGeometry>; count: number; eye: boolean; organ: boolean; split: boolean; idle: number; owners: unknown[]; zapped: number; warm?: boolean }
   /** The batch's instance-matrix rows (segment-instance.ts), at least `cap` of them. */
   const rowsOf = (b: Batch, cap = 0) => ensureSegmentMatrices(b.mesh.geometry, cap);
   /** Take a batch out of the scene. Its draw geometry is this renderer's own (a closed batch's instancedShareOf, a
@@ -702,8 +743,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   /** A split geometry's records (mesh-split.ts packSplitInstance): ONE interleaved instance buffer of
    *  SPLIT_INSTANCE_FLOATS a row, read as the four vec4 attributes SPLIT_INSTANCE_ATTRS. One buffer, not four: the
    *  pipeline may bind 8 vertex buffers, and position, normal, meshFeature (an anatomical plate: uv in its place),
-   *  the instance matrix (segment-instance.ts, one interleaved buffer too), iLights and iFill are six. At least `cap` rows (grown with the batch; the rows are
-   *  rewritten every update). */
+   *  the instance matrix (segment-instance.ts, one interleaved buffer too), iLights, iFill and iZap (zap-xray.ts) are
+   *  seven, and this record the EIGHTH: a split batch is at the limit, and its next per-instance value has to ride
+   *  one of these buffers. At least `cap` rows (grown with the batch; the rows are rewritten every update). */
   const splitRows = (geometry: THREE.BufferGeometry, cap = 0): THREE.InstancedInterleavedBuffer => {
     const cur = (geometry.getAttribute(SPLIT_INSTANCE_ATTRS[0]) as THREE.InterleavedBufferAttribute | undefined)?.data as THREE.InstancedInterleavedBuffer | undefined;
     if (cur && cur.count >= cap) return cur;
@@ -713,12 +755,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     SPLIT_INSTANCE_ATTRS.forEach((name, k) => geometry.setAttribute(name, new THREE.InterleavedBufferAttribute(next, 4, k * 4)));
     return next;
   };
-  /** iLights (4 packed picks), iFill (1 float) and the instance matrix (identity), all sized to `cap` instances; a
-   *  split batch's records with them. A plain debris mesh on a segment material takes one of each. */
+  /** iLights (4 packed picks), iFill (1 float), iZap (1 float, 0: no zap) and the instance matrix (identity), all
+   *  sized to `cap` instances; a split batch's records with them. A plain debris mesh on a segment material takes one
+   *  of each: every material's one node build reads them all. */
   const ensureLights = (geometry: THREE.BufferGeometry, cap: number, split: boolean) => {
     ensureSegmentMatrices(geometry, cap);
     ensureInstanced(geometry, 'iLights', 4, NO_OWNER_PICKS, cap);
     ensureInstanced(geometry, 'iFill', 1, 1, cap);
+    ensureInstanced(geometry, SEGMENT_ZAP_ATTR, 1, 0, cap);
     if (split) splitRows(geometry, cap);
   };
   /** Upload only the live instances (M3): the attribute is DynamicDrawUsage, so three uploads it
@@ -745,7 +789,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       mesh.layers.set(layer);
       ensureLights(drawGeometry, 16, split);
       group.add(mesh);
-      b = { mesh, count: 0, eye, organ, split, idle: 0, owners: [] };
+      b = { mesh, count: 0, eye, organ, split, idle: 0, owners: [], zapped: 0 };
       batches.set(geometry, b);
     }
     return b;
@@ -1398,6 +1442,30 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         markLive(attr, b.count);
         markLive(fAttr, b.count);
       }
+    },
+    syncZap(zapOf) {
+      for (const b of batches.values()) {
+        const n = Math.max(b.count, b.zapped);
+        if (n === 0) continue;
+        const attr = b.mesh.geometry.getAttribute(SEGMENT_ZAP_ATTR) as THREE.InstancedBufferAttribute;
+        const arr = attr.array as Float32Array;
+        let zapped = 0, changed = false;
+        for (let i = 0; i < n; i++) {
+          const z = i < b.count && !b.organ ? zapOf(b.owners[i]) : 0;
+          if (arr[i] !== z) { arr[i] = z; changed = true; }
+          if (z !== 0) zapped = i + 1;
+        }
+        b.zapped = zapped;
+        if (changed) markLive(attr, n);
+      }
+    },
+    ownerZap(owner) {
+      const out: number[] = [];
+      for (const b of batches.values()) {
+        const arr = (b.mesh.geometry.getAttribute(SEGMENT_ZAP_ATTR) as THREE.InstancedBufferAttribute).array as Float32Array;
+        for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(arr[i]!);
+      }
+      return out;
     },
     ownerLights(owner) {
       const out: number[][] = [];

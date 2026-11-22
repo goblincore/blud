@@ -1,0 +1,881 @@
+{
+  "tag": "sweep2",
+  "characters": {
+    "gargoyle": {
+      "bootFailed": "__sdfGame never booted (level=arena&spawn=gargoyle)",
+      "bootError": "[sdf-game] bootstrap failed Error: zombie 1: no motion joints\n    at createZombieActor (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-actor.ts:264:18)\n    at spawnEnemy (http://localhost:5551/s"
+    },
+    "twinhead": {
+      "variants": {
+        "a": {
+          "distance": 4.26,
+          "box": {
+            "center": [
+              -0.017547780722724504,
+              1.078111348755751,
+              -9.463277923440245
+            ],
+            "half": [
+              0.5483126718820239,
+              1.038503903687552,
+              0.5996441279409224
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 61.45,
+              "std": 60.32,
+              "blueMinusRed": 5.1
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 60.78,
+              "std": 60.03,
+              "blueMinusRed": 0.9
+            }
+          },
+          "pipelines": {
+            "before": 146,
+            "after": 149
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 27
+        },
+        "b": {
+          "distance": 4.27,
+          "box": {
+            "center": [
+              -0.022366514766058665,
+              1.0798547583440115,
+              -9.507726576412228
+            ],
+            "half": [
+              0.5479342516528789,
+              1.041775708499855,
+              0.5878972646083307
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 69.5,
+              "std": 68.9,
+              "blueMinusRed": 8.7
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 51.46,
+              "std": 52.17,
+              "blueMinusRed": 3.9
+            }
+          },
+          "pipelines": {
+            "before": 151,
+            "after": 156
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 27
+        }
+      }
+    },
+    "butcher": {
+      "variants": {
+        "a": {
+          "distance": 3.69,
+          "box": {
+            "center": [
+              0.007665945800515661,
+              0.8980379193014941,
+              -9.581596142192428
+            ],
+            "half": [
+              0.3793592416855812,
+              0.9367259385624108,
+              0.4427206077974324
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 55.21,
+              "std": 52.28,
+              "blueMinusRed": 4.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 57.88,
+              "std": 57.57,
+              "blueMinusRed": 2.4
+            }
+          },
+          "pipelines": {
+            "before": 133,
+            "after": 136
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 28
+        },
+        "b": {
+          "distance": 3.71,
+          "box": {
+            "center": [
+              -0.4177672478129072,
+              0.9025583440219911,
+              -9.788234022523081
+            ],
+            "half": [
+              0.46812500185088934,
+              0.9399061665663011,
+              0.46289447207033696
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 60.02,
+              "std": 63.33,
+              "blueMinusRed": 5.2
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 48.8,
+              "std": 44.69,
+              "blueMinusRed": 3.8
+            }
+          },
+          "pipelines": {
+            "before": 138,
+            "after": 143
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 28
+        }
+      }
+    },
+    "flayer": {
+      "variants": {
+        "a": {
+          "distance": 3.65,
+          "box": {
+            "center": [
+              -0.005906788978622235,
+              0.8995165445675485,
+              -9.549837211233788
+            ],
+            "half": [
+              0.37503222247024687,
+              0.9164695211873909,
+              0.444177644968784
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 54.77,
+              "std": 52.31,
+              "blueMinusRed": 4.3
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 57.25,
+              "std": 56.81,
+              "blueMinusRed": 2
+            }
+          },
+          "pipelines": {
+            "before": 133,
+            "after": 136
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 28
+        },
+        "b": {
+          "distance": 3.63,
+          "box": {
+            "center": [
+              -0.43002128518864524,
+              0.8869054951422733,
+              -9.795485890558643
+            ],
+            "half": [
+              0.471057138872346,
+              0.915346805940873,
+              0.44127178431169867
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 62.86,
+              "std": 65.89,
+              "blueMinusRed": 5.4
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 49.78,
+              "std": 45.99,
+              "blueMinusRed": 4.1
+            }
+          },
+          "pipelines": {
+            "before": 138,
+            "after": 143
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 28
+        }
+      }
+    },
+    "deadeye": {
+      "variants": {
+        "a": {
+          "distance": 3.63,
+          "box": {
+            "center": [
+              -0.03244878745266891,
+              0.8920398299693713,
+              -9.680826741174236
+            ],
+            "half": [
+              0.29321162945209667,
+              0.9108713711034426,
+              0.44210063259747034
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 54.64,
+              "std": 51.96,
+              "blueMinusRed": 4.2
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 58.33,
+              "std": 58.13,
+              "blueMinusRed": 1.9
+            }
+          },
+          "pipelines": {
+            "before": 142,
+            "after": 145
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 28
+        },
+        "b": {
+          "distance": 3.63,
+          "box": {
+            "center": [
+              -0.030307820179375694,
+              0.8928286311739305,
+              -9.680813536300303
+            ],
+            "half": [
+              0.29256240092556907,
+              0.9116594513119115,
+              0.4421116251307451
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 64.17,
+              "std": 65.8,
+              "blueMinusRed": 6.9
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 50.03,
+              "std": 46.13,
+              "blueMinusRed": 3.8
+            }
+          },
+          "pipelines": {
+            "before": 149,
+            "after": 154
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 28
+        }
+      }
+    },
+    "gutcrawler": {
+      "variants": {
+        "a": {
+          "distance": 4.71,
+          "box": {
+            "center": [
+              0.0139764626948842,
+              0.23546978364933668,
+              -9.847468769747586
+            ],
+            "half": [
+              0.44199999999999995,
+              0.3290977289589171,
+              1.1220596516326165
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 52.14,
+              "std": 41.85,
+              "blueMinusRed": 2.8
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 50.86,
+              "std": 39.78,
+              "blueMinusRed": 1.2
+            }
+          },
+          "pipelines": {
+            "before": 127,
+            "after": 127
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 17
+        },
+        "b": {
+          "distance": 3.82,
+          "box": {
+            "center": [
+              -0.18800518382637765,
+              0.23239299905094477,
+              -10.01430513292878
+            ],
+            "half": [
+              0.9090573307202965,
+              0.32957942175609556,
+              0.848688312883815
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 64.81,
+              "std": 58.32,
+              "blueMinusRed": 6.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 55.4,
+              "std": 45.88,
+              "blueMinusRed": 4
+            }
+          },
+          "pipelines": {
+            "before": 129,
+            "after": 131
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 17
+        }
+      }
+    },
+    "gibbet": {
+      "variants": {
+        "a": {
+          "distance": 2.73,
+          "box": {
+            "center": [
+              -0.007175563033120863,
+              0.565038411007439,
+              -9.369258413809522
+            ],
+            "half": [
+              0.4877710916594008,
+              0.5584945284464294,
+              0.6494364939790485
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 76.27,
+              "std": 62.67,
+              "blueMinusRed": 4.9
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 67.95,
+              "std": 54.25,
+              "blueMinusRed": 1.1
+            }
+          },
+          "pipelines": {
+            "before": 130,
+            "after": 132
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 23
+        },
+        "b": {
+          "distance": 3.52,
+          "box": {
+            "center": [
+              -0.4241196168389425,
+              0.5541086726783351,
+              -9.720835001537896
+            ],
+            "half": [
+              0.8370407168360907,
+              0.5663606971634914,
+              0.540679385596099
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 76.36,
+              "std": 74.87,
+              "blueMinusRed": 4.2
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 50.91,
+              "std": 39.2,
+              "blueMinusRed": 3.2
+            }
+          },
+          "pipelines": {
+            "before": 133,
+            "after": 137
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 23
+        }
+      }
+    },
+    "chair": {
+      "variants": {
+        "a": {
+          "distance": 2.96,
+          "box": {
+            "center": [
+              0.004299999569157831,
+              0.7245195482279552,
+              -9.698526607117138
+            ],
+            "half": [
+              0.2834796148392216,
+              0.7472458168852485,
+              0.4233615897347809
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 81.11,
+              "std": 75.47,
+              "blueMinusRed": 3.9
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 68.7,
+              "std": 60.1,
+              "blueMinusRed": 0.9
+            }
+          },
+          "pipelines": {
+            "before": 132,
+            "after": 134
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 27
+        },
+        "b": {
+          "distance": 2.95,
+          "box": {
+            "center": [
+              -0.20053623365353876,
+              0.7254172003337988,
+              -9.944294816010043
+            ],
+            "half": [
+              0.45779344202452554,
+              0.7391409628657054,
+              0.41478034260323415
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 81.02,
+              "std": 80.59,
+              "blueMinusRed": 5.2
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 50.92,
+              "std": 42.21,
+              "blueMinusRed": 3.8
+            }
+          },
+          "pipelines": {
+            "before": 136,
+            "after": 140
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 27
+        }
+      }
+    },
+    "gamer": {
+      "variants": {
+        "a": {
+          "distance": 3.52,
+          "box": {
+            "center": [
+              0.019031059929850297,
+              0.8609629610106504,
+              -9.601845768138979
+            ],
+            "half": [
+              0.39054306513114245,
+              0.8857015376775654,
+              0.48161014740684926
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 72.38,
+              "std": 64.71,
+              "blueMinusRed": 3
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 70.84,
+              "std": 62.64,
+              "blueMinusRed": -0.2
+            }
+          },
+          "pipelines": {
+            "before": 133,
+            "after": 135
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 26
+        },
+        "b": {
+          "distance": 3.5,
+          "box": {
+            "center": [
+              -0.2165831726922769,
+              0.8619493169465989,
+              -9.827714001460166
+            ],
+            "half": [
+              0.552614787651975,
+              0.8751164929806824,
+              0.47097047494444233
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 88.66,
+              "std": 86.08,
+              "blueMinusRed": 6.1
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 53.57,
+              "std": 46.44,
+              "blueMinusRed": 4.7
+            }
+          },
+          "pipelines": {
+            "before": 137,
+            "after": 141
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 26
+        }
+      }
+    },
+    "bloatmaw": {
+      "bootFailed": "__sdfGame never booted (level=arena&spawn=bloatmaw)",
+      "bootError": "[sdf-game] bootstrap failed Error: zombie 1: no motion joints\n    at createZombieActor (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-actor.ts:264:18)\n    at spawnEnemy (http://localhost:5551/s"
+    },
+    "imp": {
+      "variants": {
+        "a": {
+          "distance": 3.12,
+          "box": {
+            "center": [
+              0.007666247617216099,
+              0.7451768555910718,
+              -9.597533105473028
+            ],
+            "half": [
+              0.4085541782821648,
+              0.8051755792418747,
+              0.3998175905867605
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 60.46,
+              "std": 55.25,
+              "blueMinusRed": 4.8
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 58.71,
+              "std": 53.05,
+              "blueMinusRed": 1.1
+            }
+          },
+          "pipelines": {
+            "before": 146,
+            "after": 150
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 28
+        },
+        "b": {
+          "distance": 3.09,
+          "box": {
+            "center": [
+              -0.424827761241799,
+              0.7383253048775072,
+              -9.950720864540779
+            ],
+            "half": [
+              0.4137587846392329,
+              0.7959906794213502,
+              0.4153187678305663
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 58.4,
+              "std": 56.47,
+              "blueMinusRed": 5.2
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 50.93,
+              "std": 44.38,
+              "blueMinusRed": 3.3
+            }
+          },
+          "pipelines": {
+            "before": 153,
+            "after": 159
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 28
+        }
+      }
+    }
+  },
+  "consoleErrors": [
+    "[sdf-game] bootstrap failed Error: zombie 1: no motion joints\n    at createZombieActor (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-actor.ts:264:18)\n    at spawnEnemy (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-spawn.ts:277:17)\n    at spawnAll (http://localhost:5551/src/lab/sdf-zo",
+    "[sdf-game] bootstrap failed Error: zombie 1: no motion joints\n    at createZombieActor (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-actor.ts:264:18)\n    at spawnEnemy (http://localhost:5551/src/lab/sdf-zombie/webgpu/game-spawn.ts:277:17)\n    at spawnAll (http://localhost:5551/src/lab/sdf-zo"
+  ]
+}

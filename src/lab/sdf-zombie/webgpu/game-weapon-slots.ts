@@ -36,13 +36,15 @@
  *  `axe` is the chop-combo axe (2026-10-04): click for an overhead, then a
  *  right and a left diagonal chop; each landed chop stamps a cut wound.
  *  `melter` is the melt-death dev harness (game-melter.ts, 2026-11-14): a
- *  placeholder prop whose only verb is melting the body it hits. */
-export type WeaponSlot = 'flail' | 'shotgun' | 'dynamite' | 'launcher' | 'flare' | 'rod' | 'axe' | 'melter';
+ *  placeholder prop whose only verb is melting the body it hits.
+ *  `tesla` is the tesla arc's dev harness (game-tesla.ts, 2026-11-17): a
+ *  placeholder prop; hold fire to zap the body under the crosshair. */
+export type WeaponSlot = 'flail' | 'shotgun' | 'dynamite' | 'launcher' | 'flare' | 'rod' | 'axe' | 'melter' | 'tesla';
 
 /** Slot order, which is ALSO the number-key order (1 → flail, 2 → shotgun,
- *  3 → dynamite, 4 → opt-in launcher prototype, 5 → flare, 6 → rod, the cut-wound stand-in blade, 7 → axe, 8 → melter). Melee on 1, as in
+ *  3 → dynamite, 4 → opt-in launcher prototype, 5 → flare, 6 → rod, the cut-wound stand-in blade, 7 → axe, 8 → melter, 9 → tesla). Melee on 1, as in
  *  Blood; the launcher keeps main's key 4, so the flare dev harness moved to 5. */
-export const WEAPON_SLOTS: readonly WeaponSlot[] = ['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod', 'axe', 'melter'];
+export const WEAPON_SLOTS: readonly WeaponSlot[] = ['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod', 'axe', 'melter', 'tesla'];
 
 /** `event.code` → slot. Only these keys select a weapon; every other key falls
  *  through to the existing handlers untouched. */
@@ -55,6 +57,7 @@ export const SLOT_BY_KEY: Readonly<Record<string, WeaponSlot>> = {
   Digit6: 'rod',
   Digit7: 'axe',
   Digit8: 'melter',
+  Digit9: 'tesla',
 };
 
 /** Slot for a keydown code, or null when the key is not a slot key. */

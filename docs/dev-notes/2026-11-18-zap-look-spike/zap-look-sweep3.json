@@ -1,0 +1,594 @@
+{
+  "tag": "sweep3",
+  "characters": {
+    "gnasher": {
+      "variants": {
+        "a": {
+          "distance": 4.18,
+          "box": {
+            "center": [
+              -0.006059266563359422,
+              0.884665579449656,
+              -9.13033861555774
+            ],
+            "half": [
+              0.6555043843968369,
+              0.9404283525223583,
+              0.9959210251941251
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 62.84,
+              "std": 61.54,
+              "blueMinusRed": 7.3
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 57.5,
+              "std": 56.59,
+              "blueMinusRed": 0.9
+            }
+          },
+          "pipelines": {
+            "before": 130,
+            "after": 130
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 29,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 3,
+            "joltsPerSec": 1.88,
+            "negativeShare": 0.156
+          }
+        },
+        "b": {
+          "distance": 4.14,
+          "box": {
+            "center": [
+              0.7540399347593636,
+              0.8801802668205413,
+              -9.261297257036558
+            ],
+            "half": [
+              0.8853889128130941,
+              0.935422525606488,
+              0.9861630383779492
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.6586362826828261,
+            "char": 0,
+            "body": {
+              "mean": 71.31,
+              "std": 71.59,
+              "blueMinusRed": 10
+            }
+          },
+          "bodyNeg": {
+            "frames": 6,
+            "glow": 0.7184188782621972,
+            "char": 0,
+            "body": {
+              "mean": 54.84,
+              "std": 54.14,
+              "blueMinusRed": 5.8
+            }
+          },
+          "pipelines": {
+            "before": 134,
+            "after": 136
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 29,
+          "strobe": {
+            "seconds": 1.6,
+            "jolts": 4,
+            "joltsPerSec": 2.5,
+            "negativeShare": 0.354
+          }
+        }
+      }
+    },
+    "ogre": {
+      "variants": {
+        "a": {
+          "distance": 4.3,
+          "box": {
+            "center": [
+              -0.055317893604789614,
+              1.0030998840971657,
+              -9.381010620882883
+            ],
+            "half": [
+              0.5964280878697419,
+              1.13418770687405,
+              0.6861417905767473
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 63.91,
+              "std": 63.93,
+              "blueMinusRed": 5.5
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 62.22,
+              "std": 62.59,
+              "blueMinusRed": -0.4
+            }
+          },
+          "pipelines": {
+            "before": 138,
+            "after": 138
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 25
+        },
+        "b": {
+          "distance": 4.3,
+          "box": {
+            "center": [
+              -0.23110389550587412,
+              1.0042027877677553,
+              -9.738039609734528
+            ],
+            "half": [
+              0.5429290209282356,
+              1.1319288394425637,
+              0.7996596550459971
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 73.27,
+              "std": 76.6,
+              "blueMinusRed": 8.3
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 53.57,
+              "std": 54.43,
+              "blueMinusRed": 4.7
+            }
+          },
+          "pipelines": {
+            "before": 142,
+            "after": 144
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 25
+        }
+      }
+    },
+    "cultist": {
+      "variants": {
+        "a": {
+          "distance": 3.93,
+          "box": {
+            "center": [
+              -0.047652183306590185,
+              1.0335103440318671,
+              -9.6552384234566
+            ],
+            "half": [
+              0.35991396699247813,
+              0.917535464911732,
+              0.4208590159940204
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 62.29,
+              "std": 64.92,
+              "blueMinusRed": 6.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 49.31,
+              "std": 48.49,
+              "blueMinusRed": 0.6
+            }
+          },
+          "pipelines": {
+            "before": 139,
+            "after": 139
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 19
+        },
+        "b": {
+          "distance": 3.94,
+          "box": {
+            "center": [
+              -0.042753423125775625,
+              1.0371962881760128,
+              -9.678792615263493
+            ],
+            "half": [
+              0.3589359563226562,
+              0.9184054282916391,
+              0.41018432923301607
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 65.61,
+              "std": 67.99,
+              "blueMinusRed": 8.9
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 48.31,
+              "std": 47.51,
+              "blueMinusRed": 4.5
+            }
+          },
+          "pipelines": {
+            "before": 143,
+            "after": 145
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 19
+        }
+      }
+    },
+    "bride": {
+      "variants": {
+        "a": {
+          "distance": 3.67,
+          "box": {
+            "center": [
+              -0.09673992818529942,
+              0.9109589999900114,
+              -9.77083823411847
+            ],
+            "half": [
+              0.2978765837779834,
+              0.9126073621327981,
+              0.31178118409440536
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 52.4,
+              "std": 50.02,
+              "blueMinusRed": 3.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 53.01,
+              "std": 51.38,
+              "blueMinusRed": 1.7
+            }
+          },
+          "pipelines": {
+            "before": 140,
+            "after": 141
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 27
+        },
+        "b": {
+          "distance": 3.56,
+          "box": {
+            "center": [
+              -0.16535073829006877,
+              0.8844273755107848,
+              -10.163315292560508
+            ],
+            "half": [
+              0.2797679765560205,
+              0.8856076377078619,
+              0.30647430887012295
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 59.58,
+              "std": 62.45,
+              "blueMinusRed": 4.8
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 49.56,
+              "std": 46.48,
+              "blueMinusRed": 3.9
+            }
+          },
+          "pipelines": {
+            "before": 145,
+            "after": 148
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 27
+        }
+      }
+    },
+    "venus": {
+      "variants": {
+        "a": {
+          "distance": 3.52,
+          "box": {
+            "center": [
+              0.015747909867375065,
+              0.8656475206017838,
+              -9.700219423176508
+            ],
+            "half": [
+              0.4020188547580662,
+              0.8854352104248321,
+              0.42689708170689933
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 57.7,
+              "std": 53.96,
+              "blueMinusRed": 5.5
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 58.37,
+              "std": 57.03,
+              "blueMinusRed": 1.7
+            }
+          },
+          "pipelines": {
+            "before": 133,
+            "after": 135
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 28
+        },
+        "b": {
+          "distance": 3.52,
+          "box": {
+            "center": [
+              -0.20132890484989804,
+              0.8651501407359685,
+              -9.992926005464637
+            ],
+            "half": [
+              0.4023997908185165,
+              0.8847368590598919,
+              0.33608563964396865
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 68.03,
+              "std": 70.41,
+              "blueMinusRed": 6.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 53.66,
+              "std": 52.8,
+              "blueMinusRed": 4.4
+            }
+          },
+          "pipelines": {
+            "before": 137,
+            "after": 141
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 28
+        }
+      }
+    },
+    "tallow": {
+      "variants": {
+        "a": {
+          "distance": 4.14,
+          "box": {
+            "center": [
+              0.031918008977453116,
+              0.9178523623021425,
+              -9.70144394932333
+            ],
+            "half": [
+              0.9865065888567055,
+              0.9110182433168158,
+              0.6714981647601848
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.8823059140226797,
+            "char": 0,
+            "body": {
+              "mean": 96.5,
+              "std": 81.09,
+              "blueMinusRed": 8.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 13,
+            "glow": 0.6807502203371306,
+            "char": 0,
+            "body": {
+              "mean": 75.76,
+              "std": 57.55,
+              "blueMinusRed": -0.9
+            }
+          },
+          "pipelines": {
+            "before": 145,
+            "after": 148
+          },
+          "fx": {
+            "arcsVisible": false,
+            "halos": 0,
+            "flashedKits": 0
+          },
+          "bones": 30
+        },
+        "b": {
+          "distance": 3.9,
+          "box": {
+            "center": [
+              -0.3390681733936058,
+              0.9113379190601023,
+              -9.849371247492344
+            ],
+            "half": [
+              0.9292655401518943,
+              0.9045472421662888,
+              0.7315161853956873
+            ]
+          },
+          "zapStarted": 1,
+          "bodyPos": {
+            "frames": 10,
+            "glow": 0.883979405621061,
+            "char": 0,
+            "body": {
+              "mean": 105.63,
+              "std": 80.27,
+              "blueMinusRed": 12.6
+            }
+          },
+          "bodyNeg": {
+            "frames": 1,
+            "glow": 0.7257947386806478,
+            "char": 0,
+            "body": {
+              "mean": 64.4,
+              "std": 48.04,
+              "blueMinusRed": 4.2
+            }
+          },
+          "pipelines": {
+            "before": 150,
+            "after": 155
+          },
+          "fx": {
+            "arcsVisible": true,
+            "halos": 0,
+            "flashedKits": 1
+          },
+          "bones": 30
+        }
+      }
+    }
+  },
+  "consoleErrors": []
+}

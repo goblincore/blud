@@ -27,7 +27,12 @@
 
 import * as THREE from 'three/webgpu';
 import type { NodeBuilder, NodeMaterial } from 'three/webgpu';
-import { Fn, attribute, mat4, normalLocal, positionLocal, transformNormal } from 'three/tsl';
+import { Fn, attribute, cameraPosition, mat4, modelWorldMatrix, normalLocal, positionGeometry, positionLocal, transformNormal, varying, vec3, vec4, wgslFn, float } from 'three/tsl';
+import { ZAP_XRAY_PULL_WGSL } from './zap-xray';
+
+/** The per-instance zap glow (zap-xray.ts): one float, on every geometry a mesh-renderer.ts segment material draws. */
+export const SEGMENT_ZAP_ATTR = 'iZap';
+const zapXrayPull = wgslFn(ZAP_XRAY_PULL_WGSL);
 
 /** The instance matrix's four columns, in this order, in one row of SEGMENT_MATRIX_FLOATS (column-major, as
  *  Matrix4.toArray writes it). */
@@ -94,13 +99,38 @@ export const batchInstances = (mesh: SegmentBatchMesh): number => mesh.geometry.
 export const batchMatrixAt = (mesh: SegmentBatchMesh, i: number, out: THREE.Matrix4): THREE.Matrix4 =>
   getSegmentMatrix(ensureSegmentMatrices(mesh.geometry, 0), i, out);
 
+const segmentMatrix = () => mat4(...SEGMENT_MATRIX_ATTRS.map(name => attribute(name, 'vec4')) as [never, never, never, never]);
+/**
+ * THE SURFACE'S OWN WORLD POSITION of a fragment of a segment material: the vertex placed by its instance matrix
+ * and its object's world matrix, WITHOUT the zap x-ray's pull. What a segment material reads where it means "where
+ * this bone is" (the split clip, the wound exposure, the lights): three's `positionWorld` is the pulled place on a
+ * zapped instance, up to 0.6 m off the bone, where a split copy clips to nothing and a wound is somewhere else. On
+ * an instance with no zap the two are the same point by the same arithmetic. A varying of its own, in place of
+ * positionWorld's (which a segment material no longer reads): no vertex buffer.
+ */
+export const segmentWorldPosition = varying(
+  modelWorldMatrix.mul(vec4(segmentMatrix().mul(vec4(positionGeometry, 1.0)).xyz, 1.0)).xyz, 'v_segmentWorld',
+);
+
 /** Three's instancing (Instance.js `instance`), from the named instance-matrix attributes: the position, and the
  *  normal by the matrix's inverse transpose (exact for the head deform's axis scales, as InstancedMesh's was). */
 export const segmentInstance = Fn((builder: NodeBuilder) => {
-  const m = mat4(...SEGMENT_MATRIX_ATTRS.map(name => attribute(name, 'vec4')) as [never, never, never, never]);
-  positionLocal.assign(m.mul(positionLocal).xyz);
-  if ((builder as unknown as { hasGeometryAttribute(name: string): boolean }).hasGeometryAttribute('normal')) {
-    normalLocal.assign(transformNormal(normalLocal, m as never));
+  const m = segmentMatrix();
+  const has = (name: string) => (builder as unknown as { hasGeometryAttribute(name: string): boolean }).hasGeometryAttribute(name);
+  // THE ZAP X-RAY (zap-xray.ts): a zapped body's bones are pulled toward the eye, clear of its flesh. The skeleton's
+  // batches sit under a group that is never moved (mesh-renderer.ts: "the instance matrix IS the world matrix"; its
+  // debris meshes are placed by their own matrices, and carry iZap 0, which is no pull). Geometry without the
+  // attribute (the level batches, the shotgun casings) takes the plain path.
+  const placed = m.mul(positionLocal).xyz;
+  // The instance's normal first: look b of the zap (zap-look.ts) draws a bone's surface a little way in along it.
+  // An eyeball is never thinned (its material says so: mesh-renderer.ts marks userData.zapNoThin).
+  const normal = has('normal') ? transformNormal(normalLocal, m as never) : null;
+  const thin = (builder as unknown as { material?: { userData?: { zapNoThin?: boolean } } }).material?.userData?.zapNoThin ? 0 : 1;
+  positionLocal.assign(has(SEGMENT_ZAP_ATTR)
+    ? zapXrayPull({ p: placed, eye: cameraPosition, zap: attribute(SEGMENT_ZAP_ATTR, 'float'), n: normal ?? vec3(0, 0, 0), thin: float(thin) })
+    : placed);
+  if (normal) {
+    normalLocal.assign(normal);
   }
 }, 'void');
 
