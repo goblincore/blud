@@ -590,7 +590,8 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.melter?.tickCooldown(fireDt);
   ctx.weapon.rod?.tick(fireDt);
   ctx.weapon.axe?.tick(fireDt);
-  ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)
+  // Its cycle is mostly the reload (bullet time reloadScale); its grenades fly on the player's shot step, as pellets do.
+  ctx.weapon.launcher?.tick(reloadDt, rdt * btScales.shot);
   ctx.weapon.recoilPitch *= Math.exp(-9 * fireDt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;

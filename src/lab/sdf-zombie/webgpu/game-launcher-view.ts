@@ -12,16 +12,31 @@ import {
   launcherBeat, launcherReady, launcherReloadPose, launcherRecoil,
   launcherSmooth, launcherCartridge, launcherSupportHand, type LauncherV3,
 } from './game-grenade-launcher';
+import { makeGrenade, stepGrenade } from '../launcher-grenade';
+import type { FlightState } from '../dynamite-flight';
+import type { Vec3 } from '../types';
+import { aimDir } from './game-weapon-rig';
+import { eyeOf } from './game-player';
+import { bundleHitsBody } from './game-dynamite-throw';
+import { detonateAt } from './game-dynamite-step';
+import { ceilingAt, debrisGround, sectorHitBetween } from './game-hit-trace';
+import { WALL_SKIN_M } from './sector-debris';
 
 export interface LauncherView {
   onMouseDown(button: number): boolean;
   consumeEdge(): void;
-  tick(dt: number): void;
+  /** `cycleDt` drives the fire/reload cycle (bullet time's reload step);
+   *  `shotDt` flies the grenades (the player's projectile step, as pellets). */
+  tick(cycleDt: number, shotDt: number): void;
   updateRig(): void;
   fire(): boolean;
   reload(): boolean;
   debug(): Record<string, unknown>;
 }
+
+/** The drawn shell's size over the glb warhead's: the real 40 mm nose is too
+ *  small to read in flight. Drawing only; the flight radius is GRENADE.radiusM. */
+const GRENADE_DRAW_SCALE = 2.5;
 
 export async function createLauncherView(ctx: GameContext): Promise<LauncherView> {
   const gltf = await new GLTFLoader().loadAsync('/assets/lab/grenade-launcher.glb');
@@ -78,6 +93,92 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
   flash.name = 'launcher-muzzle-flash'; flash.renderOrder = 999; rig.add(flash);
   if (ctx.boot.deferredApi) {
     for (const node of [gun, left, right, fresh, ejected]) ctx.boot.deferredApi.router.register(node, 'mesh', 'level-only');
+  }
+  // THE GRENADES IN FLIGHT. Each draws as a clone of the round's own warhead
+  // (the glb's `projectile` node), parented to the scene root and posed from
+  // the pure flight (launcher-grenade.ts). Meshes only: no light rides the
+  // shell, and the blast's light is the dynamite pool's (detonateAt).
+  const warhead = round.getObjectByName('projectile');
+  if (!warhead) throw new Error('[launcher] grenade-launcher.glb Round has no projectile');
+  const shellGroup = new THREE.Group(); shellGroup.name = 'launcher-grenades';
+  ctx.boot.handle.scene.add(shellGroup);
+  ctx.boot.deferredApi?.router.register(shellGroup, 'mesh', 'level-only');
+  // THE SHELL'S GLOW: the warhead is a 3 cm nose, a pixel at room range, so
+  // each shell also carries an additive sprite (the muzzle flash's texture,
+  // unlit: no light, so no LightsNode re-key). It is a forward draw outside
+  // the routed group, as the muzzle flash is.
+  const glowGroup = new THREE.Group(); glowGroup.name = 'launcher-grenade-glows';
+  ctx.boot.handle.scene.add(glowGroup);
+  const glowMat = new THREE.SpriteMaterial({ map: tex, color: 0xff9a4a, transparent: true, opacity: .9,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  interface Shell { state: FlightState; view: THREE.Object3D; glow: THREE.Sprite; nose: THREE.Vector3; baseQ: THREE.Quaternion }
+  const shells: Shell[] = [];
+  const spareViews: THREE.Object3D[] = [];
+  const spareGlows: THREE.Sprite[] = [];
+  let launched = 0, detonated = 0;
+  let lastBoom: { cause: string | null; at: Vec3 } | null = null;
+  const muzzleW = new THREE.Vector3(), breechW = new THREE.Vector3(), velDir = new THREE.Vector3(), turn = new THREE.Quaternion();
+  const scaleW = new THREE.Vector3();
+  function launch(): void {
+    rig.updateMatrixWorld(true);
+    muzzle.getWorldPosition(muzzleW); breech.getWorldPosition(breechW);
+    let origin: Vec3 = [muzzleW.x, muzzleW.y, muzzleW.z];
+    // SECTOR LEVELS: a muzzle past the wall the player hugs would start the
+    // shell in the void; start it on the eye's side, as the bundle throw does.
+    const eye = eyeOf(ctx.player.player);
+    const wallHit = sectorHitBetween(ctx, eye, origin);
+    if (wallHit) {
+      const d = Math.hypot(origin[0] - eye[0], origin[1] - eye[1], origin[2] - eye[2]) || 1;
+      const k = Math.max(0, wallHit.t - (0.03 + WALL_SKIN_M) / d);
+      origin = [eye[0] + (origin[0] - eye[0]) * k, eye[1] + (origin[1] - eye[1]) * k, eye[2] + (origin[2] - eye[2]) * k];
+    }
+    // FREE AIM: the reticle's ray, never the camera forward.
+    const state = makeGrenade(origin, aimDir(ctx));
+    const view = spareViews.pop() ?? warhead!.clone(true);
+    view.name = 'launcher-grenade';
+    // The drawn shell keeps the warhead's world size and its world attitude at
+    // the muzzle; flight turns it from the bore's nose onto the velocity.
+    warhead!.getWorldScale(scaleW); view.scale.copy(scaleW).multiplyScalar(GRENADE_DRAW_SCALE);
+    const baseQ = new THREE.Quaternion(); warhead!.getWorldQuaternion(baseQ);
+    const nose = muzzleW.clone().sub(breechW).normalize();
+    view.visible = true;
+    shellGroup.add(view);
+    const glow = spareGlows.pop() ?? new THREE.Sprite(glowMat);
+    glow.name = 'launcher-grenade-glow'; glow.scale.setScalar(.22); glow.renderOrder = 998;
+    glow.visible = true; glowGroup.add(glow);
+    const shell: Shell = { state, view, glow, nose, baseQ };
+    shells.push(shell); placeShell(shell);
+    launched++;
+    ctx.telemetry.telemetry.event('launcher-grenade-launch', { x: origin[0], y: origin[1], z: origin[2] });
+  }
+  function placeShell(s: Shell): void {
+    s.view.position.set(s.state.pos[0], s.state.pos[1], s.state.pos[2]);
+    s.glow.position.copy(s.view.position);
+    velDir.set(s.state.vel[0], s.state.vel[1], s.state.vel[2]);
+    if (velDir.lengthSq() > 1e-6) turn.setFromUnitVectors(s.nose, velDir.normalize());
+    s.view.quaternion.copy(turn).multiply(s.baseQ);
+  }
+  function stepShells(dt: number): void {
+    if (!(dt > 0) || shells.length === 0) return;
+    const g = debrisGround(ctx);
+    for (let i = shells.length - 1; i >= 0; i--) {
+      const s = shells[i]!;
+      const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, s.state.pos[0], s.state.pos[2]), ...(g ? { ground: g } : {}) };
+      const r = stepGrenade(s.state, dt, world, (from, to) => bundleHitsBody(ctx, from, to) !== null);
+      s.state = r.state;
+      if (r.boom) {
+        shells.splice(i, 1);
+        s.view.visible = false; shellGroup.remove(s.view); spareViews.push(s.view);
+        s.glow.visible = false; glowGroup.remove(s.glow); spareGlows.push(s.glow);
+        detonated++;
+        lastBoom = { cause: r.cause, at: [...r.boom] as Vec3 };
+        ctx.telemetry.telemetry.event('launcher-grenade-detonate', { cause: r.cause, x: r.boom[0], y: r.boom[1], z: r.boom[2] });
+        // THE DYNAMITE'S BLAST, unchanged: wounds, gibs, shove, light, kick.
+        detonateAt(ctx, r.boom, false, ctx.world.level.def?.sectors ? r.lastOpen : undefined);
+        continue;
+      }
+      placeShell(s);
+    }
   }
 
   function pose(): void {
@@ -146,6 +247,7 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
     ctx.weapon.shotAlert = true;
     ctx.telemetry.telemetry.event('launcher-shot', { shots: state.shots, prototype: true });
     pose();
+    launch();
     return true;
   }
   function reload(): boolean {
@@ -169,9 +271,9 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
       return true;
     },
     consumeEdge() { if (pending) { pending = false; fire(); } },
-    tick(dt) { state = stepLauncher(state, dt * ctx.weapon.reloadSpeed); },
+    tick(cycleDt, shotDt) { state = stepLauncher(state, cycleDt * ctx.weapon.reloadSpeed); stepShells(shotDt); },
     updateRig, fire, reload,
-    debug: () => ({ ...state, timing: { ...LAUNCHER }, ready: launcherReady(state), beat: launcherBeat(state), hingeRad: barrel.rotation.x,
+    debug: () => ({ ...state, grenades: { launched, detonated, lastBoom, flying: shells.map(q => [...q.state.pos]) }, timing: { ...LAUNCHER }, ready: launcherReady(state), beat: launcherBeat(state), hingeRad: barrel.rotation.x,
       visible: rig.visible, flash: flash.visible, carriedRound: fresh.visible, ejectedCase: ejected.visible,
       left: left.position.toArray(), forestock: handFore.toArray(), forestockDistanceM: left.position.distanceTo(handFore),
       right: right.position.toArray(), round: round.position.toArray(),
